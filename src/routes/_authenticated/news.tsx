@@ -1,0 +1,894 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { pb, fileUrl } from "@/lib/pocketbase";
+import { useAuth } from "@/lib/auth";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { FilterBar } from "@/components/ui/filter-bar";
+import { toneBorder, ChipTone } from "@/components/ui/status-chip";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
+import {
+  Phone,
+  Plus,
+  Pencil,
+  Trash2,
+  Building2,
+  MapPin,
+  Clock,
+  Banknote,
+  ImagePlus,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+export const Route = createFileRoute("/_authenticated/news")({
+  component: NewsPage,
+});
+
+interface Recruitment {
+  id: string;
+  company: string;
+  images: string[];
+  map_url: string;
+  introduction: string;
+  interview_time: string;
+  recruitment_deadline: string;
+  gender: string[];
+  salary_base: string;
+  allowance: string;
+  bonus_other: string;
+  short_term_salary: string;
+  environment: string;
+  work_posture: string;
+  production_qc: string;
+  production_qc_note: string;
+  documents: string;
+  notes: string;
+  admin_phone: string;
+  collectionId: string;
+  collectionName: string;
+  created?: string;
+}
+
+const EMPTY: Recruitment = {
+  id: "",
+  company: "",
+  images: [],
+  map_url: "",
+  introduction: "",
+  interview_time: "",
+  recruitment_deadline: "",
+  gender: ["male", "female"],
+  salary_base: "",
+  allowance: "",
+  bonus_other: "",
+  short_term_salary: "",
+  environment: "",
+  work_posture: "",
+  production_qc: "",
+  production_qc_note: "",
+  documents: "",
+  notes: "",
+  admin_phone: "",
+  collectionId: "",
+  collectionName: "",
+};
+
+const genderLabel = (g?: string[]) => {
+  if (!g || g.length === 0) return "—";
+  if (g.length === 2) return "Nam & Nữ";
+  return g[0] === "male" ? "Nam" : "Nữ";
+};
+
+const ENVIRONMENT_OPTIONS = [
+  { value: "normal_room", label: "Phòng thường" },
+  { value: "clean_room", label: "Phòng sạch" },
+  { value: "both", label: "Cả 2" },
+] as const;
+
+const WORK_POSTURE_OPTIONS = [
+  { value: "standing", label: "Làm đứng" },
+  { value: "sitting", label: "Làm ngồi" },
+  { value: "both", label: "Cả 2" },
+] as const;
+
+const PRODUCTION_QC_OPTIONS = [
+  { value: "production", label: "Sản xuất" },
+  { value: "qc", label: "QC" },
+  { value: "both", label: "Cả 2" },
+] as const;
+
+type SelectOption = { value: string; label: string };
+
+const optionLabel = (options: readonly SelectOption[], value?: string) =>
+  options.find((option) => option.value === value)?.label || "";
+
+type FactoryOption = { id: string; name: string; address?: string };
+
+const errorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
+
+const factoryMapUrl = (factory?: FactoryOption | null) => {
+  const query = factory?.address || factory?.name || "";
+  return query
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
+    : "";
+};
+
+const formatMoneyInput = (value: string) => {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return "";
+  return new Intl.NumberFormat("vi-VN").format(Number(digits));
+};
+
+function NewsPage() {
+  const { isAdmin } = useAuth();
+  const [items, setItems] = useState<Recruitment[]>([]);
+  const [detail, setDetail] = useState<Recruitment | null>(null);
+  const [editing, setEditing] = useState<Recruitment | null>(null);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [environmentFilter, setEnvironmentFilter] = useState("all");
+  const [postureFilter, setPostureFilter] = useState("all");
+  const [productionQcFilter, setProductionQcFilter] = useState("all");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  const load = async () => {
+    try {
+      const res = await pb.collection("recruitments").getFullList({ sort: "-created" });
+      setItems(res as unknown as Recruitment[]);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Lỗi tải bảng tin"));
+    }
+  };
+  useEffect(() => {
+    load();
+  }, []);
+
+  const remove = async (id: string) => {
+    if (!confirm("Xoá tin tuyển dụng?")) return;
+    await pb.collection("recruitments").delete(id);
+    load();
+  };
+
+  const filtered = useMemo(() => {
+    return items.filter((r) => {
+      if (search && !r.company.toLowerCase().includes(search.toLowerCase())) return false;
+      if (filter === "male" && !r.gender?.includes("male")) return false;
+      if (filter === "female" && !r.gender?.includes("female")) return false;
+      if (environmentFilter !== "all" && r.environment !== environmentFilter) return false;
+      if (postureFilter !== "all" && r.work_posture !== postureFilter) return false;
+      if (productionQcFilter !== "all" && r.production_qc !== productionQcFilter) return false;
+      return true;
+    });
+  }, [items, search, filter, environmentFilter, postureFilter, productionQcFilter]);
+
+  const isNew = (r: Recruitment) =>
+    r.created && Date.now() - new Date(r.created).getTime() < 7 * 24 * 3600 * 1000;
+  const hasAdvancedFilter = [environmentFilter, postureFilter, productionQcFilter].some(
+    (value) => value !== "all",
+  );
+
+  return (
+    <PageContainer
+      title="Bảng tin tuyển dụng"
+      subtitle={`${items.length} tin đang đăng`}
+      right={
+        isAdmin && (
+          <button
+            onClick={() => setEditing({ ...EMPTY })}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-soft active:scale-95"
+            aria-label="Thêm tin"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        )
+      }
+    >
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Tìm theo tên nhà máy…"
+        chips={[
+          { key: "all", label: "Tất cả", count: items.length },
+          { key: "male", label: "Nam" },
+          { key: "female", label: "Nữ" },
+        ]}
+        activeChip={filter}
+        onChipChange={setFilter}
+        chipActions={
+          <button
+            type="button"
+            onClick={() => setShowAdvancedFilters((value) => !value)}
+            aria-expanded={showAdvancedFilters}
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition",
+              showAdvancedFilters || hasAdvancedFilter
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                : "border-border bg-card text-muted-foreground",
+            )}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Lọc nâng cao
+            {hasAdvancedFilter && (
+              <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
+            )}
+          </button>
+        }
+      />
+      {showAdvancedFilters && (
+        <AdvancedFilters
+          environment={environmentFilter}
+          onEnvironmentChange={setEnvironmentFilter}
+          posture={postureFilter}
+          onPostureChange={setPostureFilter}
+          productionQc={productionQcFilter}
+          onProductionQcChange={setProductionQcFilter}
+        />
+      )}
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={Building2}
+          title="Chưa có tin tuyển dụng"
+          description={search ? "Không tìm thấy kết quả phù hợp." : "Tin mới sẽ xuất hiện ở đây."}
+        />
+      ) : (
+        filtered.map((r) => {
+          const cover = r.images?.[0] ? fileUrl(r, r.images[0]) : null;
+          const tone: ChipTone = isNew(r) ? "info" : "neutral";
+          return (
+            <div key={r.id} className={cn("list-card relative", toneBorder[tone])}>
+              {isAdmin && (
+                <div className="absolute right-2 top-2 z-10 flex gap-1">
+                  <button
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-card/90 text-muted-foreground shadow-soft hover:bg-muted"
+                    onClick={() => setEditing(r)}
+                    aria-label="Sua"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-card/90 text-destructive shadow-soft hover:bg-destructive/10"
+                    onClick={() => remove(r.id)}
+                    aria-label="Xoa"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              <button
+                className={cn("flex w-full items-start gap-3 text-left", isAdmin && "pr-16")}
+                onClick={() => setDetail(r)}
+              >
+                {cover ? (
+                  <img
+                    src={cover}
+                    className="h-14 w-14 flex-none rounded-xl object-cover"
+                    alt={r.company}
+                  />
+                ) : (
+                  <div className="flex h-14 w-14 flex-none items-center justify-center rounded-xl bg-secondary">
+                    <Building2 className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{r.company}</div>
+                  <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                    <SummaryItem label="LCB" value={r.salary_base} />
+                    <SummaryItem label="Phụ cấp" value={r.allowance} />
+                    <SummaryItem
+                      label="Môi trường"
+                      value={optionLabel(ENVIRONMENT_OPTIONS, r.environment)}
+                    />
+                    <SummaryItem
+                      label="Tư thế"
+                      value={optionLabel(WORK_POSTURE_OPTIONS, r.work_posture)}
+                    />
+                    <SummaryItem
+                      label="Sản xuất/QC"
+                      value={optionLabel(PRODUCTION_QC_OPTIONS, r.production_qc)}
+                    />
+                    <SummaryItem label="Hết hạn" value={r.recruitment_deadline} />
+                  </div>
+                </div>
+              </button>
+            </div>
+          );
+        })
+      )}
+
+      <DetailSheet item={detail} onClose={() => setDetail(null)} />
+      <EditDialog
+        item={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          load();
+        }}
+      />
+    </PageContainer>
+  );
+}
+
+function AdvancedFilters({
+  environment,
+  onEnvironmentChange,
+  posture,
+  onPostureChange,
+  productionQc,
+  onProductionQcChange,
+}: {
+  environment: string;
+  onEnvironmentChange: (value: string) => void;
+  posture: string;
+  onPostureChange: (value: string) => void;
+  productionQc: string;
+  onProductionQcChange: (value: string) => void;
+}) {
+  const hasActive = [environment, posture, productionQc].some((value) => value !== "all");
+
+  return (
+    <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold text-muted-foreground">Bộ lọc nâng cao</div>
+        {hasActive && (
+          <button
+            type="button"
+            onClick={() => {
+              onEnvironmentChange("all");
+              onPostureChange("all");
+              onProductionQcChange("all");
+            }}
+            className="text-xs font-medium text-primary"
+          >
+            Xóa lọc
+          </button>
+        )}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <WorkModeFilter
+          label="Môi trường"
+          value={environment}
+          onChange={onEnvironmentChange}
+          options={ENVIRONMENT_OPTIONS}
+        />
+        <WorkModeFilter
+          label="Tư thế"
+          value={posture}
+          onChange={onPostureChange}
+          options={WORK_POSTURE_OPTIONS}
+        />
+        <WorkModeFilter
+          label="Sản xuất/QC"
+          value={productionQc}
+          onChange={onProductionQcChange}
+          options={PRODUCTION_QC_OPTIONS}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SummaryItem({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="min-w-0">
+      <span className="text-muted-foreground/80">{label}: </span>
+      <span className="font-medium text-foreground">{value || "-"}</span>
+    </div>
+  );
+}
+
+function DetailSheet({ item, onClose }: { item: Recruitment | null; onClose: () => void }) {
+  return (
+    <Dialog open={!!item} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[92dvh] overflow-y-auto p-0">
+        {item && (
+          <div>
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b bg-card/95 p-3 backdrop-blur">
+              <DialogHeader className="flex-1">
+                <DialogTitle className="truncate">{item.company}</DialogTitle>
+              </DialogHeader>
+              <a
+                href={`tel:${item.admin_phone}`}
+                className="flex items-center gap-1.5 rounded-full bg-success px-3 py-1.5 text-xs font-semibold text-success-foreground"
+              >
+                <Phone className="h-4 w-4" /> Ứng tuyển
+              </a>
+            </div>
+            {item.images?.length > 0 && (
+              <Carousel
+                opts={{ align: "start", loop: item.images.length > 1 }}
+                className="px-4 pt-4"
+              >
+                <CarouselContent className="-ml-2">
+                  {item.images.map((f, index) => (
+                    <CarouselItem key={f} className="pl-2">
+                      <div className="relative overflow-hidden rounded-xl border bg-muted">
+                        <img
+                          src={fileUrl(item, f)}
+                          className="h-56 w-full object-cover"
+                          alt={`${item.company} ${index + 1}`}
+                        />
+                        {item.images.length > 1 && (
+                          <div className="absolute bottom-2 right-2 rounded-full bg-background/85 px-2 py-0.5 text-[11px] font-medium text-foreground shadow-soft backdrop-blur">
+                            {index + 1}/{item.images.length}
+                          </div>
+                        )}
+                      </div>
+                    </CarouselItem>
+                  ))}
+                </CarouselContent>
+                {item.images.length > 1 && (
+                  <>
+                    <CarouselPrevious className="left-6 border-border/70 bg-background/90 shadow-soft" />
+                    <CarouselNext className="right-6 border-border/70 bg-background/90 shadow-soft" />
+                  </>
+                )}
+              </Carousel>
+            )}
+            <div className="space-y-3 p-4 text-sm">
+              <Info label="Giới thiệu" value={item.introduction} multiline />
+              <Info label="Thời hạn tuyển dụng" value={item.recruitment_deadline} />
+              <Info label="Thưởng khác" value={item.bonus_other} multiline />
+              <Info label="Lương ngắn hạn" value={item.short_term_salary} multiline />
+              <Info label="Môi trường" value={optionLabel(ENVIRONMENT_OPTIONS, item.environment)} />
+              <Info
+                label="Tư thế công việc"
+                value={optionLabel(WORK_POSTURE_OPTIONS, item.work_posture)}
+              />
+              <Info
+                label="Sản xuất/QC"
+                value={[
+                  optionLabel(PRODUCTION_QC_OPTIONS, item.production_qc),
+                  item.production_qc_note,
+                ]
+                  .filter(Boolean)
+                  .join("\n")}
+                multiline
+              />
+              <Info icon={Clock} label="Thời gian phỏng vấn" value={item.interview_time} />
+              <Info icon={Banknote} label="Lương cơ bản" value={item.salary_base} />
+              <Info label="Phụ cấp" value={item.allowance} />
+              <Info label="Tuyển" value={genderLabel(item.gender)} />
+              <Info label="Giấy tờ yêu cầu" value={item.documents} multiline />
+              <Info label="Ghi chú khác" value={item.notes} multiline />
+              {item.map_url && (
+                <a
+                  href={item.map_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 rounded-xl border bg-secondary p-3 text-primary"
+                >
+                  <MapPin className="h-4 w-4" /> Mở Google Maps
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Info({
+  icon: Icon,
+  label,
+  value,
+  multiline,
+}: {
+  icon?: LucideIcon;
+  label: string;
+  value?: string;
+  multiline?: boolean;
+}) {
+  if (!value) return null;
+  return (
+    <div className="flex gap-3">
+      {Icon && <Icon className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />}
+      <div className="min-w-0 flex-1">
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+        <div className={multiline ? "whitespace-pre-wrap" : "font-medium"}>{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function EditDialog({
+  item,
+  onClose,
+  onSaved,
+}: {
+  item: Recruitment | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { user } = useAuth();
+  const [form, setForm] = useState<Recruitment | null>(item);
+  const [files, setFiles] = useState<File[]>([]);
+  const [removedImages, setRemovedImages] = useState<string[]>([]);
+  const [selectedFactory, setSelectedFactory] = useState<FactoryOption | null>(null);
+
+  useEffect(() => {
+    setForm(item);
+    setFiles([]);
+    setRemovedImages([]);
+    setSelectedFactory(null);
+  }, [item]);
+  if (!form) return null;
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fs = Array.from(e.target.files || []);
+    const remaining = 3 - ((form.images?.length || 0) - removedImages.length) - files.length;
+    if (fs.length > remaining) toast.warning(`Chỉ được tối đa 3 ảnh`);
+    setFiles((p) => [...p, ...fs.slice(0, remaining)]);
+  };
+
+  const save = async () => {
+    try {
+      const adminPhone = user?.phone || form.admin_phone || "";
+      const mapUrl = factoryMapUrl(selectedFactory) || form.map_url || "";
+      const fd = new FormData();
+      fd.append("company", form.company);
+      fd.append("map_url", mapUrl);
+      fd.append("introduction", form.introduction || "");
+      fd.append("interview_time", form.interview_time);
+      fd.append("recruitment_deadline", form.recruitment_deadline || "");
+      for (const g of form.gender || []) fd.append("gender", g);
+      fd.append("salary_base", form.salary_base);
+      fd.append("allowance", form.allowance);
+      fd.append("bonus_other", form.bonus_other || "");
+      fd.append("short_term_salary", form.short_term_salary || "");
+      fd.append("environment", form.environment || "");
+      fd.append("work_posture", form.work_posture || "");
+      fd.append("production_qc", form.production_qc || "");
+      fd.append("production_qc_note", form.production_qc_note || "");
+      fd.append("documents", form.documents);
+      fd.append("notes", form.notes);
+      fd.append("admin_phone", adminPhone);
+      for (const rm of removedImages) fd.append("images-", rm);
+      for (const f of files) fd.append("images", f);
+
+      if (form.id) await pb.collection("recruitments").update(form.id, fd);
+      else await pb.collection("recruitments").create(fd);
+      toast.success("Đã lưu");
+      onSaved();
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Lỗi tải bảng tin"));
+    }
+  };
+
+  return (
+    <Dialog open={!!item} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[92dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{form.id ? "Sửa tin tuyển dụng" : "Thêm tin tuyển dụng"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <FactoryField
+            label="Nhà máy"
+            v={form.company}
+            on={(v, factory) => {
+              setSelectedFactory(factory);
+              setForm({ ...form, company: v, map_url: factoryMapUrl(factory) || form.map_url });
+            }}
+          />
+          <FT
+            label="Giới thiệu"
+            v={form.introduction || ""}
+            on={(v) => setForm({ ...form, introduction: v })}
+          />
+          <F
+            label="Thời gian phỏng vấn"
+            v={form.interview_time}
+            on={(v) => setForm({ ...form, interview_time: v })}
+          />
+          <F
+            label="Thời hạn tuyển dụng"
+            v={form.recruitment_deadline || ""}
+            on={(v) => setForm({ ...form, recruitment_deadline: v })}
+            placeholder="VD: 31/12/2026 hoặc Lâu dài"
+          />
+          <div className="space-y-2">
+            <Label>Tuyển</Label>
+            <div className="flex gap-4">
+              {(
+                [
+                  ["male", "Nam"],
+                  ["female", "Nữ"],
+                ] as const
+              ).map(([val, lbl]) => {
+                const checked = form.gender?.includes(val) ?? false;
+                return (
+                  <label key={val} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(c) => {
+                        const set = new Set(form.gender || []);
+                        if (c) set.add(val);
+                        else set.delete(val);
+                        setForm({ ...form, gender: Array.from(set) });
+                      }}
+                    />
+                    {lbl}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <WorkModeField
+            label="Môi trường"
+            value={form.environment || ""}
+            onChange={(v) => setForm({ ...form, environment: v })}
+            options={ENVIRONMENT_OPTIONS}
+          />
+          <WorkModeField
+            label="Tư thế công việc"
+            value={form.work_posture || ""}
+            onChange={(v) => setForm({ ...form, work_posture: v })}
+            options={WORK_POSTURE_OPTIONS}
+          />
+          <div className="grid grid-cols-[9.5rem_minmax(0,1fr)] items-end gap-2">
+            <WorkModeField
+              label="Sản xuất/QC"
+              value={form.production_qc || ""}
+              onChange={(v) => setForm({ ...form, production_qc: v })}
+              options={PRODUCTION_QC_OPTIONS}
+            />
+            <Input
+              value={form.production_qc_note || ""}
+              placeholder="Ghi chú Sản xuất/QC"
+              onChange={(e) => setForm({ ...form, production_qc_note: e.target.value })}
+            />
+          </div>
+          <MoneyField
+            label="Lương cơ bản"
+            v={form.salary_base}
+            on={(v) => setForm({ ...form, salary_base: v })}
+          />
+          <MoneyField
+            label="Phụ cấp"
+            v={form.allowance}
+            on={(v) => setForm({ ...form, allowance: v })}
+          />
+          <FT
+            label="Thưởng khác"
+            v={form.bonus_other || ""}
+            on={(v) => setForm({ ...form, bonus_other: v })}
+          />
+          <FT
+            label="Lương ngắn hạn"
+            v={form.short_term_salary || ""}
+            on={(v) => setForm({ ...form, short_term_salary: v })}
+          />
+          <FT
+            label="Giấy tờ yêu cầu"
+            v={form.documents}
+            on={(v) => setForm({ ...form, documents: v })}
+          />
+          <FT label="Ghi chú khác" v={form.notes} on={(v) => setForm({ ...form, notes: v })} />
+
+          <div className="space-y-1">
+            <Label>Hình ảnh (tối đa 3)</Label>
+            <div className="flex flex-wrap gap-2">
+              {(form.images || [])
+                .filter((f) => !removedImages.includes(f))
+                .map((f) => (
+                  <div key={f} className="relative">
+                    <img src={fileUrl(form, f)} className="h-20 w-20 rounded-xl object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setRemovedImages((r) => [...r, f])}
+                      className="absolute -right-1 -top-1 rounded-full bg-destructive p-0.5 text-destructive-foreground"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              {files.map((f, i) => (
+                <div key={i} className="relative">
+                  <img src={URL.createObjectURL(f)} className="h-20 w-20 rounded-xl object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setFiles((p) => p.filter((_, j) => j !== i))}
+                    className="absolute -right-1 -top-1 rounded-full bg-destructive p-0.5 text-destructive-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed text-muted-foreground">
+                <ImagePlus className="h-5 w-5" />
+                <input type="file" accept="image/*" multiple className="hidden" onChange={onFile} />
+              </label>
+            </div>
+          </div>
+
+          <Button onClick={save} className="w-full">
+            Lưu
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function F({
+  label,
+  v,
+  on,
+  placeholder,
+}: {
+  label: string;
+  v: string;
+  on: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <Input value={v || ""} placeholder={placeholder} onChange={(e) => on(e.target.value)} />
+    </div>
+  );
+}
+
+function WorkModeField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly SelectOption[];
+}) {
+  return (
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <Select value={value || "-"} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue placeholder="Chọn hình thức" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function WorkModeFilter({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly SelectOption[];
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="rounded-xl bg-background text-xs">
+        <SelectValue placeholder={label} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">{label}</SelectItem>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function MoneyField({ label, v, on }: { label: string; v: string; on: (v: string) => void }) {
+  return (
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <Input
+        inputMode="numeric"
+        value={v || ""}
+        onChange={(e) => on(formatMoneyInput(e.target.value))}
+      />
+    </div>
+  );
+}
+
+function FT({ label, v, on }: { label: string; v: string; on: (v: string) => void }) {
+  return (
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <Textarea rows={3} value={v || ""} onChange={(e) => on(e.target.value)} />
+    </div>
+  );
+}
+
+function FactoryField({
+  label,
+  v,
+  on,
+}: {
+  label: string;
+  v: string;
+  on: (v: string, factory: FactoryOption | null) => void;
+}) {
+  const [factories, setFactories] = useState<FactoryOption[]>([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    pb.collection("factories")
+      .getFullList({ sort: "name" })
+      .then((res) => {
+        if (!cancelled) setFactories(res as unknown as FactoryOption[]);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const hasMatch = !v || factories.some((f) => f.name === v);
+  return (
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <Select
+        value={v || ""}
+        onValueChange={(value) => {
+          const factory = factories.find((f) => f.name === value) || null;
+          on(value, factory);
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder={loading ? "Đang tải..." : "Chọn nhà máy"} />
+        </SelectTrigger>
+        <SelectContent className="max-h-72">
+          {!hasMatch && v && <SelectItem value={v}>{v} (cũ)</SelectItem>}
+          {factories.map((f) => (
+            <SelectItem key={f.id} value={f.name}>
+              {f.name}
+            </SelectItem>
+          ))}
+          {factories.length === 0 && !loading && (
+            <div className="px-2 py-1.5 text-xs text-muted-foreground">
+              Chưa có nhà máy. Admin hãy thêm trong Cài đặt hệ thống.
+            </div>
+          )}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}

@@ -1,0 +1,381 @@
+Error: Error transforming route file D:/My App/JobConnect/src/routes/_authenticated/news.tsx: SyntaxError: Unexpected token (521:10)
+    at file:///D:/My%20App/JobConnect/node_modules/@tanstack/router-generator/dist/esm/generator.js:143:13
+    at async generate (file:///D:/My%20App/JobConnect/node_modules/@tanstack/router-plugin/dist/esm/core/router-generator-plugin.js:39:4)
+    at async PluginContext.watchChange (file:///D:/My%20App/JobConnect/node_modules/@tanstack/router-plugin/dist/esm/core/router-generator-plugin.js:49:4)
+    at async Promise.all (index 1)
+    at async EnvironmentPluginContainer.hookParallel (file:///D:/My%20App/JobConnect/node_modules/vite/dist/node/chunks/config.js:28681:3)
+    at async EnvironmentPluginContainer.watchChange (file:///D:/My%20App/JobConnect/node_modules/vite/dist/node/chunks/config.js:28841:3)
+    at async Promise.all (index 0)
+    at async FSWatcher.<anonymous> (file:///D:/My%20App/JobConnect/node_modules/vite/dist/node/chunks/config.js:25598:3)
+[2m3:00:53 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Unexpected token (521:10)[39m
+  Plugin: [35mtanstack-router:code-splitter:compile-reference-file[39m
+  File: [36mD:/My App/JobConnect/src/routes/_authenticated/news.tsx[39m:521:10
+[33m  519 |              label="Lương cơ bản"
+  520 |              v={form.salary_base}
+  521 |            <WorkModeField
+      |             ^
+  522 |              label="Môi trường"
+  523 |              value={form.environment || ""}[39m
+      at constructor (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:365:19)
+      at TypeScriptParserMixin.raise (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6616:19)
+      at TypeScriptParserMixin.unexpected (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6636:16)
+      at TypeScriptParserMixin.jsxParseIdentifier (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4581:12)
+      at TypeScriptParserMixin.jsxParseNamespacedName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4588:23)
+      at TypeScriptParserMixin.jsxParseAttribute (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4664:22)
+      at TypeScriptParserMixin.jsxParseOpeningElementAfterName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4679:28)
+      at TypeScriptParserMixin.jsxParseOpeningElementAfterName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10060:18)
+      at TypeScriptParserMixin.jsxParseOpeningElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4674:17)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4698:33)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElement (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4761:17)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4771:19)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10848:21)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9792:39
+      at TypeScriptParserMixin.tryParse (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6924:20)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9792:18)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10817:39
+      at TypeScriptParserMixin.allowInAnd (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12443:12)
+      at TypeScriptParserMixin.parseMaybeAssignAllowIn (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10817:17)
+      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12510:17)
+      at TypeScriptParserMixin.parseParenAndDistinguishExpression (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11692:28)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11348:23)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4776:20)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10848:21)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9803:20)
+      at TypeScriptParserMixin.parseExpressionBase (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10801:23)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10797:39
+      at TypeScriptParserMixin.allowInAnd (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12438:16)
+      at TypeScriptParserMixin.parseExpression (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10797:17)
+      at TypeScriptParserMixin.parseReturnStatement (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:13159:28)
+      at TypeScriptParserMixin.parseStatementContent (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12815:21)
+      at TypeScriptParserMixin.parseStatementContent (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9525:18)
+      at TypeScriptParserMixin.parseStatementLike (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12784:17)
+[2m3:00:53 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Unexpected token (521:10)[39m
+  Plugin: [35mtanstack-router:code-splitter:compile-virtual-file[39m
+  File: [36mD:/My App/JobConnect/src/routes/_authenticated/news.tsx?tsr-split=component[39m:521:10
+[33m  519 |              label="Lương cơ bản"
+  520 |              v={form.salary_base}
+  521 |            <WorkModeField
+      |             ^
+  522 |              label="Môi trường"
+  523 |              value={form.environment || ""}[39m
+      at constructor (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:365:19)
+      at TypeScriptParserMixin.raise (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6616:19)
+      at TypeScriptParserMixin.unexpected (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6636:16)
+      at TypeScriptParserMixin.jsxParseIdentifier (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4581:12)
+      at TypeScriptParserMixin.jsxParseNamespacedName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4588:23)
+      at TypeScriptParserMixin.jsxParseAttribute (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4664:22)
+      at TypeScriptParserMixin.jsxParseOpeningElementAfterName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4679:28)
+      at TypeScriptParserMixin.jsxParseOpeningElementAfterName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10060:18)
+      at TypeScriptParserMixin.jsxParseOpeningElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4674:17)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4698:33)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElement (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4761:17)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4771:19)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10848:21)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9792:39
+      at TypeScriptParserMixin.tryParse (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6924:20)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9792:18)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10817:39
+      at TypeScriptParserMixin.allowInAnd (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12443:12)
+      at TypeScriptParserMixin.parseMaybeAssignAllowIn (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10817:17)
+      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12510:17)
+      at TypeScriptParserMixin.parseParenAndDistinguishExpression (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11692:28)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11348:23)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4776:20)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10848:21)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9803:20)
+      at TypeScriptParserMixin.parseExpressionBase (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10801:23)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10797:39
+      at TypeScriptParserMixin.allowInAnd (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12438:16)
+      at TypeScriptParserMixin.parseExpression (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10797:17)
+      at TypeScriptParserMixin.parseReturnStatement (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:13159:28)
+      at TypeScriptParserMixin.parseStatementContent (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12815:21)
+      at TypeScriptParserMixin.parseStatementContent (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9525:18)
+      at TypeScriptParserMixin.parseStatementLike (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12784:17)
+Error: Error transforming route file D:/My App/JobConnect/src/routes/_authenticated/news.tsx: SyntaxError: Unexpected token (639:18)
+    at file:///D:/My%20App/JobConnect/node_modules/@tanstack/router-generator/dist/esm/generator.js:143:13
+    at async generate (file:///D:/My%20App/JobConnect/node_modules/@tanstack/router-plugin/dist/esm/core/router-generator-plugin.js:39:4)
+    at async PluginContext.watchChange (file:///D:/My%20App/JobConnect/node_modules/@tanstack/router-plugin/dist/esm/core/router-generator-plugin.js:49:4)
+    at async Promise.all (index 1)
+    at async EnvironmentPluginContainer.hookParallel (file:///D:/My%20App/JobConnect/node_modules/vite/dist/node/chunks/config.js:28681:3)
+    at async EnvironmentPluginContainer.watchChange (file:///D:/My%20App/JobConnect/node_modules/vite/dist/node/chunks/config.js:28841:3)
+    at async Promise.all (index 0)
+    at async FSWatcher.<anonymous> (file:///D:/My%20App/JobConnect/node_modules/vite/dist/node/chunks/config.js:25598:3)
+[2m3:15:14 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Unexpected token (639:18)[39m
+  Plugin: [35mtanstack-router:code-splitter:compile-reference-file[39m
+  File: [36mD:/My App/JobConnect/src/routes/_authenticated/news.tsx[39m:639:18
+[33m  637 |              options={PRODUCTION_QC_OPTIONS}
+  638 |              />
+  639 |              <Input`r`n              className="sm:mt-6"`r`n              value={form.production_qc_note || ""}`r`n   ...
+      |                       ^
+  640 |            </div>
+  641 |            <MoneyField[39m
+      at constructor (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:365:19)
+      at TypeScriptParserMixin.raise (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6616:19)
+      at TypeScriptParserMixin.unexpected (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6636:16)
+      at TypeScriptParserMixin.jsxParseIdentifier (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4581:12)
+      at TypeScriptParserMixin.jsxParseNamespacedName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4588:23)
+      at TypeScriptParserMixin.jsxParseAttribute (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4664:22)
+      at TypeScriptParserMixin.jsxParseOpeningElementAfterName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4679:28)
+      at TypeScriptParserMixin.jsxParseOpeningElementAfterName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10060:18)
+      at TypeScriptParserMixin.jsxParseOpeningElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4674:17)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4698:33)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElement (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4761:17)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4771:19)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10848:21)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9792:39
+      at TypeScriptParserMixin.tryParse (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6924:20)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9792:18)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10817:39
+      at TypeScriptParserMixin.allowInAnd (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12443:12)
+      at TypeScriptParserMixin.parseMaybeAssignAllowIn (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10817:17)
+      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12510:17)
+      at TypeScriptParserMixin.parseParenAndDistinguishExpression (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11692:28)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11348:23)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4776:20)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10848:21)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9803:20)
+      at TypeScriptParserMixin.parseExpressionBase (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10801:23)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10797:39
+      at TypeScriptParserMixin.allowInAnd (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12438:16)
+      at TypeScriptParserMixin.parseExpression (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10797:17)
+      at TypeScriptParserMixin.parseReturnStatement (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:13159:28)
+      at TypeScriptParserMixin.parseStatementContent (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12815:21)
+      at TypeScriptParserMixin.parseStatementContent (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9525:18)
+[2m3:15:14 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Unexpected token (639:18)[39m
+  Plugin: [35mtanstack-router:code-splitter:compile-virtual-file[39m
+  File: [36mD:/My App/JobConnect/src/routes/_authenticated/news.tsx?tsr-split=component[39m:639:18
+[33m  637 |              options={PRODUCTION_QC_OPTIONS}
+  638 |              />
+  639 |              <Input`r`n              className="sm:mt-6"`r`n              value={form.production_qc_note || ""}`r`n   ...
+      |                       ^
+  640 |            </div>
+  641 |            <MoneyField[39m
+      at constructor (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:365:19)
+      at TypeScriptParserMixin.raise (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6616:19)
+      at TypeScriptParserMixin.unexpected (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6636:16)
+      at TypeScriptParserMixin.jsxParseIdentifier (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4581:12)
+      at TypeScriptParserMixin.jsxParseNamespacedName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4588:23)
+      at TypeScriptParserMixin.jsxParseAttribute (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4664:22)
+      at TypeScriptParserMixin.jsxParseOpeningElementAfterName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4679:28)
+      at TypeScriptParserMixin.jsxParseOpeningElementAfterName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10060:18)
+      at TypeScriptParserMixin.jsxParseOpeningElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4674:17)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4698:33)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElement (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4761:17)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4771:19)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10848:21)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9792:39
+      at TypeScriptParserMixin.tryParse (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6924:20)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9792:18)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10817:39
+      at TypeScriptParserMixin.allowInAnd (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12443:12)
+      at TypeScriptParserMixin.parseMaybeAssignAllowIn (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10817:17)
+      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12510:17)
+      at TypeScriptParserMixin.parseParenAndDistinguishExpression (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11692:28)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11348:23)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4776:20)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10848:21)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9803:20)
+      at TypeScriptParserMixin.parseExpressionBase (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10801:23)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10797:39
+      at TypeScriptParserMixin.allowInAnd (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12438:16)
+      at TypeScriptParserMixin.parseExpression (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10797:17)
+      at TypeScriptParserMixin.parseReturnStatement (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:13159:28)
+      at TypeScriptParserMixin.parseStatementContent (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12815:21)
+      at TypeScriptParserMixin.parseStatementContent (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9525:18)
+Error: Error transforming route file D:/My App/JobConnect/src/routes/_authenticated/news.tsx: SyntaxError: Unexpected token (639:18)
+    at file:///D:/My%20App/JobConnect/node_modules/@tanstack/router-generator/dist/esm/generator.js:143:13
+    at async generate (file:///D:/My%20App/JobConnect/node_modules/@tanstack/router-plugin/dist/esm/core/router-generator-plugin.js:39:4)
+    at async PluginContext.watchChange (file:///D:/My%20App/JobConnect/node_modules/@tanstack/router-plugin/dist/esm/core/router-generator-plugin.js:49:4)
+    at async Promise.all (index 1)
+    at async EnvironmentPluginContainer.hookParallel (file:///D:/My%20App/JobConnect/node_modules/vite/dist/node/chunks/config.js:28681:3)
+    at async EnvironmentPluginContainer.watchChange (file:///D:/My%20App/JobConnect/node_modules/vite/dist/node/chunks/config.js:28841:3)
+    at async Promise.all (index 0)
+    at async FSWatcher.<anonymous> (file:///D:/My%20App/JobConnect/node_modules/vite/dist/node/chunks/config.js:25598:3)
+[2m3:15:23 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Unexpected token (639:18)[39m
+  Plugin: [35mtanstack-router:code-splitter:compile-reference-file[39m
+  File: [36mD:/My App/JobConnect/src/routes/_authenticated/news.tsx[39m:639:18
+[33m  637 |              options={PRODUCTION_QC_OPTIONS}
+  638 |              />
+  639 |              <Input`r`n              className="sm:mt-6"`r`n              value={form.production_qc_note || ""}`r`n   ...
+      |                       ^
+  640 |            </div>
+  641 |            <MoneyField[39m
+      at constructor (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:365:19)
+      at TypeScriptParserMixin.raise (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6616:19)
+      at TypeScriptParserMixin.unexpected (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6636:16)
+      at TypeScriptParserMixin.jsxParseIdentifier (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4581:12)
+      at TypeScriptParserMixin.jsxParseNamespacedName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4588:23)
+      at TypeScriptParserMixin.jsxParseAttribute (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4664:22)
+      at TypeScriptParserMixin.jsxParseOpeningElementAfterName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4679:28)
+      at TypeScriptParserMixin.jsxParseOpeningElementAfterName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10060:18)
+      at TypeScriptParserMixin.jsxParseOpeningElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4674:17)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4698:33)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElement (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4761:17)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4771:19)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10848:21)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9792:39
+      at TypeScriptParserMixin.tryParse (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6924:20)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9792:18)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10817:39
+      at TypeScriptParserMixin.allowInAnd (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12443:12)
+      at TypeScriptParserMixin.parseMaybeAssignAllowIn (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10817:17)
+      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12510:17)
+      at TypeScriptParserMixin.parseParenAndDistinguishExpression (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11692:28)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11348:23)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4776:20)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10848:21)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9803:20)
+      at TypeScriptParserMixin.parseExpressionBase (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10801:23)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10797:39
+      at TypeScriptParserMixin.allowInAnd (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12438:16)
+      at TypeScriptParserMixin.parseExpression (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10797:17)
+      at TypeScriptParserMixin.parseReturnStatement (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:13159:28)
+      at TypeScriptParserMixin.parseStatementContent (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12815:21)
+      at TypeScriptParserMixin.parseStatementContent (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9525:18)
+[2m3:15:23 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Unexpected token (639:18)[39m
+  Plugin: [35mtanstack-router:code-splitter:compile-virtual-file[39m
+  File: [36mD:/My App/JobConnect/src/routes/_authenticated/news.tsx?tsr-split=component[39m:639:18
+[33m  637 |              options={PRODUCTION_QC_OPTIONS}
+  638 |              />
+  639 |              <Input`r`n              className="sm:mt-6"`r`n              value={form.production_qc_note || ""}`r`n   ...
+      |                       ^
+  640 |            </div>
+  641 |            <MoneyField[39m
+      at constructor (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:365:19)
+      at TypeScriptParserMixin.raise (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6616:19)
+      at TypeScriptParserMixin.unexpected (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6636:16)
+      at TypeScriptParserMixin.jsxParseIdentifier (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4581:12)
+      at TypeScriptParserMixin.jsxParseNamespacedName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4588:23)
+      at TypeScriptParserMixin.jsxParseAttribute (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4664:22)
+      at TypeScriptParserMixin.jsxParseOpeningElementAfterName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4679:28)
+      at TypeScriptParserMixin.jsxParseOpeningElementAfterName (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10060:18)
+      at TypeScriptParserMixin.jsxParseOpeningElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4674:17)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4698:33)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4710:32)
+      at TypeScriptParserMixin.jsxParseElement (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4761:17)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4771:19)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10848:21)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9792:39
+      at TypeScriptParserMixin.tryParse (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:6924:20)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9792:18)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10817:39
+      at TypeScriptParserMixin.allowInAnd (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12443:12)
+      at TypeScriptParserMixin.parseMaybeAssignAllowIn (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10817:17)
+      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12510:17)
+      at TypeScriptParserMixin.parseParenAndDistinguishExpression (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11692:28)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11348:23)
+      at TypeScriptParserMixin.parseExprAtom (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:4776:20)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10848:21)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9803:20)
+      at TypeScriptParserMixin.parseExpressionBase (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10801:23)
+      at D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10797:39
+      at TypeScriptParserMixin.allowInAnd (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12438:16)
+      at TypeScriptParserMixin.parseExpression (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:10797:17)
+      at TypeScriptParserMixin.parseReturnStatement (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:13159:28)
+      at TypeScriptParserMixin.parseStatementContent (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:12815:21)
+      at TypeScriptParserMixin.parseStatementContent (D:\My App\JobConnect\node_modules\@babel\parser\lib\index.js:9525:18)
