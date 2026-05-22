@@ -36,7 +36,12 @@ import {
   MapPin,
   Clock,
   Banknote,
+  CalendarDays,
+  ClipboardCheck,
+  Gift,
   ImagePlus,
+  PersonStanding,
+  ShieldCheck,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -125,6 +130,17 @@ type SelectOption = { value: string; label: string };
 const optionLabel = (options: readonly SelectOption[], value?: string) =>
   options.find((option) => option.value === value)?.label || "";
 
+const matchesInclusiveSelectFilter = (
+  value: string | undefined,
+  selected: string,
+  options: readonly SelectOption[],
+) => {
+  if (selected === "all") return true;
+  if (!value) return false;
+  if (selected === "both") return options.some((option) => option.value === value);
+  return value === selected || value === "both";
+};
+
 type FactoryOption = { id: string; name: string; address?: string };
 
 const errorMessage = (error: unknown, fallback: string) =>
@@ -178,9 +194,17 @@ function NewsPage() {
       if (search && !r.company.toLowerCase().includes(search.toLowerCase())) return false;
       if (filter === "male" && !r.gender?.includes("male")) return false;
       if (filter === "female" && !r.gender?.includes("female")) return false;
-      if (environmentFilter !== "all" && r.environment !== environmentFilter) return false;
-      if (postureFilter !== "all" && r.work_posture !== postureFilter) return false;
-      if (productionQcFilter !== "all" && r.production_qc !== productionQcFilter) return false;
+      if (!matchesInclusiveSelectFilter(r.environment, environmentFilter, ENVIRONMENT_OPTIONS)) {
+        return false;
+      }
+      if (!matchesInclusiveSelectFilter(r.work_posture, postureFilter, WORK_POSTURE_OPTIONS)) {
+        return false;
+      }
+      if (
+        !matchesInclusiveSelectFilter(r.production_qc, productionQcFilter, PRODUCTION_QC_OPTIONS)
+      ) {
+        return false;
+      }
       return true;
     });
   }, [items, search, filter, environmentFilter, postureFilter, productionQcFilter]);
@@ -297,21 +321,28 @@ function NewsPage() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{r.company}</div>
                   <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-                    <SummaryItem label="LCB" value={r.salary_base} />
-                    <SummaryItem label="Phụ cấp" value={r.allowance} />
+                    <SummaryItem icon={Banknote} label="LCB" value={r.salary_base} />
+                    <SummaryItem icon={Gift} label="Phụ cấp" value={r.allowance} />
                     <SummaryItem
+                      icon={ShieldCheck}
                       label="Môi trường"
                       value={optionLabel(ENVIRONMENT_OPTIONS, r.environment)}
                     />
                     <SummaryItem
+                      icon={PersonStanding}
                       label="Tư thế"
                       value={optionLabel(WORK_POSTURE_OPTIONS, r.work_posture)}
                     />
                     <SummaryItem
+                      icon={ClipboardCheck}
                       label="Sản xuất/QC"
                       value={optionLabel(PRODUCTION_QC_OPTIONS, r.production_qc)}
                     />
-                    <SummaryItem label="Hết hạn" value={r.recruitment_deadline} />
+                    <SummaryItem
+                      icon={CalendarDays}
+                      label="Hết hạn"
+                      value={r.recruitment_deadline}
+                    />
                   </div>
                 </div>
               </button>
@@ -392,11 +423,25 @@ function AdvancedFilters({
   );
 }
 
-function SummaryItem({ label, value }: { label: string; value?: string }) {
+function SummaryItem({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value?: string;
+}) {
+  const displayValue = value || "-";
+
   return (
-    <div className="min-w-0">
-      <span className="text-muted-foreground/80">{label}: </span>
-      <span className="font-medium text-foreground">{value || "-"}</span>
+    <div
+      className="flex min-w-0 items-center gap-1.5"
+      title={`${label}: ${displayValue}`}
+      aria-label={`${label}: ${displayValue}`}
+    >
+      <Icon className="h-3.5 w-3.5 flex-none text-muted-foreground/80" />
+      <span className="truncate font-medium text-foreground">{displayValue}</span>
     </div>
   );
 }
@@ -417,6 +462,16 @@ function DetailSheet({ item, onClose }: { item: Recruitment | null; onClose: () 
               >
                 <Phone className="h-4 w-4" /> Ứng tuyển
               </a>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 flex-none rounded-full"
+                onClick={onClose}
+                aria-label="Đóng"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
             {item.images?.length > 0 && (
               <Carousel
@@ -796,12 +851,11 @@ function WorkModeFilter({
   options: readonly SelectOption[];
 }) {
   return (
-    <Select value={value} onValueChange={onChange}>
+    <Select value={value === "all" ? undefined : value} onValueChange={onChange}>
       <SelectTrigger className="rounded-xl bg-background text-xs">
         <SelectValue placeholder={label} />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="all">{label}</SelectItem>
         {options.map((option) => (
           <SelectItem key={option.value} value={option.value}>
             {option.label}

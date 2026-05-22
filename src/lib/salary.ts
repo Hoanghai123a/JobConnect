@@ -115,5 +115,5 @@ export function calcSalary(b: RateBuckets, inputs: SalaryInputs) {
 
 export function formatVND(n: number) {
   if (!isFinite(n)) n = 0;
-  return Math.round(n).toLocaleString("vi-VN") + " ₫";
+  return Math.round(n).toLocaleString("vi-VN") + " đ";
 }

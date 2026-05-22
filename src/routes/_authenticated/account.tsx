@@ -131,6 +131,7 @@ function UserProfileForm() {
       default_hc_hours: user?.default_hc_hours ?? 8,
       default_ot_hours: user?.default_ot_hours ?? 0,
       company: user?.company || "",
+      employee_code: user?.employee_code || "",
       lcb: user?.lcb ?? 0,
       chuyen_can: user?.chuyen_can ?? 0,
       doi_song: user?.doi_song ?? 0,
@@ -169,11 +170,21 @@ function UserProfileForm() {
           <Label className="text-xs">Tên đăng nhập</Label>
           <Input value={user?.username || ""} disabled />
         </div>
-        <TextField label="Họ và tên" value={form.full_name} onChange={(v) => setForm({ ...form, full_name: v })} />
-        <TextField label="Số điện thoại" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
-        <FactorySelect
-          value={form.company}
-          onChange={(v) => setForm({ ...form, company: v })}
+        <TextField
+          label="Họ và tên"
+          value={form.full_name}
+          onChange={(v) => setForm({ ...form, full_name: v })}
+        />
+        <TextField
+          label="Số điện thoại"
+          value={form.phone}
+          onChange={(v) => setForm({ ...form, phone: v })}
+        />
+        <FactorySelect value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
+        <TextField
+          label="Mã NV"
+          value={form.employee_code}
+          onChange={(v) => setForm({ ...form, employee_code: v })}
         />
       </Section>
 
@@ -284,6 +295,8 @@ function AdminUsersPanel() {
       "Họ tên": u.full_name || "",
       "Số điện thoại": u.phone || "",
       "Tên đăng nhập": u.username || "",
+      "Mã NV": u.employee_code || "",
+      "Nhà máy": u.company || "",
       "Ngày tạo": new Date(u.created).toLocaleDateString("vi-VN"),
       "Trạng thái": u.approved ? "Hoạt động" : "Vô hiệu hoá",
     }));
@@ -365,9 +378,7 @@ function AdminUsersPanel() {
         target_factories: [],
         created_by: me?.id,
       });
-      toast.success(
-        targets.length ? `Đã gửi đến ${targets.length} người` : "Đã gửi tới tất cả",
-      );
+      toast.success(targets.length ? `Đã gửi đến ${targets.length} người` : "Đã gửi tới tất cả");
       setGuideOpen(false);
       setGuide({ title: "", content: "" });
       setSelected(new Set());
@@ -378,7 +389,14 @@ function AdminUsersPanel() {
 
   // ── Create single account ──
   const [createOpen, setCreateOpen] = useState(false);
-  const emptyNew = { full_name: "", phone: "", username: "", password: "", company: "" };
+  const emptyNew = {
+    full_name: "",
+    phone: "",
+    username: "",
+    password: "",
+    company: "",
+    employee_code: "",
+  };
   const [newUser, setNewUser] = useState<any>(emptyNew);
   const createOne = async () => {
     const full_name = (newUser.full_name || "").trim();
@@ -386,6 +404,7 @@ function AdminUsersPanel() {
     const username = (newUser.username || "").trim().toLowerCase();
     const password = newUser.password || "";
     const company = (newUser.company || "").trim();
+    const employee_code = (newUser.employee_code || "").trim();
     if (!full_name || !phone || !username || !password) {
       toast.error("Vui lòng nhập đủ Họ tên, SĐT, Tên đăng nhập, Mật khẩu");
       return;
@@ -396,7 +415,12 @@ function AdminUsersPanel() {
     }
     try {
       await pb.collection("users").create({
-        full_name, phone, username, password, company,
+        full_name,
+        phone,
+        username,
+        password,
+        company,
+        employee_code,
         passwordConfirm: password,
         role: "user",
         approved: true,
@@ -420,6 +444,7 @@ function AdminUsersPanel() {
         "Tên đăng nhập": "nguyenvana",
         "Mật khẩu": "12345678",
         "Nhà máy": "",
+        "Mã NV": "",
       },
       {
         "Họ tên": "Trần Thị B",
@@ -427,6 +452,7 @@ function AdminUsersPanel() {
         "Tên đăng nhập": "tranthib",
         "Mật khẩu": "12345678",
         "Nhà máy": "",
+        "Mã NV": "",
       },
     ];
     exportToExcel("mau_nhap_tai_khoan", { Users: sample });
@@ -447,9 +473,12 @@ function AdminUsersPanel() {
       for (const r of rows) {
         const full_name = String(r["Họ tên"] || r["full_name"] || "").trim();
         const phone = String(r["Số điện thoại"] || r["phone"] || "").trim();
-        const username = String(r["Tên đăng nhập"] || r["username"] || "").trim().toLowerCase();
+        const username = String(r["Tên đăng nhập"] || r["username"] || "")
+          .trim()
+          .toLowerCase();
         const password = String(r["Mật khẩu"] || r["password"] || "").trim();
         const company = String(r["Nhà máy"] || r["Công ty"] || r["company"] || "").trim();
+        const employee_code = String(r["Mã NV"] || r["Ma NV"] || r["employee_code"] || "").trim();
         if (!full_name || !phone || !username || !password) {
           fail++;
           continue;
@@ -467,6 +496,7 @@ function AdminUsersPanel() {
             password,
             passwordConfirm: password,
             company,
+            employee_code,
             role: "user",
             approved: true,
           });
@@ -508,12 +538,7 @@ function AdminUsersPanel() {
               <Upload className="h-3.5 w-3.5" /> {importing ? "Đang nhập..." : "Nhập Excel"}
             </span>
           </label>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={downloadTemplate}
-            className="rounded-full"
-          >
+          <Button size="sm" variant="outline" onClick={downloadTemplate} className="rounded-full">
             <FileSpreadsheet className="h-3.5 w-3.5" /> Mẫu
           </Button>
           <Button size="sm" variant="outline" onClick={exportExcel} className="rounded-full">
@@ -521,7 +546,6 @@ function AdminUsersPanel() {
           </Button>
         </div>
       </div>
-
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -575,25 +599,20 @@ function AdminUsersPanel() {
               : "border-l-[color:var(--status-danger)]";
             return (
               <div key={u.id} className={`list-card flex items-start gap-3 ${tone}`}>
-                <Checkbox
-                  checked={isSel}
-                  onCheckedChange={() => toggle(u.id)}
-                  className="mt-1"
-                />
+                <Checkbox checked={isSel} onCheckedChange={() => toggle(u.id)} className="mt-1" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">
-                    {u.full_name || u.username}
-                  </div>
+                  <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     📞 {u.phone || "—"}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Mã NV {u.employee_code || "—"} · {u.company || "—"}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
                     📅 {new Date(u.created).toLocaleDateString("vi-VN")}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-1">
-                    <span
-                      className={`chip ${u.approved ? "chip-success" : "chip-danger"}`}
-                    >
+                    <span className={`chip ${u.approved ? "chip-success" : "chip-danger"}`}>
                       {u.approved ? "Hoạt động" : "Vô hiệu hoá"}
                     </span>
                   </div>
@@ -722,6 +741,11 @@ function AdminUsersPanel() {
               value={newUser.company}
               onChange={(v) => setNewUser({ ...newUser, company: v })}
             />
+            <TextField
+              label="Mã NV"
+              value={newUser.employee_code}
+              onChange={(v) => setNewUser({ ...newUser, employee_code: v })}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
@@ -761,9 +785,7 @@ function NumberField({
     Number.isFinite(value) ? new Intl.NumberFormat("vi-VN").format(value) : "",
   );
   useEffect(() => {
-    const formatted = Number.isFinite(value)
-      ? new Intl.NumberFormat("vi-VN").format(value)
-      : "";
+    const formatted = Number.isFinite(value) ? new Intl.NumberFormat("vi-VN").format(value) : "";
     const currentDigits = text.replace(/\D/g, "");
     if (currentDigits !== String(value)) setText(formatted);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -804,13 +826,7 @@ function TextField({
   );
 }
 
-function FactorySelect({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
+function FactorySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [factories, setFactories] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(false);
   useEffect(() => {
@@ -836,9 +852,7 @@ function FactorySelect({
           <SelectValue placeholder={loading ? "Đang tải..." : "Chọn nhà máy"} />
         </SelectTrigger>
         <SelectContent className="max-h-72">
-          {!hasMatch && value && (
-            <SelectItem value={value}>{value} (cũ)</SelectItem>
-          )}
+          {!hasMatch && value && <SelectItem value={value}>{value} (cũ)</SelectItem>}
           {factories.map((f) => (
             <SelectItem key={f.id} value={f.name}>
               {f.name}

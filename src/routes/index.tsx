@@ -12,6 +12,7 @@ import {
   User,
   Settings,
   Building2,
+  CalendarCheck,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -66,13 +67,52 @@ function DashboardPage() {
       <div className="-mt-6 px-4">
         <div className="rounded-3xl bg-card p-3 shadow-soft">
           <div className="grid grid-cols-2 gap-3">
-            <FeatureTile to="/news" label="Bảng tin" description="Tin tuyển dụng mới" icon={Newspaper} />
-            <FeatureTile to="/attendance" label="Chấm công" description="Ghi nhận giờ làm" icon={Clock} />
-            <FeatureTile to="/guides" label="Hướng dẫn" description="Tài liệu, biểu mẫu" icon={BookOpen} variant="accent" />
-            <FeatureTile to="/complaints" label="Khiếu nại" description="Gửi phản ánh" icon={MessageSquareWarning} variant="accent" />
-            <FeatureTile to="/account" label="Tài khoản" description="Thông tin cá nhân" icon={User} />
+            <FeatureTile
+              to="/news"
+              label="Bảng tin"
+              description="Tin tuyển dụng mới"
+              icon={Newspaper}
+            />
+            <FeatureTile
+              to="/attendance"
+              label="Chấm công"
+              description="Ghi nhận giờ làm"
+              icon={Clock}
+            />
+            <FeatureTile
+              to="/check-attendance"
+              label="Check công/lương"
+              description="Kiểm tra bảng công"
+              icon={CalendarCheck}
+            />
+            <FeatureTile
+              to="/guides"
+              label="Hướng dẫn"
+              description="Tài liệu, biểu mẫu"
+              icon={BookOpen}
+              variant="accent"
+            />
+            <FeatureTile
+              to="/complaints"
+              label="Khiếu nại"
+              description="Gửi phản ánh"
+              icon={MessageSquareWarning}
+              variant="accent"
+            />
+            <FeatureTile
+              to="/account"
+              label="Tài khoản"
+              description="Thông tin cá nhân"
+              icon={User}
+            />
             {isAdmin && (
-              <FeatureTile to="/admin/settings" label="Cài đặt" description="Quản trị hệ thống" icon={Settings} variant="accent" />
+              <FeatureTile
+                to="/admin/settings"
+                label="Cài đặt"
+                description="Quản trị hệ thống"
+                icon={Settings}
+                variant="accent"
+              />
             )}
           </div>
         </div>

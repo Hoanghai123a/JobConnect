@@ -26,6 +26,7 @@ export interface UserRecord {
   default_hc_hours?: number;
   default_ot_hours?: number;
   company?: string;
+  employee_code?: string;
   lcb?: number;
   chuyen_can?: number;
   doi_song?: number;
@@ -50,5 +51,5 @@ export function dataUrlToFile(dataUrl: string, filename: string): File {
 
 export function fileUrl(record: any, filename?: string) {
   if (!record || !filename) return "";
-  return pb.files.getUrl(record, filename);
+  return pb.files.getURL(record, filename);
 }
