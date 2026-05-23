@@ -140,7 +140,7 @@ function CompanyTab() {
       <div className="flex items-center gap-4">
         <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border bg-muted">
           {logoPreview ? (
-            <img src={logoPreview} alt="logo" className="h-full w-full object-cover" />
+            <img src={logoPreview} alt="logo" className="logo-fit" />
           ) : (
             <Building2 className="h-8 w-8 text-muted-foreground" />
           )}

@@ -29,15 +29,13 @@ function AboutPage() {
         <div className="relative flex flex-col items-center gap-3 text-center">
           <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl bg-white/95 shadow-soft">
             {logoUrl ? (
-              <img src={logoUrl} alt="logo" className="h-full w-full object-cover" />
+              <img src={logoUrl} alt="logo" className="logo-fit" />
             ) : (
               <Building2 className="h-9 w-9 text-primary" />
             )}
           </div>
           <h1 className="text-xl font-bold leading-tight">{settings.company_name}</h1>
-          {settings.slogan && (
-            <p className="text-sm text-white/85">{settings.slogan}</p>
-          )}
+          {settings.slogan && <p className="text-sm text-white/85">{settings.slogan}</p>}
         </div>
       </div>
 

@@ -63,7 +63,7 @@ function DashboardPage() {
         <div className="relative flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-white/95 shadow-soft">
             {logoUrl ? (
-              <img src={logoUrl} alt="logo" className="h-full w-full object-cover" />
+              <img src={logoUrl} alt="logo" className="logo-fit" />
             ) : (
               <Building2 className="h-6 w-6 text-primary" />
             )}
