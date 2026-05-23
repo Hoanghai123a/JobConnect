@@ -8,9 +8,10 @@ interface Props {
   description?: string;
   icon: LucideIcon;
   variant?: "default" | "accent";
+  badge?: string;
 }
 
-export function FeatureTile({ to, label, description, icon: Icon, variant = "default" }: Props) {
+export function FeatureTile({ to, label, description, icon: Icon, variant = "default", badge }: Props) {
   return (
     <Link
       to={to as any}
@@ -28,6 +29,11 @@ export function FeatureTile({ to, label, description, icon: Icon, variant = "def
       >
         <Icon className="h-5 w-5" />
       </div>
+      {badge && (
+        <span className="absolute right-3 top-3 inline-flex min-w-6 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+          {badge}
+        </span>
+      )}
       <div>
         <div className="text-sm font-semibold tracking-tight">{label}</div>
         {description && (

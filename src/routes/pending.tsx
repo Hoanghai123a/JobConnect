@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/layout/BackButton";
 import { Clock } from "lucide-react";
 
 export const Route = createFileRoute("/pending")({
@@ -12,7 +13,8 @@ function PendingPage() {
   const nav = useNavigate();
 
   return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-4 px-6 text-center">
+      <BackButton className="absolute left-4 top-4 text-muted-foreground" />
       <div className="rounded-full bg-warning/20 p-5 text-warning-foreground">
         <Clock className="h-10 w-10" />
       </div>

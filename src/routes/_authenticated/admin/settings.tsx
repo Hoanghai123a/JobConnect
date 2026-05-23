@@ -1,7 +1,8 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+﻿import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { pb, dataUrlToFile, fileUrl } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";
+import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -92,6 +93,8 @@ function CompanyTab() {
       hotline: settings.hotline || "",
       email: settings.email || "",
       about: settings.about || "",
+      advance_limit: formatMoneyInput(settings.advance_limit || 0),
+      advance_rules: settings.advance_rules || "",
     });
     setLogoPreview(logoUrl);
   }, [settings.id]);
@@ -112,7 +115,10 @@ function CompanyTab() {
     setSaving(true);
     try {
       const fd = new FormData();
-      Object.entries(form).forEach(([k, v]) => fd.append(k, (v as any) ?? ""));
+      Object.entries(form).forEach(([k, v]) => {
+        if (k === "advance_limit") fd.append(k, String(parseMoneyInput(v as string)));
+        else fd.append(k, (v as any) ?? "");
+      });
       if (logoFile) fd.append("logo", logoFile);
       if (settings.id) {
         await pb.collection("app_settings").update(settings.id, fd);
@@ -152,11 +158,7 @@ function CompanyTab() {
         value={form.company_name}
         onChange={(v) => setForm({ ...form, company_name: v })}
       />
-      <Field
-        label="Slogan"
-        value={form.slogan}
-        onChange={(v) => setForm({ ...form, slogan: v })}
-      />
+      <Field label="Slogan" value={form.slogan} onChange={(v) => setForm({ ...form, slogan: v })} />
       <Field
         label="Địa chỉ"
         value={form.address}
@@ -167,11 +169,27 @@ function CompanyTab() {
         value={form.hotline}
         onChange={(v) => setForm({ ...form, hotline: v })}
       />
-      <Field
-        label="Email"
-        value={form.email}
-        onChange={(v) => setForm({ ...form, email: v })}
-      />
+      <Field label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
+      <div>
+        <Label className="text-xs">Hạn mức Ứng lương</Label>
+        <Input
+          className="mt-1 rounded-xl"
+          inputMode="numeric"
+          placeholder="0"
+          value={form.advance_limit || ""}
+          onChange={(e) => setForm({ ...form, advance_limit: formatMoneyInput(e.target.value) })}
+        />
+      </div>
+      <div>
+        <Label className="text-xs">Nội quy Ứng lương</Label>
+        <Textarea
+          className="mt-1 rounded-xl"
+          rows={5}
+          placeholder="Nhập nội quy, điều kiện và lưu ý khi Ứng lương..."
+          value={form.advance_rules || ""}
+          onChange={(e) => setForm({ ...form, advance_rules: e.target.value })}
+        />
+      </div>
       <div>
         <Label className="text-xs">Giới thiệu</Label>
         <Textarea
@@ -187,8 +205,9 @@ function CompanyTab() {
       </Button>
 
       <p className="text-[11px] text-muted-foreground">
-        Yêu cầu collection PocketBase tên <code>app_settings</code> với các field:
-        company_name, slogan, address, hotline, email, about (text), logo (file).
+        Yêu cầu collection PocketBase tên <code>app_settings</code> với các field: company_name,
+        slogan, address, hotline, email, about (text), advance_limit (number), advance_rules (text),
+        logo (file).
       </p>
     </Card>
   );
@@ -296,9 +315,7 @@ function FactoriesTab() {
         </button>
       </div>
 
-      {loading && (
-        <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
-      )}
+      {loading && <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>}
       {!loading && items.length === 0 && (
         <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
           Chưa có nhà máy. Bấm nút + để thêm.
@@ -325,9 +342,7 @@ function FactoriesTab() {
                 📍 {f.address}
               </a>
             )}
-            {f.hotline && (
-              <div className="text-[11px] text-muted-foreground">📞 {f.hotline}</div>
-            )}
+            {f.hotline && <div className="text-[11px] text-muted-foreground">📞 {f.hotline}</div>}
           </div>
           <div className="flex gap-1">
             <button
@@ -347,7 +362,6 @@ function FactoriesTab() {
           </div>
         </div>
       ))}
-
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="rounded-2xl">
@@ -391,7 +405,6 @@ function FactoriesTab() {
         </DialogContent>
       </Dialog>
     </div>
-
   );
 }
 
@@ -476,9 +489,7 @@ function UsersTab() {
         Tổng: {users.length} · Hiển thị: {filtered.length}
       </div>
 
-      {loading && (
-        <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
-      )}
+      {loading && <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>}
       {!loading && filtered.length === 0 && (
         <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
           Không có user.
@@ -486,7 +497,9 @@ function UsersTab() {
       )}
       {filtered.map((u) => {
         const avatar = u.avatar ? fileUrl(u, u.avatar) : "";
-        const borderTone = u.approved ? "border-l-[color:var(--status-success)]" : "border-l-[color:var(--status-warning)]";
+        const borderTone = u.approved
+          ? "border-l-[color:var(--status-success)]"
+          : "border-l-[color:var(--status-warning)]";
         return (
           <div key={u.id} className={`list-card flex items-start gap-3 ${borderTone}`}>
             <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
@@ -499,9 +512,7 @@ function UsersTab() {
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold">
-                {u.full_name || u.username}
-              </div>
+              <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
               <div className="text-[11px] text-muted-foreground">
                 @{u.username} {u.phone && `· ${u.phone}`}
               </div>
@@ -547,5 +558,4 @@ function UsersTab() {
       })}
     </div>
   );
-
 }

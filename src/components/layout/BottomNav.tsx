@@ -51,7 +51,7 @@ export function AppHeader({
   title,
   subtitle,
   right,
-  back = false,
+  back,
 }: {
   title: string;
   subtitle?: string;
@@ -59,14 +59,23 @@ export function AppHeader({
   back?: boolean;
 }) {
   const nav = useNavigate();
+  const { pathname } = useLocation();
+  const showBack = back ?? pathname !== "/";
+  const goBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    nav({ to: "/" });
+  };
   return (
     <header
       className="sticky top-0 z-30 flex items-center gap-2 border-b border-border/60 bg-card/90 px-3 backdrop-blur-xl"
       style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.5rem)", paddingBottom: "0.5rem" }}
     >
-      {back && (
+      {showBack && (
         <button
-          onClick={() => nav({ to: "/" })}
+          onClick={goBack}
           className="-ml-1 flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground active:bg-muted active:scale-95 transition"
           aria-label="Quay lại"
         >
@@ -83,4 +92,3 @@ export function AppHeader({
     </header>
   );
 }
-

@@ -9,6 +9,8 @@ export interface AppSettings {
   hotline?: string;
   email?: string;
   about?: string;
+  advance_limit?: number;
+  advance_rules?: string;
   logo?: string;
   collectionId?: string;
   collectionName?: string;
@@ -21,6 +23,8 @@ const DEFAULTS: AppSettings = {
   hotline: "",
   email: "",
   about: "",
+  advance_limit: 0,
+  advance_rules: "",
 };
 
 export async function fetchAppSettings(): Promise<AppSettings> {

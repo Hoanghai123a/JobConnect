@@ -118,7 +118,6 @@ type ParsedSalaryRow = {
   wageLine?: SalaryWageLine;
   allowanceLine?: SalaryMoneyLine;
   deductionLine?: SalaryMoneyLine;
-  totals: Partial<SalaryTotals>;
 };
 
 const EMPTY_CHECK_BUCKETS = (): RateBuckets => ({
@@ -140,10 +139,6 @@ function normalizeBuckets(summary?: Partial<RateBuckets>) {
 
 function hasRateValues(rates: RateBuckets) {
   return Object.values(rates).some((value) => Number(value) > 0);
-}
-
-function hasTotals(totals: Partial<SalaryTotals>) {
-  return Object.values(totals).some((value) => Number(value) > 0);
 }
 
 function pad(n: number) {
@@ -230,6 +225,38 @@ function parseNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function calculateSalaryTotals({
+  wageLines,
+  allowanceLines,
+  deductionLines,
+}: {
+  wageLines: SalaryWageLine[];
+  allowanceLines: SalaryMoneyLine[];
+  deductionLines: SalaryMoneyLine[];
+}): SalaryTotals {
+  const wage = wageLines.reduce((sum, line) => sum + Number(line.amount || 0), 0);
+  const allowance = allowanceLines.reduce((sum, line) => sum + Number(line.amount || 0), 0);
+  const deduction = deductionLines.reduce((sum, line) => sum + Number(line.amount || 0), 0);
+  return {
+    wage,
+    allowance,
+    deduction,
+    net: wage + allowance - deduction,
+  };
+}
+
+function formatSalaryRate(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (raw.includes("%")) return raw;
+
+  const numeric = parseNumber(raw);
+  if (!numeric) return raw;
+
+  const percent = numeric <= 10 ? numeric * 100 : numeric;
+  return `${Number.isInteger(percent) ? percent : Number(percent.toFixed(2))}%`;
+}
+
 async function readAttendanceExcel(file: File): Promise<ParsedRow[]> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: "array" });
@@ -275,7 +302,7 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
       const employeeCode = String(pick(row, ["Mã NV", "Ma NV", "employee_code"])).trim();
       const company = String(pick(row, ["Nhà máy", "Công ty", "company", "factory"])).trim();
       const wageLine = {
-        rate: String(pick(row, ["Hệ số", "He so", "rate", "coefficient"])).trim(),
+        rate: formatSalaryRate(pick(row, ["Hệ số", "He so", "rate", "coefficient"])),
         hours: parseNumber(pick(row, ["Số giờ", "So gio", "hours"])),
         amount: parseNumber(pick(row, ["Thành tiền", "Thanh tien", "Tiền lương", "wage_amount"])),
       };
@@ -303,19 +330,13 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
           allowanceLine.label || allowanceLine.amount ? allowanceLine : undefined,
         deductionLine:
           deductionLine.label || deductionLine.amount ? deductionLine : undefined,
-        totals: {
-          wage: parseNumber(pick(row, ["Tổng lương", "Tong luong", "total_wage"])),
-          allowance: parseNumber(pick(row, ["Tổng phụ cấp", "Tong phu cap", "total_allowance"])),
-          deduction: parseNumber(pick(row, ["Tổng khấu trừ", "Tong khau tru", "total_deduction"])),
-          net: parseNumber(pick(row, ["Thực nhận", "Thuc nhan", "net_amount"])),
-        },
       };
     })
     .filter(
       (row) =>
         row.employeeCode &&
         row.company &&
-        (row.wageLine || row.allowanceLine || row.deductionLine || hasTotals(row.totals)),
+        (row.wageLine || row.allowanceLine || row.deductionLine),
     );
 }
 
@@ -535,10 +556,6 @@ function AdminCheckAttendance() {
           "Tiền phụ cấp": 500000,
           "Loại khấu trừ": "BHXH",
           "Tiền khấu trừ": 525000,
-          "Tổng lương": 5000000,
-          "Tổng phụ cấp": 500000,
-          "Tổng khấu trừ": 525000,
-          "Thực nhận": 4975000,
         },
         {
           "Mã NV": sampleUser?.employee_code || "NV001",
@@ -555,10 +572,6 @@ function AdminCheckAttendance() {
           "Tiền phụ cấp": 300000,
           "Loại khấu trừ": "Tạm ứng",
           "Tiền khấu trừ": 200000,
-          "Tổng lương": "",
-          "Tổng phụ cấp": "",
-          "Tổng khấu trừ": "",
-          "Thực nhận": "",
         },
       ],
     });
@@ -588,7 +601,6 @@ function AdminCheckAttendance() {
           wageLines: SalaryWageLine[];
           allowanceLines: SalaryMoneyLine[];
           deductionLines: SalaryMoneyLine[];
-          totals: Partial<SalaryTotals>;
         }
       >();
       const unmatched = new Set<string>();
@@ -607,14 +619,12 @@ function AdminCheckAttendance() {
             wageLines: [],
             allowanceLines: [],
             deductionLines: [],
-            totals: {},
           } satisfies {
             user: UserRecord;
             personal: SalaryPersonalInfo;
             wageLines: SalaryWageLine[];
             allowanceLines: SalaryMoneyLine[];
             deductionLines: SalaryMoneyLine[];
-            totals: Partial<SalaryTotals>;
           });
 
         current.personal = {
@@ -628,7 +638,6 @@ function AdminCheckAttendance() {
         if (row.wageLine) current.wageLines.push(row.wageLine);
         if (row.allowanceLine) current.allowanceLines.push(row.allowanceLine);
         if (row.deductionLine) current.deductionLines.push(row.deductionLine);
-        if (!hasTotals(current.totals) && hasTotals(row.totals)) current.totals = row.totals;
         grouped.set(user.id, current);
       }
 
@@ -650,19 +659,11 @@ function AdminCheckAttendance() {
         .create(formData)) as unknown as BatchRecord;
 
       for (const item of grouped.values()) {
-        const calculatedWage = item.wageLines.reduce((sum, line) => sum + line.amount, 0);
-        const calculatedAllowance = item.allowanceLines.reduce((sum, line) => sum + line.amount, 0);
-        const calculatedDeduction = item.deductionLines.reduce((sum, line) => sum + line.amount, 0);
-        const totals = {
-          wage: item.totals.wage || calculatedWage,
-          allowance: item.totals.allowance || calculatedAllowance,
-          deduction: item.totals.deduction || calculatedDeduction,
-          net:
-            item.totals.net ||
-            (item.totals.wage || calculatedWage) +
-              (item.totals.allowance || calculatedAllowance) -
-              (item.totals.deduction || calculatedDeduction),
-        };
+        const totals = calculateSalaryTotals({
+          wageLines: item.wageLines,
+          allowanceLines: item.allowanceLines,
+          deductionLines: item.deductionLines,
+        });
         await pb.collection("check_salary_items").create({
           batch: batch.id,
           user: item.user.id,
@@ -1180,6 +1181,14 @@ function SalaryCheckPanel({
     );
   }
 
+  const selectedTotals = selected
+    ? calculateSalaryTotals({
+        wageLines: selected.wage_lines,
+        allowanceLines: selected.allowance_lines,
+        deductionLines: selected.deduction_lines,
+      })
+    : null;
+
   return (
     <div className="space-y-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1207,7 +1216,7 @@ function SalaryCheckPanel({
         <Card className="overflow-hidden">
           <div className="gradient-accent p-4 text-accent-foreground">
             <div className="text-xs uppercase opacity-80">Bảng check lương</div>
-            <div className="mt-0.5 text-xl font-bold">{formatVND(selected.totals.net)}</div>
+            <div className="mt-0.5 text-xl font-bold">{formatVND(selectedTotals?.net || 0)}</div>
             <div className="mt-1 text-xs opacity-80">
               {selected.month} · Lần {selected.round_no}
             </div>
@@ -1226,22 +1235,22 @@ function SalaryCheckPanel({
               <InfoCell label="Số công HC" value={`${selected.personal.standard_workdays || 0}`} />
             </div>
 
-            <SalaryWageSection lines={selected.wage_lines} total={selected.totals.wage} />
+            <SalaryWageSection lines={selected.wage_lines} total={selectedTotals?.wage || 0} />
             <SalaryMoneySection
               title="Phụ cấp"
               lines={selected.allowance_lines}
-              total={selected.totals.allowance}
+              total={selectedTotals?.allowance || 0}
             />
             <SalaryMoneySection
               title="Khấu trừ"
               lines={selected.deduction_lines}
-              total={selected.totals.deduction}
+              total={selectedTotals?.deduction || 0}
             />
 
             <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
               <div className="text-[11px] uppercase text-muted-foreground">Thực nhận</div>
               <div className="mt-1 text-xl font-bold text-primary">
-                {formatVND(selected.totals.net)}
+                {formatVND(selectedTotals?.net || 0)}
               </div>
             </div>
           </div>

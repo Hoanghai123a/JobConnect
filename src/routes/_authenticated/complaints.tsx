@@ -8,7 +8,6 @@ import { StatusChip, toneBorder, ChipTone } from "@/components/ui/status-chip";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -25,6 +24,7 @@ type Status = "pending" | "accepted" | "rejected";
 
 interface Complaint {
   id: string;
+  employee_code?: string;
   full_name: string;
   company: string;
   phone: string;
@@ -55,6 +55,8 @@ function ComplaintsPage() {
     content: "",
   });
   const [sending, setSending] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [expandedComplaintId, setExpandedComplaintId] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -72,7 +74,14 @@ function ComplaintsPage() {
     e.preventDefault();
     setSending(true);
     try {
-      await pb.collection("complaints").create({ ...form, status: "pending" });
+      await pb.collection("complaints").create({
+        full_name: user?.full_name || "",
+        employee_code: user?.employee_code || "",
+        company: user?.company || "",
+        phone: user?.phone || "",
+        content: form.content,
+        status: "pending",
+      });
       toast.success("Đã gửi khiếu nại");
       setForm({ ...form, content: "" });
       load();
@@ -137,9 +146,22 @@ function ComplaintsPage() {
       <PageContainer title="Khiếu nại" subtitle="Gửi phản ánh & xem lịch sử">
         <form onSubmit={submit} className="space-y-3">
           <div className="card-soft space-y-3 rounded-2xl border bg-card p-4">
-            <Field label="Họ và tên" value={form.full_name} onChange={(v) => setForm({ ...form, full_name: v })} required />
-            <Field label="Nhà máy đang làm" value={form.company} onChange={(v) => setForm({ ...form, company: v })} required />
-            <Field label="Số điện thoại liên hệ" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} type="tel" required />
+            <button
+              type="button"
+              onClick={() => setShowProfile((v) => !v)}
+              className="flex w-full items-center justify-between rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm font-medium"
+            >
+              <span>Thông tin cá nhân</span>
+              <span className="text-xs text-muted-foreground">{showProfile ? "Thu gọn" : "Xem"}</span>
+            </button>
+            {showProfile && (
+              <div className="space-y-3">
+                <ReadOnlyField label="Họ và tên" value={user?.full_name} />
+                <ReadOnlyField label="Mã NV" value={user?.employee_code} />
+                <ReadOnlyField label="Nhà máy đang làm" value={user?.company} />
+                <ReadOnlyField label="Số điện thoại liên hệ" value={user?.phone} />
+              </div>
+            )}
             <div className="space-y-1">
               <Label>Nội dung khiếu nại</Label>
               <Textarea
@@ -166,6 +188,7 @@ function ComplaintsPage() {
           items.map((c) => {
             const status = (c.status || "pending") as Status;
             const meta = STATUS_META[status];
+            const isExpanded = expandedComplaintId === c.id;
             return (
               <div key={c.id} className={cn("list-card", toneBorder[meta.tone])}>
                 <div className="flex items-baseline justify-between gap-2">
@@ -174,7 +197,18 @@ function ComplaintsPage() {
                     {new Date(c.created).toLocaleString("vi-VN")}
                   </div>
                 </div>
-                <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed">{c.content}</p>
+                <button
+                  type="button"
+                  onClick={() => setExpandedComplaintId(isExpanded ? null : c.id)}
+                  className="mt-2 block w-full text-left"
+                >
+                  <p className={cn("whitespace-pre-wrap text-[13px] leading-relaxed", !isExpanded && "line-clamp-2")}>
+                    {c.content}
+                  </p>
+                  <div className="mt-1 text-[11px] font-medium text-primary">
+                    {isExpanded ? "Thu gọn" : "Xem đầy đủ"}
+                  </div>
+                </button>
                 {c.admin_note && (
                   <div className="mt-2 rounded-lg bg-muted/60 p-2 text-[12px]">
                     <div className="font-semibold text-muted-foreground">Phản hồi admin:</div>
@@ -234,6 +268,7 @@ function ComplaintsPage() {
         filtered.map((c) => {
           const status = (c.status || "pending") as Status;
           const meta = STATUS_META[status];
+          const isExpanded = expandedComplaintId === c.id;
           return (
             <div key={c.id} className={cn("list-card", toneBorder[meta.tone])}>
               <div className="flex items-baseline justify-between gap-2">
@@ -246,7 +281,18 @@ function ComplaintsPage() {
                 <StatusChip tone="neutral">{c.company || "—"}</StatusChip>
                 <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
               </div>
-              <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed">{c.content}</p>
+              <button
+                type="button"
+                onClick={() => setExpandedComplaintId(isExpanded ? null : c.id)}
+                className="mt-2 block w-full text-left"
+              >
+                <p className={cn("whitespace-pre-wrap text-[13px] leading-relaxed", !isExpanded && "line-clamp-2")}>
+                  {c.content}
+                </p>
+                <div className="mt-1 text-[11px] font-medium text-primary">
+                  {isExpanded ? "Thu gọn" : "Xem đầy đủ"}
+                </div>
+              </button>
 
               {c.admin_note && (
                 <div className="mt-2 rounded-lg bg-muted/60 p-2 text-[12px]">
@@ -306,14 +352,13 @@ function ComplaintsPage() {
   );
 }
 
-function Field(props: {
-  label: string; value: string; onChange: (v: string) => void;
-  type?: string; required?: boolean;
-}) {
+function ReadOnlyField(props: { label: string; value?: string | null }) {
   return (
     <div className="space-y-1">
       <Label>{props.label}</Label>
-      <Input type={props.type || "text"} value={props.value} onChange={(e) => props.onChange(e.target.value)} required={props.required} />
+      <div className="rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-sm text-foreground">
+        {props.value?.trim() || "—"}
+      </div>
     </div>
   );
 }

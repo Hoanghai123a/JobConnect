@@ -6,6 +6,7 @@ import { isProfileComplete } from "@/lib/profile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BackButton } from "@/components/layout/BackButton";
 import { toast } from "sonner";
 import { Loader2, LogIn } from "lucide-react";
 
@@ -96,7 +97,8 @@ function LoginPage() {
           <p className="mt-4 text-sm font-medium text-muted-foreground">Đang đăng nhập...</p>
         </div>
       )}
-      <div className="gradient-primary px-6 pb-10 pt-16 text-primary-foreground">
+      <div className="gradient-primary relative px-6 pb-10 pt-16 text-primary-foreground">
+        <BackButton className="absolute left-4 top-4 text-primary-foreground active:bg-white/15" />
         <h1 className="text-3xl font-bold tracking-tight">HR Connect</h1>
         <p className="mt-1 text-sm text-primary-foreground/80">
           Kết nối NLĐ — Nhà tuyển dụng

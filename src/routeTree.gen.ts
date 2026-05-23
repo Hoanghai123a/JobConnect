@@ -15,11 +15,14 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedTransportRouteImport } from './routes/_authenticated/transport'
 import { Route as AuthenticatedNewsRouteImport } from './routes/_authenticated/news'
 import { Route as AuthenticatedGuidesRouteImport } from './routes/_authenticated/guides'
 import { Route as AuthenticatedComplaintsRouteImport } from './routes/_authenticated/complaints'
 import { Route as AuthenticatedCheckAttendanceRouteImport } from './routes/_authenticated/check-attendance'
+import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedAttendanceRouteImport } from './routes/_authenticated/attendance'
+import { Route as AuthenticatedAdvancesRouteImport } from './routes/_authenticated/advances'
 import { Route as AuthenticatedAccountRouteImport } from './routes/_authenticated/account'
 import { Route as ApiPublicPocketbaseAuthRouteImport } from './routes/api/public/pocketbase-auth'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
@@ -55,6 +58,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedTransportRoute = AuthenticatedTransportRouteImport.update({
+  id: '/transport',
+  path: '/transport',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedNewsRoute = AuthenticatedNewsRouteImport.update({
   id: '/news',
   path: '/news',
@@ -76,9 +84,19 @@ const AuthenticatedCheckAttendanceRoute =
     path: '/check-attendance',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedChatRoute = AuthenticatedChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedAttendanceRoute = AuthenticatedAttendanceRouteImport.update({
   id: '/attendance',
   path: '/attendance',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedAdvancesRoute = AuthenticatedAdvancesRouteImport.update({
+  id: '/advances',
+  path: '/advances',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedAccountRoute = AuthenticatedAccountRouteImport.update({
@@ -116,11 +134,14 @@ export interface FileRoutesByFullPath {
   '/pending': typeof PendingRoute
   '/register': typeof RegisterRoute
   '/account': typeof AuthenticatedAccountRoute
+  '/advances': typeof AuthenticatedAdvancesRoute
   '/attendance': typeof AuthenticatedAttendanceRoute
+  '/chat': typeof AuthenticatedChatRoute
   '/check-attendance': typeof AuthenticatedCheckAttendanceRoute
   '/complaints': typeof AuthenticatedComplaintsRoute
   '/guides': typeof AuthenticatedGuidesRoute
   '/news': typeof AuthenticatedNewsRoute
+  '/transport': typeof AuthenticatedTransportRoute
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
@@ -133,11 +154,14 @@ export interface FileRoutesByTo {
   '/pending': typeof PendingRoute
   '/register': typeof RegisterRoute
   '/account': typeof AuthenticatedAccountRoute
+  '/advances': typeof AuthenticatedAdvancesRoute
   '/attendance': typeof AuthenticatedAttendanceRoute
+  '/chat': typeof AuthenticatedChatRoute
   '/check-attendance': typeof AuthenticatedCheckAttendanceRoute
   '/complaints': typeof AuthenticatedComplaintsRoute
   '/guides': typeof AuthenticatedGuidesRoute
   '/news': typeof AuthenticatedNewsRoute
+  '/transport': typeof AuthenticatedTransportRoute
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
@@ -152,11 +176,14 @@ export interface FileRoutesById {
   '/pending': typeof PendingRoute
   '/register': typeof RegisterRoute
   '/_authenticated/account': typeof AuthenticatedAccountRoute
+  '/_authenticated/advances': typeof AuthenticatedAdvancesRoute
   '/_authenticated/attendance': typeof AuthenticatedAttendanceRoute
+  '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/check-attendance': typeof AuthenticatedCheckAttendanceRoute
   '/_authenticated/complaints': typeof AuthenticatedComplaintsRoute
   '/_authenticated/guides': typeof AuthenticatedGuidesRoute
   '/_authenticated/news': typeof AuthenticatedNewsRoute
+  '/_authenticated/transport': typeof AuthenticatedTransportRoute
   '/_authenticated/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
@@ -171,11 +198,14 @@ export interface FileRouteTypes {
     | '/pending'
     | '/register'
     | '/account'
+    | '/advances'
     | '/attendance'
+    | '/chat'
     | '/check-attendance'
     | '/complaints'
     | '/guides'
     | '/news'
+    | '/transport'
     | '/admin/approvals'
     | '/admin/settings'
     | '/api/public/pocketbase-auth'
@@ -188,11 +218,14 @@ export interface FileRouteTypes {
     | '/pending'
     | '/register'
     | '/account'
+    | '/advances'
     | '/attendance'
+    | '/chat'
     | '/check-attendance'
     | '/complaints'
     | '/guides'
     | '/news'
+    | '/transport'
     | '/admin/approvals'
     | '/admin/settings'
     | '/api/public/pocketbase-auth'
@@ -206,11 +239,14 @@ export interface FileRouteTypes {
     | '/pending'
     | '/register'
     | '/_authenticated/account'
+    | '/_authenticated/advances'
     | '/_authenticated/attendance'
+    | '/_authenticated/chat'
     | '/_authenticated/check-attendance'
     | '/_authenticated/complaints'
     | '/_authenticated/guides'
     | '/_authenticated/news'
+    | '/_authenticated/transport'
     | '/_authenticated/admin/approvals'
     | '/_authenticated/admin/settings'
     | '/api/public/pocketbase-auth'
@@ -272,6 +308,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/transport': {
+      id: '/_authenticated/transport'
+      path: '/transport'
+      fullPath: '/transport'
+      preLoaderRoute: typeof AuthenticatedTransportRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/news': {
       id: '/_authenticated/news'
       path: '/news'
@@ -300,11 +343,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCheckAttendanceRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/chat': {
+      id: '/_authenticated/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof AuthenticatedChatRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/attendance': {
       id: '/_authenticated/attendance'
       path: '/attendance'
       fullPath: '/attendance'
       preLoaderRoute: typeof AuthenticatedAttendanceRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/advances': {
+      id: '/_authenticated/advances'
+      path: '/advances'
+      fullPath: '/advances'
+      preLoaderRoute: typeof AuthenticatedAdvancesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/account': {
@@ -347,22 +404,28 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteChildren {
   AuthenticatedAccountRoute: typeof AuthenticatedAccountRoute
+  AuthenticatedAdvancesRoute: typeof AuthenticatedAdvancesRoute
   AuthenticatedAttendanceRoute: typeof AuthenticatedAttendanceRoute
+  AuthenticatedChatRoute: typeof AuthenticatedChatRoute
   AuthenticatedCheckAttendanceRoute: typeof AuthenticatedCheckAttendanceRoute
   AuthenticatedComplaintsRoute: typeof AuthenticatedComplaintsRoute
   AuthenticatedGuidesRoute: typeof AuthenticatedGuidesRoute
   AuthenticatedNewsRoute: typeof AuthenticatedNewsRoute
+  AuthenticatedTransportRoute: typeof AuthenticatedTransportRoute
   AuthenticatedAdminApprovalsRoute: typeof AuthenticatedAdminApprovalsRoute
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAccountRoute: AuthenticatedAccountRoute,
+  AuthenticatedAdvancesRoute: AuthenticatedAdvancesRoute,
   AuthenticatedAttendanceRoute: AuthenticatedAttendanceRoute,
+  AuthenticatedChatRoute: AuthenticatedChatRoute,
   AuthenticatedCheckAttendanceRoute: AuthenticatedCheckAttendanceRoute,
   AuthenticatedComplaintsRoute: AuthenticatedComplaintsRoute,
   AuthenticatedGuidesRoute: AuthenticatedGuidesRoute,
   AuthenticatedNewsRoute: AuthenticatedNewsRoute,
+  AuthenticatedTransportRoute: AuthenticatedTransportRoute,
   AuthenticatedAdminApprovalsRoute: AuthenticatedAdminApprovalsRoute,
   AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
 }

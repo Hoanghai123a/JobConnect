@@ -4,6 +4,7 @@ import { pb } from "@/lib/pocketbase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BackButton } from "@/components/layout/BackButton";
 import { toast } from "sonner";
 import { Loader2, UserPlus } from "lucide-react";
 
@@ -102,7 +103,8 @@ function RegisterPage() {
 
   return (
     <div className="min-h-[100dvh]">
-      <div className="gradient-primary px-6 pb-10 pt-12 text-primary-foreground">
+      <div className="gradient-primary relative px-6 pb-10 pt-16 text-primary-foreground">
+        <BackButton className="absolute left-4 top-4 text-primary-foreground active:bg-white/15" />
         <h1 className="text-2xl font-bold">Tạo tài khoản</h1>
         <p className="mt-1 text-sm text-primary-foreground/80">
           Sau khi đăng ký, admin có thể cần duyệt tài khoản của bạn.

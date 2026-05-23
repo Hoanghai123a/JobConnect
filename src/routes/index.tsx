@@ -1,4 +1,5 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+﻿import { createFileRoute, redirect } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
@@ -13,6 +14,9 @@ import {
   Settings,
   Building2,
   CalendarCheck,
+  Wallet,
+  MessagesSquare,
+  BusFront,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -28,6 +32,27 @@ export const Route = createFileRoute("/")({
 function DashboardPage() {
   const { user, isAdmin } = useAuth();
   const { data: settings, logoUrl } = useAppSettings();
+  const [pendingComplaintCount, setPendingComplaintCount] = useState(0);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let alive = true;
+
+    (async () => {
+      try {
+        const res = await pb.collection("complaints").getList(1, 1, {
+          filter: 'status = "pending"',
+        });
+        if (alive) setPendingComplaintCount(res.totalItems || 0);
+      } catch {
+        if (alive) setPendingComplaintCount(0);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin]);
 
   return (
     <div className="pb-nav">
@@ -98,6 +123,32 @@ function DashboardPage() {
               description="Gửi phản ánh"
               icon={MessageSquareWarning}
               variant="accent"
+              badge={
+                isAdmin && pendingComplaintCount > 0
+                  ? pendingComplaintCount > 9
+                    ? "9+"
+                    : String(pendingComplaintCount)
+                  : undefined
+              }
+            />
+            <FeatureTile
+              to="/advances"
+              label="Ứng lương"
+              description="Xin ứng lương"
+              icon={Wallet}
+            />
+            <FeatureTile
+              to="/chat"
+              label="Trò chuyện"
+              description="Nhắn tin nhóm"
+              icon={MessagesSquare}
+              variant="accent"
+            />
+            <FeatureTile
+              to="/transport"
+              label="Tìm nhà xe"
+              description="Thông tin cộng đồng"
+              icon={BusFront}
             />
             <FeatureTile
               to="/account"
