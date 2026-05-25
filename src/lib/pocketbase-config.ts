@@ -1,7 +1,18 @@
-// Use same-origin proxy in the browser (avoids CORS issues with the upstream
-// PocketBase server). Server-side code still hits the upstream directly.
-const UPSTREAM = "https://ripple-skyrocket-progeny.ngrok-free.dev";
+const DEFAULT_PB_URL = "https://ripple-skyrocket-progeny.ngrok-free.dev";
+
+const runtimePbUrl =
+  typeof window !== "undefined" ? (window as { __PB_URL__?: string }).__PB_URL__ : undefined;
+
+export function getPBUpstream() {
+  return (
+    (typeof process !== "undefined" ? process.env.PB_URL : undefined) ||
+    import.meta.env.VITE_PB_URL ||
+    DEFAULT_PB_URL
+  );
+}
 
 export const PB_URL =
-  (typeof window !== "undefined" && (window as any).__PB_URL__) ||
-  (typeof window !== "undefined" ? `${window.location.origin}/api/public/pb` : UPSTREAM);
+  runtimePbUrl ||
+  (typeof window !== "undefined"
+    ? `${window.location.origin}/api/public/pb`
+    : import.meta.env.VITE_PB_URL || DEFAULT_PB_URL);

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { PB_URL } from "@/lib/pocketbase-config";
+import { getPBUpstream } from "@/lib/pocketbase-config";
 
 const LoginSchema = z.object({
   identity: z.string().trim().min(1).max(100),
@@ -18,7 +18,7 @@ export const Route = createFileRoute("/api/public/pocketbase-auth")({
         }
 
         try {
-          const response = await fetch(`${PB_URL}/api/collections/users/auth-with-password`, {
+          const response = await fetch(`${getPBUpstream()}/api/collections/users/auth-with-password`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

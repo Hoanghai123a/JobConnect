@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-const PB_ORIGIN = "https://ripple-skyrocket-progeny.ngrok-free.dev";
+import { getPBUpstream } from "@/lib/pocketbase-config";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -11,7 +11,7 @@ const CORS = {
 
 async function proxy(request: Request, splat: string | undefined) {
   const incoming = new URL(request.url);
-  const target = `${PB_ORIGIN}/${splat ?? ""}${incoming.search}`;
+  const target = `${getPBUpstream()}/${splat ?? ""}${incoming.search}`;
 
   const headers = new Headers();
   const auth = request.headers.get("authorization");
