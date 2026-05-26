@@ -30,7 +30,6 @@ function RegisterPage() {
     username: "",
     full_name: "",
     phone: "",
-    bank_account_number: "",
     password: "",
     passwordConfirm: "",
   });
@@ -44,31 +43,27 @@ function RegisterPage() {
       toast.error("Mật khẩu nhập lại không khớp");
       return;
     }
+
     const username = form.username.trim().toLowerCase();
     if (!/^[a-z0-9_.]{4,30}$/.test(username)) {
-      toast.error("Tên đăng nhập 4–30 ký tự, chỉ chữ/số/._");
+      toast.error("Tên đăng nhập 4-30 ký tự, chỉ chữ/số/._");
       return;
     }
+
     if (form.phone && !/^[0-9]{9,11}$/.test(form.phone)) {
       toast.error("Số điện thoại không hợp lệ");
       return;
     }
+
     setLoading(true);
     try {
       const userTaken = await pb
         .collection("users")
         .getList(1, 1, { filter: `username="${username}"` })
         .catch(() => ({ items: [] as any[] }));
-      if (userTaken.items.length) throw new Error("Tên đăng nhập đã tồn tại");
 
-      if (form.bank_account_number) {
-        const stkTaken = await pb
-          .collection("users")
-          .getList(1, 1, {
-            filter: `bank_account_number="${form.bank_account_number}"`,
-          })
-          .catch(() => ({ items: [] as any[] }));
-        if (stkTaken.items.length) throw new Error("Số tài khoản đã tồn tại");
+      if (userTaken.items.length) {
+        throw new Error("Tên đăng nhập đã tồn tại");
       }
 
       const requireApproval = await fetchRequireApproval();
@@ -80,7 +75,6 @@ function RegisterPage() {
         passwordConfirm: form.passwordConfirm,
         full_name: form.full_name,
         phone: form.phone || undefined,
-        bank_account_number: form.bank_account_number || undefined,
         role: "user",
         approved: !requireApproval,
       });
@@ -102,28 +96,38 @@ function RegisterPage() {
   };
 
   return (
-    <div className="min-h-[100dvh]">
-      <div className="gradient-primary relative px-6 pb-10 pt-16 text-primary-foreground">
+    <div className="min-h-[100dvh] bg-background">
+      <div className="gradient-primary relative px-6 pb-16 pt-16 text-primary-foreground">
         <BackButton className="absolute left-4 top-4 text-primary-foreground active:bg-white/15" />
         <h1 className="text-2xl font-bold">Tạo tài khoản</h1>
         <p className="mt-1 text-sm text-primary-foreground/80">
           Sau khi đăng ký, admin có thể cần duyệt tài khoản của bạn.
         </p>
       </div>
-      <form onSubmit={onSubmit} className="card-soft mx-4 -mt-6 space-y-3 rounded-2xl p-5">
-        <Field label="Tên đăng nhập" value={form.username} onChange={(v) => set("username", v)} required placeholder="nguyenvana" />
+      <form
+        onSubmit={onSubmit}
+        className="card-soft mx-4 -mt-8 space-y-4 rounded-[1.75rem] border border-border/70 bg-card/95 p-6 shadow-[0_20px_45px_-24px_rgba(15,23,42,0.28)] backdrop-blur"
+      >
+        <Field label="Tên đăng nhập" value={form.username} onChange={(v) => set("username", v)} required />
         <Field label="Họ và tên" value={form.full_name} onChange={(v) => set("full_name", v)} required />
         <Field label="Số điện thoại" value={form.phone} onChange={(v) => set("phone", v)} type="tel" />
-        <Field label="Số tài khoản ngân hàng" value={form.bank_account_number} onChange={(v) => set("bank_account_number", v)} />
         <Field label="Mật khẩu" value={form.password} onChange={(v) => set("password", v)} required type="password" />
-        <Field label="Nhập lại mật khẩu" value={form.passwordConfirm} onChange={(v) => set("passwordConfirm", v)} required type="password" />
+        <Field
+          label="Nhập lại mật khẩu"
+          value={form.passwordConfirm}
+          onChange={(v) => set("passwordConfirm", v)}
+          required
+          type="password"
+        />
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
           Đăng ký
         </Button>
         <p className="text-center text-sm text-muted-foreground">
           Đã có tài khoản?{" "}
-          <Link to="/login" className="font-medium text-primary">Đăng nhập</Link>
+          <Link to="/login" className="font-medium text-primary">
+            Đăng nhập
+          </Link>
         </p>
       </form>
     </div>
@@ -136,17 +140,18 @@ function Field(props: {
   onChange: (v: string) => void;
   type?: string;
   required?: boolean;
-  placeholder?: string;
 }) {
   return (
     <div className="space-y-1.5">
-      <Label>{props.label}{props.required && <span className="text-destructive"> *</span>}</Label>
+      <Label>
+        {props.label}
+        {props.required && <span className="text-destructive"> *</span>}
+      </Label>
       <Input
         type={props.type || "text"}
         value={props.value}
         onChange={(e) => props.onChange(e.target.value)}
         required={props.required}
-        placeholder={props.placeholder}
       />
     </div>
   );

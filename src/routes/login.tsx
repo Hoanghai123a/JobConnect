@@ -86,7 +86,7 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col relative">
+    <div className="min-h-[100dvh] flex flex-col relative bg-background">
       {loading && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/70 backdrop-blur-sm">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-card shadow-soft">
@@ -95,7 +95,7 @@ function LoginPage() {
           <p className="mt-4 text-sm font-medium text-muted-foreground">Đang đăng nhập...</p>
         </div>
       )}
-      <div className="gradient-primary relative px-6 pb-10 pt-16 text-primary-foreground">
+      <div className="gradient-primary relative px-6 pb-16 pt-16 text-primary-foreground">
         <BackButton className="absolute left-4 top-4 text-primary-foreground active:bg-white/15" />
         <h1 className="text-3xl font-bold tracking-tight">HR Connect</h1>
         <p className="mt-1 text-sm text-primary-foreground/80">Kết nối NLĐ — Nhà tuyển dụng</p>
@@ -103,7 +103,7 @@ function LoginPage() {
       <form
         onSubmit={onSubmit}
         noValidate
-        className="card-soft mx-4 -mt-6 flex-1 space-y-4 rounded-2xl p-5"
+        className="card-soft mx-4 -mt-8 flex-1 space-y-5 rounded-[1.75rem] border border-border/70 bg-card/95 p-6 shadow-[0_20px_45px_-24px_rgba(15,23,42,0.28)] backdrop-blur"
       >
         <div className="space-y-1.5">
           <Label htmlFor="identity">Tên đăng nhập</Label>
