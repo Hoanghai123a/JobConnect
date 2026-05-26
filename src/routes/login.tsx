@@ -18,7 +18,6 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-
 function LoginPage() {
   const { login } = useAuth();
   const nav = useNavigate();
@@ -86,7 +85,6 @@ function LoginPage() {
     }
   };
 
-
   return (
     <div className="min-h-[100dvh] flex flex-col relative">
       {loading && (
@@ -100,9 +98,7 @@ function LoginPage() {
       <div className="gradient-primary relative px-6 pb-10 pt-16 text-primary-foreground">
         <BackButton className="absolute left-4 top-4 text-primary-foreground active:bg-white/15" />
         <h1 className="text-3xl font-bold tracking-tight">HR Connect</h1>
-        <p className="mt-1 text-sm text-primary-foreground/80">
-          Kết nối NLĐ — Nhà tuyển dụng
-        </p>
+        <p className="mt-1 text-sm text-primary-foreground/80">Kết nối NLĐ — Nhà tuyển dụng</p>
       </div>
       <form
         onSubmit={onSubmit}
@@ -116,7 +112,7 @@ function LoginPage() {
             value={identity}
             disabled={loading}
             onChange={(e) => setIdentity(e.target.value)}
-            placeholder="nguyenvana"
+            placeholder=""
             autoComplete="username"
           />
         </div>
@@ -144,5 +140,4 @@ function LoginPage() {
       </form>
     </div>
   );
-
 }

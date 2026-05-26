@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
 import { pb, type UserRecord } from "./pocketbase";
+import { getPBUpstream } from "./pocketbase-config";
 
 interface AuthCtx {
   user: UserRecord | null;
