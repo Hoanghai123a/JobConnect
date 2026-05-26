@@ -7,6 +7,7 @@ import {
   Scripts,
   Link,
 } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/lib/auth";
@@ -59,7 +60,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "HR Connect — Tuyển dụng & NLĐ" },
       { name: "description", content: "Kết nối nhà tuyển dụng và người lao động khu công nghiệp." },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/pwa-icon.svg" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
@@ -83,6 +88,12 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    }
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
