@@ -25,9 +25,11 @@ import { Route as AuthenticatedAttendanceRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdvancesRouteImport } from './routes/_authenticated/advances'
 import { Route as AuthenticatedAccountRouteImport } from './routes/_authenticated/account'
 import { Route as ApiPublicPocketbaseAuthRouteImport } from './routes/api/public/pocketbase-auth'
+import { Route as ApiPublicAppLogoRouteImport } from './routes/api/public/app-logo'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminApprovalsRouteImport } from './routes/_authenticated/admin/approvals'
 import { Route as ApiPublicPbSplatRouteImport } from './routes/api/public/pb.$'
+import { Route as ApiPublicManifestWebmanifestRouteImport } from './routes/api/public/manifest.webmanifest'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
@@ -109,6 +111,11 @@ const ApiPublicPocketbaseAuthRoute = ApiPublicPocketbaseAuthRouteImport.update({
   path: '/api/public/pocketbase-auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicAppLogoRoute = ApiPublicAppLogoRouteImport.update({
+  id: '/api/public/app-logo',
+  path: '/api/public/app-logo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedAdminSettingsRoute =
   AuthenticatedAdminSettingsRouteImport.update({
     id: '/admin/settings',
@@ -126,6 +133,12 @@ const ApiPublicPbSplatRoute = ApiPublicPbSplatRouteImport.update({
   path: '/api/public/pb/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicManifestWebmanifestRoute =
+  ApiPublicManifestWebmanifestRouteImport.update({
+    id: '/api/public/manifest/webmanifest',
+    path: '/api/public/manifest/webmanifest',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -144,7 +157,9 @@ export interface FileRoutesByFullPath {
   '/transport': typeof AuthenticatedTransportRoute
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
+  '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
 }
 export interface FileRoutesByTo {
@@ -164,7 +179,9 @@ export interface FileRoutesByTo {
   '/transport': typeof AuthenticatedTransportRoute
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
+  '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
 }
 export interface FileRoutesById {
@@ -186,7 +203,9 @@ export interface FileRoutesById {
   '/_authenticated/transport': typeof AuthenticatedTransportRoute
   '/_authenticated/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
+  '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
 }
 export interface FileRouteTypes {
@@ -208,7 +227,9 @@ export interface FileRouteTypes {
     | '/transport'
     | '/admin/approvals'
     | '/admin/settings'
+    | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
+    | '/api/public/manifest/webmanifest'
     | '/api/public/pb/$'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -228,7 +249,9 @@ export interface FileRouteTypes {
     | '/transport'
     | '/admin/approvals'
     | '/admin/settings'
+    | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
+    | '/api/public/manifest/webmanifest'
     | '/api/public/pb/$'
   id:
     | '__root__'
@@ -249,7 +272,9 @@ export interface FileRouteTypes {
     | '/_authenticated/transport'
     | '/_authenticated/admin/approvals'
     | '/_authenticated/admin/settings'
+    | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
+    | '/api/public/manifest/webmanifest'
     | '/api/public/pb/$'
   fileRoutesById: FileRoutesById
 }
@@ -260,7 +285,9 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PendingRoute: typeof PendingRoute
   RegisterRoute: typeof RegisterRoute
+  ApiPublicAppLogoRoute: typeof ApiPublicAppLogoRoute
   ApiPublicPocketbaseAuthRoute: typeof ApiPublicPocketbaseAuthRoute
+  ApiPublicManifestWebmanifestRoute: typeof ApiPublicManifestWebmanifestRoute
   ApiPublicPbSplatRoute: typeof ApiPublicPbSplatRoute
 }
 
@@ -378,6 +405,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPocketbaseAuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/app-logo': {
+      id: '/api/public/app-logo'
+      path: '/api/public/app-logo'
+      fullPath: '/api/public/app-logo'
+      preLoaderRoute: typeof ApiPublicAppLogoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/admin/settings': {
       id: '/_authenticated/admin/settings'
       path: '/admin/settings'
@@ -397,6 +431,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/pb/$'
       fullPath: '/api/public/pb/$'
       preLoaderRoute: typeof ApiPublicPbSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/manifest/webmanifest': {
+      id: '/api/public/manifest/webmanifest'
+      path: '/api/public/manifest/webmanifest'
+      fullPath: '/api/public/manifest/webmanifest'
+      preLoaderRoute: typeof ApiPublicManifestWebmanifestRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -441,7 +482,9 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PendingRoute: PendingRoute,
   RegisterRoute: RegisterRoute,
+  ApiPublicAppLogoRoute: ApiPublicAppLogoRoute,
   ApiPublicPocketbaseAuthRoute: ApiPublicPocketbaseAuthRoute,
+  ApiPublicManifestWebmanifestRoute: ApiPublicManifestWebmanifestRoute,
   ApiPublicPbSplatRoute: ApiPublicPbSplatRoute,
 }
 export const routeTree = rootRouteImport

@@ -97,7 +97,7 @@ function LoginPage() {
       )}
       <div className="gradient-primary relative px-6 pb-16 pt-16 text-primary-foreground">
         <BackButton className="absolute left-4 top-4 text-primary-foreground active:bg-white/15" />
-        <h1 className="text-3xl font-bold tracking-tight">HR Connect</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Hoàng Long DJC</h1>
         <p className="mt-1 text-sm text-primary-foreground/80">Kết nối NLĐ — Nhà tuyển dụng</p>
       </div>
       <form

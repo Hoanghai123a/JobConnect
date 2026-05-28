@@ -17,7 +17,7 @@ export interface AppSettings {
 }
 
 const DEFAULTS: AppSettings = {
-  company_name: "HR Connect",
+  company_name: "Chấm công",
   slogan: "Kết nối nhà tuyển dụng & người lao động",
   address: "",
   hotline: "",

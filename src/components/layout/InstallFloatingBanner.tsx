@@ -105,10 +105,11 @@ export function InstallFloatingBanner() {
           <Download className="h-4.5 w-4.5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-tight text-foreground">Cài app ra màn hình chính</p>
+          <p className="text-sm font-semibold leading-tight text-foreground">
+            Cài app ra màn hình chính
+          </p>
           <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
-            Mở nhanh như app, không vướng thanh trình duyệt khi chấm công.
-            {isIos && " Trên iPhone: bấm Chia sẻ rồi chọn Thêm vào màn hình chính."}
+            Trên iPhone: bấm Chia sẻ rồi chọn Thêm vào màn hình chính.
           </p>
         </div>
         {installPrompt && (
@@ -117,7 +118,7 @@ export function InstallFloatingBanner() {
             onClick={install}
             className="shrink-0 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground active:scale-95"
           >
-            Cài
+            Cài đặt
           </button>
         )}
       </div>
