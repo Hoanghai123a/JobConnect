@@ -12,6 +12,7 @@ export interface AppSettings {
   advance_limit?: number;
   advance_rules?: string;
   logo?: string;
+  install_guide_images?: string[];
   collectionId?: string;
   collectionName?: string;
 }
@@ -25,6 +26,7 @@ const DEFAULTS: AppSettings = {
   about: "",
   advance_limit: 0,
   advance_rules: "",
+  install_guide_images: [],
 };
 
 export async function fetchAppSettings(): Promise<AppSettings> {

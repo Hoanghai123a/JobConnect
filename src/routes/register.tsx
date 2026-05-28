@@ -6,7 +6,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BackButton } from "@/components/layout/BackButton";
 import { toast } from "sonner";
-import { Loader2, UserPlus } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock,
+  Eye,
+  EyeOff,
+  Loader2,
+  LogIn,
+  UserCog,
+  UserPlus,
+  XCircle,
+} from "lucide-react";
 
 export const Route = createFileRoute("/register")({
   beforeLoad: () => {
@@ -24,6 +34,8 @@ async function fetchRequireApproval(): Promise<boolean> {
   }
 }
 
+type RegisterResult = "pending" | "approved" | null;
+
 function RegisterPage() {
   const nav = useNavigate();
   const [form, setForm] = useState({
@@ -34,8 +46,25 @@ function RegisterPage() {
     passwordConfirm: "",
   });
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [result, setResult] = useState<RegisterResult>(null);
 
   const set = (k: keyof typeof form, v: string) => setForm((s) => ({ ...s, [k]: v }));
+
+  const backToLogin = () => {
+    pb.authStore.clear();
+    nav({ to: "/login" });
+  };
+
+  const exit = () => {
+    pb.authStore.clear();
+    window.close();
+    window.setTimeout(() => nav({ to: "/login" }), 100);
+  };
+
+  const useNow = () => {
+    nav({ to: "/account", search: { incomplete: 1 } as any });
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,10 +112,10 @@ function RegisterPage() {
 
       if (requireApproval) {
         toast.success("Đã gửi đăng ký, chờ admin duyệt");
-        nav({ to: "/pending" });
+        setResult("pending");
       } else {
         toast.success("Đăng ký thành công");
-        nav({ to: "/news" });
+        setResult("approved");
       }
     } catch (err: any) {
       toast.error(err?.message || "Đăng ký thất bại");
@@ -94,6 +123,52 @@ function RegisterPage() {
       setLoading(false);
     }
   };
+
+  if (result) {
+    const isPending = result === "pending";
+    return (
+      <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-4 px-6 text-center">
+        <div
+          className={
+            isPending
+              ? "rounded-full bg-warning/20 p-5 text-warning-foreground"
+              : "rounded-full bg-success/20 p-5 text-success-foreground"
+          }
+        >
+          {isPending ? <Clock className="h-10 w-10" /> : <CheckCircle2 className="h-10 w-10" />}
+        </div>
+        <h1 className="text-xl font-semibold">
+          {isPending ? "Đang chờ duyệt" : "Tạo tài khoản thành công"}
+        </h1>
+        <p className="max-w-xs text-sm text-muted-foreground">
+          {isPending
+            ? "Tài khoản của bạn đã được gửi tới admin. Bạn sẽ vào được hệ thống ngay khi được duyệt."
+            : "Tài khoản đã sẵn sàng. Bạn có thể vào ứng dụng để bổ sung thông tin tài khoản."}
+        </p>
+        <div className="flex w-full max-w-xs flex-col gap-2">
+          {isPending ? (
+            <>
+              <Button variant="outline" onClick={backToLogin} className="w-full">
+                <LogIn className="h-4 w-4" /> Trở về đăng nhập
+              </Button>
+              <Button variant="ghost" onClick={exit} className="w-full">
+                <XCircle className="h-4 w-4" /> Thoát
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={useNow} className="w-full">
+                <UserCog className="h-4 w-4" /> Sử dụng ngay
+              </Button>
+              <Button variant="outline" onClick={backToLogin} className="w-full">
+                <LogIn className="h-4 w-4" /> Trở về đăng nhập
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] bg-background">
@@ -108,19 +183,66 @@ function RegisterPage() {
         onSubmit={onSubmit}
         className="card-soft mx-4 -mt-8 space-y-4 rounded-[1.75rem] border border-border/70 bg-card/95 p-6 shadow-[0_20px_45px_-24px_rgba(15,23,42,0.28)] backdrop-blur"
       >
-        <Field label="Tên đăng nhập" value={form.username} onChange={(v) => set("username", v)} required />
-        <Field label="Họ và tên" value={form.full_name} onChange={(v) => set("full_name", v)} required />
-        <Field label="Số điện thoại" value={form.phone} onChange={(v) => set("phone", v)} type="tel" />
-        <Field label="Mật khẩu" value={form.password} onChange={(v) => set("password", v)} required type="password" />
+        <Field
+          label="Tên đăng nhập"
+          value={form.username}
+          onChange={(v) => set("username", v)}
+          required
+          placeholder="VD: NguyenVanA"
+        />
+        <Field
+          label="Họ và tên"
+          value={form.full_name}
+          onChange={(v) => set("full_name", v)}
+          required
+        />
+        <Field
+          label="Số điện thoại"
+          value={form.phone}
+          onChange={(v) => set("phone", v)}
+          type="tel"
+        />
+        <Field
+          label="Mật khẩu"
+          value={form.password}
+          onChange={(v) => set("password", v)}
+          required
+          placeholder="Ít nhất 8 ký tự"
+          type={showPassword ? "text" : "password"}
+          action={
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute inset-y-0 right-3 flex items-center text-muted-foreground"
+              aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          }
+        />
         <Field
           label="Nhập lại mật khẩu"
           value={form.passwordConfirm}
           onChange={(v) => set("passwordConfirm", v)}
           required
-          type="password"
+          type={showPassword ? "text" : "password"}
+          action={
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute inset-y-0 right-3 flex items-center text-muted-foreground"
+              aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          }
         />
         <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <UserPlus className="h-4 w-4" />
+          )}
           Đăng ký
         </Button>
         <p className="text-center text-sm text-muted-foreground">
@@ -140,6 +262,8 @@ function Field(props: {
   onChange: (v: string) => void;
   type?: string;
   required?: boolean;
+  placeholder?: string;
+  action?: React.ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
@@ -147,12 +271,17 @@ function Field(props: {
         {props.label}
         {props.required && <span className="text-destructive"> *</span>}
       </Label>
-      <Input
-        type={props.type || "text"}
-        value={props.value}
-        onChange={(e) => props.onChange(e.target.value)}
-        required={props.required}
-      />
+      <div className="relative">
+        <Input
+          type={props.type || "text"}
+          value={props.value}
+          onChange={(e) => props.onChange(e.target.value)}
+          required={props.required}
+          placeholder={props.placeholder}
+          className={props.action ? "pr-10" : undefined}
+        />
+        {props.action}
+      </div>
     </div>
   );
 }

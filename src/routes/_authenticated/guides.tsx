@@ -1,7 +1,8 @@
 ﻿import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { pb } from "@/lib/pocketbase";
+import { pb, fileUrl } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { useAppSettings } from "@/lib/app-settings";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -26,6 +27,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -33,13 +41,16 @@ import * as Icons from "lucide-react";
 import {
   BookOpen,
   ChevronDown,
+  Download,
   Pencil,
   Plus,
+  Smartphone,
   Trash2,
   Send,
   Users,
   Factory as FactoryIcon,
   User as UserIcon,
+  X,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/guides")({
@@ -89,6 +100,22 @@ const TARGET_META: Record<TargetType, { label: string; icon: any }> = {
   factories: { label: "Theo nhà máy", icon: FactoryIcon },
   users: { label: "Cá nhân", icon: UserIcon },
 };
+
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
+
+function isIosDevice() {
+  if (typeof window === "undefined") return false;
+  const ua = window.navigator.userAgent.toLowerCase();
+  return /iphone|ipad|ipod/.test(ua) || (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
+}
+
+function isAndroidDevice() {
+  if (typeof window === "undefined") return false;
+  return /android/i.test(window.navigator.userAgent);
+}
 
 function MultiSelectDropdown({
   options,
@@ -192,6 +219,7 @@ function MultiSelectDropdown({
 
 function GuidesPage() {
   const { user, isAdmin } = useAuth();
+  const { data: settings } = useAppSettings();
   const [items, setItems] = useState<Guide[]>([]);
   const [factories, setFactories] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -199,6 +227,13 @@ function GuidesPage() {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [reading, setReading] = useState<Guide | null>(null);
+  const [installGuideOpen, setInstallGuideOpen] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const isIos = useMemo(() => isIosDevice(), []);
+  const isAndroid = useMemo(() => isAndroidDevice(), []);
+  const installGuideImages = Array.isArray(settings.install_guide_images)
+    ? settings.install_guide_images
+    : [];
 
   const load = async () => {
     try {
@@ -236,6 +271,29 @@ function GuidesPage() {
     load();
     loadAdminRefs(); /* eslint-disable-next-line */
   }, [isAdmin]);
+
+  useEffect(() => {
+    const onBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+    const onAppInstalled = () => {
+      setInstallPrompt(null);
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onAppInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onAppInstalled);
+    };
+  }, []);
+
+  const installApp = async () => {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    if (choice.outcome === "accepted") setInstallPrompt(null);
+  };
 
   const openNew = () => {
     setEditing({
@@ -337,6 +395,32 @@ function GuidesPage() {
         )
       }
     >
+      {(isIos || isAndroid) && (
+        <div className="mb-3 rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
+          <button
+            type="button"
+            onClick={() => (isIos ? setInstallGuideOpen(true) : void installApp())}
+            disabled={isAndroid && !installPrompt}
+            className="flex w-full items-center gap-2 text-left disabled:opacity-50"
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
+              {isIos ? <Smartphone className="h-4.5 w-4.5" /> : <Download className="h-4.5 w-4.5" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-foreground">Cài app ra màn hình chính</div>
+              <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                {isIos
+                  ? "Bấm Hướng dẫn để xem từng bước bằng ảnh."
+                  : "Bấm Cài đặt để thêm app vào màn hình chính."}
+              </div>
+            </div>
+            <span className="shrink-0 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
+              {isIos ? "Hướng dẫn" : "Cài đặt"}
+            </span>
+          </button>
+        </div>
+      )}
+
       <FilterBar search={search} onSearchChange={setSearch} placeholder="Tìm hướng dẫn…" />
 
       {filtered.length === 0 ? (
@@ -409,6 +493,48 @@ function GuidesPage() {
           })}
         </div>
       )}
+
+      <Dialog open={installGuideOpen} onOpenChange={setInstallGuideOpen}>
+        <DialogContent className="max-h-[92dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Cài app ra màn hình chính</DialogTitle>
+            <DialogDescription>Làm theo từng bước theo ảnh bên dưới.</DialogDescription>
+          </DialogHeader>
+          {installGuideImages.length > 0 ? (
+            <Carousel opts={{ align: "start", loop: installGuideImages.length > 1 }} className="pt-2">
+              <CarouselContent className="-ml-2">
+                {installGuideImages.map((image, index) => (
+                  <CarouselItem key={image} className="pl-2">
+                    <div className="overflow-hidden rounded-2xl border bg-muted">
+                      <div className="flex items-center justify-between border-b bg-card px-3 py-2">
+                        <div className="text-xs font-medium">Bước {index + 1}</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {index + 1}/{installGuideImages.length}
+                        </div>
+                      </div>
+                      <img
+                        src={fileUrl(settings, image)}
+                        alt={`Hướng dẫn bước ${index + 1}`}
+                        className="max-h-[60dvh] w-full object-contain bg-black"
+                      />
+                    </div>
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+              {installGuideImages.length > 1 && (
+                <>
+                  <CarouselPrevious className="left-3 border-border/70 bg-background/90 shadow-soft" />
+                  <CarouselNext className="right-3 border-border/70 bg-background/90 shadow-soft" />
+                </>
+              )}
+            </Carousel>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+              Chưa có ảnh hướng dẫn. Vui lòng liên hệ admin.
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Reader */}
       <Dialog open={!!reading} onOpenChange={(o) => !o && setReading(null)}>

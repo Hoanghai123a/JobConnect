@@ -70,16 +70,19 @@ function AccountPage() {
       <AppHeader
         title="Tài khoản"
         right={
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              logout();
-              nav({ to: "/login" });
-            }}
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <>
+            <div>Đăng xuất</div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                logout();
+                nav({ to: "/login" });
+              }}
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </>
         }
       />
 

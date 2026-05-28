@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +33,7 @@ import {
   X,
   ShieldCheck,
   Search,
+  Smartphone,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({
@@ -83,7 +84,12 @@ function CompanyTab() {
   const [form, setForm] = useState<any>({});
   const [logoPreview, setLogoPreview] = useState<string>("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [installGuideFiles, setInstallGuideFiles] = useState<File[]>([]);
+  const [removedInstallGuideImages, setRemovedInstallGuideImages] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const installGuideImages = Array.isArray(settings.install_guide_images)
+    ? settings.install_guide_images
+    : [];
 
   useEffect(() => {
     setForm({
@@ -111,15 +117,25 @@ function CompanyTab() {
     r.readAsDataURL(f);
   };
 
+  const onPickInstallGuideImages = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setInstallGuideFiles((prev) => [...prev, ...files]);
+    e.target.value = "";
+  };
+
   const save = async () => {
     setSaving(true);
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => {
+        if (k === "install_guide_images") return;
         if (k === "advance_limit") fd.append(k, String(parseMoneyInput(v as string)));
         else fd.append(k, (v as any) ?? "");
       });
       if (logoFile) fd.append("logo", logoFile);
+      for (const rm of removedInstallGuideImages) fd.append("install_guide_images-", rm);
+      for (const f of installGuideFiles) fd.append("install_guide_images", f);
       if (settings.id) {
         await pb.collection("app_settings").update(settings.id, fd);
       } else {
@@ -128,6 +144,8 @@ function CompanyTab() {
       toast.success("Đã lưu thông tin công ty");
       qc.invalidateQueries({ queryKey: ["app_settings"] });
       refetch();
+      setInstallGuideFiles([]);
+      setRemovedInstallGuideImages([]);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi lưu");
     } finally {
@@ -200,6 +218,67 @@ function CompanyTab() {
         />
       </div>
 
+      <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/30 p-3">
+        <div className="flex items-center gap-2">
+          <Smartphone className="h-4 w-4 text-primary" />
+          <div>
+            <div className="text-xs font-semibold">Hướng dẫn cài app cho iOS</div>
+            <div className="text-[11px] text-muted-foreground">
+              Tải ảnh step-by-step để hiển thị trong nút "Hướng dẫn".
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {installGuideImages
+            .filter((f) => !removedInstallGuideImages.includes(f))
+            .map((f) => (
+              <div key={f} className="relative">
+                <img
+                  src={fileUrl(settings, f)}
+                  alt=""
+                  className="h-20 w-20 rounded-xl object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => setRemovedInstallGuideImages((prev) => [...prev, f])}
+                  className="absolute -right-1 -top-1 rounded-full bg-destructive p-0.5 text-destructive-foreground"
+                  aria-label="Xoá ảnh hướng dẫn"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          {installGuideFiles.map((f, i) => (
+            <div key={`${f.name}-${i}`} className="relative">
+              <img
+                src={URL.createObjectURL(f)}
+                alt=""
+                className="h-20 w-20 rounded-xl object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => setInstallGuideFiles((prev) => prev.filter((_, j) => j !== i))}
+                className="absolute -right-1 -top-1 rounded-full bg-destructive p-0.5 text-destructive-foreground"
+                aria-label="Xoá ảnh mới"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed text-muted-foreground">
+            <ImagePlus className="h-5 w-5" />
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={onPickInstallGuideImages}
+            />
+          </label>
+        </div>
+      </div>
+
       <Button onClick={save} disabled={saving} className="w-full rounded-xl">
         <Save className="h-4 w-4" /> {saving ? "Đang lưu..." : "Lưu thay đổi"}
       </Button>
@@ -207,7 +286,7 @@ function CompanyTab() {
       <p className="text-[11px] text-muted-foreground">
         Yêu cầu collection PocketBase tên <code>app_settings</code> với các field: company_name,
         slogan, address, hotline, email, about (text), advance_limit (number), advance_rules (text),
-        logo (file).
+        logo (file), install_guide_images (multiple files).
       </p>
     </Card>
   );
@@ -414,6 +493,11 @@ function UsersTab() {
   const [users, setUsers] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const [requireApproval, setRequireApproval] = useState(true);
+  const [settingsId, setSettingsId] = useState<string | null>(null);
+  const [pendingApprovalValue, setPendingApprovalValue] = useState<boolean | null>(null);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [confirmingApproval, setConfirmingApproval] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -424,6 +508,16 @@ function UsersTab() {
       toast.error(e?.message || "Lỗi tải user");
     } finally {
       setLoading(false);
+    }
+
+    try {
+      const s = await pb.collection("settings").getList(1, 1);
+      if (s.items[0]) {
+        setSettingsId(s.items[0].id);
+        setRequireApproval(Boolean(s.items[0].require_approval));
+      }
+    } catch {
+      // Settings collection may be initialized later by another admin screen.
     }
   };
   useEffect(() => {
@@ -463,6 +557,68 @@ function UsersTab() {
     }
   };
 
+  const toggleApprovalRequirement = async (val: boolean) => {
+    setRequireApproval(val);
+    try {
+      if (settingsId) {
+        await pb.collection("settings").update(settingsId, { require_approval: val });
+      } else {
+        const r = await pb.collection("settings").create({ require_approval: val });
+        setSettingsId(r.id);
+      }
+      toast.success("Đã cập nhật kiểm duyệt đăng ký");
+    } catch (e: any) {
+      setRequireApproval((prev) => !prev);
+      toast.error(e?.message || "Lỗi cập nhật");
+    }
+  };
+
+  const requestToggleApprovalRequirement = (val: boolean) => {
+    setPendingApprovalValue(val);
+    setAdminPassword("");
+  };
+
+  const closeApprovalConfirm = () => {
+    if (confirmingApproval) return;
+    setPendingApprovalValue(null);
+    setAdminPassword("");
+  };
+
+  const confirmToggleApprovalRequirement = async () => {
+    if (pendingApprovalValue === null) return;
+    const admin = pb.authStore.record as any;
+    const identity = admin?.username || admin?.email;
+    if (!identity) {
+      toast.error("Không xác định được tài khoản admin");
+      return;
+    }
+    if (!adminPassword) {
+      toast.error("Nhập mật khẩu admin");
+      return;
+    }
+
+    setConfirmingApproval(true);
+    try {
+      const res = await fetch("/api/public/pocketbase-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identity, password: adminPassword }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.message || "Mật khẩu admin không đúng");
+      if (payload?.record?.id !== admin.id || payload?.record?.role !== "admin") {
+        throw new Error("Tài khoản xác thực không phải admin hiện tại");
+      }
+
+      await toggleApprovalRequirement(pendingApprovalValue);
+      closeApprovalConfirm();
+    } catch (e: any) {
+      toast.error(e?.message || "Không xác thực được mật khẩu admin");
+    } finally {
+      setConfirmingApproval(false);
+    }
+  };
+
   const filtered = users.filter((u) => {
     if (!search) return true;
     const s = search.toLowerCase();
@@ -475,6 +631,19 @@ function UsersTab() {
 
   return (
     <div className="space-y-3">
+      <Card className="flex items-center gap-3 rounded-2xl border-border/60 p-3.5 shadow-soft">
+        <div className="rounded-xl bg-primary/10 p-2 text-primary">
+          <ShieldCheck className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <Label className="text-sm font-semibold">Yêu cầu duyệt khi đăng ký</Label>
+          <div className="text-[11px] text-muted-foreground">
+            Tắt để user tạo tài khoản và sử dụng ngay.
+          </div>
+        </div>
+        <Switch checked={requireApproval} onCheckedChange={requestToggleApprovalRequirement} />
+      </Card>
+
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -556,6 +725,47 @@ function UsersTab() {
           </div>
         );
       })}
+
+      <Dialog
+        open={pendingApprovalValue !== null}
+        onOpenChange={(open) => !open && closeApprovalConfirm()}
+      >
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Xác nhận mật khẩu admin</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label className="text-xs">Mật khẩu admin</Label>
+            <Input
+              type="password"
+              className="rounded-xl"
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmToggleApprovalRequirement();
+              }}
+              autoComplete="current-password"
+              autoFocus
+            />
+            <div className="text-xs text-muted-foreground">
+              Sau khi xác thực, hệ thống sẽ {pendingApprovalValue ? "bật" : "tắt"} yêu cầu duyệt khi
+              đăng ký.
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeApprovalConfirm} className="rounded-xl">
+              Huỷ
+            </Button>
+            <Button
+              onClick={confirmToggleApprovalRequirement}
+              disabled={confirmingApproval}
+              className="rounded-xl"
+            >
+              {confirmingApproval ? "Đang xác thực..." : "Xác nhận"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
