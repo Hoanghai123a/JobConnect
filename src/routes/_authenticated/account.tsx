@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { VN_BANKS } from "@/lib/vn-banks";
 import { exportToExcel } from "@/lib/excel";
+import { isUserApproved } from "@/lib/user-approval";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import {
@@ -301,7 +302,7 @@ function AdminUsersPanel() {
       "Mã NV": u.employee_code || "",
       "Nhà máy": u.company || "",
       "Ngày tạo": new Date(u.created).toLocaleDateString("vi-VN"),
-      "Trạng thái": u.approved ? "Hoạt động" : "Vô hiệu hoá",
+      "Trạng thái": isUserApproved(u) ? "Hoạt động" : "Vô hiệu hoá",
     }));
     exportToExcel(`danh_sach_tai_khoan_${Date.now()}`, { Users: rows });
   };
@@ -311,7 +312,11 @@ function AdminUsersPanel() {
     if (!confirm(`${disable ? "Vô hiệu hoá" : "Kích hoạt"} ${selected.size} tài khoản?`)) return;
     try {
       for (const id of selected) {
-        await pb.collection("users").update(id, { approved: !disable });
+        await pb.collection("users").update(id, {
+          approvalStatus: disable ? "pending" : "approved",
+          approved: disable ? "false" : "true",
+          status: disable ? "disabled" : "active",
+        });
       }
       toast.success("Đã cập nhật");
       setSelected(new Set());
@@ -426,7 +431,9 @@ function AdminUsersPanel() {
         employee_code,
         passwordConfirm: password,
         role: "user",
-        approved: true,
+        approvalStatus: "approved",
+        approved: "true",
+        status: "active",
       });
       toast.success("Đã tạo tài khoản");
       setCreateOpen(false);
@@ -501,7 +508,9 @@ function AdminUsersPanel() {
             company,
             employee_code,
             role: "user",
-            approved: true,
+            approvalStatus: "approved",
+            approved: "true",
+            status: "active",
           });
           ok++;
         } catch (err: any) {
@@ -597,7 +606,8 @@ function AdminUsersPanel() {
         <div className="space-y-2">
           {filtered.map((u) => {
             const isSel = selected.has(u.id);
-            const tone = u.approved
+            const approved = isUserApproved(u);
+            const tone = approved
               ? "border-l-[color:var(--status-success)]"
               : "border-l-[color:var(--status-danger)]";
             return (
@@ -615,8 +625,8 @@ function AdminUsersPanel() {
                     📅 {new Date(u.created).toLocaleDateString("vi-VN")}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-1">
-                    <span className={`chip ${u.approved ? "chip-success" : "chip-danger"}`}>
-                      {u.approved ? "Hoạt động" : "Vô hiệu hoá"}
+                    <span className={`chip ${approved ? "chip-success" : "chip-danger"}`}>
+                      {approved ? "Hoạt động" : "Vô hiệu hoá"}
                     </span>
                   </div>
                 </div>

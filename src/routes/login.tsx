@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { pb } from "@/lib/pocketbase";
 import { isProfileComplete } from "@/lib/profile";
+import { isUserApproved } from "@/lib/user-approval";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,7 +46,7 @@ function LoginPage() {
     try {
       const u = await login(normalizedIdentity, password);
       const name = (u as any).full_name || (u as any).username || "bạn";
-      if ((u as any).approved === false) {
+      if (!isUserApproved(u)) {
         toast.warning("Tài khoản đang chờ duyệt", {
           id: toastId,
           description: `Xin chào ${name}, admin sẽ duyệt tài khoản của bạn sớm.`,

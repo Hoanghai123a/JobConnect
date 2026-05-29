@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, redirect, useNavigate } from "@tanstack/react-
 import { useEffect } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { isUserApproved } from "@/lib/user-approval";
 import { BottomNav } from "@/components/layout/BottomNav";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -12,7 +13,7 @@ export const Route = createFileRoute("/_authenticated")({
       throw redirect({ to: "/login", search: { redirect: location.href } as any });
     }
     const u = pb.authStore.record as any;
-    if (u && u.approved === false) {
+    if (u && !isUserApproved(u)) {
       throw redirect({ to: "/pending" });
     }
   },

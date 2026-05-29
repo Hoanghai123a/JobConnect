@@ -105,15 +105,17 @@ function RegisterPage() {
         full_name: form.full_name,
         phone: form.phone || undefined,
         role: "user",
-        approved: !requireApproval,
+        approvalStatus: requireApproval ? "pending" : "approved",
+        approved: requireApproval ? "false" : "true",
+        status: requireApproval ? "disabled" : "active",
       });
-
-      await pb.collection("users").authWithPassword(username, form.password);
 
       if (requireApproval) {
         toast.success("Đã gửi đăng ký, chờ admin duyệt");
+        pb.authStore.clear();
         setResult("pending");
       } else {
+        await pb.collection("users").authWithPassword(username, form.password);
         toast.success("Đăng ký thành công");
         setResult("approved");
       }

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { pb, dataUrlToFile, fileUrl } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";
+import { isUserApproved } from "@/lib/user-approval";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppHeader } from "@/components/layout/BottomNav";
@@ -525,9 +526,14 @@ function UsersTab() {
   }, []);
 
   const toggleApproved = async (u: any) => {
+    const approved = isUserApproved(u);
     try {
-      await pb.collection("users").update(u.id, { approved: !u.approved });
-      toast.success(u.approved ? "Đã huỷ duyệt" : "Đã duyệt");
+      await pb.collection("users").update(u.id, {
+        approvalStatus: approved ? "pending" : "approved",
+        approved: approved ? "false" : "true",
+        status: approved ? "disabled" : "active",
+      });
+      toast.success(approved ? "Đã huỷ duyệt" : "Đã duyệt");
       load();
     } catch (e: any) {
       toast.error(e?.message || "Lỗi");
@@ -666,7 +672,8 @@ function UsersTab() {
       )}
       {filtered.map((u) => {
         const avatar = u.avatar ? fileUrl(u, u.avatar) : "";
-        const borderTone = u.approved
+        const approved = isUserApproved(u);
+        const borderTone = approved
           ? "border-l-[color:var(--status-success)]"
           : "border-l-[color:var(--status-warning)]";
         return (
@@ -690,8 +697,8 @@ function UsersTab() {
                   {u.role === "admin" && <ShieldCheck className="h-3 w-3" />}
                   {u.role === "admin" ? "Admin" : "User"}
                 </span>
-                <span className={`chip ${u.approved ? "chip-success" : "chip-warning"}`}>
-                  {u.approved ? "Đã duyệt" : "Chờ duyệt"}
+                <span className={`chip ${approved ? "chip-success" : "chip-warning"}`}>
+                  {approved ? "Đã duyệt" : "Chờ duyệt"}
                 </span>
               </div>
             </div>
@@ -699,13 +706,13 @@ function UsersTab() {
               <button
                 onClick={() => toggleApproved(u)}
                 className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                  u.approved
+                  approved
                     ? "text-[color:var(--status-warning-fg)] hover:bg-[color:var(--status-warning-bg)]"
                     : "text-[color:var(--status-success-fg)] hover:bg-[color:var(--status-success-bg)]"
                 }`}
-                title={u.approved ? "Huỷ duyệt" : "Duyệt"}
+                title={approved ? "Huỷ duyệt" : "Duyệt"}
               >
-                {u.approved ? <X className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                {approved ? <X className="h-4 w-4" /> : <Check className="h-4 w-4" />}
               </button>
               <button
                 onClick={() => toggleRole(u)}

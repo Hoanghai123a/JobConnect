@@ -44,6 +44,7 @@ export const Route = createFileRoute("/_authenticated/advances")({
 
 type AdvanceStatus = "pending" | "accepted" | "rejected";
 type RecoveryStatus = "none" | "recovered" | "unrecoverable";
+type AdminTab = "pending" | "accepted" | "recovered" | "unrecoverable" | "rejected" | "all";
 
 type AdvanceRecord = {
   id: string;
@@ -78,7 +79,7 @@ const RECOVERY_META: Record<
 > = {
   none: { label: "Chờ thu hồi", tone: "neutral" },
   recovered: { label: "Đã thu hồi", tone: "success" },
-  unrecoverable: { label: "Không thể thu hồi", tone: "danger" },
+  unrecoverable: { label: "Không thu hồi", tone: "danger" },
 };
 
 export function AdvancesPage() {
@@ -87,7 +88,7 @@ export function AdvancesPage() {
 
   const [items, setItems] = useState<AdvanceRecord[]>([]);
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"pending" | "accepted" | "rejected" | "all">("pending");
+  const [tab, setTab] = useState<AdminTab>("pending");
   const [showProfile, setShowProfile] = useState(false);
   const [sending, setSending] = useState(false);
   const [amountText, setAmountText] = useState("");
@@ -134,7 +135,14 @@ export function AdvancesPage() {
     const to = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
     return items.filter((row) => {
       const status = row.status || "pending";
-      if (tab !== "all" && status !== tab) return false;
+      const recovery = row.recovery_status || "none";
+      if (tab === "pending" && status !== "pending") return false;
+      if (tab === "accepted" && (status !== "accepted" || recovery !== "none")) return false;
+      if (tab === "recovered" && (status !== "accepted" || recovery !== "recovered")) return false;
+      if (tab === "unrecoverable" && (status !== "accepted" || recovery !== "unrecoverable")) {
+        return false;
+      }
+      if (tab === "rejected" && status !== "rejected") return false;
       const createdAt = new Date(row.created).getTime();
       if (from && createdAt < from) return false;
       if (to && createdAt > to) return false;
@@ -150,10 +158,22 @@ export function AdvancesPage() {
       );
     });
   }, [items, search, tab, dateFrom, dateTo]);
-  const selectableFiltered = useMemo(
-    () => filtered.filter((row) => (row.status || "pending") === "pending"),
-    [filtered],
-  );
+  const isActionable = (row: AdvanceRecord) => {
+    const status = row.status || "pending";
+    const recovery = row.recovery_status || "none";
+    return status === "pending" || (status === "accepted" && recovery === "none");
+  };
+  const selectableFiltered = useMemo(() => filtered.filter(isActionable), [filtered]);
+  const selectedPendingCount = filtered.filter(
+    (row) => selectedIds.has(row.id) && (row.status || "pending") === "pending",
+  ).length;
+  const selectedRecoverableCount = filtered.filter(
+    (row) =>
+      selectedIds.has(row.id) &&
+      row.status === "accepted" &&
+      (row.recovery_status || "none") === "none",
+  ).length;
+  const selectedActionableCount = selectedPendingCount + selectedRecoverableCount;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,6 +244,31 @@ export function AdvancesPage() {
     }
   };
 
+  const bulkResolveRecovery = async (recoveryStatus: Exclude<RecoveryStatus, "none">) => {
+    const rows = filtered.filter(
+      (row) =>
+        selectedIds.has(row.id) &&
+        row.status === "accepted" &&
+        (row.recovery_status || "none") === "none",
+    );
+    if (!rows.length) return;
+    try {
+      for (const row of rows) {
+        await updateRow(row.id, {
+          recovery_status: recoveryStatus,
+          recovered_at: recoveryStatus === "recovered" ? new Date().toISOString() : "",
+        });
+      }
+      toast.success(
+        recoveryStatus === "recovered" ? "Đã đánh dấu thu hồi" : "Đã đánh dấu không thu hồi",
+      );
+      setSelectedIds(new Set());
+      load();
+    } catch (error: any) {
+      toast.error(error?.message || "Lỗi xử lý hàng loạt");
+    }
+  };
+
   const resolveRecovery = async (
     row: AdvanceRecord,
     recoveryStatus: Exclude<RecoveryStatus, "none">,
@@ -264,9 +309,16 @@ export function AdvancesPage() {
   const stats = useMemo(
     () => ({
       pending: items.filter((row) => (row.status || "pending") === "pending").length,
-      accepted: items.filter((row) => row.status === "accepted").length,
+      accepted: items.filter(
+        (row) => row.status === "accepted" && (row.recovery_status || "none") === "none",
+      ).length,
       rejected: items.filter((row) => row.status === "rejected").length,
-      recovered: items.filter((row) => row.recovery_status === "recovered").length,
+      recovered: items.filter(
+        (row) => row.status === "accepted" && row.recovery_status === "recovered",
+      ).length,
+      unrecoverable: items.filter(
+        (row) => row.status === "accepted" && row.recovery_status === "unrecoverable",
+      ).length,
     }),
     [items],
   );
@@ -433,6 +485,7 @@ export function AdvancesPage() {
         <StatCard label="Đã tiếp nhận" value={stats.accepted} icon={Check} tone="success" />
         <StatCard label="Từ chối" value={stats.rejected} icon={X} tone="danger" />
         <StatCard label="Đã thu hồi" value={stats.recovered} icon={ShieldCheck} tone="primary" />
+        <StatCard label="Không thu hồi" value={stats.unrecoverable} icon={X} tone="danger" />
       </div>
 
       <FilterBar
@@ -441,12 +494,14 @@ export function AdvancesPage() {
         placeholder="Tìm theo tên, mã NV, số tiền…"
         chips={[
           { key: "pending", label: `Chờ (${stats.pending})` },
-          { key: "accepted", label: `Tiếp nhận (${stats.accepted})` },
+          { key: "accepted", label: `Đã tiếp nhận (${stats.accepted})` },
+          { key: "recovered", label: `Đã thu hồi (${stats.recovered})` },
+          { key: "unrecoverable", label: `Không thu hồi (${stats.unrecoverable})` },
           { key: "rejected", label: `Từ chối (${stats.rejected})` },
           { key: "all", label: "Tất cả" },
         ]}
         activeChip={tab}
-        onChipChange={(v) => setTab(v as any)}
+        onChipChange={(v) => setTab(v as AdminTab)}
       />
 
       <div className="grid grid-cols-2 gap-2">
@@ -460,29 +515,54 @@ export function AdvancesPage() {
         </div>
       </div>
 
-      {selectedIds.size > 0 && (
+      {selectedActionableCount > 0 && (
         <div className="sticky top-[var(--header-h,3.25rem)] z-20 -mx-4 flex items-center justify-between gap-2 bg-primary/10 px-4 py-2 backdrop-blur">
-          <span className="text-xs font-medium text-primary">{selectedIds.size} đã chọn</span>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => bulkUpdate("accepted")}>
-              <Check className="h-3.5 w-3.5" /> Duyệt
-            </Button>
-            <Button size="sm" variant="destructive" onClick={() => bulkUpdate("rejected")}>
-              <X className="h-3.5 w-3.5" /> Từ chối
-            </Button>
+          <span className="text-xs font-medium text-primary">
+            {selectedActionableCount} đã chọn
+          </span>
+          <div className="flex flex-wrap justify-end gap-2">
+            {selectedPendingCount > 0 && (
+              <>
+                <Button size="sm" onClick={() => bulkUpdate("accepted")}>
+                  <Check className="h-3.5 w-3.5" /> Duyệt
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => bulkUpdate("rejected")}>
+                  <X className="h-3.5 w-3.5" /> Từ chối
+                </Button>
+              </>
+            )}
+            {selectedRecoverableCount > 0 && (
+              <>
+                <Button size="sm" onClick={() => bulkResolveRecovery("recovered")}>
+                  <ShieldCheck className="h-3.5 w-3.5" /> Thu hồi
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => bulkResolveRecovery("unrecoverable")}
+                >
+                  Không thu hồi
+                </Button>
+              </>
+            )}
           </div>
         </div>
       )}
 
-      <label className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-        <Checkbox
-          checked={selectableFiltered.length > 0 && selectedIds.size === selectableFiltered.length}
-          onCheckedChange={(checked) =>
-            setSelectedIds(checked ? new Set(selectableFiltered.map((row) => row.id)) : new Set())
-          }
-        />
-        Chọn tất cả ({selectableFiltered.length})
-      </label>
+      {selectableFiltered.length > 0 && (
+        <label className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+          <Checkbox
+            checked={selectableFiltered.every((row) => selectedIds.has(row.id))}
+            onCheckedChange={(checked) =>
+              setSelectedIds((current) => {
+                if (!checked) return new Set();
+                return new Set([...current, ...selectableFiltered.map((row) => row.id)]);
+              })
+            }
+          />
+          Chọn tất cả ({selectableFiltered.length})
+        </label>
+      )}
 
       {filtered.length === 0 ? (
         <EmptyState
@@ -498,7 +578,7 @@ export function AdvancesPage() {
         filtered.map((row) => {
           const status = (row.status || "pending") as AdvanceStatus;
           const recovery = (row.recovery_status || "none") as RecoveryStatus;
-          const selectable = status === "pending";
+          const selectable = isActionable(row);
           const canRecover = status === "accepted" && recovery === "none";
           return (
             <div
@@ -509,18 +589,19 @@ export function AdvancesPage() {
                 !selectable && "opacity-95",
               )}
             >
-              <Checkbox
-                checked={selectedIds.has(row.id)}
-                onCheckedChange={() =>
-                  setSelectedIds((current) => {
-                    const next = new Set(current);
-                    next.has(row.id) ? next.delete(row.id) : next.add(row.id);
-                    return next;
-                  })
-                }
-                disabled={!selectable}
-                className="mt-1"
-              />
+              {selectable && (
+                <Checkbox
+                  checked={selectedIds.has(row.id)}
+                  onCheckedChange={(checked) =>
+                    setSelectedIds((current) => {
+                      const next = new Set(current);
+                      checked ? next.add(row.id) : next.delete(row.id);
+                      return next;
+                    })
+                  }
+                  className="mt-1"
+                />
+              )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">

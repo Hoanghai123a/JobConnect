@@ -22,7 +22,9 @@ export interface UserRecord {
   phone?: string;
   full_name?: string;
   role?: Role;
-  approved?: boolean;
+  approved?: boolean | string;
+  approvalStatus?: "pending" | "approved" | "rejected";
+  status?: "active" | "disabled";
   default_hc_hours?: number;
   default_ot_hours?: number;
   company?: string;

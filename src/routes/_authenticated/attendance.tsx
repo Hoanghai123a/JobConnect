@@ -352,6 +352,7 @@ function UserAttendance() {
   const [hcHours, setHcHours] = useState<number>(user?.default_hc_hours ?? 8);
   const [otHours, setOtHours] = useState<number>(user?.default_ot_hours ?? 0);
   const [entryOpen, setEntryOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setHcHours(user?.default_hc_hours ?? 8);
@@ -403,7 +404,8 @@ function UserAttendance() {
   );
 
   const submit = async () => {
-    if (!user?.id) return;
+    if (!user?.id || saving) return;
+    setSaving(true);
     try {
       const existing = rows.find((r) => r.date === date);
       const payload = {
@@ -421,7 +423,15 @@ function UserAttendance() {
       fetchMonth();
     } catch (e: any) {
       toast.error(e?.message || "Lỗi");
+    } finally {
+      setSaving(false);
     }
+  };
+
+  const submitFromHours = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    submit();
   };
 
   const remove = async (id: string) => {
@@ -505,7 +515,13 @@ function UserAttendance() {
                 Nhập hoặc cập nhật ca làm, ngày lễ, giờ hành chính và giờ tăng ca cho ngày đã chọn.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submit();
+              }}
+            >
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Ngày</Label>
@@ -530,18 +546,24 @@ function UserAttendance() {
                   <Label className="text-xs">Giờ hành chính</Label>
                   <Input
                     type="number"
+                    inputMode="decimal"
+                    enterKeyHint="done"
                     step="0.5"
                     value={hcHours}
                     onChange={(e) => setHcHours(Number(e.target.value))}
+                    onKeyDown={submitFromHours}
                   />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Giờ tăng ca</Label>
                   <Input
                     type="number"
+                    inputMode="decimal"
+                    enterKeyHint="done"
                     step="0.5"
                     value={otHours}
                     onChange={(e) => setOtHours(Number(e.target.value))}
+                    onKeyDown={submitFromHours}
                   />
                 </div>
               </div>
@@ -560,11 +582,11 @@ function UserAttendance() {
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 )}
-                <Button onClick={submit} className="flex-1">
+                <Button type="submit" className="flex-1" disabled={saving}>
                   <Plus className="h-4 w-4" /> Lưu / Cập nhật
                 </Button>
               </div>
-            </div>
+            </form>
           </DialogContent>
         </Dialog>
       </div>

@@ -55,6 +55,7 @@ export const Route = createFileRoute("/_authenticated/news")({
 interface Recruitment {
   id: string;
   company: string;
+  area: string;
   images: string[];
   map_url: string;
   introduction: string;
@@ -80,6 +81,7 @@ interface Recruitment {
 const EMPTY: Recruitment = {
   id: "",
   company: "",
+  area: "",
   images: [],
   map_url: "",
   introduction: "",
@@ -143,6 +145,8 @@ const matchesInclusiveSelectFilter = (
 
 type FactoryOption = { id: string; name: string; address?: string };
 
+const normalizeArea = (value?: string) => value?.trim() || "";
+
 const errorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
 
@@ -166,6 +170,7 @@ function NewsPage() {
   const [editing, setEditing] = useState<Recruitment | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [areaFilter, setAreaFilter] = useState("all");
   const [environmentFilter, setEnvironmentFilter] = useState("all");
   const [postureFilter, setPostureFilter] = useState("all");
   const [productionQcFilter, setProductionQcFilter] = useState("all");
@@ -191,7 +196,11 @@ function NewsPage() {
 
   const filtered = useMemo(() => {
     return items.filter((r) => {
-      if (search && !r.company.toLowerCase().includes(search.toLowerCase())) return false;
+      const q = search.toLowerCase();
+      if (search && ![r.company, r.area].some((value) => value?.toLowerCase().includes(q))) {
+        return false;
+      }
+      if (areaFilter !== "all" && normalizeArea(r.area) !== areaFilter) return false;
       if (filter === "male" && !r.gender?.includes("male")) return false;
       if (filter === "female" && !r.gender?.includes("female")) return false;
       if (!matchesInclusiveSelectFilter(r.environment, environmentFilter, ENVIRONMENT_OPTIONS)) {
@@ -207,11 +216,19 @@ function NewsPage() {
       }
       return true;
     });
-  }, [items, search, filter, environmentFilter, postureFilter, productionQcFilter]);
+  }, [items, search, filter, areaFilter, environmentFilter, postureFilter, productionQcFilter]);
+
+  const areaOptions = useMemo(
+    () =>
+      Array.from(new Set(items.map((item) => normalizeArea(item.area)).filter(Boolean)))
+        .sort((a, b) => a.localeCompare(b, "vi"))
+        .map((area) => ({ value: area, label: area })),
+    [items],
+  );
 
   const isNew = (r: Recruitment) =>
     r.created && Date.now() - new Date(r.created).getTime() < 7 * 24 * 3600 * 1000;
-  const hasAdvancedFilter = [environmentFilter, postureFilter, productionQcFilter].some(
+  const hasAdvancedFilter = [areaFilter, environmentFilter, postureFilter, productionQcFilter].some(
     (value) => value !== "all",
   );
 
@@ -264,6 +281,9 @@ function NewsPage() {
       />
       {showAdvancedFilters && (
         <AdvancedFilters
+          area={areaFilter}
+          areaOptions={areaOptions}
+          onAreaChange={setAreaFilter}
           environment={environmentFilter}
           onEnvironmentChange={setEnvironmentFilter}
           posture={postureFilter}
@@ -322,6 +342,7 @@ function NewsPage() {
                   <div className="truncate text-sm font-semibold">{r.company}</div>
                   <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
                     <SummaryItem icon={Banknote} label="LCB" value={r.salary_base} />
+                    <SummaryItem icon={MapPin} label="Khu vực" value={r.area} />
                     <SummaryItem icon={Gift} label="Phụ cấp" value={r.allowance} />
                     <SummaryItem
                       icon={ShieldCheck}
@@ -365,6 +386,9 @@ function NewsPage() {
 }
 
 function AdvancedFilters({
+  area,
+  areaOptions,
+  onAreaChange,
   environment,
   onEnvironmentChange,
   posture,
@@ -372,6 +396,9 @@ function AdvancedFilters({
   productionQc,
   onProductionQcChange,
 }: {
+  area: string;
+  areaOptions: SelectOption[];
+  onAreaChange: (value: string) => void;
   environment: string;
   onEnvironmentChange: (value: string) => void;
   posture: string;
@@ -379,7 +406,7 @@ function AdvancedFilters({
   productionQc: string;
   onProductionQcChange: (value: string) => void;
 }) {
-  const hasActive = [environment, posture, productionQc].some((value) => value !== "all");
+  const hasActive = [area, environment, posture, productionQc].some((value) => value !== "all");
 
   return (
     <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
@@ -390,6 +417,7 @@ function AdvancedFilters({
             type="button"
             onClick={() => {
               onEnvironmentChange("all");
+              onAreaChange("all");
               onPostureChange("all");
               onProductionQcChange("all");
             }}
@@ -399,7 +427,13 @@ function AdvancedFilters({
           </button>
         )}
       </div>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-4">
+        <WorkModeFilter
+          label="Khu vực"
+          value={area}
+          onChange={onAreaChange}
+          options={areaOptions}
+        />
         <WorkModeFilter
           label="Môi trường"
           value={environment}
@@ -505,6 +539,7 @@ function DetailSheet({ item, onClose }: { item: Recruitment | null; onClose: () 
               </Carousel>
             )}
             <div className="space-y-3 p-4 text-sm">
+              <Info icon={MapPin} label="Khu vực" value={item.area} />
               <Info label="Giới thiệu" value={item.introduction} multiline />
               <Info label="Thời hạn tuyển dụng" value={item.recruitment_deadline} />
               <Info label="Thưởng khác" value={item.bonus_other} multiline />
@@ -607,6 +642,7 @@ function EditDialog({
       const mapUrl = factoryMapUrl(selectedFactory) || form.map_url || "";
       const fd = new FormData();
       fd.append("company", form.company);
+      fd.append("area", normalizeArea(form.area));
       fd.append("map_url", mapUrl);
       fd.append("introduction", form.introduction || "");
       fd.append("interview_time", form.interview_time);
@@ -649,6 +685,12 @@ function EditDialog({
               setSelectedFactory(factory);
               setForm({ ...form, company: v, map_url: factoryMapUrl(factory) || form.map_url });
             }}
+          />
+          <F
+            label="Khu vực"
+            v={form.area || ""}
+            on={(v) => setForm({ ...form, area: v })}
+            placeholder="VD: Bá Thiện, Khai Quang, Nam Sơn..."
           />
           <FT
             label="Giới thiệu"

@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
+import { isUserApproved } from "@/lib/user-approval";
 import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/layout/BackButton";
 import { Clock } from "lucide-react";
@@ -20,18 +21,20 @@ function PendingPage() {
       </div>
       <h1 className="text-xl font-semibold">Đang chờ duyệt</h1>
       <p className="max-w-xs text-sm text-muted-foreground">
-        Tài khoản <strong>{user?.full_name || user?.phone}</strong> đã được gửi tới admin.
-        Bạn sẽ vào được hệ thống ngay khi được duyệt.
+        Tài khoản <strong>{user?.full_name || user?.phone}</strong> đã được gửi tới admin. Bạn sẽ
+        vào được hệ thống ngay khi được duyệt.
       </p>
       <div className="flex gap-2">
         <Button
           variant="outline"
           onClick={async () => {
-            try { await refresh(); } catch {}
+            try {
+              await refresh();
+            } catch {}
             const { pb } = await import("@/lib/pocketbase");
             const { isProfileComplete } = await import("@/lib/profile");
             const u = pb.authStore.record as any;
-            if (!u?.approved) return;
+            if (!isUserApproved(u)) return;
             if (u.role === "admin") {
               nav({ to: "/" });
             } else if (!isProfileComplete(u)) {

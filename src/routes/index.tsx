@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
+import { isUserApproved } from "@/lib/user-approval";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { FeatureTile } from "@/components/dashboard/FeatureTile";
 import {
@@ -24,7 +25,7 @@ export const Route = createFileRoute("/")({
     if (typeof window === "undefined") return;
     if (!pb.authStore.isValid) throw redirect({ to: "/login", search: { redirect: "/" } as any });
     const u = pb.authStore.record as any;
-    if (u && u.approved === false) throw redirect({ to: "/pending" });
+    if (u && !isUserApproved(u)) throw redirect({ to: "/pending" });
   },
   component: DashboardPage,
 });
