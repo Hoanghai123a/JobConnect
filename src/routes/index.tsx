@@ -101,12 +101,12 @@ function DashboardPage() {
         </div>
 
         <div className="relative mt-2 flex">
-          <div className="text-xl text-white/80">Xin chào:</div>
-          <div className="mt-0.5 ml-2 text-xl font-semibold leading-tight">
+          <div className="text-sm text-white/80">Xin chào,</div>
+          <div className="text-base ml-2 font-semibold leading-tight">
             {user?.full_name || user?.username || "Bạn"} 👋
           </div>
 
-          <div className="mt-1 ml-5 inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider backdrop-blur">
+          <div className="ml-5 inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-[8px] uppercase tracking-wider backdrop-blur">
             {isAdmin ? "Quản trị viên" : "Nhân viên"}
           </div>
         </div>

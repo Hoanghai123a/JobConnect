@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Carousel,
@@ -61,6 +62,8 @@ interface Recruitment {
   introduction: string;
   interview_time: string;
   recruitment_deadline: string;
+  employment_type?: string;
+  is_active?: boolean;
   gender: string[];
   salary_base: string;
   allowance: string;
@@ -87,6 +90,8 @@ const EMPTY: Recruitment = {
   introduction: "",
   interview_time: "",
   recruitment_deadline: "",
+  employment_type: "official",
+  is_active: true,
   gender: ["male", "female"],
   salary_base: "",
   allowance: "",
@@ -127,6 +132,11 @@ const PRODUCTION_QC_OPTIONS = [
   { value: "both", label: "Cả 2" },
 ] as const;
 
+const EMPLOYMENT_TYPE_OPTIONS = [
+  { value: "official", label: "Chính thức" },
+  { value: "temporary", label: "Thời vụ" },
+] as const;
+
 type SelectOption = { value: string; label: string };
 
 const optionLabel = (options: readonly SelectOption[], value?: string) =>
@@ -146,6 +156,10 @@ const matchesInclusiveSelectFilter = (
 type FactoryOption = { id: string; name: string; address?: string };
 
 const normalizeArea = (value?: string) => value?.trim() || "";
+
+const isRecruitmentActive = (item: Recruitment) => item.is_active !== false;
+
+const recruitmentEmploymentType = (item: Recruitment) => item.employment_type || "official";
 
 const errorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
@@ -171,6 +185,7 @@ function NewsPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
+  const [employmentTypeFilter, setEmploymentTypeFilter] = useState("all");
   const [environmentFilter, setEnvironmentFilter] = useState("all");
   const [postureFilter, setPostureFilter] = useState("all");
   const [productionQcFilter, setProductionQcFilter] = useState("all");
@@ -188,6 +203,11 @@ function NewsPage() {
     load();
   }, []);
 
+  const visibleItems = useMemo(
+    () => (isAdmin ? items : items.filter(isRecruitmentActive)),
+    [items, isAdmin],
+  );
+
   const remove = async (id: string) => {
     if (!confirm("Xoá tin tuyển dụng?")) return;
     await pb.collection("recruitments").delete(id);
@@ -195,7 +215,7 @@ function NewsPage() {
   };
 
   const filtered = useMemo(() => {
-    return items.filter((r) => {
+    return visibleItems.filter((r) => {
       const q = search.toLowerCase();
       if (search && ![r.company, r.area].some((value) => value?.toLowerCase().includes(q))) {
         return false;
@@ -203,6 +223,9 @@ function NewsPage() {
       if (areaFilter !== "all" && normalizeArea(r.area) !== areaFilter) return false;
       if (filter === "male" && !r.gender?.includes("male")) return false;
       if (filter === "female" && !r.gender?.includes("female")) return false;
+      if (employmentTypeFilter !== "all" && recruitmentEmploymentType(r) !== employmentTypeFilter) {
+        return false;
+      }
       if (!matchesInclusiveSelectFilter(r.environment, environmentFilter, ENVIRONMENT_OPTIONS)) {
         return false;
       }
@@ -216,26 +239,39 @@ function NewsPage() {
       }
       return true;
     });
-  }, [items, search, filter, areaFilter, environmentFilter, postureFilter, productionQcFilter]);
+  }, [
+    visibleItems,
+    search,
+    filter,
+    areaFilter,
+    employmentTypeFilter,
+    environmentFilter,
+    postureFilter,
+    productionQcFilter,
+  ]);
 
   const areaOptions = useMemo(
     () =>
-      Array.from(new Set(items.map((item) => normalizeArea(item.area)).filter(Boolean)))
+      Array.from(new Set(visibleItems.map((item) => normalizeArea(item.area)).filter(Boolean)))
         .sort((a, b) => a.localeCompare(b, "vi"))
         .map((area) => ({ value: area, label: area })),
-    [items],
+    [visibleItems],
   );
 
   const isNew = (r: Recruitment) =>
     r.created && Date.now() - new Date(r.created).getTime() < 7 * 24 * 3600 * 1000;
-  const hasAdvancedFilter = [areaFilter, environmentFilter, postureFilter, productionQcFilter].some(
-    (value) => value !== "all",
-  );
+  const hasAdvancedFilter = [
+    areaFilter,
+    employmentTypeFilter,
+    environmentFilter,
+    postureFilter,
+    productionQcFilter,
+  ].some((value) => value !== "all");
 
   return (
     <PageContainer
       title="Bảng tin tuyển dụng"
-      subtitle={`${items.length} tin đang đăng`}
+      subtitle={`${visibleItems.length} tin đang đăng`}
       right={
         isAdmin && (
           <button
@@ -253,7 +289,7 @@ function NewsPage() {
         onSearchChange={setSearch}
         placeholder="Tìm theo tên nhà máy…"
         chips={[
-          { key: "all", label: "Tất cả", count: items.length },
+          { key: "all", label: "Tất cả", count: visibleItems.length },
           { key: "male", label: "Nam" },
           { key: "female", label: "Nữ" },
         ]}
@@ -284,6 +320,8 @@ function NewsPage() {
           area={areaFilter}
           areaOptions={areaOptions}
           onAreaChange={setAreaFilter}
+          employmentType={employmentTypeFilter}
+          onEmploymentTypeChange={setEmploymentTypeFilter}
           environment={environmentFilter}
           onEnvironmentChange={setEnvironmentFilter}
           posture={postureFilter}
@@ -340,7 +378,17 @@ function NewsPage() {
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{r.company}</div>
+                  {isAdmin && !isRecruitmentActive(r) && (
+                    <div className="mt-1 inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                      Đang tắt
+                    </div>
+                  )}
                   <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                    <SummaryItem
+                      icon={ClipboardCheck}
+                      label="Loại tuyển"
+                      value={optionLabel(EMPLOYMENT_TYPE_OPTIONS, recruitmentEmploymentType(r))}
+                    />
                     <SummaryItem icon={Banknote} label="LCB" value={r.salary_base} />
                     <SummaryItem icon={MapPin} label="Khu vực" value={r.area} />
                     <SummaryItem icon={Gift} label="Phụ cấp" value={r.allowance} />
@@ -389,6 +437,8 @@ function AdvancedFilters({
   area,
   areaOptions,
   onAreaChange,
+  employmentType,
+  onEmploymentTypeChange,
   environment,
   onEnvironmentChange,
   posture,
@@ -399,6 +449,8 @@ function AdvancedFilters({
   area: string;
   areaOptions: SelectOption[];
   onAreaChange: (value: string) => void;
+  employmentType: string;
+  onEmploymentTypeChange: (value: string) => void;
   environment: string;
   onEnvironmentChange: (value: string) => void;
   posture: string;
@@ -406,7 +458,9 @@ function AdvancedFilters({
   productionQc: string;
   onProductionQcChange: (value: string) => void;
 }) {
-  const hasActive = [area, environment, posture, productionQc].some((value) => value !== "all");
+  const hasActive = [area, employmentType, environment, posture, productionQc].some(
+    (value) => value !== "all",
+  );
 
   return (
     <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
@@ -418,6 +472,7 @@ function AdvancedFilters({
             onClick={() => {
               onEnvironmentChange("all");
               onAreaChange("all");
+              onEmploymentTypeChange("all");
               onPostureChange("all");
               onProductionQcChange("all");
             }}
@@ -427,12 +482,18 @@ function AdvancedFilters({
           </button>
         )}
       </div>
-      <div className="grid gap-2 sm:grid-cols-4">
+      <div className="grid gap-2 sm:grid-cols-5">
         <WorkModeFilter
           label="Khu vực"
           value={area}
           onChange={onAreaChange}
           options={areaOptions}
+        />
+        <WorkModeFilter
+          label="Loại tuyển"
+          value={employmentType}
+          onChange={onEmploymentTypeChange}
+          options={EMPLOYMENT_TYPE_OPTIONS}
         />
         <WorkModeFilter
           label="Môi trường"
@@ -539,6 +600,10 @@ function DetailSheet({ item, onClose }: { item: Recruitment | null; onClose: () 
               </Carousel>
             )}
             <div className="space-y-3 p-4 text-sm">
+              <Info
+                label="Loại tuyển"
+                value={optionLabel(EMPLOYMENT_TYPE_OPTIONS, recruitmentEmploymentType(item))}
+              />
               <Info icon={MapPin} label="Khu vực" value={item.area} />
               <Info label="Giới thiệu" value={item.introduction} multiline />
               <Info label="Thời hạn tuyển dụng" value={item.recruitment_deadline} />
@@ -647,6 +712,8 @@ function EditDialog({
       fd.append("introduction", form.introduction || "");
       fd.append("interview_time", form.interview_time);
       fd.append("recruitment_deadline", form.recruitment_deadline || "");
+      fd.append("employment_type", form.employment_type || "official");
+      fd.append("is_active", String(form.is_active !== false));
       for (const g of form.gender || []) fd.append("gender", g);
       fd.append("salary_base", form.salary_base);
       fd.append("allowance", form.allowance);
@@ -708,6 +775,24 @@ function EditDialog({
             on={(v) => setForm({ ...form, recruitment_deadline: v })}
             placeholder="VD: 31/12/2026 hoặc Lâu dài"
           />
+          <WorkModeField
+            label="Loại tuyển"
+            value={form.employment_type || "official"}
+            onChange={(v) => setForm({ ...form, employment_type: v })}
+            options={EMPLOYMENT_TYPE_OPTIONS}
+          />
+          <label className="flex items-center justify-between rounded-xl border bg-secondary/50 p-3">
+            <div>
+              <div className="text-sm font-medium">Hiển thị tin tuyển dụng</div>
+              <div className="text-xs text-muted-foreground">
+                Tắt thì user sẽ không nhìn thấy tin này.
+              </div>
+            </div>
+            <Switch
+              checked={form.is_active !== false}
+              onCheckedChange={(checked) => setForm({ ...form, is_active: checked })}
+            />
+          </label>
           <div className="space-y-2">
             <Label>Tuyển</Label>
             <div className="flex gap-4">
