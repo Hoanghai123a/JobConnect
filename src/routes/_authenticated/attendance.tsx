@@ -493,7 +493,7 @@ function UserAttendance() {
 
         <div className="space-y-3">
           {loading && <div className="p-4 text-sm text-muted-foreground">Đang tải…</div>}
-          <div className="flex items-center justify-center rounded-2xl border border-border/70 shadow-soft">
+          <div className="flex items-center justify-center rounded-2xl shadow-soft">
             <MonthSwitcher value={monthDate} onChange={setMonthDate} neutral />
           </div>
           <MonthCalendar monthDate={monthDate} rows={rows} onPickDate={openEntryForDate} />

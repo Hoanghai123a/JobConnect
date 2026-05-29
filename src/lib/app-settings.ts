@@ -32,7 +32,7 @@ const DEFAULTS: AppSettings = {
 export async function fetchAppSettings(): Promise<AppSettings> {
   try {
     const res = await pb.collection("app_settings").getList(1, 1);
-    return (res.items[0] as any) || DEFAULTS;
+    return (res.items[0] as AppSettings | undefined) || DEFAULTS;
   } catch {
     return DEFAULTS;
   }
@@ -42,7 +42,11 @@ export function useAppSettings() {
   const q = useQuery({
     queryKey: ["app_settings"],
     queryFn: fetchAppSettings,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
   });
   const data = q.data || DEFAULTS;
   const logoUrl = data.logo ? fileUrl(data, data.logo) : "";

@@ -13,6 +13,7 @@ interface AuthCtx {
 
 const Ctx = createContext<AuthCtx | null>(null);
 const AUTH_REFRESH_TIMEOUT_MS = 3500;
+let pendingAuthRefresh: Promise<unknown> | null = null;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -30,6 +31,18 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+function refreshAuthOnce() {
+  if (!pendingAuthRefresh) {
+    pendingAuthRefresh = withTimeout(
+      pb.collection("users").authRefresh(),
+      AUTH_REFRESH_TIMEOUT_MS,
+    ).finally(() => {
+      pendingAuthRefresh = null;
+    });
+  }
+  return pendingAuthRefresh;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         if (pb.authStore.isValid) {
-          await withTimeout(pb.collection("users").authRefresh(), AUTH_REFRESH_TIMEOUT_MS);
+          await refreshAuthOnce();
           setUser((pb.authStore.record as UserRecord | null) ?? null);
         } else {
           setUser(null);
@@ -89,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     if (pb.authStore.isValid) {
-      await pb.collection("users").authRefresh();
+      await refreshAuthOnce();
     }
   }, []);
 

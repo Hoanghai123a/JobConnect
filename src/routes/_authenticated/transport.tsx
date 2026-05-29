@@ -163,11 +163,11 @@ function TransportPage() {
         {formOpen && (
           <form onSubmit={submit} className="mt-3 space-y-3 border-t border-border pt-3">
             <div className="space-y-1">
-              <Label>Tiêu đề</Label>
+              <Label>Tiêu đề (những nơi xe đi qua)</Label>
               <Input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                placeholder="VD: Lào Cai - Hà Nội"
+                placeholder="VD: Lào Cai - Phú Thọ - Hà Nội"
               />
             </div>
             <div className="space-y-1">
