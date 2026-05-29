@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UserCombobox } from "@/components/users/UserCombobox";
 import {
   Dialog,
   DialogContent,
@@ -19,8 +20,18 @@ import {
 } from "@/components/ui/dialog";
 import { formatVND, type AttendanceRow, type RateBuckets, type Shift } from "@/lib/salary";
 import { exportToExcel } from "@/lib/excel";
+import { fetchReceivedDelegations, relationInFilter } from "@/lib/delegations";
 import { cn } from "@/lib/utils";
-import { CalendarCheck, FileDown, FileSpreadsheet, Moon, Send, Sun, Upload, Wallet } from "lucide-react";
+import {
+  CalendarCheck,
+  FileDown,
+  FileSpreadsheet,
+  Moon,
+  Send,
+  Sun,
+  Upload,
+  Wallet,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/check-attendance")({
@@ -307,12 +318,20 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
         amount: parseNumber(pick(row, ["Thành tiền", "Thanh tien", "Tiền lương", "wage_amount"])),
       };
       const allowanceLine = {
-        label: String(pick(row, ["Loại phụ cấp", "Loai phu cap", "Phụ cấp", "allowance_type"])).trim(),
-        amount: parseNumber(pick(row, ["Tiền phụ cấp", "Tien phu cap", "Số tiền phụ cấp", "allowance_amount"])),
+        label: String(
+          pick(row, ["Loại phụ cấp", "Loai phu cap", "Phụ cấp", "allowance_type"]),
+        ).trim(),
+        amount: parseNumber(
+          pick(row, ["Tiền phụ cấp", "Tien phu cap", "Số tiền phụ cấp", "allowance_amount"]),
+        ),
       };
       const deductionLine = {
-        label: String(pick(row, ["Loại khấu trừ", "Loai khau tru", "Khấu trừ", "deduction_type"])).trim(),
-        amount: parseNumber(pick(row, ["Tiền khấu trừ", "Tien khau tru", "Số tiền khấu trừ", "deduction_amount"])),
+        label: String(
+          pick(row, ["Loại khấu trừ", "Loai khau tru", "Khấu trừ", "deduction_type"]),
+        ).trim(),
+        amount: parseNumber(
+          pick(row, ["Tiền khấu trừ", "Tien khau tru", "Số tiền khấu trừ", "deduction_amount"]),
+        ),
       };
       return {
         employeeCode,
@@ -323,20 +342,18 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
           start_date: parseExcelDate(pick(row, ["Ngày vào làm", "Ngay vao lam", "start_date"])),
           end_date: parseExcelDate(pick(row, ["Ngày nghỉ", "Ngay nghi", "end_date"])),
           base_salary: parseNumber(pick(row, ["Lương cơ bản", "Luong co ban", "base_salary"])),
-          standard_workdays: parseNumber(pick(row, ["Số công HC", "So cong HC", "standard_workdays"])),
+          standard_workdays: parseNumber(
+            pick(row, ["Số công HC", "So cong HC", "standard_workdays"]),
+          ),
         },
         wageLine: wageLine.rate || wageLine.hours || wageLine.amount ? wageLine : undefined,
-        allowanceLine:
-          allowanceLine.label || allowanceLine.amount ? allowanceLine : undefined,
-        deductionLine:
-          deductionLine.label || deductionLine.amount ? deductionLine : undefined,
+        allowanceLine: allowanceLine.label || allowanceLine.amount ? allowanceLine : undefined,
+        deductionLine: deductionLine.label || deductionLine.amount ? deductionLine : undefined,
       };
     })
     .filter(
       (row) =>
-        row.employeeCode &&
-        row.company &&
-        (row.wageLine || row.allowanceLine || row.deductionLine),
+        row.employeeCode && row.company && (row.wageLine || row.allowanceLine || row.deductionLine),
     );
 }
 
@@ -370,7 +387,9 @@ function AdminCheckAttendance() {
     setBatches(batchRes as unknown as BatchRecord[]);
     setUsers(userRes as unknown as UserRecord[]);
     try {
-      const salaryBatchRes = await pb.collection("check_salary_batches").getFullList({ sort: "-created" });
+      const salaryBatchRes = await pb
+        .collection("check_salary_batches")
+        .getFullList({ sort: "-created" });
       setSalaryBatches(salaryBatchRes as unknown as BatchRecord[]);
     } catch {
       setSalaryBatches([]);
@@ -707,55 +726,55 @@ function AdminCheckAttendance() {
 
           <TabsContent value="attendance" className="mt-0 space-y-4">
             <Card className="space-y-3 p-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <FileSpreadsheet className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold">Gửi check công</div>
-              <div className="text-[11px] text-muted-foreground">
-                Tháng {month} · lần gửi tiếp theo: {nextRound}
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <FileSpreadsheet className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold">Gửi check công</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Tháng {month} · lần gửi tiếp theo: {nextRound}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Tháng</Label>
-              <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Ghi chú</Label>
-              <Input
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Tuỳ chọn"
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Tháng</Label>
+                  <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Ghi chú</Label>
+                  <Input
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Tuỳ chọn"
+                  />
+                </div>
+              </div>
 
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-            <label className="block">
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                disabled={uploading}
-                onChange={(event) => {
-                  onUpload(event.target.files?.[0]);
-                  event.currentTarget.value = "";
-                }}
-              />
-              <span className="inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow active:scale-[0.98]">
-                <Upload className="h-4 w-4" />
-                {uploading ? "Đang gửi..." : "Chọn file Excel và gửi"}
-              </span>
-            </label>
-            <Button type="button" variant="outline" onClick={downloadTemplate}>
-              <FileDown className="h-4 w-4" />
-              Tải mẫu
-            </Button>
-          </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <label className="block">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    disabled={uploading}
+                    onChange={(event) => {
+                      onUpload(event.target.files?.[0]);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  <span className="inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow active:scale-[0.98]">
+                    <Upload className="h-4 w-4" />
+                    {uploading ? "Đang gửi..." : "Chọn file Excel và gửi"}
+                  </span>
+                </label>
+                <Button type="button" variant="outline" onClick={downloadTemplate}>
+                  <FileDown className="h-4 w-4" />
+                  Tải mẫu
+                </Button>
+              </div>
             </Card>
 
             <AdminBatchHistory
@@ -769,166 +788,166 @@ function AdminCheckAttendance() {
 
           <TabsContent value="salary" className="mt-0 space-y-4">
             <Card className="space-y-3 p-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Wallet className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold">Gửi check lương</div>
-              <div className="text-[11px] text-muted-foreground">
-                Tháng {salaryMonth} · lần gửi tiếp theo: {nextSalaryRound}
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Wallet className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold">Gửi check lương</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Tháng {salaryMonth} · lần gửi tiếp theo: {nextSalaryRound}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Tháng</Label>
-              <Input
-                type="month"
-                value={salaryMonth}
-                onChange={(e) => setSalaryMonth(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Ghi chú</Label>
-              <Input
-                value={salaryNote}
-                onChange={(e) => setSalaryNote(e.target.value)}
-                placeholder="Tuỳ chọn"
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Tháng</Label>
+                  <Input
+                    type="month"
+                    value={salaryMonth}
+                    onChange={(e) => setSalaryMonth(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Ghi chú</Label>
+                  <Input
+                    value={salaryNote}
+                    onChange={(e) => setSalaryNote(e.target.value)}
+                    placeholder="Tuỳ chọn"
+                  />
+                </div>
+              </div>
 
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-            <label className="block">
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                disabled={salaryUploading}
-                onChange={(event) => {
-                  onSalaryUpload(event.target.files?.[0]);
-                  event.currentTarget.value = "";
-                }}
-              />
-              <span className="inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow active:scale-[0.98]">
-                <Upload className="h-4 w-4" />
-                {salaryUploading ? "Đang gửi..." : "Chọn file Excel và gửi"}
-              </span>
-            </label>
-            <Button type="button" variant="outline" onClick={downloadSalaryTemplate}>
-              <FileDown className="h-4 w-4" />
-              Tải mẫu
-            </Button>
-          </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <label className="block">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    disabled={salaryUploading}
+                    onChange={(event) => {
+                      onSalaryUpload(event.target.files?.[0]);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  <span className="inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow active:scale-[0.98]">
+                    <Upload className="h-4 w-4" />
+                    {salaryUploading ? "Đang gửi..." : "Chọn file Excel và gửi"}
+                  </span>
+                </label>
+                <Button type="button" variant="outline" onClick={downloadSalaryTemplate}>
+                  <FileDown className="h-4 w-4" />
+                  Tải mẫu
+                </Button>
+              </div>
             </Card>
 
-        <div className="hidden">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Lịch sử gửi
-          </div>
-          {batches.length === 0 ? (
-            <EmptyState
-              icon={CalendarCheck}
-              title="Chưa có lần gửi check công"
-              description="Sau khi admin nhập Excel, lịch sử gửi sẽ hiển thị tại đây."
-            />
-          ) : (
-            batches.map((batch) => (
-              <Card key={batch.id} className="p-3">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-secondary text-primary">
-                    <Send className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-semibold">
-                        {batch.month} · Lần {batch.round_no}
+            <div className="hidden">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Lịch sử gửi
+              </div>
+              {batches.length === 0 ? (
+                <EmptyState
+                  icon={CalendarCheck}
+                  title="Chưa có lần gửi check công"
+                  description="Sau khi admin nhập Excel, lịch sử gửi sẽ hiển thị tại đây."
+                />
+              ) : (
+                batches.map((batch) => (
+                  <Card key={batch.id} className="p-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-secondary text-primary">
+                        <Send className="h-4 w-4" />
                       </div>
-                      <span className="chip chip-info">{batch.total_users || 0} người</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-semibold">
+                            {batch.month} · Lần {batch.round_no}
+                          </div>
+                          <span className="chip chip-info">{batch.total_users || 0} người</span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <span className="chip chip-neutral">{batch.total_rows || 0} dòng</span>
+                          {batch.created && (
+                            <span className="chip chip-neutral">
+                              {new Date(batch.created).toLocaleDateString("vi-VN")}
+                            </span>
+                          )}
+                          {batch.source_file && (
+                            <a
+                              href={fileUrl(batch, batch.source_file)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="chip chip-info"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              File Excel
+                            </a>
+                          )}
+                        </div>
+                        {batch.note && (
+                          <div className="mt-1 text-[11px] text-muted-foreground">{batch.note}</div>
+                        )}
+                      </div>
                     </div>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      <span className="chip chip-neutral">{batch.total_rows || 0} dòng</span>
-                      {batch.created && (
-                        <span className="chip chip-neutral">
-                          {new Date(batch.created).toLocaleDateString("vi-VN")}
-                        </span>
-                      )}
-                      {batch.source_file && (
-                        <a
-                          href={fileUrl(batch, batch.source_file)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="chip chip-info"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          File Excel
-                        </a>
-                      )}
-                    </div>
-                    {batch.note && (
-                      <div className="mt-1 text-[11px] text-muted-foreground">{batch.note}</div>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            ))
-          )}
-        </div>
+                  </Card>
+                ))
+              )}
+            </div>
 
-        <div className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Lịch sử gửi lương
-          </div>
-          {salaryBatches.length === 0 ? (
-            <EmptyState
-              icon={Wallet}
-              title="Chưa có lần gửi check lương"
-              description="Sau khi admin nhập Excel lương, lịch sử gửi sẽ hiển thị tại đây."
-            />
-          ) : (
-            salaryBatches.map((batch) => (
-              <Card key={batch.id} className="p-3">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-secondary text-primary">
-                    <Send className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-semibold">
-                        {batch.month} · Lần {batch.round_no}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Lịch sử gửi lương
+              </div>
+              {salaryBatches.length === 0 ? (
+                <EmptyState
+                  icon={Wallet}
+                  title="Chưa có lần gửi check lương"
+                  description="Sau khi admin nhập Excel lương, lịch sử gửi sẽ hiển thị tại đây."
+                />
+              ) : (
+                salaryBatches.map((batch) => (
+                  <Card key={batch.id} className="p-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-secondary text-primary">
+                        <Send className="h-4 w-4" />
                       </div>
-                      <span className="chip chip-info">{batch.total_users || 0} người</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-semibold">
+                            {batch.month} · Lần {batch.round_no}
+                          </div>
+                          <span className="chip chip-info">{batch.total_users || 0} người</span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <span className="chip chip-neutral">{batch.total_rows || 0} dòng</span>
+                          {batch.created && (
+                            <span className="chip chip-neutral">
+                              {new Date(batch.created).toLocaleDateString("vi-VN")}
+                            </span>
+                          )}
+                          {batch.source_file && (
+                            <a
+                              href={fileUrl(batch, batch.source_file)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="chip chip-info"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              File Excel
+                            </a>
+                          )}
+                        </div>
+                        {batch.note && (
+                          <div className="mt-1 text-[11px] text-muted-foreground">{batch.note}</div>
+                        )}
+                      </div>
                     </div>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      <span className="chip chip-neutral">{batch.total_rows || 0} dòng</span>
-                      {batch.created && (
-                        <span className="chip chip-neutral">
-                          {new Date(batch.created).toLocaleDateString("vi-VN")}
-                        </span>
-                      )}
-                      {batch.source_file && (
-                        <a
-                          href={fileUrl(batch, batch.source_file)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="chip chip-info"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          File Excel
-                        </a>
-                      )}
-                    </div>
-                    {batch.note && (
-                      <div className="mt-1 text-[11px] text-muted-foreground">{batch.note}</div>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            ))
-          )}
-        </div>
+                  </Card>
+                ))
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </div>
@@ -1015,6 +1034,8 @@ function AdminBatchHistory({
 
 function UserCheckAttendance() {
   const { user } = useAuth();
+  const [checkUsers, setCheckUsers] = useState<UserRecord[]>([]);
+  const [activeUserId, setActiveUserId] = useState(user?.id || "");
   const [items, setItems] = useState<CheckItemRecord[]>([]);
   const [selected, setSelected] = useState<CheckItemRecord | null>(null);
   const [salaryItems, setSalaryItems] = useState<SalaryItemRecord[]>([]);
@@ -1025,15 +1046,25 @@ function UserCheckAttendance() {
     if (!user?.id) return;
     setLoading(true);
     try {
+      const delegations = await fetchReceivedDelegations(user.id, "check").catch(() => []);
+      const visibleUsers = [
+        user as UserRecord,
+        ...(delegations.map((item) => item.expand?.grantor).filter(Boolean) as UserRecord[]),
+      ];
+      const uniqueUsers = [...new Map(visibleUsers.map((item) => [item.id, item])).values()];
+      const visibleUserIds = uniqueUsers.map((item) => item.id);
+      setCheckUsers(uniqueUsers);
+      const nextActiveUserId = visibleUserIds.includes(activeUserId) ? activeUserId : user.id;
+      setActiveUserId(nextActiveUserId);
       const res = await pb.collection("check_attendance_items").getFullList({
-        filter: `user="${user.id}"`,
+        filter: relationInFilter("user", visibleUserIds),
         sort: "-created",
         expand: "batch",
       });
       let salaryRes: unknown[] = [];
       try {
         salaryRes = await pb.collection("check_salary_items").getFullList({
-          filter: `user="${user.id}"`,
+          filter: relationInFilter("user", visibleUserIds),
           sort: "-created",
           expand: "batch",
         });
@@ -1053,29 +1084,53 @@ function UserCheckAttendance() {
       }));
       setItems(normalized);
       setSalaryItems(normalizedSalary);
-      setSelected((current) => current || normalized[0] || null);
-      setSelectedSalary((current) => current || normalizedSalary[0] || null);
+      setSelected(normalized.find((item) => item.user === nextActiveUserId) || null);
+      setSelectedSalary(normalizedSalary.find((item) => item.user === nextActiveUserId) || null);
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Không tải được check công");
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [activeUserId, user]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const buckets = useMemo(
-    () => normalizeBuckets(selected?.summary),
-    [selected],
+  const activeItems = useMemo(
+    () => items.filter((item) => item.user === activeUserId),
+    [activeUserId, items],
   );
+  const activeSalaryItems = useMemo(
+    () => salaryItems.filter((item) => item.user === activeUserId),
+    [activeUserId, salaryItems],
+  );
+
+  useEffect(() => {
+    setSelected(activeItems[0] || null);
+    setSelectedSalary(activeSalaryItems[0] || null);
+  }, [activeItems, activeSalaryItems]);
+
+  const buckets = useMemo(() => normalizeBuckets(selected?.summary), [selected]);
 
   return (
     <div>
       <AppHeader title="Check công/lương" subtitle="Bảng check công admin gửi" back />
       <div className="space-y-4 p-4">
         {loading && <div className="p-4 text-sm text-muted-foreground">Đang tải...</div>}
+
+        {checkUsers.length > 1 && (
+          <div className="space-y-1">
+            <Label className="text-xs">Người cần xem</Label>
+            <UserCombobox
+              value={activeUserId}
+              onChange={setActiveUserId}
+              users={checkUsers}
+              currentUserId={user?.id}
+              placeholder="Chọn người cần xem"
+            />
+          </div>
+        )}
 
         <Tabs defaultValue="attendance" className="space-y-4">
           <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl">
@@ -1088,67 +1143,68 @@ function UserCheckAttendance() {
           </TabsList>
 
           <TabsContent value="attendance" className="mt-0 space-y-4">
-        {items.length === 0 && !loading ? (
-          <EmptyState
-            icon={CalendarCheck}
-            title="Chưa có bảng check công"
-            description="Khi admin gửi bảng check công, bạn sẽ xem được từng lần gửi tại đây."
-          />
-        ) : (
-          <>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {items.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setSelected(item)}
-                  className={cn(
-                    "flex-none rounded-full border px-3 py-1.5 text-xs font-medium transition",
-                    selected?.id === item.id
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-card text-muted-foreground",
-                  )}
-                >
-                  {item.month} · Lần {item.round_no}
-                </button>
-              ))}
-            </div>
-
-            {selected && (
+            {activeItems.length === 0 && !loading ? (
+              <EmptyState
+                icon={CalendarCheck}
+                title="Chưa có bảng check công"
+                description="Khi admin gửi bảng check công, bạn sẽ xem được từng lần gửi tại đây."
+              />
+            ) : (
               <>
-                <Card className="overflow-hidden">
-                  <div className="gradient-accent p-4 text-accent-foreground">
-                    <div className="text-xs uppercase opacity-80">Bảng check công</div>
-                    <div className="mt-0.5 text-xl font-bold">
-                      {selected.month} · Lần {selected.round_no}
-                    </div>
-                    {selected.expand?.batch?.note && (
-                      <div className="mt-1 text-xs opacity-80">{selected.expand.batch.note}</div>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 bg-card p-3 text-xs">
-                    <RateCell label="100%" hours={buckets.r100} />
-                    <RateCell label="130%" hours={buckets.r130} />
-                    <RateCell label="150%" hours={buckets.r150} />
-                    <RateCell label="200%" hours={buckets.r200} />
-                    <RateCell label="270%" hours={buckets.r270} />
-                    <RateCell label="300%" hours={buckets.r300} />
-                    <RateCell label="390%" hours={buckets.r390} />
-                    <RateCell label="Ngày" hours={selected.rows.length} suffix="" />
-                  </div>
-                </Card>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {activeItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSelected(item)}
+                      className={cn(
+                        "flex-none rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                        selected?.id === item.id
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-card text-muted-foreground",
+                      )}
+                    >
+                      {item.month} · Lần {item.round_no}
+                    </button>
+                  ))}
+                </div>
 
-                <CheckMonthCalendar rows={selected.rows} />
+                {selected && (
+                  <>
+                    <Card className="overflow-hidden">
+                      <div className="gradient-accent p-4 text-accent-foreground">
+                        <div className="text-xs uppercase opacity-80">Bảng check công</div>
+                        <div className="mt-0.5 text-xl font-bold">
+                          {selected.month} · Lần {selected.round_no}
+                        </div>
+                        {selected.expand?.batch?.note && (
+                          <div className="mt-1 text-xs opacity-80">
+                            {selected.expand.batch.note}
+                          </div>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 bg-card p-3 text-xs">
+                        <RateCell label="100%" hours={buckets.r100} />
+                        <RateCell label="130%" hours={buckets.r130} />
+                        <RateCell label="150%" hours={buckets.r150} />
+                        <RateCell label="200%" hours={buckets.r200} />
+                        <RateCell label="270%" hours={buckets.r270} />
+                        <RateCell label="300%" hours={buckets.r300} />
+                        <RateCell label="390%" hours={buckets.r390} />
+                        <RateCell label="Ngày" hours={selected.rows.length} suffix="" />
+                      </div>
+                    </Card>
+
+                    <CheckMonthCalendar rows={selected.rows} />
+                  </>
+                )}
               </>
             )}
-          </>
-        )}
-
           </TabsContent>
 
           <TabsContent value="salary" className="mt-0">
             <SalaryCheckPanel
-              items={salaryItems}
+              items={activeSalaryItems}
               selected={selectedSalary}
               onSelect={setSelectedSalary}
               loading={loading}
@@ -1229,7 +1285,10 @@ function SalaryCheckPanel({
             <div className="grid grid-cols-2 gap-2 text-sm">
               <InfoCell label="Mã NV" value={selected.personal.employee_code || "—"} />
               <InfoCell label="Nhà máy" value={selected.personal.company || "—"} />
-              <InfoCell label="Ngày vào làm" value={formatDisplayDate(selected.personal.start_date)} />
+              <InfoCell
+                label="Ngày vào làm"
+                value={formatDisplayDate(selected.personal.start_date)}
+              />
               <InfoCell label="Ngày nghỉ" value={formatDisplayDate(selected.personal.end_date)} />
               <InfoCell label="Lương cơ bản" value={formatVND(selected.personal.base_salary)} />
               <InfoCell label="Số công HC" value={`${selected.personal.standard_workdays || 0}`} />
@@ -1273,7 +1332,10 @@ function SalaryWageSection({ lines, total }: { lines: SalaryWageLine[]; total: n
           </div>
         ) : (
           lines.map((line, index) => (
-            <div key={`${line.rate}-${index}`} className="grid grid-cols-3 gap-2 rounded-xl border bg-card p-3 text-sm">
+            <div
+              key={`${line.rate}-${index}`}
+              className="grid grid-cols-3 gap-2 rounded-xl border bg-card p-3 text-sm"
+            >
               <div>
                 <div className="text-[11px] text-muted-foreground">Hệ số</div>
                 <div className="font-semibold">{line.rate || "—"}</div>
@@ -1316,7 +1378,10 @@ function SalaryMoneySection({
           </div>
         ) : (
           lines.map((line, index) => (
-            <div key={`${line.label}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border bg-card p-3 text-sm">
+            <div
+              key={`${line.label}-${index}`}
+              className="flex items-center justify-between gap-3 rounded-xl border bg-card p-3 text-sm"
+            >
               <div className="font-medium">{line.label || "—"}</div>
               <div className="font-semibold">{formatVND(line.amount)}</div>
             </div>

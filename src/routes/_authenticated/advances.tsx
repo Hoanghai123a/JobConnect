@@ -1,6 +1,6 @@
 ﻿import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { pb } from "@/lib/pocketbase";
+import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -13,6 +13,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { UserCombobox } from "@/components/users/UserCombobox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +29,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { exportToExcel } from "@/lib/excel";
+import { fetchReceivedDelegations, relationInFilter } from "@/lib/delegations";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
+import { VN_BANKS } from "@/lib/vn-banks";
 import { toast } from "sonner";
 import {
   Banknote,
@@ -49,10 +59,14 @@ type AdminTab = "pending" | "accepted" | "recovered" | "unrecoverable" | "reject
 type AdvanceRecord = {
   id: string;
   user?: string;
+  requested_by?: string;
   employee_code: string;
   full_name: string;
   company: string;
   phone: string;
+  bank_name?: string;
+  bank_account_number?: string;
+  bank_account_name?: string;
   amount: number;
   reason: string;
   status?: AdvanceStatus;
@@ -93,15 +107,63 @@ export function AdvancesPage() {
   const [sending, setSending] = useState(false);
   const [amountText, setAmountText] = useState("");
   const [reason, setReason] = useState("");
+  const [delegatedUsers, setDelegatedUsers] = useState<UserRecord[]>([]);
+  const [selectedAdvanceUserId, setSelectedAdvanceUserId] = useState(user?.id || "");
+  const [bankForm, setBankForm] = useState({
+    bank_name: "",
+    bank_account_number: "",
+    bank_account_name: "",
+  });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const advanceUsers = useMemo(() => {
+    const self = user ? [user as UserRecord] : [];
+    const map = new Map<string, UserRecord>();
+    for (const item of [...self, ...delegatedUsers]) map.set(item.id, item);
+    return [...map.values()];
+  }, [delegatedUsers, user]);
+
+  const selectedAdvanceUser = useMemo(
+    () => advanceUsers.find((item) => item.id === selectedAdvanceUserId) || advanceUsers[0] || null,
+    [advanceUsers, selectedAdvanceUserId],
+  );
+
+  useEffect(() => {
+    if (isAdmin || !user?.id) return;
+    const ids = advanceUsers.map((item) => item.id);
+    if (!selectedAdvanceUserId || !ids.includes(selectedAdvanceUserId)) {
+      setSelectedAdvanceUserId(user.id);
+    }
+  }, [advanceUsers, isAdmin, selectedAdvanceUserId, user?.id]);
+
+  useEffect(() => {
+    if (isAdmin || !user?.id) return;
+    fetchReceivedDelegations(user.id, "advance")
+      .then((rows) =>
+        setDelegatedUsers(rows.map((row) => row.expand?.grantor).filter(Boolean) as UserRecord[]),
+      )
+      .catch(() => setDelegatedUsers([]));
+  }, [isAdmin, user?.id]);
+
+  useEffect(() => {
+    if (!selectedAdvanceUser) return;
+    setBankForm({
+      bank_name: selectedAdvanceUser.bank_name || "",
+      bank_account_number: selectedAdvanceUser.bank_account_number || "",
+      bank_account_name: selectedAdvanceUser.bank_account_name || "",
+    });
+  }, [selectedAdvanceUser]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const filter = isAdmin ? "" : `user="${user?.id || ""}"`;
+      const visibleUserIds = advanceUsers.map((item) => item.id);
+      const filter = isAdmin
+        ? ""
+        : relationInFilter("user", visibleUserIds.length ? visibleUserIds : [user?.id || ""]);
       const res = await pb.collection("advances").getFullList({
         filter,
         sort: "-created",
@@ -112,7 +174,7 @@ export function AdvancesPage() {
     } finally {
       setLoading(false);
     }
-  }, [isAdmin, user?.id]);
+  }, [advanceUsers, isAdmin, user?.id]);
 
   useEffect(() => {
     load();
@@ -121,13 +183,14 @@ export function AdvancesPage() {
   const limit = Number(settings.advance_limit || 0);
   const outstanding = useMemo(() => {
     return items.reduce((sum, row) => {
+      if (!isAdmin && selectedAdvanceUser?.id && row.user !== selectedAdvanceUser.id) return sum;
       const status = row.status || "pending";
       const recovery = row.recovery_status || "none";
       if (status === "pending") return sum + Number(row.amount || 0);
       if (status === "accepted" && recovery === "none") return sum + Number(row.amount || 0);
       return sum;
     }, 0);
-  }, [items]);
+  }, [isAdmin, items, selectedAdvanceUser?.id]);
   const available = limit > 0 ? Math.max(0, limit - outstanding) : 0;
 
   const filtered = useMemo(() => {
@@ -153,6 +216,9 @@ export function AdvancesPage() {
         row.employee_code?.toLowerCase().includes(q) ||
         row.company?.toLowerCase().includes(q) ||
         row.phone?.toLowerCase().includes(q) ||
+        row.bank_name?.toLowerCase().includes(q) ||
+        row.bank_account_number?.toLowerCase().includes(q) ||
+        row.bank_account_name?.toLowerCase().includes(q) ||
         row.reason?.toLowerCase().includes(q) ||
         String(row.amount || 0).includes(q)
       );
@@ -186,6 +252,10 @@ export function AdvancesPage() {
       toast.error("Lý do ứng không được để trống");
       return;
     }
+    if (!selectedAdvanceUser?.id) {
+      toast.error("Chọn người báo ứng");
+      return;
+    }
     if (limit <= 0) {
       toast.error("Admin chưa cài hạn mức Ứng lương");
       return;
@@ -198,11 +268,15 @@ export function AdvancesPage() {
     setSending(true);
     try {
       await pb.collection("advances").create({
-        user: user?.id,
-        employee_code: user?.employee_code || "",
-        full_name: user?.full_name || "",
-        company: user?.company || "",
-        phone: user?.phone || "",
+        user: selectedAdvanceUser.id,
+        requested_by: user?.id || selectedAdvanceUser.id,
+        employee_code: selectedAdvanceUser.employee_code || "",
+        full_name: selectedAdvanceUser.full_name || "",
+        company: selectedAdvanceUser.company || "",
+        phone: selectedAdvanceUser.phone || "",
+        bank_name: bankForm.bank_name || "",
+        bank_account_number: bankForm.bank_account_number || "",
+        bank_account_name: bankForm.bank_account_name || "",
         amount,
         reason: reason.trim(),
         status: "pending",
@@ -293,6 +367,9 @@ export function AdvancesPage() {
       "Mã NV": row.employee_code,
       "Nhà máy": row.company,
       SĐT: row.phone,
+      "Ngân hàng": row.bank_name || "",
+      "Số TK": row.bank_account_number || "",
+      "Tên TK": row.bank_account_name || "",
       "Số tiền": row.amount,
       "Lý do": row.reason,
       "Trạng thái": STATUS_META[(row.status || "pending") as AdvanceStatus].label,
@@ -329,22 +406,35 @@ export function AdvancesPage() {
         <AdvanceRulesCard rules={settings.advance_rules} />
         <form onSubmit={submit} className="space-y-3">
           <div className="card-soft space-y-3 rounded-2xl border bg-card p-4">
+            {advanceUsers.length > 1 && (
+              <div className="space-y-1">
+                <Label>Người báo ứng</Label>
+                <UserCombobox
+                  value={selectedAdvanceUserId}
+                  onChange={setSelectedAdvanceUserId}
+                  users={advanceUsers}
+                  currentUserId={user?.id}
+                  placeholder="Chọn người báo ứng"
+                />
+              </div>
+            )}
+
             <button
               type="button"
               onClick={() => setShowProfile((v) => !v)}
               className="flex w-full items-center justify-between rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm font-medium"
             >
-              <span>Thông tin cá nhân</span>
+              <span>Thông tin người báo ứng</span>
               <span className="text-xs text-muted-foreground">
                 {showProfile ? "Thu gọn" : "Xem"}
               </span>
             </button>
             {showProfile && (
               <div className="space-y-3">
-                <ReadOnlyField label="Mã NV" value={user?.employee_code} />
-                <ReadOnlyField label="Họ và tên" value={user?.full_name} />
-                <ReadOnlyField label="Nhà máy đang làm" value={user?.company} />
-                <ReadOnlyField label="Số điện thoại liên hệ" value={user?.phone} />
+                <ReadOnlyField label="Mã NV" value={selectedAdvanceUser?.employee_code} />
+                <ReadOnlyField label="Họ và tên" value={selectedAdvanceUser?.full_name} />
+                <ReadOnlyField label="Nhà máy đang làm" value={selectedAdvanceUser?.company} />
+                <ReadOnlyField label="Số điện thoại liên hệ" value={selectedAdvanceUser?.phone} />
               </div>
             )}
 
@@ -367,6 +457,52 @@ export function AdvancesPage() {
               <span className="font-semibold text-foreground">
                 {limit > 0 ? formatMoney(available) : "—"}
               </span>
+            </div>
+
+            <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
+              <div className="text-xs font-semibold text-muted-foreground">Tài khoản nhận tiền</div>
+              <div className="space-y-1">
+                <Label>Ngân hàng</Label>
+                <Select
+                  value={bankForm.bank_name || ""}
+                  onValueChange={(value) => setBankForm({ ...bankForm, bank_name: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn ngân hàng" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {VN_BANKS.map((bank) => (
+                      <SelectItem key={bank.code} value={bank.name}>
+                        {bank.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label>Số TK</Label>
+                  <Input
+                    value={bankForm.bank_account_number}
+                    inputMode="numeric"
+                    onChange={(e) =>
+                      setBankForm({
+                        ...bankForm,
+                        bank_account_number: e.target.value.replace(/\D/g, ""),
+                      })
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Tên TK</Label>
+                  <Input
+                    value={bankForm.bank_account_name}
+                    onChange={(e) =>
+                      setBankForm({ ...bankForm, bank_account_name: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -405,11 +541,11 @@ export function AdvancesPage() {
               className={cn(
                 "list-card",
                 toneBorder[
-                  (row.status === "accepted"
+                  row.status === "accepted"
                     ? "success"
                     : row.status === "rejected"
                       ? "danger"
-                      : "warning") as any
+                      : "warning"
                 ],
               )}
             >
@@ -433,6 +569,12 @@ export function AdvancesPage() {
                 </StatusChip>
               </div>
               <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed">{row.reason}</p>
+              {(row.bank_name || row.bank_account_number || row.bank_account_name) && (
+                <div className="mt-2 rounded-lg bg-muted/60 p-2 text-[12px] text-muted-foreground">
+                  Nhận tiền: {row.bank_name || "—"} · {row.bank_account_number || "—"} ·{" "}
+                  {row.bank_account_name || "—"}
+                </div>
+              )}
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <StatusChip
                   tone={
@@ -626,6 +768,12 @@ export function AdvancesPage() {
                 <div className="mt-2 text-[11px] text-muted-foreground">
                   SĐT: {row.phone} · {new Date(row.created).toLocaleString("vi-VN")}
                 </div>
+                {(row.bank_name || row.bank_account_number || row.bank_account_name) && (
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    TK: {row.bank_name || "—"} · {row.bank_account_number || "—"} ·{" "}
+                    {row.bank_account_name || "—"}
+                  </div>
+                )}
                 {(row.admin_note || row.recovery_note) && (
                   <div className="mt-2 space-y-1 rounded-lg bg-muted/60 p-2 text-[12px]">
                     {row.admin_note && <div>Admin: {row.admin_note}</div>}

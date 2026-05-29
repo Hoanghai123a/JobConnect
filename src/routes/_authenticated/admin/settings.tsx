@@ -5,6 +5,7 @@ import { useAppSettings } from "@/lib/app-settings";
 import { isUserApproved } from "@/lib/user-approval";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { useQueryClient } from "@tanstack/react-query";
+import { DelegationPanel } from "@/components/delegations/DelegationPanel";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
@@ -636,143 +637,160 @@ function UsersTab() {
   });
 
   return (
-    <div className="space-y-3">
-      <Card className="flex items-center gap-3 rounded-2xl border-border/60 p-3.5 shadow-soft">
-        <div className="rounded-xl bg-primary/10 p-2 text-primary">
-          <ShieldCheck className="h-5 w-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Label className="text-sm font-semibold">Yêu cầu duyệt khi đăng ký</Label>
-          <div className="text-[11px] text-muted-foreground">
-            Tắt để user tạo tài khoản và sử dụng ngay.
+    <Tabs defaultValue="accounts" className="space-y-3">
+      <TabsList className="grid h-10 w-full grid-cols-2 rounded-2xl">
+        <TabsTrigger value="accounts" className="rounded-xl text-xs">
+          Tài khoản
+        </TabsTrigger>
+        <TabsTrigger value="delegations" className="rounded-xl text-xs">
+          Ủy quyền
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="accounts" className="mt-0 space-y-3">
+        <Card className="flex items-center gap-3 rounded-2xl border-border/60 p-3.5 shadow-soft">
+          <div className="rounded-xl bg-primary/10 p-2 text-primary">
+            <ShieldCheck className="h-5 w-5" />
           </div>
-        </div>
-        <Switch checked={requireApproval} onCheckedChange={requestToggleApprovalRequirement} />
-      </Card>
-
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="rounded-full pl-9"
-          placeholder="Tìm theo tên / username / SĐT"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
-
-      <div className="px-1 text-xs text-muted-foreground">
-        Tổng: {users.length} · Hiển thị: {filtered.length}
-      </div>
-
-      {loading && <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>}
-      {!loading && filtered.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
-          Không có user.
-        </div>
-      )}
-      {filtered.map((u) => {
-        const avatar = u.avatar ? fileUrl(u, u.avatar) : "";
-        const approved = isUserApproved(u);
-        const borderTone = approved
-          ? "border-l-[color:var(--status-success)]"
-          : "border-l-[color:var(--status-warning)]";
-        return (
-          <div key={u.id} className={`list-card flex items-start gap-3 ${borderTone}`}>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
-              {avatar ? (
-                <img src={avatar} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <span className="text-sm font-semibold text-muted-foreground">
-                  {(u.full_name || u.username || "?").slice(0, 1).toUpperCase()}
-                </span>
-              )}
+          <div className="min-w-0 flex-1">
+            <Label className="text-sm font-semibold">Yêu cầu duyệt khi đăng ký</Label>
+            <div className="text-[11px] text-muted-foreground">
+              Tắt để user tạo tài khoản và sử dụng ngay.
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
-              <div className="text-[11px] text-muted-foreground">
-                @{u.username} {u.phone && `· ${u.phone}`}
+          </div>
+          <Switch checked={requireApproval} onCheckedChange={requestToggleApprovalRequirement} />
+        </Card>
+
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="rounded-full pl-9"
+            placeholder="Tìm theo tên / username / SĐT"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        <div className="px-1 text-xs text-muted-foreground">
+          Tổng: {users.length} · Hiển thị: {filtered.length}
+        </div>
+
+        {loading && (
+          <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
+        )}
+        {!loading && filtered.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
+            Không có user.
+          </div>
+        )}
+        {filtered.map((u) => {
+          const avatar = u.avatar ? fileUrl(u, u.avatar) : "";
+          const approved = isUserApproved(u);
+          const borderTone = approved
+            ? "border-l-[color:var(--status-success)]"
+            : "border-l-[color:var(--status-warning)]";
+          return (
+            <div key={u.id} className={`list-card flex items-start gap-3 ${borderTone}`}>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
+                {avatar ? (
+                  <img src={avatar} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-sm font-semibold text-muted-foreground">
+                    {(u.full_name || u.username || "?").slice(0, 1).toUpperCase()}
+                  </span>
+                )}
               </div>
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                <span className={`chip ${u.role === "admin" ? "chip-info" : "chip-neutral"}`}>
-                  {u.role === "admin" && <ShieldCheck className="h-3 w-3" />}
-                  {u.role === "admin" ? "Admin" : "User"}
-                </span>
-                <span className={`chip ${approved ? "chip-success" : "chip-warning"}`}>
-                  {approved ? "Đã duyệt" : "Chờ duyệt"}
-                </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
+                <div className="text-[11px] text-muted-foreground">
+                  @{u.username} {u.phone && `· ${u.phone}`}
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  <span className={`chip ${u.role === "admin" ? "chip-info" : "chip-neutral"}`}>
+                    {u.role === "admin" && <ShieldCheck className="h-3 w-3" />}
+                    {u.role === "admin" ? "Admin" : "User"}
+                  </span>
+                  <span className={`chip ${approved ? "chip-success" : "chip-warning"}`}>
+                    {approved ? "Đã duyệt" : "Chờ duyệt"}
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={() => toggleApproved(u)}
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                    approved
+                      ? "text-[color:var(--status-warning-fg)] hover:bg-[color:var(--status-warning-bg)]"
+                      : "text-[color:var(--status-success-fg)] hover:bg-[color:var(--status-success-bg)]"
+                  }`}
+                  title={approved ? "Huỷ duyệt" : "Duyệt"}
+                >
+                  {approved ? <X className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                </button>
+                <button
+                  onClick={() => toggleRole(u)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
+                  title="Đổi vai trò"
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => remove(u)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
+                  title="Xoá"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <button
-                onClick={() => toggleApproved(u)}
-                className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                  approved
-                    ? "text-[color:var(--status-warning-fg)] hover:bg-[color:var(--status-warning-bg)]"
-                    : "text-[color:var(--status-success-fg)] hover:bg-[color:var(--status-success-bg)]"
-                }`}
-                title={approved ? "Huỷ duyệt" : "Duyệt"}
-              >
-                {approved ? <X className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-              </button>
-              <button
-                onClick={() => toggleRole(u)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
-                title="Đổi vai trò"
-              >
-                <ShieldCheck className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => remove(u)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
-                title="Xoá"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
 
-      <Dialog
-        open={pendingApprovalValue !== null}
-        onOpenChange={(open) => !open && closeApprovalConfirm()}
-      >
-        <DialogContent className="rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>Xác nhận mật khẩu admin</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label className="text-xs">Mật khẩu admin</Label>
-            <Input
-              type="password"
-              className="rounded-xl"
-              value={adminPassword}
-              onChange={(e) => setAdminPassword(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") confirmToggleApprovalRequirement();
-              }}
-              autoComplete="current-password"
-              autoFocus
-            />
-            <div className="text-xs text-muted-foreground">
-              Sau khi xác thực, hệ thống sẽ {pendingApprovalValue ? "bật" : "tắt"} yêu cầu duyệt khi
-              đăng ký.
+        <Dialog
+          open={pendingApprovalValue !== null}
+          onOpenChange={(open) => !open && closeApprovalConfirm()}
+        >
+          <DialogContent className="rounded-2xl">
+            <DialogHeader>
+              <DialogTitle>Xác nhận mật khẩu admin</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label className="text-xs">Mật khẩu admin</Label>
+              <Input
+                type="password"
+                className="rounded-xl"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") confirmToggleApprovalRequirement();
+                }}
+                autoComplete="current-password"
+                autoFocus
+              />
+              <div className="text-xs text-muted-foreground">
+                Sau khi xác thực, hệ thống sẽ {pendingApprovalValue ? "bật" : "tắt"} yêu cầu duyệt
+                khi đăng ký.
+              </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={closeApprovalConfirm} className="rounded-xl">
-              Huỷ
-            </Button>
-            <Button
-              onClick={confirmToggleApprovalRequirement}
-              disabled={confirmingApproval}
-              className="rounded-xl"
-            >
-              {confirmingApproval ? "Đang xác thực..." : "Xác nhận"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={closeApprovalConfirm} className="rounded-xl">
+                Huỷ
+              </Button>
+              <Button
+                onClick={confirmToggleApprovalRequirement}
+                disabled={confirmingApproval}
+                className="rounded-xl"
+              >
+                {confirmingApproval ? "Đang xác thực..." : "Xác nhận"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </TabsContent>
+
+      <TabsContent value="delegations" className="mt-0">
+        <DelegationPanel mode="admin" />
+      </TabsContent>
+    </Tabs>
   );
 }

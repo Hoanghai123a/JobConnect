@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,7 @@ import {
 import { VN_BANKS } from "@/lib/vn-banks";
 import { exportToExcel } from "@/lib/excel";
 import { isUserApproved } from "@/lib/user-approval";
+import { DelegationPanel } from "@/components/delegations/DelegationPanel";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import {
@@ -107,7 +109,26 @@ function AccountPage() {
           </div>
         </Card>
 
-        {isAdmin ? <AdminUsersPanel /> : <UserProfileForm />}
+        {isAdmin ? (
+          <AdminUsersPanel />
+        ) : (
+          <Tabs defaultValue="profile" className="space-y-3">
+            <TabsList className="grid h-10 w-full grid-cols-2 rounded-2xl">
+              <TabsTrigger value="profile" className="rounded-xl text-xs">
+                Thông tin
+              </TabsTrigger>
+              <TabsTrigger value="delegations" className="rounded-xl text-xs">
+                Ủy quyền
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="profile" className="mt-0 space-y-3">
+              <UserProfileForm />
+            </TabsContent>
+            <TabsContent value="delegations" className="mt-0">
+              <DelegationPanel mode="user" />
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
     </div>
   );
