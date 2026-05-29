@@ -30,6 +30,14 @@ function AuthLayout() {
     }
   }, [loading, nav, user]);
 
+  if (loading || !user) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center px-4 text-sm text-muted-foreground">
+        Đang tải...
+      </div>
+    );
+  }
+
   return (
     <div className="pb-nav">
       {loading ? (

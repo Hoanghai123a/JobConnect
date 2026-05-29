@@ -38,17 +38,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsub = pb.authStore.onChange(() => {
       setUser((pb.authStore.record as UserRecord | null) ?? null);
     }, false);
-    // initial refresh
+    // Validate the stored session before exposing authenticated UI.
     (async () => {
       try {
         if (pb.authStore.isValid) {
-          setUser((pb.authStore.record as UserRecord | null) ?? null);
           await withTimeout(pb.collection("users").authRefresh(), AUTH_REFRESH_TIMEOUT_MS);
+          setUser((pb.authStore.record as UserRecord | null) ?? null);
+        } else {
+          setUser(null);
         }
       } catch (error) {
         console.warn("[auth] refresh skipped", error);
+        pb.authStore.clear();
+        setUser(null);
       } finally {
-        setUser((pb.authStore.record as UserRecord | null) ?? null);
         setLoading(false);
       }
     })();

@@ -22,22 +22,20 @@ export const Route = createFileRoute("/api/public/manifest/webmanifest")({
             background_color: "#f4fbfb",
             theme_color: "#0e6b7a",
             orientation: "portrait-primary",
-            icons: app?.item.logo
-              ? [
-                  {
-                    src: iconSrc,
-                    sizes: "any",
-                    purpose: "any maskable",
-                  },
-                ]
-              : [
-                  {
-                    src: iconSrc,
-                    sizes: "any",
-                    type: "image/svg+xml",
-                    purpose: "any maskable",
-                  },
-                ],
+            icons: [
+              {
+                src: iconSrc,
+                sizes: "192x192",
+                type: "image/svg+xml",
+                purpose: "any maskable",
+              },
+              {
+                src: iconSrc,
+                sizes: "512x512",
+                type: "image/svg+xml",
+                purpose: "any maskable",
+              },
+            ],
           },
           {
             headers: {

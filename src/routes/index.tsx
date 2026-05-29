@@ -1,5 +1,6 @@
 ﻿import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
@@ -31,9 +32,21 @@ export const Route = createFileRoute("/")({
 });
 
 function DashboardPage() {
-  const { user, isAdmin } = useAuth();
+  const { loading, user, isAdmin } = useAuth();
   const { data: settings, logoUrl } = useAppSettings();
   const [pendingComplaintCount, setPendingComplaintCount] = useState(0);
+  const nav = useNavigate();
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) {
+      nav({ to: "/login" });
+      return;
+    }
+    if (!isUserApproved(user)) {
+      nav({ to: "/pending" });
+    }
+  }, [loading, nav, user]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -54,6 +67,14 @@ function DashboardPage() {
       alive = false;
     };
   }, [isAdmin]);
+
+  if (loading || !user || !isUserApproved(user)) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center px-4 text-sm text-muted-foreground">
+        Đang kiểm tra đăng nhập...
+      </div>
+    );
+  }
 
   return (
     <div className="pb-nav">

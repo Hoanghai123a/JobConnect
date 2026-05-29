@@ -12,6 +12,7 @@ import { useEffect } from "react";
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/lib/auth";
 import { Toaster } from "@/components/ui/sonner";
+import { installPwaPromptListeners } from "@/lib/pwa-install";
 
 function NotFoundComponent() {
   return (
@@ -90,9 +91,11 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useEffect(() => {
+    const removePwaListeners = installPwaPromptListeners();
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
+    return removePwaListeners;
   }, []);
 
   return (

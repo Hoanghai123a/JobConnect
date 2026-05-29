@@ -402,6 +402,15 @@ function UserAttendance() {
       }),
     [buckets, user?.lcb, user?.chuyen_can, user?.doi_song, user?.tham_nien],
   );
+  const visibleRateCells = [
+    { label: "100%", hours: buckets.r100 },
+    { label: "130%", hours: buckets.r130 },
+    { label: "150%", hours: buckets.r150 },
+    { label: "200%", hours: buckets.r200 },
+    { label: "270%", hours: buckets.r270 },
+    { label: "300%", hours: buckets.r300 },
+    { label: "390%", hours: buckets.r390 },
+  ].filter((cell) => cell.hours > 0);
 
   const submit = async () => {
     if (!user?.id || saving) return;
@@ -466,7 +475,6 @@ function UserAttendance() {
                 <div className="text-xs uppercase opacity-80">Bảng lương tạm tính</div>
                 <div className="text-xl font-bold">{user?.company || "—"}</div>
               </div>
-              <MonthSwitcher value={monthDate} onChange={setMonthDate} accent />
             </div>
             <div className="mt-3 text-3xl font-extrabold tracking-tight">
               {formatVND(salary.total)}
@@ -475,20 +483,19 @@ function UserAttendance() {
               Lương theo giờ: {formatVND(salary.wage)} • Phụ cấp: {formatVND(salary.allowance)}
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2 bg-card p-3 text-xs">
-            <RateCell label="100%" hours={buckets.r100} />
-            <RateCell label="130%" hours={buckets.r130} />
-            <RateCell label="150%" hours={buckets.r150} />
-            <RateCell label="200%" hours={buckets.r200} />
-            <RateCell label="270%" hours={buckets.r270} />
-            <RateCell label="300%" hours={buckets.r300} />
-            <RateCell label="390%" hours={buckets.r390} />
-            <RateCell label="LCB" hours={user?.lcb || 0} suffix="₫" />
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2 bg-card p-3 text-[10px] sm:text-sm">
+            {visibleRateCells.map((cell) => (
+              <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
+            ))}
+            <RateCell label="LCB" hours={user?.lcb || 0} suffix="₫" className="col-span-2" />
           </div>
         </Card>
 
         <div className="space-y-3">
           {loading && <div className="p-4 text-sm text-muted-foreground">Đang tải…</div>}
+          <div className="flex items-center justify-center rounded-2xl border border-border/70 shadow-soft">
+            <MonthSwitcher value={monthDate} onChange={setMonthDate} neutral />
+          </div>
           <MonthCalendar monthDate={monthDate} rows={rows} onPickDate={openEntryForDate} />
           <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-muted-foreground">
             <span className="inline-flex items-center gap-1">
@@ -598,20 +605,25 @@ function MonthSwitcher({
   value,
   onChange,
   accent,
+  neutral,
 }: {
   value: Date;
   onChange: (d: Date) => void;
   accent?: boolean;
+  neutral?: boolean;
 }) {
-  const cls = accent
-    ? "flex items-center gap-1 rounded-full bg-white/25 px-1 py-0.5"
-    : "flex items-center gap-1 rounded-full bg-primary-foreground/25 px-1 py-0.5";
+  const cls = neutral
+    ? "flex items-center gap-1 rounded-full border border-border bg-muted px-1 py-0.5 text-foreground"
+    : accent
+      ? "flex items-center gap-1 rounded-full bg-white/25 px-1 py-0.5"
+      : "flex items-center gap-1 rounded-full bg-primary-foreground/25 px-1 py-0.5";
+  const buttonCls = neutral ? "h-7 w-7 hover:bg-background" : "h-7 w-7 hover:bg-white/20";
   return (
     <div className={cls}>
       <Button
         size="icon"
         variant="ghost"
-        className="h-7 w-7 hover:bg-white/20"
+        className={buttonCls}
         onClick={() => {
           const d = new Date(value);
           d.setMonth(d.getMonth() - 1);
@@ -626,7 +638,7 @@ function MonthSwitcher({
       <Button
         size="icon"
         variant="ghost"
-        className="h-7 w-7 hover:bg-white/20"
+        className={buttonCls}
         onClick={() => {
           const d = new Date(value);
           d.setMonth(d.getMonth() + 1);
@@ -754,13 +766,17 @@ function RateCell({
   label,
   hours,
   suffix = "h",
+  className = "",
 }: {
   label: string;
   hours: number;
   suffix?: string;
+  className?: string;
 }) {
   return (
-    <div className="rounded-xl border border-border/80 bg-background p-2.5 text-center shadow-sm">
+    <div
+      className={`rounded-xl border border-border/80 bg-background p-2.5 text-center shadow-sm ${className}`}
+    >
       <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
       <div className="text-sm font-semibold">
         {suffix === "₫" ? formatVND(hours) : `${hours}${suffix}`}

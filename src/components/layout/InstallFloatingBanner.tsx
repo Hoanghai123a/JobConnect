@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { BookOpen, Download, Smartphone, X } from "lucide-react";
 import { useAppSettings } from "@/lib/app-settings";
 import { fileUrl } from "@/lib/pocketbase";
+import { isStandaloneMode, usePwaInstallPrompt } from "@/lib/pwa-install";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -21,33 +23,6 @@ const HIDE_FLAG_KEY = "hideInstallBanner";
 const HIDE_UNTIL_KEY = "hideInstallBannerUntil";
 const HIDE_MS = 7 * 24 * 60 * 60 * 1000;
 
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-};
-
-function isStandaloneMode() {
-  if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    window.matchMedia("(display-mode: fullscreen)").matches ||
-    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
-  );
-}
-
-function isIosDevice() {
-  if (typeof window === "undefined") return false;
-  const ua = window.navigator.userAgent.toLowerCase();
-  const isIos = /iphone|ipad|ipod/.test(ua);
-  const isIpadOs = window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1;
-  return isIos || isIpadOs;
-}
-
-function isAndroidDevice() {
-  if (typeof window === "undefined") return false;
-  return /android/i.test(window.navigator.userAgent);
-}
-
 function isTemporarilyHidden(now: number) {
   const until = Number(window.localStorage.getItem(HIDE_UNTIL_KEY) || 0);
   return Number.isFinite(until) && until > now;
@@ -55,12 +30,10 @@ function isTemporarilyHidden(now: number) {
 
 export function InstallFloatingBanner() {
   const { data: settings } = useAppSettings();
+  const { installPrompt, installApp, isAndroid, isIos } = usePwaInstallPrompt();
   const [ready, setReady] = useState(false);
   const [hidden, setHidden] = useState(true);
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
-  const isIos = useMemo(() => isIosDevice(), []);
-  const isAndroid = useMemo(() => isAndroidDevice(), []);
   const guideImages = Array.isArray(settings.install_guide_images)
     ? settings.install_guide_images
     : [];
@@ -82,7 +55,7 @@ export function InstallFloatingBanner() {
       }
 
       if (isAndroid) {
-        setHidden(!installPrompt);
+        setHidden(false);
         setReady(true);
         return;
       }
@@ -91,28 +64,16 @@ export function InstallFloatingBanner() {
       setReady(true);
     };
 
-    const onBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as BeforeInstallPromptEvent);
-      if (isAndroid) {
-        setHidden(false);
-        setReady(true);
-      }
-    };
-
     const onAppInstalled = () => {
       setHidden(true);
-      setInstallPrompt(null);
       window.localStorage.removeItem(HIDE_FLAG_KEY);
       window.localStorage.removeItem(HIDE_UNTIL_KEY);
     };
 
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
     window.addEventListener("appinstalled", onAppInstalled);
     evaluateVisibility();
 
     return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
       window.removeEventListener("appinstalled", onAppInstalled);
     };
   }, [installPrompt, isAndroid, isIos]);
@@ -124,11 +85,15 @@ export function InstallFloatingBanner() {
   };
 
   const install = async () => {
-    if (!installPrompt) return;
-    await installPrompt.prompt();
-    const choice = await installPrompt.userChoice;
-    setInstallPrompt(null);
-    if (choice.outcome === "accepted") setHidden(true);
+    if (!installPrompt) {
+      toast.info("Chưa thể mở hộp cài đặt", {
+        description:
+          "Vui lòng mở bằng Chrome trên Android, hoặc thử tải lại trang rồi bấm Cài đặt.",
+      });
+      return;
+    }
+    const choice = await installApp();
+    if (choice === "accepted") setHidden(true);
   };
 
   if (!ready || hidden) return null;
@@ -174,8 +139,7 @@ export function InstallFloatingBanner() {
               Hướng dẫn
             </button>
           ) : (
-            isAndroid &&
-            installPrompt && (
+            isAndroid && (
               <button
                 type="button"
                 onClick={install}

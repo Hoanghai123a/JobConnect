@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { pb, fileUrl } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
+import { usePwaInstallPrompt } from "@/lib/pwa-install";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -101,22 +102,6 @@ const TARGET_META: Record<TargetType, { label: string; icon: any }> = {
   users: { label: "Cá nhân", icon: UserIcon },
 };
 
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-};
-
-function isIosDevice() {
-  if (typeof window === "undefined") return false;
-  const ua = window.navigator.userAgent.toLowerCase();
-  return /iphone|ipad|ipod/.test(ua) || (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
-}
-
-function isAndroidDevice() {
-  if (typeof window === "undefined") return false;
-  return /android/i.test(window.navigator.userAgent);
-}
-
 function MultiSelectDropdown({
   options,
   selected,
@@ -144,7 +129,8 @@ function MultiSelectDropdown({
 
   const toggle = (value: string) => {
     const next = new Set(selected);
-    next.has(value) ? next.delete(value) : next.add(value);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
     onChange(Array.from(next));
   };
 
@@ -228,9 +214,7 @@ function GuidesPage() {
   const [search, setSearch] = useState("");
   const [reading, setReading] = useState<Guide | null>(null);
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const isIos = useMemo(() => isIosDevice(), []);
-  const isAndroid = useMemo(() => isAndroidDevice(), []);
+  const { installPrompt, installApp: installPwaApp, isAndroid, isIos } = usePwaInstallPrompt();
   const installGuideImages = Array.isArray(settings.install_guide_images)
     ? settings.install_guide_images
     : [];
@@ -272,27 +256,16 @@ function GuidesPage() {
     loadAdminRefs(); /* eslint-disable-next-line */
   }, [isAdmin]);
 
-  useEffect(() => {
-    const onBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as BeforeInstallPromptEvent);
-    };
-    const onAppInstalled = () => {
-      setInstallPrompt(null);
-    };
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-    window.addEventListener("appinstalled", onAppInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-      window.removeEventListener("appinstalled", onAppInstalled);
-    };
-  }, []);
-
   const installApp = async () => {
-    if (!installPrompt) return;
-    await installPrompt.prompt();
-    const choice = await installPrompt.userChoice;
-    if (choice.outcome === "accepted") setInstallPrompt(null);
+    if (!installPrompt) {
+      toast.info("Chưa thể mở hộp cài đặt", {
+        description:
+          "Vui lòng mở bằng Chrome trên Android, hoặc thử tải lại trang rồi bấm Cài đặt.",
+      });
+      return;
+    }
+    const outcome = await installPwaApp();
+    if (outcome === "accepted") toast.success("Đã gửi yêu cầu cài app");
   };
 
   const openNew = () => {
@@ -400,11 +373,14 @@ function GuidesPage() {
           <button
             type="button"
             onClick={() => (isIos ? setInstallGuideOpen(true) : void installApp())}
-            disabled={isAndroid && !installPrompt}
-            className="flex w-full items-center gap-2 text-left disabled:opacity-50"
+            className="flex w-full items-center gap-2 text-left"
           >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
-              {isIos ? <Smartphone className="h-4.5 w-4.5" /> : <Download className="h-4.5 w-4.5" />}
+              {isIos ? (
+                <Smartphone className="h-4.5 w-4.5" />
+              ) : (
+                <Download className="h-4.5 w-4.5" />
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-foreground">Cài app ra màn hình chính</div>
@@ -501,7 +477,10 @@ function GuidesPage() {
             <DialogDescription>Làm theo từng bước theo ảnh bên dưới.</DialogDescription>
           </DialogHeader>
           {installGuideImages.length > 0 ? (
-            <Carousel opts={{ align: "start", loop: installGuideImages.length > 1 }} className="pt-2">
+            <Carousel
+              opts={{ align: "start", loop: installGuideImages.length > 1 }}
+              className="pt-2"
+            >
               <CarouselContent className="-ml-2">
                 {installGuideImages.map((image, index) => (
                   <CarouselItem key={image} className="pl-2">
@@ -529,8 +508,9 @@ function GuidesPage() {
               )}
             </Carousel>
           ) : (
-            <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-              Chưa có ảnh hướng dẫn. Vui lòng liên hệ admin.
+            <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm leading-6 text-muted-foreground">
+              Trên Android Chrome, mở menu trình duyệt rồi chọn Thêm vào màn hình chính hoặc Cài đặt
+              ứng dụng.
             </div>
           )}
         </DialogContent>
