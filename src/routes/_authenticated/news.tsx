@@ -745,6 +745,18 @@ function EditDialog({
           <DialogTitle>{form.id ? "Sửa tin tuyển dụng" : "Thêm tin tuyển dụng"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
+          <label className="flex items-center justify-between rounded-xl border bg-secondary/50 p-3">
+            <div>
+              <div className="text-sm font-medium">Hiển thị tin tuyển dụng</div>
+              <div className="text-xs text-muted-foreground">
+                Tắt thì user sẽ không nhìn thấy tin này.
+              </div>
+            </div>
+            <Switch
+              checked={form.is_active !== false}
+              onCheckedChange={(checked) => setForm({ ...form, is_active: checked })}
+            />
+          </label>
           <FactoryField
             label="Nhà máy"
             v={form.company}
@@ -781,18 +793,6 @@ function EditDialog({
             onChange={(v) => setForm({ ...form, employment_type: v })}
             options={EMPLOYMENT_TYPE_OPTIONS}
           />
-          <label className="flex items-center justify-between rounded-xl border bg-secondary/50 p-3">
-            <div>
-              <div className="text-sm font-medium">Hiển thị tin tuyển dụng</div>
-              <div className="text-xs text-muted-foreground">
-                Tắt thì user sẽ không nhìn thấy tin này.
-              </div>
-            </div>
-            <Switch
-              checked={form.is_active !== false}
-              onCheckedChange={(checked) => setForm({ ...form, is_active: checked })}
-            />
-          </label>
           <div className="space-y-2">
             <Label>Tuyển</Label>
             <div className="flex gap-4">

@@ -20,6 +20,13 @@ import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { aggregate, calcSalary, formatVND, type AttendanceRow, type Shift } from "@/lib/salary";
+import {
+  addDaysToDateKey,
+  buildPayrollCalendarCells,
+  fetchFactoryAttendanceCutoffDay,
+  getPayrollPeriod,
+  type PayrollPeriod,
+} from "@/lib/payroll-cycle";
 import { exportToExcel } from "@/lib/excel";
 import { toast } from "sonner";
 import {
@@ -345,6 +352,7 @@ function UserAttendance() {
   });
   const [rows, setRows] = useState<(AttendanceRow & { id: string })[]>([]);
   const [loading, setLoading] = useState(false);
+  const [factoryCutoffDay, setFactoryCutoffDay] = useState<number | null>(null);
 
   const [date, setDate] = useState(todayStr());
   const [shift, setShift] = useState<Shift>("day");
@@ -359,16 +367,30 @@ function UserAttendance() {
     setOtHours(user?.default_ot_hours ?? 0);
   }, [user?.id, user?.default_hc_hours, user?.default_ot_hours]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetchFactoryAttendanceCutoffDay(user?.company).then((day) => {
+      if (!cancelled) setFactoryCutoffDay(day);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.company]);
+
+  const payrollPeriod = useMemo(
+    () => getPayrollPeriod(monthDate, factoryCutoffDay),
+    [monthDate, factoryCutoffDay],
+  );
+
   const fetchMonth = async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const first = ym(monthDate) + "-01";
-      const next = new Date(monthDate);
-      next.setMonth(next.getMonth() + 1);
-      const last = ym(next) + "-01";
       const res = await pb.collection("attendance").getFullList({
-        filter: `user="${user.id}" && date>="${first}" && date<"${last}"`,
+        filter: `user="${user.id}" && date>="${payrollPeriod.start}" && date<"${addDaysToDateKey(
+          payrollPeriod.end,
+          1,
+        )}"`,
         sort: "date",
       });
       setRows(
@@ -389,7 +411,7 @@ function UserAttendance() {
   };
   useEffect(() => {
     fetchMonth(); /* eslint-disable-next-line */
-  }, [user?.id, monthDate.getTime()]);
+  }, [user?.id, payrollPeriod.start, payrollPeriod.end]);
 
   const buckets = useMemo(() => aggregate(rows), [rows]);
   const salary = useMemo(
@@ -496,7 +518,7 @@ function UserAttendance() {
           <div className="flex items-center justify-center rounded-2xl shadow-soft">
             <MonthSwitcher value={monthDate} onChange={setMonthDate} neutral />
           </div>
-          <MonthCalendar monthDate={monthDate} rows={rows} onPickDate={openEntryForDate} />
+          <MonthCalendar period={payrollPeriod} rows={rows} onPickDate={openEntryForDate} />
           <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               <Sun className="h-3 w-3 text-[color:var(--status-warning-fg)]" />
@@ -652,19 +674,14 @@ function MonthSwitcher({
 }
 
 function MonthCalendar({
-  monthDate,
+  period,
   rows,
   onPickDate,
 }: {
-  monthDate: Date;
+  period: PayrollPeriod;
   rows: (AttendanceRow & { id: string })[];
   onPickDate: (date: string) => void;
 }) {
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  // Monday-first: getDay() Sun=0..Sat=6 → offset
-  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7;
   const today = todayStr();
 
   const map = useMemo(() => {
@@ -673,17 +690,16 @@ function MonthCalendar({
     return m;
   }, [rows]);
 
-  const cells: ({ d: number; key: string } | null)[] = [];
-  for (let i = 0; i < firstDow; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) {
-    cells.push({ d, key: `${year}-${pad(month + 1)}-${pad(d)}` });
-  }
-  while (cells.length % 7 !== 0) cells.push(null);
+  const cells = buildPayrollCalendarCells(period);
 
   const dows = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 
   return (
     <Card className="overflow-hidden rounded-2xl p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-sm font-semibold">{period.title}</div>
+        <span className="chip chip-info">{rows.length} ngày</span>
+      </div>
       <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase text-muted-foreground">
         {dows.map((d, i) => (
           <div key={d} className={i === 6 ? "text-[color:var(--status-danger)]" : ""}>
@@ -718,7 +734,7 @@ function MonthCalendar({
               <div
                 className={`text-[11px] font-semibold leading-none ${isSun ? "text-[color:var(--status-danger)]" : ""}`}
               >
-                {c.d}
+                {c.day}
               </div>
               {r ? (
                 <div className="mt-0.5 flex flex-1 flex-col items-center justify-center gap-0.5">

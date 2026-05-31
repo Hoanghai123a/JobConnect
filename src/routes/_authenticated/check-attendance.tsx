@@ -21,6 +21,12 @@ import {
 import { formatVND, type AttendanceRow, type RateBuckets, type Shift } from "@/lib/salary";
 import { exportToExcel } from "@/lib/excel";
 import { fetchReceivedDelegations, relationInFilter } from "@/lib/delegations";
+import {
+  buildPayrollCalendarCells,
+  fetchFactoryAttendanceCutoffDay,
+  getPayrollPeriod,
+  type PayrollPeriod,
+} from "@/lib/payroll-cycle";
 import { cn } from "@/lib/utils";
 import {
   CalendarCheck,
@@ -162,6 +168,11 @@ function ym(date: Date) {
 
 function todayMonth() {
   return ym(new Date());
+}
+
+function monthStringToDate(month: string) {
+  const [year, monthValue] = month.split("-").map(Number);
+  return new Date(year || new Date().getFullYear(), (monthValue || 1) - 1, 1);
 }
 
 function formatTemplateDate(month: string, day: number) {
@@ -1041,6 +1052,7 @@ function UserCheckAttendance() {
   const [salaryItems, setSalaryItems] = useState<SalaryItemRecord[]>([]);
   const [selectedSalary, setSelectedSalary] = useState<SalaryItemRecord | null>(null);
   const [loading, setLoading] = useState(false);
+  const [factoryCutoffDay, setFactoryCutoffDay] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -1105,6 +1117,20 @@ function UserCheckAttendance() {
     () => salaryItems.filter((item) => item.user === activeUserId),
     [activeUserId, salaryItems],
   );
+  const activeCheckUser = useMemo(
+    () => checkUsers.find((item) => item.id === activeUserId),
+    [activeUserId, checkUsers],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchFactoryAttendanceCutoffDay(activeCheckUser?.company).then((day) => {
+      if (!cancelled) setFactoryCutoffDay(day);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCheckUser?.company]);
 
   useEffect(() => {
     setSelected(activeItems[0] || null);
@@ -1112,6 +1138,23 @@ function UserCheckAttendance() {
   }, [activeItems, activeSalaryItems]);
 
   const buckets = useMemo(() => normalizeBuckets(selected?.summary), [selected]);
+  const visibleRateCells = useMemo(
+    () =>
+      [
+        { label: "100%", hours: buckets.r100 },
+        { label: "130%", hours: buckets.r130 },
+        { label: "150%", hours: buckets.r150 },
+        { label: "200%", hours: buckets.r200 },
+        { label: "270%", hours: buckets.r270 },
+        { label: "300%", hours: buckets.r300 },
+        { label: "390%", hours: buckets.r390 },
+      ].filter((cell) => cell.hours > 0),
+    [buckets],
+  );
+  const selectedPeriod = useMemo(
+    () => getPayrollPeriod(monthStringToDate(selected?.month || todayMonth()), factoryCutoffDay),
+    [selected?.month, factoryCutoffDay],
+  );
 
   return (
     <div>
@@ -1183,19 +1226,15 @@ function UserCheckAttendance() {
                           </div>
                         )}
                       </div>
-                      <div className="grid grid-cols-3 gap-2 bg-card p-3 text-xs">
-                        <RateCell label="100%" hours={buckets.r100} />
-                        <RateCell label="130%" hours={buckets.r130} />
-                        <RateCell label="150%" hours={buckets.r150} />
-                        <RateCell label="200%" hours={buckets.r200} />
-                        <RateCell label="270%" hours={buckets.r270} />
-                        <RateCell label="300%" hours={buckets.r300} />
-                        <RateCell label="390%" hours={buckets.r390} />
-                        <RateCell label="Ngày" hours={selected.rows.length} suffix="" />
+                      <div className="grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
+                        {visibleRateCells.map((cell) => (
+                          <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
+                        ))}
+                        <RateCell label={"Ng\u00e0y"} hours={selected.rows.length} suffix="" />
                       </div>
                     </Card>
 
-                    <CheckMonthCalendar rows={selected.rows} />
+                    <CheckMonthCalendar rows={selected.rows} period={selectedPeriod} />
                   </>
                 )}
               </>
@@ -1402,30 +1441,27 @@ function TotalRow({ label, value }: { label: string; value: number }) {
   );
 }
 
-function CheckMonthCalendar({ rows }: { rows: CheckAttendanceRow[] }) {
+function CheckMonthCalendar({
+  rows,
+  period,
+}: {
+  rows: CheckAttendanceRow[];
+  period: PayrollPeriod;
+}) {
   const [detail, setDetail] = useState<CheckAttendanceRow | null>(null);
-  const firstDate = rows[0]?.date || `${todayMonth()}-01`;
-  const [year, month] = firstDate.split("-").map(Number);
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const firstDow = (new Date(year, month - 1, 1).getDay() + 6) % 7;
   const map = useMemo(() => {
     const result = new Map<string, CheckAttendanceRow>();
     for (const row of rows) result.set(row.date, row);
     return result;
   }, [rows]);
 
-  const cells: ({ d: number; key: string } | null)[] = [];
-  for (let i = 0; i < firstDow; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push({ d, key: `${year}-${pad(month)}-${pad(d)}` });
-  while (cells.length % 7 !== 0) cells.push(null);
+  const cells = buildPayrollCalendarCells(period);
 
   return (
     <>
       <Card className="overflow-hidden rounded-2xl p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="text-sm font-semibold">
-            Tháng {pad(month)}/{year}
-          </div>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="text-sm font-semibold">{period.title}</div>
           <span className="chip chip-info">{rows.length} ngày</span>
         </div>
         <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase text-muted-foreground">
@@ -1462,7 +1498,7 @@ function CheckMonthCalendar({ rows }: { rows: CheckAttendanceRow[] }) {
                     isSun ? "text-[color:var(--status-danger)]" : ""
                   }`}
                 >
-                  {cell.d}
+                  {cell.day}
                 </div>
                 {row && (
                   <div className="mt-0.5 flex flex-1 flex-col items-center justify-center gap-0.5">
@@ -1524,9 +1560,9 @@ function RateCell({
   suffix?: string;
 }) {
   return (
-    <div className="rounded-xl border border-border/80 bg-background p-2.5 text-center shadow-sm">
-      <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
-      <div className="text-sm font-semibold">
+    <div className="rounded-lg border border-border/80 bg-background p-2 text-center shadow-sm">
+      <div className="text-[9px] uppercase text-muted-foreground">{label}</div>
+      <div className="text-xs font-semibold sm:text-sm">
         {hours}
         {suffix}
       </div>

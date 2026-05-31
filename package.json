@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
+    "pm2:reload": "pm2 reload jobconnect-frontend || pm2 start .output/server/index.mjs --name \"jobconnect-frontend\"",
+    "build": "vite build && npm run pm2:reload",
+    "build:dev": "vite build --mode development && npm run pm2:reload",
     "preview": "vite preview",
     "start": "node .output/server/index.mjs",
     "lint": "eslint .",

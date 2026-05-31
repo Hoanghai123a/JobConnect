@@ -36,6 +36,7 @@ import {
   ShieldCheck,
   Search,
   Smartphone,
+  CalendarDays,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({
@@ -288,7 +289,8 @@ function CompanyTab() {
       <p className="text-[11px] text-muted-foreground">
         Yêu cầu collection PocketBase tên <code>app_settings</code> với các field: company_name,
         slogan, address, hotline, email, about (text), advance_limit (number), advance_rules (text),
-        logo (file), install_guide_images (multiple files).
+        logo (file), install_guide_images (multiple files). Collection <code>factories</code> cần
+        thêm field attendance_cutoff_day (number).
       </p>
     </Card>
   );
@@ -323,6 +325,7 @@ interface Factory {
   address?: string;
   hotline?: string;
   note?: string;
+  attendance_cutoff_day?: number;
 }
 
 function FactoriesTab() {
@@ -356,6 +359,7 @@ function FactoriesTab() {
         address: editing.address || "",
         hotline: editing.hotline || "",
         note: editing.note || "",
+        attendance_cutoff_day: Number(editing.attendance_cutoff_day) || 31,
       };
       if (editing.id) {
         await pb.collection("factories").update(editing.id, payload);
@@ -424,6 +428,10 @@ function FactoriesTab() {
               </a>
             )}
             {f.hotline && <div className="text-[11px] text-muted-foreground">📞 {f.hotline}</div>}
+            <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+              <CalendarDays className="h-3 w-3" />
+              Chốt công ngày {f.attendance_cutoff_day || 31}
+            </div>
           </div>
           <div className="flex gap-1">
             <button
@@ -465,6 +473,24 @@ function FactoriesTab() {
               value={editing?.hotline || ""}
               onChange={(v) => setEditing({ ...editing, hotline: v })}
             />
+            <div>
+              <Label className="text-xs">Ngày chốt công</Label>
+              <Input
+                className="mt-1 rounded-xl"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={31}
+                value={editing?.attendance_cutoff_day || 31}
+                onChange={(e) =>
+                  setEditing({ ...editing, attendance_cutoff_day: Number(e.target.value) })
+                }
+              />
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                Ví dụ: chốt ngày 25 thì kỳ công bắt đầu từ ngày 26 tháng trước
+                đến ngày 25 tháng này.
+              </div>
+            </div>
             <div>
               <Label className="text-xs">Ghi chú</Label>
               <Textarea
