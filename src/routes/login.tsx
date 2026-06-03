@@ -28,7 +28,7 @@ function LoginPage() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const normalizedIdentity = identity.trim().toLowerCase();
+    const normalizedIdentity = identity.trim();
 
     if (!normalizedIdentity || !password) {
       toast.warning("Thiếu thông tin đăng nhập", {

@@ -1,5 +1,5 @@
 ﻿import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
@@ -60,6 +60,9 @@ type AdvanceRecord = {
   id: string;
   user?: string;
   requested_by?: string;
+  expand?: {
+    requested_by?: UserRecord;
+  };
   employee_code: string;
   full_name: string;
   company: string;
@@ -118,6 +121,7 @@ export function AdvancesPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(false);
+  const [advanceDetail, setAdvanceDetail] = useState<AdvanceRecord | null>(null);
 
   const advanceUsers = useMemo(() => {
     const self = user ? [user as UserRecord] : [];
@@ -167,6 +171,7 @@ export function AdvancesPage() {
       const res = await pb.collection("advances").getFullList({
         filter,
         sort: "-created",
+        expand: "requested_by",
       });
       setItems(res as unknown as AdvanceRecord[]);
     } catch (error: any) {
@@ -219,6 +224,8 @@ export function AdvancesPage() {
         row.bank_name?.toLowerCase().includes(q) ||
         row.bank_account_number?.toLowerCase().includes(q) ||
         row.bank_account_name?.toLowerCase().includes(q) ||
+        getAdvanceRequesterName(row).toLowerCase().includes(q) ||
+        getAdvanceRequesterMeta(row).toLowerCase().includes(q) ||
         row.reason?.toLowerCase().includes(q) ||
         String(row.amount || 0).includes(q)
       );
@@ -367,6 +374,10 @@ export function AdvancesPage() {
       "Mã NV": row.employee_code,
       "Nhà máy": row.company,
       SĐT: row.phone,
+      "Người báo ứng": getAdvanceRequesterName(row),
+      "Mã NV người báo": getAdvanceRequesterField(row, "employee_code"),
+      "Nhà máy người báo": getAdvanceRequesterField(row, "company"),
+      "SĐT người báo": getAdvanceRequesterField(row, "phone"),
       "Ngân hàng": row.bank_name || "",
       "Số TK": row.bank_account_number || "",
       "Tên TK": row.bank_account_name || "",
@@ -722,14 +733,25 @@ export function AdvancesPage() {
           const recovery = (row.recovery_status || "none") as RecoveryStatus;
           const selectable = isActionable(row);
           const canRecover = status === "accepted" && recovery === "none";
+          const requesterName = getAdvanceRequesterName(row);
           return (
             <div
               key={row.id}
               className={cn(
-                "list-card flex items-start gap-3",
+                "list-card flex cursor-pointer items-center gap-2 px-3 py-2",
                 toneBorder[STATUS_META[status].tone],
                 !selectable && "opacity-95",
               )}
+              role="button"
+              tabIndex={0}
+              onClick={() => setAdvanceDetail(row)}
+              onKeyDown={(event) => {
+                if (event.currentTarget !== event.target) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setAdvanceDetail(row);
+                }
+              }}
             >
               {selectable && (
                 <Checkbox
@@ -741,85 +763,98 @@ export function AdvancesPage() {
                       return next;
                     })
                   }
-                  className="mt-1"
+                  className="shrink-0"
+                  onClick={(event) => event.stopPropagation()}
                 />
               )}
               <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold">{row.full_name}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {row.employee_code} · {row.company}
-                    </div>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold leading-tight">
+                    {row.employee_code || "-"} - {row.full_name || "-"}
                   </div>
-                  <div className="shrink-0 text-right text-sm font-semibold">
+                  <div className="mt-0.5 text-sm font-bold leading-tight text-primary">
                     {formatMoney(row.amount)}
                   </div>
+                  <div className="truncate text-[11px] leading-tight text-muted-foreground">
+                    Báo ứng: {requesterName}
+                  </div>
                 </div>
-                <div className="mt-1 flex flex-wrap gap-1.5">
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground">
+                    {new Date(row.created).toLocaleString("vi-VN")}
+                  </span>
                   <StatusChip tone={STATUS_META[status].tone}>
                     {STATUS_META[status].label}
                   </StatusChip>
-                  <StatusChip tone={RECOVERY_META[recovery].tone as any}>
-                    {RECOVERY_META[recovery].label}
-                  </StatusChip>
+                  {recovery !== "none" && (
+                    <StatusChip tone={RECOVERY_META[recovery].tone as any}>
+                      {RECOVERY_META[recovery].label}
+                    </StatusChip>
+                  )}
                 </div>
-                <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed">{row.reason}</p>
-                <div className="mt-2 text-[11px] text-muted-foreground">
-                  SĐT: {row.phone} · {new Date(row.created).toLocaleString("vi-VN")}
-                </div>
-                {(row.bank_name || row.bank_account_number || row.bank_account_name) && (
-                  <div className="mt-1 text-[11px] text-muted-foreground">
-                    TK: {row.bank_name || "—"} · {row.bank_account_number || "—"} ·{" "}
-                    {row.bank_account_name || "—"}
-                  </div>
-                )}
-                {(row.admin_note || row.recovery_note) && (
-                  <div className="mt-2 space-y-1 rounded-lg bg-muted/60 p-2 text-[12px]">
-                    {row.admin_note && <div>Admin: {row.admin_note}</div>}
-                    {row.recovery_note && <div>Thu hồi: {row.recovery_note}</div>}
-                  </div>
-                )}
               </div>
-              <div className="flex flex-col gap-1">
+              <div className="flex shrink-0 items-center gap-1">
                 {status === "pending" && (
                   <>
                     <Button
-                      size="sm"
-                      onClick={() =>
+                      size="icon"
+                      className="h-8 w-8"
+                      title="Tiếp nhận"
+                      aria-label="Tiếp nhận ứng lương"
+                      onClick={(event) => {
+                        event.stopPropagation();
                         updateRow(row.id, {
                           status: "accepted",
                           resolved_at: new Date().toISOString(),
-                        }).then(load)
-                      }
+                        }).then(load);
+                      }}
                     >
-                      <Check className="h-3.5 w-3.5" /> Tiếp nhận
+                      <Check className="h-3.5 w-3.5" />
                     </Button>
                     <Button
-                      size="sm"
+                      size="icon"
                       variant="destructive"
-                      onClick={() =>
+                      className="h-8 w-8"
+                      title="Từ chối"
+                      aria-label="Từ chối ứng lương"
+                      onClick={(event) => {
+                        event.stopPropagation();
                         updateRow(row.id, {
                           status: "rejected",
                           resolved_at: new Date().toISOString(),
-                        }).then(load)
-                      }
+                        }).then(load);
+                      }}
                     >
-                      <X className="h-3.5 w-3.5" /> Từ chối
+                      <X className="h-3.5 w-3.5" />
                     </Button>
                   </>
                 )}
                 {canRecover && (
                   <>
-                    <Button size="sm" onClick={() => resolveRecovery(row, "recovered")}>
-                      <ShieldCheck className="h-3.5 w-3.5" /> Thu hồi
+                    <Button
+                      size="icon"
+                      className="h-8 w-8"
+                      title="Thu hồi"
+                      aria-label="Đánh dấu đã thu hồi"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        resolveRecovery(row, "recovered");
+                      }}
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5" />
                     </Button>
                     <Button
-                      size="sm"
+                      size="icon"
                       variant="outline"
-                      onClick={() => resolveRecovery(row, "unrecoverable")}
+                      className="h-8 w-8"
+                      title="Không thu hồi"
+                      aria-label="Đánh dấu không thu hồi"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        resolveRecovery(row, "unrecoverable");
+                      }}
                     >
-                      Không thu hồi
+                      <X className="h-3.5 w-3.5" />
                     </Button>
                   </>
                 )}
@@ -828,8 +863,146 @@ export function AdvancesPage() {
           );
         })
       )}
+
+      <Dialog open={!!advanceDetail} onOpenChange={(open) => !open && setAdvanceDetail(null)}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Chi tiết ứng lương</DialogTitle>
+            <DialogDescription>Thông tin đầy đủ của yêu cầu ứng lương.</DialogDescription>
+          </DialogHeader>
+          {advanceDetail && (
+            <div className="space-y-3">
+              <div className="rounded-xl border bg-muted/30 p-3">
+                <div className="text-[11px] uppercase text-muted-foreground">Số tiền</div>
+                <div className="mt-1 text-2xl font-bold text-primary">
+                  {formatMoney(advanceDetail.amount)}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <AdvanceDetailCell label="Họ tên" value={advanceDetail.full_name} />
+                <AdvanceDetailCell label="Mã NV" value={advanceDetail.employee_code} />
+                <AdvanceDetailCell label="Nhà máy" value={advanceDetail.company} />
+                <AdvanceDetailCell
+                  label="Người báo ứng"
+                  value={getAdvanceRequesterName(advanceDetail)}
+                />
+                <AdvanceDetailCell
+                  label="Thông tin người báo ứng"
+                  value={getAdvanceRequesterMeta(advanceDetail)}
+                />
+                <AdvanceDetailCell
+                  label="Số điện thoại"
+                  value={
+                    advanceDetail.phone ? (
+                      <a
+                        href={`tel:${advanceDetail.phone.replace(/\s/g, "")}`}
+                        className="font-semibold text-primary underline-offset-2 hover:underline"
+                      >
+                        {advanceDetail.phone}
+                      </a>
+                    ) : (
+                      "-"
+                    )
+                  }
+                />
+                <AdvanceDetailCell
+                  label="Trạng thái"
+                  value={STATUS_META[(advanceDetail.status || "pending") as AdvanceStatus].label}
+                />
+                <AdvanceDetailCell
+                  label="Thu hồi"
+                  value={
+                    RECOVERY_META[(advanceDetail.recovery_status || "none") as RecoveryStatus].label
+                  }
+                />
+                <AdvanceDetailCell label="Ngày gửi" value={formatDateTime(advanceDetail.created)} />
+                <AdvanceDetailCell
+                  label="Ngày xử lý"
+                  value={formatDateTime(advanceDetail.resolved_at)}
+                />
+                <AdvanceDetailCell
+                  label="Ngày thu hồi"
+                  value={formatDateTime(advanceDetail.recovered_at)}
+                />
+              </div>
+
+              <div className="rounded-xl border bg-card p-3 text-sm">
+                <div className="text-[11px] text-muted-foreground">Tài khoản nhận tiền</div>
+                <div className="mt-1 font-medium">{advanceDetail.bank_name || "-"}</div>
+                <div className="mt-0.5 text-muted-foreground">
+                  {advanceDetail.bank_account_number || "-"} -{" "}
+                  {advanceDetail.bank_account_name || "-"}
+                </div>
+              </div>
+
+              <AdvanceTextBlock label="Lý do ứng" value={advanceDetail.reason} />
+              <AdvanceTextBlock label="Ghi chú admin" value={advanceDetail.admin_note} />
+              <AdvanceTextBlock label="Ghi chú thu hồi" value={advanceDetail.recovery_note} />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </PageContainer>
   );
+}
+
+function AdvanceDetailCell({ label, value }: { label: string; value?: ReactNode }) {
+  return (
+    <div className="rounded-xl border bg-card p-3">
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="mt-0.5 break-words text-sm font-semibold">{value || "-"}</div>
+    </div>
+  );
+}
+
+function AdvanceTextBlock({ label, value }: { label: string; value?: string }) {
+  if (!value?.trim()) return null;
+  return (
+    <div className="rounded-xl border bg-card p-3 text-sm">
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="mt-1 whitespace-pre-wrap leading-relaxed">{value}</div>
+    </div>
+  );
+}
+
+function formatDateTime(value?: string) {
+  return value ? new Date(value).toLocaleString("vi-VN") : "-";
+}
+
+function getAdvanceRequesterName(row: AdvanceRecord) {
+  const requester = row.expand?.requested_by;
+  if (requester) {
+    return requester.full_name || requester.username || requester.phone || row.requested_by || "-";
+  }
+  if (row.requested_by && row.user && row.requested_by === row.user) {
+    return row.full_name || row.employee_code || row.phone || "-";
+  }
+  return row.requested_by || "-";
+}
+
+function getAdvanceRequesterMeta(row: AdvanceRecord) {
+  const requester = row.expand?.requested_by;
+  if (requester) {
+    return (
+      [requester.employee_code, requester.company, requester.phone].filter(Boolean).join(" - ") ||
+      "-"
+    );
+  }
+  if (row.requested_by && row.user && row.requested_by === row.user) {
+    return [row.employee_code, row.company, row.phone].filter(Boolean).join(" - ") || "-";
+  }
+  return row.requested_by || "-";
+}
+
+function getAdvanceRequesterField(
+  row: AdvanceRecord,
+  field: "employee_code" | "company" | "phone",
+) {
+  const requester = row.expand?.requested_by;
+  if (requester?.[field]) return String(requester[field]);
+  if (row.requested_by && row.user && row.requested_by === row.user) return row[field] || "";
+  return "";
 }
 
 function AdvanceRulesCard({ rules }: { rules?: string }) {

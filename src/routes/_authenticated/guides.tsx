@@ -1,10 +1,10 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { pb, fileUrl } from "@/lib/pocketbase";
+import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
-import { useAppSettings } from "@/lib/app-settings";
 import { usePwaInstallPrompt } from "@/lib/pwa-install";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { IosInstallGuideDialog } from "@/components/layout/IosInstallGuideDialog";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -28,13 +28,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -51,7 +44,6 @@ import {
   Users,
   Factory as FactoryIcon,
   User as UserIcon,
-  X,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/guides")({
@@ -205,7 +197,6 @@ function MultiSelectDropdown({
 
 function GuidesPage() {
   const { user, isAdmin } = useAuth();
-  const { data: settings } = useAppSettings();
   const [items, setItems] = useState<Guide[]>([]);
   const [factories, setFactories] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -215,9 +206,6 @@ function GuidesPage() {
   const [reading, setReading] = useState<Guide | null>(null);
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
   const { installPrompt, installApp: installPwaApp, isAndroid, isIos } = usePwaInstallPrompt();
-  const installGuideImages = Array.isArray(settings.install_guide_images)
-    ? settings.install_guide_images
-    : [];
 
   const load = async () => {
     try {
@@ -470,51 +458,7 @@ function GuidesPage() {
         </div>
       )}
 
-      <Dialog open={installGuideOpen} onOpenChange={setInstallGuideOpen}>
-        <DialogContent className="max-h-[92dvh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Cài app ra màn hình chính</DialogTitle>
-            <DialogDescription>Làm theo từng bước theo ảnh bên dưới.</DialogDescription>
-          </DialogHeader>
-          {installGuideImages.length > 0 ? (
-            <Carousel
-              opts={{ align: "start", loop: installGuideImages.length > 1 }}
-              className="pt-2"
-            >
-              <CarouselContent className="-ml-2">
-                {installGuideImages.map((image, index) => (
-                  <CarouselItem key={image} className="pl-2">
-                    <div className="overflow-hidden rounded-2xl border bg-muted">
-                      <div className="flex items-center justify-between border-b bg-card px-3 py-2">
-                        <div className="text-xs font-medium">Bước {index + 1}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {index + 1}/{installGuideImages.length}
-                        </div>
-                      </div>
-                      <img
-                        src={fileUrl(settings, image)}
-                        alt={`Hướng dẫn bước ${index + 1}`}
-                        className="max-h-[60dvh] w-full object-contain bg-black"
-                      />
-                    </div>
-                  </CarouselItem>
-                ))}
-              </CarouselContent>
-              {installGuideImages.length > 1 && (
-                <>
-                  <CarouselPrevious className="left-3 border-border/70 bg-background/90 shadow-soft" />
-                  <CarouselNext className="right-3 border-border/70 bg-background/90 shadow-soft" />
-                </>
-              )}
-            </Carousel>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm leading-6 text-muted-foreground">
-              Trên Android Chrome, mở menu trình duyệt rồi chọn Thêm vào màn hình chính hoặc Cài đặt
-              ứng dụng.
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <IosInstallGuideDialog open={installGuideOpen} onOpenChange={setInstallGuideOpen} />
 
       {/* Reader */}
       <Dialog open={!!reading} onOpenChange={(o) => !o && setReading(null)}>

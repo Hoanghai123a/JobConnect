@@ -1,23 +1,8 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Download, Smartphone, X } from "lucide-react";
-import { useAppSettings } from "@/lib/app-settings";
-import { fileUrl } from "@/lib/pocketbase";
+import { Download, Smartphone, X } from "lucide-react";
 import { isStandaloneMode, usePwaInstallPrompt } from "@/lib/pwa-install";
 import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
+import { IosInstallGuideDialog } from "./IosInstallGuideDialog";
 
 const HIDE_FLAG_KEY = "hideInstallBanner";
 const HIDE_UNTIL_KEY = "hideInstallBannerUntil";
@@ -29,14 +14,10 @@ function isTemporarilyHidden(now: number) {
 }
 
 export function InstallFloatingBanner() {
-  const { data: settings } = useAppSettings();
   const { installPrompt, installApp, isAndroid, isIos } = usePwaInstallPrompt();
   const [ready, setReady] = useState(false);
   const [hidden, setHidden] = useState(true);
   const [guideOpen, setGuideOpen] = useState(false);
-  const guideImages = Array.isArray(settings.install_guide_images)
-    ? settings.install_guide_images
-    : [];
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -125,7 +106,7 @@ export function InstallFloatingBanner() {
             </p>
             <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
               {isIos
-                ? "Mở hướng dẫn để xem từng bước theo ảnh."
+                ? "Xem 5 bước thêm app vào màn hình chính trên iPhone/iPad."
                 : "Nhấn Cài đặt để thêm ứng dụng vào màn hình chính."}
             </p>
           </div>
@@ -152,56 +133,7 @@ export function InstallFloatingBanner() {
         </div>
       </div>
 
-      <Dialog open={guideOpen} onOpenChange={setGuideOpen}>
-        <DialogContent className="max-h-[92dvh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Hướng dẫn cài đặt</DialogTitle>
-          </DialogHeader>
-
-          {guideImages.length > 0 ? (
-            <Carousel opts={{ align: "start", loop: guideImages.length > 1 }} className="pt-2">
-              <CarouselContent className="-ml-2">
-                {guideImages.map((image, index) => (
-                  <CarouselItem key={image} className="pl-2">
-                    <div className="overflow-hidden rounded-2xl border bg-muted">
-                      <div className="flex items-center justify-between border-b bg-card px-3 py-2">
-                        <div className="flex items-center gap-2 text-xs font-medium">
-                          <BookOpen className="h-4 w-4 text-primary" />
-                          Bước {index + 1}
-                        </div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {index + 1}/{guideImages.length}
-                        </div>
-                      </div>
-                      <img
-                        src={fileUrl(settings, image)}
-                        alt={`Hướng dẫn bước ${index + 1}`}
-                        className="max-h-[60dvh] w-full object-contain bg-black"
-                      />
-                    </div>
-                  </CarouselItem>
-                ))}
-              </CarouselContent>
-              {guideImages.length > 1 && (
-                <>
-                  <CarouselPrevious className="left-3 border-border/70 bg-background/90 shadow-soft" />
-                  <CarouselNext className="right-3 border-border/70 bg-background/90 shadow-soft" />
-                </>
-              )}
-            </Carousel>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-              Chưa có ảnh hướng dẫn. Admin thêm ảnh trong Cài đặt hệ thống.
-            </div>
-          )}
-
-          {guideImages.length > 0 && (
-            <div className="text-xs text-muted-foreground">
-              Mẹo: Sau khi mở trang chia sẻ của iPhone, chọn <strong>Thêm vào MH chính</strong>.
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <IosInstallGuideDialog open={guideOpen} onOpenChange={setGuideOpen} />
     </>
   );
 }
