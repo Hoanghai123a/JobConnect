@@ -13,6 +13,4 @@ export function getPBUpstream() {
 
 export const PB_URL =
   runtimePbUrl ||
-  (typeof window !== "undefined"
-    ? `${window.location.origin}/api/public/pb`
-    : getPBUpstream());
+  (typeof window !== "undefined" ? `${window.location.origin}/api/public/pb` : getPBUpstream());
