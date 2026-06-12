@@ -1,4 +1,4 @@
-const DEFAULT_PB_URL = "https://ripple-skyrocket-progeny.ngrok-free.dev";
+const DEFAULT_PB_URL = "http://127.0.0.1:8090";
 
 const runtimePbUrl =
   typeof window !== "undefined" ? (window as { __PB_URL__?: string }).__PB_URL__ : undefined;
@@ -15,4 +15,4 @@ export const PB_URL =
   runtimePbUrl ||
   (typeof window !== "undefined"
     ? `${window.location.origin}/api/public/pb`
-    : import.meta.env.VITE_PB_URL || DEFAULT_PB_URL);
+    : getPBUpstream());

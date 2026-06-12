@@ -4,14 +4,6 @@ import { PB_URL } from "./pocketbase-config";
 export const pb = new PocketBase(PB_URL);
 pb.autoCancellation(false);
 
-// Bypass ngrok-free.dev browser warning page (returns HTML otherwise → "Failed to fetch")
-pb.beforeSend = function (url, options) {
-  options.headers = {
-    ...(options.headers || {}),
-    "ngrok-skip-browser-warning": "true",
-  };
-  return { url, options };
-};
 
 export type Role = "admin" | "user";
 

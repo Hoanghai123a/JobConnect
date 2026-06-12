@@ -20,8 +20,49 @@ npm run start
 
 Set these before deploy:
 
-- `VITE_PB_URL`: public PocketBase base URL
 - `PB_URL`: server-side upstream PocketBase URL
+- `VITE_PB_URL`: optional SSR/build-time PocketBase URL
+
+## Production Flow
+
+Recommended production topology for this app:
+
+```text
+chamcongchua.com
+  -> Cloudflare Tunnel
+  -> http://localhost:3000
+  -> JobConnect app
+  -> PB_URL
+  -> http://127.0.0.1:8090
+```
+
+Browser requests should stay same-origin and go through `/api/public/pb`.
+PocketBase should stay private on the Linux server when possible.
+
+Example `.env` for CentOS / PM2 / Cloudflare Tunnel:
+
+```bash
+PB_URL=http://127.0.0.1:8090
+VITE_PB_URL=http://127.0.0.1:8090
+```
+
+## PM2 Deploy
+
+```bash
+npm install
+npm run build
+npm run pm2:start
+pm2 save
+```
+
+On later deploys:
+
+```bash
+git pull
+npm install
+npm run deploy:pm2
+pm2 save
+```
 
 ## Deploy
 
