@@ -16,6 +16,15 @@ npm run build
 npm run start
 ```
 
+## Dev
+
+```bash
+npm run dev
+```
+
+Local dev now runs at `http://127.0.0.1:3000` to stay aligned with production routing.
+If PM2 production is already using port `3000` on the same machine, stop that process before starting dev.
+
 ## Env
 
 Set these before deploy:

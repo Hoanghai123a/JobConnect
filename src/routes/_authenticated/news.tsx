@@ -119,26 +119,47 @@ const genderLabel = (g?: string[]) => {
 };
 
 const ENVIRONMENT_OPTIONS = [
-  { value: "normal_room", label: "Phòng thường" },
-  { value: "clean_room", label: "Phòng sạch" },
+  {
+    value: "normal_room",
+    label: "Phòng thường",
+  },
+  {
+    value: "clean_room",
+    label: "Phòng sạch",
+  },
   { value: "both", label: "Cả 2" },
 ] as const;
 
 const WORK_POSTURE_OPTIONS = [
-  { value: "standing", label: "Làm đứng" },
-  { value: "sitting", label: "Làm ngồi" },
+  {
+    value: "standing",
+    label: "Làm đứng",
+  },
+  {
+    value: "sitting",
+    label: "Làm ngồi",
+  },
   { value: "both", label: "Cả 2" },
 ] as const;
 
 const PRODUCTION_QC_OPTIONS = [
-  { value: "production", label: "Sản xuất" },
+  {
+    value: "production",
+    label: "Sản xuất",
+  },
   { value: "qc", label: "QC" },
   { value: "both", label: "Cả 2" },
 ] as const;
 
 const EMPLOYMENT_TYPE_OPTIONS = [
-  { value: "official", label: "Chính thức" },
-  { value: "temporary", label: "Thời vụ" },
+  {
+    value: "official",
+    label: "Chính thức",
+  },
+  {
+    value: "temporary",
+    label: "Thời vụ",
+  },
 ] as const;
 
 type SelectOption = { value: string; label: string };
@@ -366,7 +387,11 @@ function NewsPage() {
         onSearchChange={setSearch}
         placeholder="Tìm theo tên nhà máy…"
         chips={[
-          { key: "all", label: "Tất cả", count: visibleItems.length },
+          {
+            key: "all",
+            label: "Tất cả",
+            count: visibleItems.length,
+          },
           { key: "male", label: "Nam" },
           { key: "female", label: "Nữ" },
         ]}
@@ -425,14 +450,14 @@ function NewsPage() {
                   <button
                     className="flex h-8 w-8 items-center justify-center rounded-lg bg-card/90 text-muted-foreground shadow-soft hover:bg-muted"
                     onClick={() => setEditing(r)}
-                    aria-label="Sua"
+                    aria-label="Sửa"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                   <button
                     className="flex h-8 w-8 items-center justify-center rounded-lg bg-card/90 text-destructive shadow-soft hover:bg-destructive/10"
                     onClick={() => remove(r.id)}
-                    aria-label="Xoa"
+                    aria-label="Xóa"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -647,13 +672,17 @@ function DetailSheet({
               {contactPhone ? (
                 <a
                   href={`tel:${contactPhone}`}
-                  className="flex items-center gap-1.5 rounded-full bg-success px-3 py-1.5 text-xs font-semibold text-success-foreground"
+                  className="flex items-center gap-2 rounded-full bg-success px-3 py-1.5 text-success-foreground"
                 >
-                  <Phone className="h-4 w-4" /> Ứng tuyển
+                  <Phone className="h-4 w-4 flex-none" />
+                  <span className="flex flex-col leading-tight">
+                    <span className="text-[11px] font-medium opacity-90">Gọi ứng tuyển</span>
+                    <span className="text-xs font-semibold">{contactPhone}</span>
+                  </span>
                 </a>
               ) : (
                 <div className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
-                  <Phone className="h-4 w-4" /> Chua co so
+                  <Phone className="h-4 w-4" /> Chưa có số
                 </div>
               )}
               <Button
