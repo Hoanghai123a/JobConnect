@@ -59,9 +59,16 @@ On later deploys:
 
 ```bash
 git pull
-npm install
-npm run deploy:pm2
-pm2 save
+npm run deploy
+```
+
+`npm run deploy` rebuilds the app, reloads PM2, and saves the PM2 process list.
+
+If dependencies changed, run the full deploy instead:
+
+```bash
+git pull
+npm run deploy:full
 ```
 
 ## Deploy
