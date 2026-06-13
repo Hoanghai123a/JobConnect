@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { pb, fileUrl } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -44,6 +44,10 @@ import {
   PersonStanding,
   ShieldCheck,
   SlidersHorizontal,
+  Briefcase,
+  FileText,
+  Users,
+  Wallet,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -153,10 +157,11 @@ const matchesInclusiveSelectFilter = (
   return value === selected || value === "both";
 };
 
-type FactoryOption = { id: string; name: string; address?: string };
+type FactoryOption = { id: string; name: string; address?: string; hotline?: string };
 type RecruitmentAreaOption = { id: string; name: string; note?: string };
 
 const normalizeArea = (value?: string) => value?.trim() || "";
+const normalizeLookupValue = (value?: string) => value?.trim().toLowerCase() || "";
 
 const isRecruitmentActive = (item: Recruitment) => item.is_active !== false;
 
@@ -166,11 +171,46 @@ const errorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
 
 const factoryMapUrl = (factory?: FactoryOption | null) => {
-  const query = factory?.address || factory?.name || "";
-  return query
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
-    : "";
+  const query = factory?.address?.trim() || factory?.name?.trim() || "";
+  if (!query) return "";
+  if (/^https?:\/\//i.test(query)) return query;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 };
+
+const findFactoryByCompany = (factories: FactoryOption[], company?: string) => {
+  const normalizedCompany = normalizeLookupValue(company);
+  if (!normalizedCompany) return null;
+  return (
+    factories.find((factory) => normalizeLookupValue(factory.name) === normalizedCompany) || null
+  );
+};
+
+function useFactoryOptions() {
+  const [factories, setFactories] = useState<FactoryOption[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    pb.collection("factories")
+      .getFullList({ sort: "name" })
+      .then((res) => {
+        if (!cancelled) setFactories(res as unknown as FactoryOption[]);
+      })
+      .catch(() => {
+        if (!cancelled) setFactories([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { factories, loading };
+}
 
 function useRecruitmentAreaOptions() {
   const [areas, setAreas] = useState<RecruitmentAreaOption[]>([]);
@@ -208,6 +248,7 @@ const formatMoneyInput = (value: string) => {
 function NewsPage() {
   const { isAdmin } = useAuth();
   const { areas: configuredAreas, loading: areasLoading } = useRecruitmentAreaOptions();
+  const { factories, loading: factoriesLoading } = useFactoryOptions();
   const [items, setItems] = useState<Recruitment[]>([]);
   const [detail, setDetail] = useState<Recruitment | null>(null);
   const [editing, setEditing] = useState<Recruitment | null>(null);
@@ -456,11 +497,13 @@ function NewsPage() {
         })
       )}
 
-      <DetailSheet item={detail} onClose={() => setDetail(null)} />
+      <DetailSheet item={detail} factories={factories} onClose={() => setDetail(null)} />
       <EditDialog
         item={editing}
         areaOptions={areaOptions}
         areasLoading={areasLoading}
+        factories={factories}
+        factoriesLoading={factoriesLoading}
         onClose={() => setEditing(null)}
         onSaved={() => {
           setEditing(null);
@@ -579,7 +622,19 @@ function SummaryItem({
   );
 }
 
-function DetailSheet({ item, onClose }: { item: Recruitment | null; onClose: () => void }) {
+function DetailSheet({
+  item,
+  factories,
+  onClose,
+}: {
+  item: Recruitment | null;
+  factories: FactoryOption[];
+  onClose: () => void;
+}) {
+  const factory = item ? findFactoryByCompany(factories, item.company) : null;
+  const contactPhone = (factory?.hotline || item?.admin_phone || "").trim();
+  const mapUrl = factoryMapUrl(factory) || item?.map_url || "";
+
   return (
     <Dialog open={!!item} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[92dvh] overflow-y-auto p-0">
@@ -589,12 +644,18 @@ function DetailSheet({ item, onClose }: { item: Recruitment | null; onClose: () 
               <DialogHeader className="flex-1">
                 <DialogTitle className="truncate">{item.company}</DialogTitle>
               </DialogHeader>
-              <a
-                href={`tel:${item.admin_phone}`}
-                className="flex items-center gap-1.5 rounded-full bg-success px-3 py-1.5 text-xs font-semibold text-success-foreground"
-              >
-                <Phone className="h-4 w-4" /> Ứng tuyển
-              </a>
+              {contactPhone ? (
+                <a
+                  href={`tel:${contactPhone}`}
+                  className="flex items-center gap-1.5 rounded-full bg-success px-3 py-1.5 text-xs font-semibold text-success-foreground"
+                >
+                  <Phone className="h-4 w-4" /> Ứng tuyển
+                </a>
+              ) : (
+                <div className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
+                  <Phone className="h-4 w-4" /> Chua co so
+                </div>
+              )}
               <Button
                 type="button"
                 variant="ghost"
@@ -637,40 +698,120 @@ function DetailSheet({ item, onClose }: { item: Recruitment | null; onClose: () 
                 )}
               </Carousel>
             )}
-            <div className="space-y-3 p-4 text-sm">
-              <Info
-                label="Loại tuyển"
-                value={optionLabel(EMPLOYMENT_TYPE_OPTIONS, recruitmentEmploymentType(item))}
-              />
-              <Info icon={MapPin} label="Khu vực" value={item.area} />
-              <Info label="Giới thiệu" value={item.introduction} multiline />
-              <Info label="Thời hạn tuyển dụng" value={item.recruitment_deadline} />
-              <Info label="Thưởng khác" value={item.bonus_other} multiline />
-              <Info label="Lương ngắn hạn" value={item.short_term_salary} multiline />
-              <Info label="Môi trường" value={optionLabel(ENVIRONMENT_OPTIONS, item.environment)} />
-              <Info
-                label="Tư thế công việc"
-                value={optionLabel(WORK_POSTURE_OPTIONS, item.work_posture)}
-              />
-              <Info
-                label="Sản xuất/QC"
-                value={[
-                  optionLabel(PRODUCTION_QC_OPTIONS, item.production_qc),
-                  item.production_qc_note,
-                ]
-                  .filter(Boolean)
-                  .join("\n")}
-                multiline
-              />
-              <Info icon={Clock} label="Thời gian phỏng vấn" value={item.interview_time} />
-              <Info icon={Banknote} label="Lương cơ bản" value={item.salary_base} />
-              <Info label="Phụ cấp" value={item.allowance} />
-              <Info label="Tuyển" value={genderLabel(item.gender)} />
-              <Info label="Giấy tờ yêu cầu" value={item.documents} multiline />
-              <Info label="Ghi chú khác" value={item.notes} multiline />
-              {item.map_url && (
+            <div className="space-y-4 p-4 text-sm">
+              <DetailSection icon={Building2} title={"T\u1ed5ng quan"}>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Info
+                    icon={ClipboardCheck}
+                    label={"Lo\u1ea1i tuy\u1ec3n"}
+                    value={optionLabel(EMPLOYMENT_TYPE_OPTIONS, recruitmentEmploymentType(item))}
+                  />
+                  <Info icon={MapPin} label={"Khu v\u1ef1c"} value={item.area} />
+                  <Info icon={Users} label={"Tuy\u1ec3n"} value={genderLabel(item.gender)} />
+                  <Info
+                    icon={Clock}
+                    label={"Th\u1eddi gian ph\u1ecfng v\u1ea5n"}
+                    value={item.interview_time}
+                  />
+                  <Info
+                    icon={CalendarDays}
+                    label={"Th\u1eddi h\u1ea1n tuy\u1ec3n d\u1ee5ng"}
+                    value={item.recruitment_deadline}
+                  />
+                </div>
+                <Info label={"Gi\u1edbi thi\u1ec7u"} value={item.introduction} multiline />
+              </DetailSection>
+
+              <DetailSection icon={Wallet} title={"Ch\u1ebf \u0111\u1ed9"}>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Info
+                    icon={Banknote}
+                    label={"L\u01b0\u01a1ng c\u01a1 b\u1ea3n"}
+                    value={item.salary_base}
+                  />
+                  <Info icon={Gift} label={"Ph\u1ee5 c\u1ea5p"} value={item.allowance} />
+                </div>
+                <Info label={"Th\u01b0\u1edfng kh\u00e1c"} value={item.bonus_other} multiline />
+                <Info
+                  label={"L\u01b0\u01a1ng ng\u1eafn h\u1ea1n"}
+                  value={item.short_term_salary}
+                  multiline
+                />
+              </DetailSection>
+
+              <DetailSection icon={Briefcase} title={"\u0110\u1eb7c th\u00f9 c\u00f4ng vi\u1ec7c"}>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Info
+                    icon={ShieldCheck}
+                    label={"M\u00f4i tr\u01b0\u1eddng"}
+                    value={optionLabel(ENVIRONMENT_OPTIONS, item.environment)}
+                  />
+                  <Info
+                    icon={PersonStanding}
+                    label={"T\u01b0 th\u1ebf c\u00f4ng vi\u1ec7c"}
+                    value={optionLabel(WORK_POSTURE_OPTIONS, item.work_posture)}
+                  />
+                </div>
+                <Info
+                  icon={ClipboardCheck}
+                  label={"S\u1ea3n xu\u1ea5t/QC"}
+                  value={[
+                    optionLabel(PRODUCTION_QC_OPTIONS, item.production_qc),
+                    item.production_qc_note,
+                  ]
+                    .filter(Boolean)
+                    .join("\n")}
+                  multiline
+                />
+              </DetailSection>
+
+              <DetailSection icon={FileText} title={"Th\u1ee7 t\u1ee5c"}>
+                <Info
+                  label={"Gi\u1ea5y t\u1edd y\u00eau c\u1ea7u"}
+                  value={item.documents}
+                  multiline
+                />
+                <Info label={"Ghi ch\u00fa kh\u00e1c"} value={item.notes} multiline />
+              </DetailSection>
+
+              <div className="hidden">
+                <Info
+                  label="Loại tuyển"
+                  value={optionLabel(EMPLOYMENT_TYPE_OPTIONS, recruitmentEmploymentType(item))}
+                />
+                <Info icon={MapPin} label="Khu vực" value={item.area} />
+                <Info label="Giới thiệu" value={item.introduction} multiline />
+                <Info label="Thời hạn tuyển dụng" value={item.recruitment_deadline} />
+                <Info label="Thưởng khác" value={item.bonus_other} multiline />
+                <Info label="Lương ngắn hạn" value={item.short_term_salary} multiline />
+                <Info
+                  label="Môi trường"
+                  value={optionLabel(ENVIRONMENT_OPTIONS, item.environment)}
+                />
+                <Info
+                  label="Tư thế công việc"
+                  value={optionLabel(WORK_POSTURE_OPTIONS, item.work_posture)}
+                />
+                <Info
+                  label="Sản xuất/QC"
+                  value={[
+                    optionLabel(PRODUCTION_QC_OPTIONS, item.production_qc),
+                    item.production_qc_note,
+                  ]
+                    .filter(Boolean)
+                    .join("\n")}
+                  multiline
+                />
+                <Info icon={Clock} label="Thời gian phỏng vấn" value={item.interview_time} />
+                <Info icon={Banknote} label="Lương cơ bản" value={item.salary_base} />
+                <Info label="Phụ cấp" value={item.allowance} />
+                <Info label="Tuyển" value={genderLabel(item.gender)} />
+                <Info label="Giấy tờ yêu cầu" value={item.documents} multiline />
+                <Info label="Ghi chú khác" value={item.notes} multiline />
+              </div>
+              {mapUrl && (
                 <a
-                  href={item.map_url}
+                  href={mapUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-2 rounded-xl border bg-secondary p-3 text-primary"
@@ -683,6 +824,28 @@ function DetailSheet({ item, onClose }: { item: Recruitment | null; onClose: () 
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function DetailSection({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-3 rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
+      <div className="flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="text-sm font-semibold">{title}</div>
+      </div>
+      <div className="space-y-3">{children}</div>
+    </section>
   );
 }
 
@@ -699,7 +862,7 @@ function Info({
 }) {
   if (!value) return null;
   return (
-    <div className="flex gap-3">
+    <div className="flex gap-3 rounded-xl bg-muted/35 p-3">
       {Icon && <Icon className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />}
       <div className="min-w-0 flex-1">
         <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
@@ -713,12 +876,16 @@ function EditDialog({
   item,
   areaOptions,
   areasLoading,
+  factories,
+  factoriesLoading,
   onClose,
   onSaved,
 }: {
   item: Recruitment | null;
   areaOptions: SelectOption[];
   areasLoading: boolean;
+  factories: FactoryOption[];
+  factoriesLoading: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -745,8 +912,9 @@ function EditDialog({
 
   const save = async () => {
     try {
-      const adminPhone = user?.phone || form.admin_phone || "";
-      const mapUrl = factoryMapUrl(selectedFactory) || form.map_url || "";
+      const currentFactory = selectedFactory || findFactoryByCompany(factories, form.company);
+      const adminPhone = currentFactory?.hotline?.trim() || user?.phone || form.admin_phone || "";
+      const mapUrl = factoryMapUrl(currentFactory) || form.map_url || "";
       const fd = new FormData();
       fd.append("company", form.company);
       fd.append("area", normalizeArea(form.area));
@@ -800,11 +968,18 @@ function EditDialog({
             />
           </label>
           <FactoryField
+            factories={factories}
+            loading={factoriesLoading}
             label="Nhà máy"
             v={form.company}
             on={(v, factory) => {
               setSelectedFactory(factory);
-              setForm({ ...form, company: v, map_url: factoryMapUrl(factory) || form.map_url });
+              setForm({
+                ...form,
+                company: v,
+                map_url: factoryMapUrl(factory) || form.map_url,
+                admin_phone: factory?.hotline?.trim() || form.admin_phone,
+              });
             }}
           />
           <AreaField
@@ -1098,32 +1273,18 @@ function AreaField({
 }
 
 function FactoryField({
+  factories,
+  loading,
   label,
   v,
   on,
 }: {
+  factories: FactoryOption[];
+  loading: boolean;
   label: string;
   v: string;
   on: (v: string, factory: FactoryOption | null) => void;
 }) {
-  const [factories, setFactories] = useState<FactoryOption[]>([]);
-  const [loading, setLoading] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    pb.collection("factories")
-      .getFullList({ sort: "name" })
-      .then((res) => {
-        if (!cancelled) setFactories(res as unknown as FactoryOption[]);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
   const hasMatch = !v || factories.some((f) => f.name === v);
   return (
     <div className="space-y-1">

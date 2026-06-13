@@ -273,11 +273,13 @@ function TransportPage() {
                   <BusFront className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold">
+                  <div className="truncate text-sm font-semibold">
                     {item.carrier_name?.trim() || item.title}
                   </div>
                   {item.carrier_name?.trim() && (
-                    <div className="mt-0.5 text-xs text-muted-foreground">{item.title}</div>
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {item.title}
+                    </div>
                   )}
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {author?.full_name || author?.username || "Người đóng góp"}
