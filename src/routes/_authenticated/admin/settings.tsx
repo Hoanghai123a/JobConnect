@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +38,8 @@ import {
   Search,
   Smartphone,
   CalendarDays,
+  ChevronDown,
+  MapPin,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({
@@ -328,12 +331,23 @@ interface Factory {
   attendance_cutoff_day?: number;
 }
 
+interface RecruitmentArea {
+  id: string;
+  name: string;
+  note?: string;
+}
+
 function FactoriesTab() {
   const [items, setItems] = useState<Factory[]>([]);
+  const [areas, setAreas] = useState<RecruitmentArea[]>([]);
   const [editing, setEditing] = useState<Partial<Factory> | null>(null);
+  const [editingArea, setEditingArea] = useState<Partial<RecruitmentArea> | null>(null);
   const [loading, setLoading] = useState(false);
+  const [areasLoading, setAreasLoading] = useState(false);
+  const [factoriesOpen, setFactoriesOpen] = useState(true);
+  const [areasOpen, setAreasOpen] = useState(true);
 
-  const load = async () => {
+  const loadFactories = async () => {
     setLoading(true);
     try {
       const res = await pb.collection("factories").getFullList({ sort: "name" });
@@ -344,8 +358,22 @@ function FactoriesTab() {
       setLoading(false);
     }
   };
+
+  const loadAreas = async () => {
+    setAreasLoading(true);
+    try {
+      const res = await pb.collection("recruitment_areas").getFullList({ sort: "name" });
+      setAreas(res as any);
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi tải khu vực. Hãy tạo collection 'recruitment_areas'.");
+    } finally {
+      setAreasLoading(false);
+    }
+  };
+
   useEffect(() => {
-    load();
+    loadFactories();
+    loadAreas();
   }, []);
 
   const save = async () => {
@@ -368,7 +396,7 @@ function FactoriesTab() {
       }
       toast.success("Đã lưu");
       setEditing(null);
-      load();
+      loadFactories();
     } catch (e: any) {
       toast.error(e?.message || "Lỗi lưu");
     }
@@ -379,78 +407,134 @@ function FactoriesTab() {
     try {
       await pb.collection("factories").delete(id);
       toast.success("Đã xoá");
-      load();
+      loadFactories();
     } catch (e: any) {
       toast.error(e?.message || "Lỗi xoá");
     }
   };
 
+  const saveArea = async () => {
+    const name = editingArea?.name?.trim();
+    if (!name) {
+      toast.error("Tên khu vực bắt buộc");
+      return;
+    }
+    try {
+      const payload = {
+        name,
+        note: editingArea?.note || "",
+      };
+      if (editingArea?.id) {
+        await pb.collection("recruitment_areas").update(editingArea.id, payload);
+      } else {
+        await pb.collection("recruitment_areas").create(payload);
+      }
+      toast.success("Đã lưu khu vực");
+      setEditingArea(null);
+      loadAreas();
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi lưu khu vực");
+    }
+  };
+
+  const removeArea = async (id: string) => {
+    if (!confirm("Xoá khu vực này?")) return;
+    try {
+      await pb.collection("recruitment_areas").delete(id);
+      toast.success("Đã xoá khu vực");
+      loadAreas();
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi xoá khu vực");
+    }
+  };
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between px-1">
-        <h2 className="text-sm font-semibold">
-          Nhà máy <span className="text-muted-foreground">({items.length})</span>
-        </h2>
-        <button
-          onClick={() => setEditing({})}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-soft active:scale-95"
-          aria-label="Thêm nhà máy"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
-      </div>
-
-      {loading && <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>}
-      {!loading && items.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
-          Chưa có nhà máy. Bấm nút + để thêm.
-        </div>
-      )}
-      {items.map((f) => (
-        <div
-          key={f.id}
-          className="list-card border-l-[color:var(--status-info)] flex items-start gap-3"
-        >
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Factory className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold">{f.name}</div>
-            {f.address && (
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(f.address)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="mt-0.5 block text-[11px] text-muted-foreground hover:text-primary hover:underline"
+      <Collapsible open={factoriesOpen} onOpenChange={setFactoriesOpen}>
+        <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
+          <div className="flex items-center justify-between gap-2">
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                aria-label="Thu gọn hoặc mở rộng danh sách nhà máy"
               >
-                📍 {f.address}
-              </a>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${factoriesOpen ? "rotate-0" : "-rotate-90"}`}
+                />
+                <h2 className="text-sm font-semibold">
+                  Nhà máy <span className="text-muted-foreground">({items.length})</span>
+                </h2>
+              </button>
+            </CollapsibleTrigger>
+            <button
+              onClick={() => setEditing({})}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-soft active:scale-95"
+              aria-label="Thêm nhà máy"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+
+          <CollapsibleContent className="mt-3 space-y-3">
+            {loading && (
+              <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
             )}
-            {f.hotline && <div className="text-[11px] text-muted-foreground">📞 {f.hotline}</div>}
-            <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-              <CalendarDays className="h-3 w-3" />
-              Chốt công ngày {f.attendance_cutoff_day || 31}
-            </div>
-          </div>
-          <div className="flex gap-1">
-            <button
-              onClick={() => setEditing(f)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
-              aria-label="Sửa"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => remove(f.id)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
-              aria-label="Xoá"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
+            {!loading && items.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
+                Chưa có nhà máy. Bấm nút + để thêm.
+              </div>
+            )}
+            {items.map((f) => (
+              <div
+                key={f.id}
+                className="list-card border-l-[color:var(--status-info)] flex items-start gap-3"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Factory className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{f.name}</div>
+                  {f.address && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(f.address)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-0.5 block text-[11px] text-muted-foreground hover:text-primary hover:underline"
+                    >
+                      📍 {f.address}
+                    </a>
+                  )}
+                  {f.hotline && (
+                    <div className="text-[11px] text-muted-foreground">📞 {f.hotline}</div>
+                  )}
+                  <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                    <CalendarDays className="h-3 w-3" />
+                    Chốt công ngày {f.attendance_cutoff_day || 31}
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setEditing(f)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+                    aria-label="Sửa"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => remove(f.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
+                    aria-label="Xoá"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </CollapsibleContent>
         </div>
-      ))}
+      </Collapsible>
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="rounded-2xl">
@@ -487,8 +571,8 @@ function FactoriesTab() {
                 }
               />
               <div className="mt-1 text-[11px] text-muted-foreground">
-                Ví dụ: chốt ngày 25 thì kỳ công bắt đầu từ ngày 26 tháng trước
-                đến ngày 25 tháng này.
+                Ví dụ: chốt ngày 25 thì kỳ công bắt đầu từ ngày 26 tháng trước đến ngày 25 tháng
+                này.
               </div>
             </div>
             <div>
@@ -506,6 +590,111 @@ function FactoriesTab() {
               Huỷ
             </Button>
             <Button onClick={save} className="rounded-xl">
+              <Save className="h-4 w-4" /> Lưu
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Collapsible open={areasOpen} onOpenChange={setAreasOpen}>
+        <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
+          <div className="flex items-center justify-between gap-2">
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                aria-label="Thu gọn hoặc mở rộng danh sách khu vực"
+              >
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${areasOpen ? "rotate-0" : "-rotate-90"}`}
+                />
+                <h2 className="text-sm font-semibold">
+                  Khu vực <span className="text-muted-foreground">({areas.length})</span>
+                </h2>
+              </button>
+            </CollapsibleTrigger>
+            <button
+              onClick={() => setEditingArea({})}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-soft active:scale-95"
+              aria-label="Thêm khu vực"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+
+          <CollapsibleContent className="mt-3 space-y-3">
+            {areasLoading && (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                Đang tải khu vực...
+              </div>
+            )}
+            {!areasLoading && areas.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
+                Chưa có khu vực. Bấm nút + để thêm.
+              </div>
+            )}
+            {areas.map((area) => (
+              <div
+                key={area.id}
+                className="list-card border-l-[color:var(--status-success)] flex items-start gap-3"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <MapPin className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{area.name}</div>
+                  {area.note && (
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">{area.note}</div>
+                  )}
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setEditingArea(area)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+                    aria-label="Sửa khu vực"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => removeArea(area.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
+                    aria-label="Xoá khu vực"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+
+      <Dialog open={!!editingArea} onOpenChange={(o) => !o && setEditingArea(null)}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingArea?.id ? "Sửa khu vực" : "Thêm khu vực"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Field
+              label="Tên khu vực *"
+              value={editingArea?.name || ""}
+              onChange={(v) => setEditingArea({ ...editingArea, name: v })}
+            />
+            <div>
+              <Label className="text-xs">Ghi chú</Label>
+              <Textarea
+                className="mt-1 rounded-xl"
+                rows={3}
+                value={editingArea?.note || ""}
+                onChange={(e) => setEditingArea({ ...editingArea, note: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingArea(null)} className="rounded-xl">
+              Huỷ
+            </Button>
+            <Button onClick={saveArea} className="rounded-xl">
               <Save className="h-4 w-4" /> Lưu
             </Button>
           </DialogFooter>

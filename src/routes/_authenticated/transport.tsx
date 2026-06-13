@@ -21,6 +21,7 @@ type TransportRecord = {
   id: string;
   user?: string;
   edited_by?: string;
+  carrier_name?: string;
   title: string;
   run_time?: string;
   phone: string;
@@ -38,10 +39,15 @@ type TransportRecord = {
   };
 };
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 function TransportPage() {
   const { user, isAdmin } = useAuth();
   const [items, setItems] = useState<TransportRecord[]>([]);
   const [search, setSearch] = useState("");
+  const [carrierName, setCarrierName] = useState("");
   const [title, setTitle] = useState("");
   const [runTime, setRunTime] = useState("");
   const [phone, setPhone] = useState("");
@@ -58,8 +64,8 @@ function TransportPage() {
         expand: "user,edited_by",
       });
       setItems(res as unknown as TransportRecord[]);
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi tải danh sách nhà xe");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Lỗi tải danh sách nhà xe"));
     } finally {
       setLoading(false);
     }
@@ -72,10 +78,15 @@ function TransportPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return items;
-    return items.filter((item) => item.title?.toLowerCase().includes(q));
+    return items.filter((item) =>
+      [item.carrier_name, item.title, item.run_time, item.phone].some((value) =>
+        value?.toLowerCase().includes(q),
+      ),
+    );
   }, [items, search]);
 
   const resetForm = () => {
+    setCarrierName("");
     setTitle("");
     setRunTime("");
     setPhone("");
@@ -89,6 +100,7 @@ function TransportPage() {
 
   const openEditForm = (item: TransportRecord) => {
     setEditing(item);
+    setCarrierName(item.carrier_name || "");
     setTitle(item.title || "");
     setRunTime(item.run_time || "");
     setPhone(item.phone || "");
@@ -114,6 +126,7 @@ function TransportPage() {
     setSaving(true);
     try {
       const payload = {
+        carrier_name: carrierName.trim(),
         title: title.trim(),
         run_time: runTime.trim(),
         phone: normalizedPhone,
@@ -134,8 +147,8 @@ function TransportPage() {
       resetForm();
       setFormOpen(false);
       load();
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi lưu thông tin nhà xe");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Lỗi lưu thông tin nhà xe"));
     } finally {
       setSaving(false);
     }
@@ -162,6 +175,17 @@ function TransportPage() {
 
         {formOpen && (
           <form onSubmit={submit} className="mt-3 space-y-3 border-t border-border pt-3">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <Label>Tên nhà xe</Label>
+                <span className="text-[11px] text-muted-foreground">Có thể để trống</span>
+              </div>
+              <Input
+                value={carrierName}
+                onChange={(event) => setCarrierName(event.target.value)}
+                placeholder="VD: Hoàng Long"
+              />
+            </div>
             <div className="space-y-1">
               <Label>Tiêu đề (những nơi xe đi qua)</Label>
               <Input
@@ -216,7 +240,7 @@ function TransportPage() {
           className="rounded-full pl-9"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="VD: Lào Cai - Hà Nội"
+          placeholder="VD: Hoàng Long hoặc Lào Cai - Hà Nội"
         />
       </div>
 
@@ -249,7 +273,12 @@ function TransportPage() {
                   <BusFront className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold">{item.title}</div>
+                  <div className="text-sm font-semibold">
+                    {item.carrier_name?.trim() || item.title}
+                  </div>
+                  {item.carrier_name?.trim() && (
+                    <div className="mt-0.5 text-xs text-muted-foreground">{item.title}</div>
+                  )}
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {author?.full_name || author?.username || "Người đóng góp"}
                     {author?.company ? ` . ${author.company}` : ""}

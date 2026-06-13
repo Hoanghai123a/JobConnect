@@ -154,6 +154,7 @@ const matchesInclusiveSelectFilter = (
 };
 
 type FactoryOption = { id: string; name: string; address?: string };
+type RecruitmentAreaOption = { id: string; name: string; note?: string };
 
 const normalizeArea = (value?: string) => value?.trim() || "";
 
@@ -171,6 +172,33 @@ const factoryMapUrl = (factory?: FactoryOption | null) => {
     : "";
 };
 
+function useRecruitmentAreaOptions() {
+  const [areas, setAreas] = useState<RecruitmentAreaOption[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    pb.collection("recruitment_areas")
+      .getFullList({ sort: "name" })
+      .then((res) => {
+        if (!cancelled) setAreas(res as unknown as RecruitmentAreaOption[]);
+      })
+      .catch(() => {
+        if (!cancelled) setAreas([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { areas, loading };
+}
+
 const formatMoneyInput = (value: string) => {
   const digits = value.replace(/\D/g, "");
   if (!digits) return "";
@@ -179,6 +207,7 @@ const formatMoneyInput = (value: string) => {
 
 function NewsPage() {
   const { isAdmin } = useAuth();
+  const { areas: configuredAreas, loading: areasLoading } = useRecruitmentAreaOptions();
   const [items, setItems] = useState<Recruitment[]>([]);
   const [detail, setDetail] = useState<Recruitment | null>(null);
   const [editing, setEditing] = useState<Recruitment | null>(null);
@@ -252,10 +281,17 @@ function NewsPage() {
 
   const areaOptions = useMemo(
     () =>
-      Array.from(new Set(visibleItems.map((item) => normalizeArea(item.area)).filter(Boolean)))
+      Array.from(
+        new Set(
+          [
+            ...configuredAreas.map((item) => normalizeArea(item.name)),
+            ...visibleItems.map((item) => normalizeArea(item.area)),
+          ].filter(Boolean),
+        ),
+      )
         .sort((a, b) => a.localeCompare(b, "vi"))
         .map((area) => ({ value: area, label: area })),
-    [visibleItems],
+    [configuredAreas, visibleItems],
   );
 
   const isNew = (r: Recruitment) =>
@@ -423,6 +459,8 @@ function NewsPage() {
       <DetailSheet item={detail} onClose={() => setDetail(null)} />
       <EditDialog
         item={editing}
+        areaOptions={areaOptions}
+        areasLoading={areasLoading}
         onClose={() => setEditing(null)}
         onSaved={() => {
           setEditing(null);
@@ -673,10 +711,14 @@ function Info({
 
 function EditDialog({
   item,
+  areaOptions,
+  areasLoading,
   onClose,
   onSaved,
 }: {
   item: Recruitment | null;
+  areaOptions: SelectOption[];
+  areasLoading: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -765,11 +807,12 @@ function EditDialog({
               setForm({ ...form, company: v, map_url: factoryMapUrl(factory) || form.map_url });
             }}
           />
-          <F
+          <AreaField
             label="Khu vực"
-            v={form.area || ""}
-            on={(v) => setForm({ ...form, area: v })}
-            placeholder="VD: Bá Thiện, Khai Quang, Nam Sơn..."
+            value={form.area || ""}
+            onChange={(v) => setForm({ ...form, area: v })}
+            options={areaOptions}
+            loading={areasLoading}
           />
           <FT
             label="Giới thiệu"
@@ -1011,6 +1054,45 @@ function FT({ label, v, on }: { label: string; v: string; on: (v: string) => voi
     <div className="space-y-1">
       <Label>{label}</Label>
       <Textarea rows={3} value={v || ""} onChange={(e) => on(e.target.value)} />
+    </div>
+  );
+}
+
+function AreaField({
+  label,
+  value,
+  onChange,
+  options,
+  loading,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: SelectOption[];
+  loading: boolean;
+}) {
+  const hasMatch = !value || options.some((option) => option.value === value);
+  return (
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <Select value={value || ""} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue placeholder={loading ? "Đang tải khu vực..." : "Chọn khu vực"} />
+        </SelectTrigger>
+        <SelectContent className="max-h-72">
+          {!hasMatch && value && <SelectItem value={value}>{value} (cũ)</SelectItem>}
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+          {options.length === 0 && !loading && (
+            <div className="px-2 py-1.5 text-xs text-muted-foreground">
+              Chưa có khu vực. Admin hãy thêm trong Cài đặt hệ thống.
+            </div>
+          )}
+        </SelectContent>
+      </Select>
     </div>
   );
 }
