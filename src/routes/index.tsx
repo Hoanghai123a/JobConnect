@@ -1,4 +1,4 @@
-﻿import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { pb } from "@/lib/pocketbase";
@@ -27,6 +27,7 @@ export const Route = createFileRoute("/")({
     if (!pb.authStore.isValid) throw redirect({ to: "/login", search: { redirect: "/" } as any });
     const u = pb.authStore.record as any;
     if (u && !isUserApproved(u)) throw redirect({ to: "/pending" });
+    if (u?.role === "staff") throw redirect({ to: "/staff" });
   },
   component: DashboardPage,
 });
@@ -41,6 +42,10 @@ function DashboardPage() {
     if (loading) return;
     if (!user) {
       nav({ to: "/login" });
+      return;
+    }
+    if (user.role === "staff") {
+      nav({ to: "/staff" });
       return;
     }
     if (!isUserApproved(user)) {
@@ -115,12 +120,7 @@ function DashboardPage() {
       <div className="-mt-6 px-4">
         <div className="rounded-3xl bg-card p-3 shadow-soft">
           <div className="grid grid-cols-2 gap-3">
-            <FeatureTile
-              to="/news"
-              label="Bảng tin"
-              description="Tin tuyển dụng mới"
-              icon={Newspaper}
-            />
+            <FeatureTile to="/news" label="Bảng tin" description="Tin tuyển dụng mới" icon={Newspaper} />
             <FeatureTile
               to="/attendance"
               label="Chấm công"
@@ -186,6 +186,14 @@ function DashboardPage() {
                 description="Quản trị hệ thống"
                 icon={Settings}
                 variant="accent"
+              />
+            )}
+            {isAdmin && (
+              <FeatureTile
+                to="/admin/staff"
+                label="Staff"
+                description="Role staff và phân nhà máy"
+                icon={MessagesSquare}
               />
             )}
           </div>

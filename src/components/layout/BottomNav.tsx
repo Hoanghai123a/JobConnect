@@ -1,15 +1,49 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { ChevronLeft, Home, Info } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  ChevronLeft,
+  Download,
+  Home,
+  Info,
+  Settings,
+  Upload,
+  User,
+  Users,
+} from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { InstallFloatingBanner } from "./InstallFloatingBanner";
 
-const items = [
-  { to: "/", label: "Trang chủ", icon: Home },
-  { to: "/about", label: "Về chúng tôi", icon: Info },
-] as const;
+type NavItem = {
+  to: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
 
 export function BottomNav() {
   const { pathname } = useLocation();
+  const { user } = useAuth();
+
+  const items: readonly NavItem[] =
+    user?.role === "staff"
+      ? [
+          { to: "/staff", label: "Staff", icon: BriefcaseBusiness },
+          { to: "/staff/workers", label: "Lao động", icon: Users },
+          { to: "/staff/export", label: "Xuất file", icon: Download },
+          { to: "/account", label: "Tài khoản", icon: User },
+        ]
+      : user?.role === "admin"
+        ? [
+            { to: "/", label: "Trang chủ", icon: Home },
+            { to: "/admin/settings", label: "Cài đặt", icon: Settings },
+            { to: "/admin/imports", label: "Nhập liệu", icon: Upload },
+            { to: "/account", label: "Tài khoản", icon: User },
+          ]
+        : [
+            { to: "/", label: "Trang chủ", icon: Home },
+            { to: "/account", label: "Tài khoản", icon: User },
+            { to: "/about", label: "Về chúng tôi", icon: Info },
+          ];
 
   return (
     <>
@@ -18,21 +52,27 @@ export function BottomNav() {
         className="fixed bottom-0 left-1/2 z-40 w-full max-w-[30rem] -translate-x-1/2 border-t border-border/60 bg-card/90 backdrop-blur-xl"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <ul className="grid grid-cols-2 gap-2 px-3 pb-2 pt-2">
-          {items.map((it) => {
-            const active = it.to === "/" ? pathname === "/" : pathname.startsWith(it.to);
-            const Icon = it.icon;
+        <ul
+          className={cn(
+            "gap-2 px-3 pb-2 pt-2",
+            items.length === 4 ? "grid grid-cols-4" : "grid grid-cols-3",
+          )}
+        >
+          {items.map((item) => {
+            const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+            const Icon = item.icon;
+
             return (
-              <li key={it.to}>
+              <li key={item.to}>
                 <Link
-                  to={it.to}
+                  to={item.to}
                   className={cn(
                     "mx-auto flex min-h-[56px] w-full max-w-[12rem] flex-col items-center justify-center gap-0.5 rounded-2xl py-2 text-[11px] font-medium transition-colors",
                     active ? "bg-primary/12 text-primary" : "text-muted-foreground active:bg-muted",
                   )}
                 >
                   <Icon className={cn("h-[22px] w-[22px] transition-transform", active && "scale-110")} />
-                  <span className="leading-none">{it.label}</span>
+                  <span className="leading-none">{item.label}</span>
                   <span
                     className={cn(
                       "mt-0.5 h-1 w-1 rounded-full transition-opacity",
@@ -60,7 +100,7 @@ export function AppHeader({
   right?: React.ReactNode;
   back?: boolean;
 }) {
-  const nav = useNavigate();
+  const navigate = useNavigate();
   const { pathname } = useLocation();
   const showBack = back ?? pathname !== "/";
 
@@ -69,7 +109,7 @@ export function AppHeader({
       window.history.back();
       return;
     }
-    nav({ to: "/" });
+    navigate({ to: "/" });
   };
 
   return (

@@ -1,15 +1,15 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { Loader2, LogIn } from "lucide-react";
+import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { pb } from "@/lib/pocketbase";
 import { isProfileComplete } from "@/lib/profile";
 import { isUserApproved } from "@/lib/user-approval";
+import { BackButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BackButton } from "@/components/layout/BackButton";
-import { toast } from "sonner";
-import { Loader2, LogIn } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
   beforeLoad: () => {
@@ -26,8 +26,8 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     const normalizedIdentity = identity.trim();
 
     if (!normalizedIdentity || !password) {
@@ -43,51 +43,72 @@ function LoginPage() {
     const toastId = toast.loading("Đang đăng nhập...", {
       description: "Đang kiểm tra tài khoản với máy chủ.",
     });
+
     try {
-      const u = await login(normalizedIdentity, password);
-      const name = (u as any).full_name || (u as any).username || "bạn";
-      if (!isUserApproved(u)) {
+      const loggedInUser = await login(normalizedIdentity, password);
+      const name = loggedInUser.full_name || loggedInUser.username || "bạn";
+
+      if (!isUserApproved(loggedInUser)) {
         toast.warning("Tài khoản đang chờ duyệt", {
           id: toastId,
           description: `Xin chào ${name}, admin sẽ duyệt tài khoản của bạn sớm.`,
         });
         nav({ to: "/pending" });
-      } else {
-        const isAdmin = (u as any).role === "admin";
-        toast.success(`Chào mừng ${name} 👋`, {
-          id: toastId,
-          description: isAdmin
-            ? "Bạn đã đăng nhập với quyền quản trị viên."
-            : "Đăng nhập thành công. Chúc bạn một ngày làm việc hiệu quả!",
-        });
-        if (isAdmin) {
-          nav({ to: "/" });
-        } else if (!isProfileComplete(u as any)) {
-          toast.info("Bổ sung đầy đủ thông tin để trải nghiệm tốt nhất");
-          nav({ to: "/account", search: { incomplete: 1 } as any });
-        } else {
-          nav({ to: "/attendance" });
-        }
+        return;
       }
-    } catch (err: any) {
-      console.error("[login] error", err, err?.data);
-      const status = err?.status;
-      const msg = err?.message || "";
-      const data = err?.data;
-      const friendly =
-        status === 400 || /Failed to authenticate|invalid|credentials|password/i.test(msg)
+
+      const role = loggedInUser.role;
+      toast.success(`Chào mừng ${name}`, {
+        id: toastId,
+        description:
+          role === "admin"
+            ? "Bạn đã đăng nhập với quyền quản trị viên."
+            : role === "staff"
+              ? "Bạn đã đăng nhập với quyền staff."
+              : "Đăng nhập thành công. Chúc bạn một ngày làm việc hiệu quả.",
+      });
+
+      if (role === "admin") {
+        nav({ to: "/" });
+        return;
+      }
+
+      if (role === "staff") {
+        nav({ to: "/staff" });
+        return;
+      }
+
+      if (!isProfileComplete(loggedInUser)) {
+        toast.info("Bổ sung đầy đủ thông tin để trải nghiệm tốt nhất");
+        nav({ to: "/account", search: { incomplete: 1 } as any });
+        return;
+      }
+
+      nav({ to: "/attendance" });
+    } catch (error: any) {
+      console.error("[login] error", error, error?.data);
+      const status = error?.status;
+      const message = error?.message || "";
+      const payload = error?.data;
+
+      const friendlyMessage =
+        status === 400 || /Failed to authenticate|invalid|credentials|password/i.test(message)
           ? "Tên đăng nhập hoặc mật khẩu không đúng"
-          : status === 0 || /Failed to fetch|network|NetworkError/i.test(msg)
-            ? "Không kết nối được máy chủ. Vui lòng kiểm tra mạng / URL backend."
-            : data?.message || msg || "Đăng nhập thất bại";
-      toast.error("Đăng nhập thất bại", { id: toastId, description: friendly });
+          : status === 0 || /Failed to fetch|network|NetworkError/i.test(message)
+            ? "Không kết nối được máy chủ. Vui lòng kiểm tra mạng hoặc URL backend."
+            : payload?.message || message || "Đăng nhập thất bại";
+
+      toast.error("Đăng nhập thất bại", {
+        id: toastId,
+        description: friendlyMessage,
+      });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col relative bg-background">
+    <div className="relative flex min-h-[100dvh] flex-col bg-background">
       {loading && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/70 backdrop-blur-sm">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-card shadow-soft">
@@ -96,11 +117,13 @@ function LoginPage() {
           <p className="mt-4 text-sm font-medium text-muted-foreground">Đang đăng nhập...</p>
         </div>
       )}
+
       <div className="gradient-primary relative px-6 pb-16 pt-16 text-primary-foreground">
         <BackButton className="absolute left-4 top-4 text-primary-foreground active:bg-white/15" />
         <h1 className="text-3xl font-bold tracking-tight">Hoàng Long DJC</h1>
-        <p className="mt-1 text-sm text-primary-foreground/80">Kết nối NLĐ — Nhà tuyển dụng</p>
+        <p className="mt-1 text-sm text-primary-foreground/80">Kết nối người lao động và nhà tuyển dụng</p>
       </div>
+
       <form
         onSubmit={onSubmit}
         noValidate
@@ -112,26 +135,28 @@ function LoginPage() {
             id="identity"
             value={identity}
             disabled={loading}
-            onChange={(e) => setIdentity(e.target.value)}
-            placeholder=""
+            onChange={(event) => setIdentity(event.target.value)}
             autoComplete="username"
           />
         </div>
+
         <div className="space-y-1.5">
-          <Label htmlFor="pwd">Mật khẩu</Label>
+          <Label htmlFor="password">Mật khẩu</Label>
           <Input
-            id="pwd"
+            id="password"
             type="password"
             value={password}
             disabled={loading}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
           />
         </div>
+
         <Button type="submit" className="w-full rounded-xl" disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
           {loading ? "Đang đăng nhập..." : "Đăng nhập"}
         </Button>
+
         <p className="text-center text-sm text-muted-foreground">
           Chưa có tài khoản?{" "}
           <Link to="/register" className="font-medium text-primary">

@@ -791,9 +791,9 @@ function AdminCheckAttendance() {
             <AdminBatchHistory
               batches={batches}
               icon={CalendarCheck}
-              title="Lá»‹ch sá»­ gá»­i"
-              emptyTitle="ChÆ°a cÃ³ láº§n gá»­i check cÃ´ng"
-              emptyDescription="Sau khi admin nháº­p Excel, lá»‹ch sá»­ gá»­i sáº½ hiá»ƒn thá»‹ táº¡i Ä‘Ã¢y."
+              title="Lịch sử gửi"
+              emptyTitle="Chưa có lần gửi check công"
+              emptyDescription="Sau khi admin nhập Excel, lịch sử gửi sẽ hiển thị tại đây."
             />
           </TabsContent>
 

@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useAuth } from "@/lib/auth";
-import { isUserApproved } from "@/lib/user-approval";
-import { Button } from "@/components/ui/button";
-import { BackButton } from "@/components/layout/BackButton";
 import { Clock } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { isProfileComplete } from "@/lib/profile";
+import { isUserApproved } from "@/lib/user-approval";
+import { BackButton } from "@/components/layout/BackButton";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/pending")({
   component: PendingPage,
@@ -16,14 +17,17 @@ function PendingPage() {
   return (
     <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-4 px-6 text-center">
       <BackButton className="absolute left-4 top-4 text-muted-foreground" />
+
       <div className="rounded-full bg-warning/20 p-5 text-warning-foreground">
         <Clock className="h-10 w-10" />
       </div>
+
       <h1 className="text-xl font-semibold">Đang chờ duyệt</h1>
       <p className="max-w-xs text-sm text-muted-foreground">
-        Tài khoản <strong>{user?.full_name || user?.phone}</strong> đã được gửi tới admin. Bạn sẽ
-        vào được hệ thống ngay khi được duyệt.
+        Tài khoản <strong>{user?.full_name || user?.phone}</strong> đã được gửi tới admin. Bạn sẽ vào
+        được hệ thống ngay khi được duyệt.
       </p>
+
       <div className="flex gap-2">
         <Button
           variant="outline"
@@ -32,12 +36,14 @@ function PendingPage() {
               await refresh();
             } catch {}
             const { pb } = await import("@/lib/pocketbase");
-            const { isProfileComplete } = await import("@/lib/profile");
-            const u = pb.authStore.record as any;
-            if (!isUserApproved(u)) return;
-            if (u.role === "admin") {
+            const refreshedUser = pb.authStore.record as any;
+            if (!isUserApproved(refreshedUser)) return;
+
+            if (refreshedUser.role === "admin") {
               nav({ to: "/" });
-            } else if (!isProfileComplete(u)) {
+            } else if (refreshedUser.role === "staff") {
+              nav({ to: "/staff" });
+            } else if (!isProfileComplete(refreshedUser)) {
               nav({ to: "/account", search: { incomplete: 1 } as any });
             } else {
               nav({ to: "/attendance" });
@@ -46,6 +52,7 @@ function PendingPage() {
         >
           Kiểm tra lại
         </Button>
+
         <Button
           variant="ghost"
           onClick={() => {

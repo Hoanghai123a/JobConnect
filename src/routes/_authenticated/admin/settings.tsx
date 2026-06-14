@@ -1,4 +1,4 @@
-﻿import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { pb, dataUrlToFile, fileUrl } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";

@@ -1,4 +1,4 @@
-﻿import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { isUserApproved } from "@/lib/user-approval";
@@ -33,7 +33,7 @@ function ApprovalsPage() {
       });
       setUsers(res);
     } catch (e: any) {
-      toast.error(e?.message || "Lá»—i táº£i");
+      toast.error(e?.message || "Lỗi tải");
     }
   };
   useEffect(() => {
@@ -59,7 +59,7 @@ function ApprovalsPage() {
         });
       else await pb.collection("users").delete(id);
     }
-    toast.success(approve ? "ÄÃ£ duyá»‡t" : "ÄÃ£ tá»« chá»‘i");
+    toast.success(approve ? "Đã duyệt" : "Đã từ chối");
     setSelected(new Set());
     load();
   };
@@ -67,49 +67,49 @@ function ApprovalsPage() {
   const exportUsers = async () => {
     const all = await pb.collection("users").getFullList({ sort: "-created" });
     const rows = all.map((u: any) => ({
-      "Há» tÃªn": u.full_name,
-      "SÄT": u.phone,
+      "Họ tên": u.full_name,
+      "SĐT": u.phone,
       Email: u.email,
-      "Vai trÃ²": u.role,
-      "ÄÃ£ duyá»‡t": isUserApproved(u) ? "CÃ³" : "KhÃ´ng",
-      "NhÃ  mÃ¡y": u.company,
+      "Vai trò": u.role,
+      "Đã duyệt": isUserApproved(u) ? "Có" : "Không",
+      "Nhà máy": u.company,
       LCB: u.lcb,
-      "NgÃ¢n hÃ ng": u.bank_name,
-      "Sá»‘ TK": u.bank_account_number,
-      "TÃªn TK": u.bank_account_name,
-      "Táº¡o lÃºc": u.created,
+      "Ngân hàng": u.bank_name,
+      "Số TK": u.bank_account_number,
+      "Tên TK": u.bank_account_name,
+      "Tạo lúc": u.created,
     }));
     exportToExcel(`danh_sach_user_${Date.now()}`, { Users: rows });
   };
 
   return (
     <PageContainer
-      title="Quáº£n lÃ½ duyá»‡t"
-      subtitle={`${users.length} chá» duyá»‡t`}
+      title="Quản lý duyệt"
+      subtitle={`${users.length} chờ duyệt`}
       right={
         <button
           onClick={exportUsers}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-muted-foreground border border-border hover:bg-muted"
-          aria-label="Xuáº¥t Excel"
+          aria-label="Xuất Excel"
         >
           <FileDown className="h-4 w-4" />
         </button>
       }
     >
       <div className="grid grid-cols-2 gap-2.5">
-        <StatCard label="Chá» duyá»‡t" value={users.length} icon={Clock} tone="warning" />
-        <StatCard label="ÄÃ£ chá»n" value={selected.size} icon={Check} tone="primary" />
+        <StatCard label="Chờ duyệt" value={users.length} icon={Clock} tone="warning" />
+        <StatCard label="Đã chọn" value={selected.size} icon={Check} tone="primary" />
       </div>
 
       {selected.size > 0 && (
         <div className="sticky top-[var(--header-h,3.25rem)] z-20 -mx-4 flex items-center justify-between gap-2 bg-primary/10 px-4 py-2 backdrop-blur">
-          <span className="text-xs font-medium text-primary">{selected.size} Ä‘Ã£ chá»n</span>
+          <span className="text-xs font-medium text-primary">{selected.size} đã chọn</span>
           <div className="flex gap-2">
             <Button size="sm" onClick={() => approveSelected(true)}>
-              <Check className="h-3.5 w-3.5" /> Duyá»‡t
+              <Check className="h-3.5 w-3.5" /> Duyệt
             </Button>
             <Button size="sm" variant="destructive" onClick={() => approveSelected(false)}>
-              <X className="h-3.5 w-3.5" /> Tá»« chá»‘i
+              <X className="h-3.5 w-3.5" /> Từ chối
             </Button>
           </div>
         </div>
@@ -121,15 +121,15 @@ function ApprovalsPage() {
             checked={selected.size === users.length && users.length > 0}
             onCheckedChange={(c) => setSelected(c ? new Set(users.map((u) => u.id)) : new Set())}
           />
-          Chá»n táº¥t cáº£ ({users.length})
+          Chọn tất cả ({users.length})
         </label>
       )}
 
       {users.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="KhÃ´ng cÃ³ yÃªu cáº§u"
-          description="Táº¥t cáº£ Ä‘Äƒng kÃ½ Ä‘Ã£ Ä‘Æ°á»£c xá»­ lÃ½."
+          title="Không có yêu cầu"
+          description="Tất cả đăng ký đã được xử lý."
         />
       ) : (
         users.map((u) => (
@@ -149,10 +149,10 @@ function ApprovalsPage() {
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold">{u.full_name || u.phone}</div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">
-                SÄT: {u.phone || "â€”"} Â· STK: {u.bank_account_number || "â€”"}
+                SĐT: {u.phone || "—"} · STK: {u.bank_account_number || "—"}
               </div>
               <div className="mt-1.5 flex flex-wrap gap-1">
-                <StatusChip tone="warning">Chá» duyá»‡t</StatusChip>
+                <StatusChip tone="warning">Chờ duyệt</StatusChip>
                 <StatusChip tone="neutral">
                   {new Date(u.created).toLocaleDateString("vi-VN")}
                 </StatusChip>

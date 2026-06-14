@@ -5,7 +5,7 @@ export const pb = new PocketBase(PB_URL);
 pb.autoCancellation(false);
 
 
-export type Role = "admin" | "user";
+export type Role = "admin" | "user" | "staff";
 
 export interface UserRecord {
   id: string;
@@ -13,6 +13,7 @@ export interface UserRecord {
   email?: string;
   phone?: string;
   full_name?: string;
+  cccd?: string;
   role?: Role;
   approved?: boolean | string;
   approvalStatus?: "pending" | "approved" | "rejected";
