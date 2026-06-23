@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { AppHeader } from "@/components/layout/BottomNav";
+import { markSeen } from "@/lib/seen";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -86,6 +87,8 @@ function GroupChatPage() {
       setHasMore(pageData.totalPages > 1);
       setPage(1);
       pageRef.current = 1;
+      const latest = pageData.items[pageData.items.length - 1];
+      markSeen("chat", user?.id, latest ? new Date(latest.created).getTime() : Date.now());
       window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "auto" }), 0);
     } catch (error: any) {
       toast.error(error?.message || "Lỗi tải trò chuyện");

@@ -8,7 +8,10 @@ export const Route = createFileRoute("/api/public/manifest/webmanifest")({
         const app = await fetchAppSettingsRecord();
         const name = app?.item.company_name?.trim() || "JobConnect";
         const shortName = name.slice(0, 12) || "JobConnect";
-        const iconSrc = app?.item.logo ? "/api/public/app-logo" : "/pwa-icon.svg";
+        const iconVersion = app?.item.updated || app?.item.id || "";
+        const iconSrc = app?.item.logo
+          ? `/api/public/app-icon${iconVersion ? `?v=${encodeURIComponent(iconVersion)}` : ""}`
+          : "/pwa-icon.svg";
 
         return Response.json(
           {
@@ -26,13 +29,11 @@ export const Route = createFileRoute("/api/public/manifest/webmanifest")({
               {
                 src: iconSrc,
                 sizes: "192x192",
-                type: "image/svg+xml",
                 purpose: "any maskable",
               },
               {
                 src: iconSrc,
                 sizes: "512x512",
-                type: "image/svg+xml",
                 purpose: "any maskable",
               },
             ],

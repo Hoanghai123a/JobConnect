@@ -172,7 +172,7 @@ function ComplaintsPage() {
               />
             </div>
             <Button type="submit" className="w-full" disabled={sending}>
-              <Send className="h-4 w-4" /> {sending ? "Đang gửi…" : "Gửi khiếu nại"}
+              <Send className="h-4 w-4" /> {sending ? "Đang gửi..." : "Gửi khiếu nại"}
             </Button>
           </div>
         </form>
@@ -262,7 +262,7 @@ function ComplaintsPage() {
         <EmptyState
           icon={MessageSquareWarning}
           title="Không có khiếu nại"
-          description={search ? "Không có kết quả phù hợp." : "Tin khiếu nại sẽ xuất hiện ở đây."}
+          description={search ? "Không có kết quả phù hợp." : "Tin khiếu nại sẽ xuất hiện tại đây."}
         />
       ) : (
         filtered.map((c) => {

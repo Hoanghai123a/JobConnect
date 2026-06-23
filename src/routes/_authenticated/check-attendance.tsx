@@ -10,7 +10,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UserCombobox } from "@/components/users/UserCombobox";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +19,8 @@ import {
 } from "@/components/ui/dialog";
 import { formatVND, type AttendanceRow, type RateBuckets, type Shift } from "@/lib/salary";
 import { exportToExcel } from "@/lib/excel";
-import { fetchReceivedDelegations, relationInFilter } from "@/lib/delegations";
+import { escapePb } from "@/lib/delegations";
+import { markSeen } from "@/lib/seen";
 import {
   buildPayrollCalendarCells,
   fetchFactoryAttendanceCutoffDay,
@@ -1045,8 +1045,6 @@ function AdminBatchHistory({
 
 function UserCheckAttendance() {
   const { user } = useAuth();
-  const [checkUsers, setCheckUsers] = useState<UserRecord[]>([]);
-  const [activeUserId, setActiveUserId] = useState(user?.id || "");
   const [items, setItems] = useState<CheckItemRecord[]>([]);
   const [selected, setSelected] = useState<CheckItemRecord | null>(null);
   const [salaryItems, setSalaryItems] = useState<SalaryItemRecord[]>([]);
@@ -1058,25 +1056,15 @@ function UserCheckAttendance() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const delegations = await fetchReceivedDelegations(user.id, "check").catch(() => []);
-      const visibleUsers = [
-        user as UserRecord,
-        ...(delegations.map((item) => item.expand?.grantor).filter(Boolean) as UserRecord[]),
-      ];
-      const uniqueUsers = [...new Map(visibleUsers.map((item) => [item.id, item])).values()];
-      const visibleUserIds = uniqueUsers.map((item) => item.id);
-      setCheckUsers(uniqueUsers);
-      const nextActiveUserId = visibleUserIds.includes(activeUserId) ? activeUserId : user.id;
-      setActiveUserId(nextActiveUserId);
       const res = await pb.collection("check_attendance_items").getFullList({
-        filter: relationInFilter("user", visibleUserIds),
+        filter: `user="${escapePb(user.id)}"`,
         sort: "-created",
         expand: "batch",
       });
       let salaryRes: unknown[] = [];
       try {
         salaryRes = await pb.collection("check_salary_items").getFullList({
-          filter: relationInFilter("user", visibleUserIds),
+          filter: `user="${escapePb(user.id)}"`,
           sort: "-created",
           expand: "batch",
         });
@@ -1096,31 +1084,33 @@ function UserCheckAttendance() {
       }));
       setItems(normalized);
       setSalaryItems(normalizedSalary);
-      setSelected(normalized.find((item) => item.user === nextActiveUserId) || null);
-      setSelectedSalary(normalizedSalary.find((item) => item.user === nextActiveUserId) || null);
+      setSelected(normalized.find((item) => item.user === user.id) || null);
+      setSelectedSalary(normalizedSalary.find((item) => item.user === user.id) || null);
+      const latest = [...normalized, ...normalizedSalary].reduce(
+        (max, item) => Math.max(max, item.created ? new Date(item.created).getTime() : 0),
+        0,
+      );
+      markSeen("check-attendance", user.id, latest || Date.now());
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Không tải được check công");
     } finally {
       setLoading(false);
     }
-  }, [activeUserId, user]);
+  }, [user]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const activeItems = useMemo(
-    () => items.filter((item) => item.user === activeUserId),
-    [activeUserId, items],
+    () => items.filter((item) => item.user === user?.id),
+    [items, user?.id],
   );
   const activeSalaryItems = useMemo(
-    () => salaryItems.filter((item) => item.user === activeUserId),
-    [activeUserId, salaryItems],
+    () => salaryItems.filter((item) => item.user === user?.id),
+    [salaryItems, user?.id],
   );
-  const activeCheckUser = useMemo(
-    () => checkUsers.find((item) => item.id === activeUserId),
-    [activeUserId, checkUsers],
-  );
+  const activeCheckUser = user as UserRecord | null;
 
   useEffect(() => {
     let cancelled = false;
@@ -1161,19 +1151,6 @@ function UserCheckAttendance() {
       <AppHeader title="Check công/lương" subtitle="Bảng check công admin gửi" back />
       <div className="space-y-4 p-4">
         {loading && <div className="p-4 text-sm text-muted-foreground">Đang tải...</div>}
-
-        {checkUsers.length > 1 && (
-          <div className="space-y-1">
-            <Label className="text-xs">Người cần xem</Label>
-            <UserCombobox
-              value={activeUserId}
-              onChange={setActiveUserId}
-              users={checkUsers}
-              currentUserId={user?.id}
-              placeholder="Chọn người cần xem"
-            />
-          </div>
-        )}
 
         <Tabs defaultValue="attendance" className="space-y-4">
           <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl">
@@ -1230,7 +1207,7 @@ function UserCheckAttendance() {
                         {visibleRateCells.map((cell) => (
                           <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
                         ))}
-                        <RateCell label={"Ng\u00e0y"} hours={selected.rows.length} suffix="" />
+                        <RateCell label={"Ngày"} hours={selected.rows.length} suffix="" />
                       </div>
                     </Card>
 

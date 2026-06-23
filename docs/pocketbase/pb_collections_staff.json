@@ -279,10 +279,10 @@
     "name": "employment_histories",
     "type": "base",
     "system": false,
-    "listRule": "@request.auth.id != \"\"",
-    "viewRule": "@request.auth.id != \"\"",
+    "listRule": "@request.auth.role = \"admin\" || @request.auth.role = \"staff\" || user = @request.auth.id",
+    "viewRule": "@request.auth.role = \"admin\" || @request.auth.role = \"staff\" || user = @request.auth.id",
     "createRule": "@request.auth.role = \"admin\" || @request.auth.role = \"staff\"",
-    "updateRule": "@request.auth.role = \"admin\" || @request.auth.role = \"staff\"",
+    "updateRule": "@request.auth.role = \"admin\" || @request.auth.role = \"staff\" || user = @request.auth.id",
     "deleteRule": "@request.auth.role = \"admin\"",
     "fields": [
       {

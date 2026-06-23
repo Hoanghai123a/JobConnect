@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { pb, fileUrl } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { markSeen } from "@/lib/seen";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { toneBorder, ChipTone } from "@/components/ui/status-chip";
@@ -267,7 +268,7 @@ const formatMoneyInput = (value: string) => {
 };
 
 function NewsPage() {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { areas: configuredAreas, loading: areasLoading } = useRecruitmentAreaOptions();
   const { factories, loading: factoriesLoading } = useFactoryOptions();
   const [items, setItems] = useState<Recruitment[]>([]);
@@ -285,7 +286,13 @@ function NewsPage() {
   const load = async () => {
     try {
       const res = await pb.collection("recruitments").getFullList({ sort: "-created" });
-      setItems(res as unknown as Recruitment[]);
+      const rows = res as unknown as Recruitment[];
+      setItems(rows);
+      const latest = rows.reduce(
+        (max, row) => Math.max(max, row.created ? new Date(row.created).getTime() : 0),
+        0,
+      );
+      markSeen("news", user?.id, latest || Date.now());
     } catch (e: unknown) {
       toast.error(errorMessage(e, "Lỗi tải bảng tin"));
     }
@@ -437,7 +444,7 @@ function NewsPage() {
         <EmptyState
           icon={Building2}
           title="Chưa có tin tuyển dụng"
-          description={search ? "Không tìm thấy kết quả phù hợp." : "Tin mới sẽ xuất hiện ở đây."}
+          description={search ? "Không tìm thấy kết quả phù hợp." : "Tin mới sẽ xuất hiện tại đây."}
         />
       ) : (
         filtered.map((r) => {
@@ -728,62 +735,62 @@ function DetailSheet({
               </Carousel>
             )}
             <div className="space-y-4 p-4 text-sm">
-              <DetailSection icon={Building2} title={"T\u1ed5ng quan"}>
+              <DetailSection icon={Building2} title={"Tổng quan"}>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Info
                     icon={ClipboardCheck}
-                    label={"Lo\u1ea1i tuy\u1ec3n"}
+                    label={"Loại tuyển"}
                     value={optionLabel(EMPLOYMENT_TYPE_OPTIONS, recruitmentEmploymentType(item))}
                   />
-                  <Info icon={MapPin} label={"Khu v\u1ef1c"} value={item.area} />
-                  <Info icon={Users} label={"Tuy\u1ec3n"} value={genderLabel(item.gender)} />
+                  <Info icon={MapPin} label={"Khu vực"} value={item.area} />
+                  <Info icon={Users} label={"Tuyển"} value={genderLabel(item.gender)} />
                   <Info
                     icon={Clock}
-                    label={"Th\u1eddi gian ph\u1ecfng v\u1ea5n"}
+                    label={"Thời gian phỏng vấn"}
                     value={item.interview_time}
                   />
                   <Info
                     icon={CalendarDays}
-                    label={"Th\u1eddi h\u1ea1n tuy\u1ec3n d\u1ee5ng"}
+                    label={"Thời hạn tuyển dụng"}
                     value={item.recruitment_deadline}
                   />
                 </div>
-                <Info label={"Gi\u1edbi thi\u1ec7u"} value={item.introduction} multiline />
+                <Info label={"Giới thiệu"} value={item.introduction} multiline />
               </DetailSection>
 
-              <DetailSection icon={Wallet} title={"Ch\u1ebf \u0111\u1ed9"}>
+              <DetailSection icon={Wallet} title={"Chế độ"}>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Info
                     icon={Banknote}
-                    label={"L\u01b0\u01a1ng c\u01a1 b\u1ea3n"}
+                    label={"Lương cơ bản"}
                     value={item.salary_base}
                   />
-                  <Info icon={Gift} label={"Ph\u1ee5 c\u1ea5p"} value={item.allowance} />
+                  <Info icon={Gift} label={"Phụ cấp"} value={item.allowance} />
                 </div>
-                <Info label={"Th\u01b0\u1edfng kh\u00e1c"} value={item.bonus_other} multiline />
+                <Info label={"Thưởng khác"} value={item.bonus_other} multiline />
                 <Info
-                  label={"L\u01b0\u01a1ng ng\u1eafn h\u1ea1n"}
+                  label={"Lương ngắn hạn"}
                   value={item.short_term_salary}
                   multiline
                 />
               </DetailSection>
 
-              <DetailSection icon={Briefcase} title={"\u0110\u1eb7c th\u00f9 c\u00f4ng vi\u1ec7c"}>
+              <DetailSection icon={Briefcase} title={"Đặc thù công việc"}>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Info
                     icon={ShieldCheck}
-                    label={"M\u00f4i tr\u01b0\u1eddng"}
+                    label={"Môi trường"}
                     value={optionLabel(ENVIRONMENT_OPTIONS, item.environment)}
                   />
                   <Info
                     icon={PersonStanding}
-                    label={"T\u01b0 th\u1ebf c\u00f4ng vi\u1ec7c"}
+                    label={"Tư thế công việc"}
                     value={optionLabel(WORK_POSTURE_OPTIONS, item.work_posture)}
                   />
                 </div>
                 <Info
                   icon={ClipboardCheck}
-                  label={"S\u1ea3n xu\u1ea5t/QC"}
+                  label={"Sản xuất/QC"}
                   value={[
                     optionLabel(PRODUCTION_QC_OPTIONS, item.production_qc),
                     item.production_qc_note,
@@ -794,13 +801,13 @@ function DetailSheet({
                 />
               </DetailSection>
 
-              <DetailSection icon={FileText} title={"Th\u1ee7 t\u1ee5c"}>
+              <DetailSection icon={FileText} title={"Thủ tục"}>
                 <Info
-                  label={"Gi\u1ea5y t\u1edd y\u00eau c\u1ea7u"}
+                  label={"Giấy tờ yêu cầu"}
                   value={item.documents}
                   multiline
                 />
-                <Info label={"Ghi ch\u00fa kh\u00e1c"} value={item.notes} multiline />
+                <Info label={"Ghi chú khác"} value={item.notes} multiline />
               </DetailSection>
 
               <div className="hidden">

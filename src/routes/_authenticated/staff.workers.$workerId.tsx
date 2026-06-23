@@ -34,7 +34,15 @@ import {
 } from "@/lib/employment";
 import { fetchFactories, fetchFactoryManagers, isFactoryAssignmentActive, type FactoryRecord } from "@/lib/factories";
 import { createStaffActionLog } from "@/lib/staff-log";
-import { canAccessStaffWorkspace, getStaffReasonsForHistory } from "@/lib/staff-permissions";
+import {
+  canAccessStaffWorkspace,
+  canReportAdvance,
+  canReportJoin,
+  canReportLeave,
+  canViewPayroll,
+  getStaffReasonsForHistory,
+  isRecentRecruiter,
+} from "@/lib/staff-permissions";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { VN_BANKS } from "@/lib/vn-banks";
 
@@ -68,6 +76,7 @@ function StaffWorkerDetailPage() {
   const [workerUser, setWorkerUser] = useState<UserRecord | null>(null);
   const [histories, setHistories] = useState<EmploymentHistoryRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
+  const [managedFactoryIds, setManagedFactoryIds] = useState<Set<string>>(new Set());
   const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
   const [attendanceItems, setAttendanceItems] = useState<AttendanceItem[]>([]);
   const [salaryItems, setSalaryItems] = useState<SalaryItem[]>([]);
@@ -130,12 +139,12 @@ function StaffWorkerDetailPage() {
         const managedFactoryIds = new Set(
           managerRows.filter((item) => isFactoryAssignmentActive(item)).map((item) => item.factory),
         );
-        const allowedRecent = historyRows.filter((history) => {
-          if (viewer.role === "admin") return true;
-          return getStaffReasonsForHistory(viewer.id, history, managedFactoryIds).length > 0;
-        });
+        const canAccessWorker =
+          viewer.role === "admin" ||
+          isRecentRecruiter(viewer, historyRows) ||
+          historyRows.some((history) => getStaffReasonsForHistory(viewer.id, history, managedFactoryIds).length > 0);
 
-        if (!allowedRecent.length && viewer.role !== "admin") {
+        if (!canAccessWorker) {
           toast.warning("Bạn không có quyền xem hồ sơ này");
           navigate({ to: "/staff/workers" });
           return;
@@ -147,6 +156,7 @@ function StaffWorkerDetailPage() {
 
         setWorkerUser(userRecord);
         setHistories(historyRows);
+        setManagedFactoryIds(managedFactoryIds);
         setFactories(factoryRows);
         setStaffUsers(staffRows as UserRecord[]);
         setJoinForm((prev) => ({
@@ -173,6 +183,7 @@ function StaffWorkerDetailPage() {
 
   useEffect(() => {
     if (!payrollOpen || !workerUser?.id || !viewer?.id) return;
+    if (!canViewPayroll(viewer, histories)) return;
 
     let alive = true;
 
@@ -201,14 +212,30 @@ function StaffWorkerDetailPage() {
     return () => {
       alive = false;
     };
-  }, [payrollOpen, viewer, workerUser?.id]);
+  }, [histories, payrollOpen, viewer, workerUser?.id]);
 
   const latestHistory = useMemo(() => getLatestEmploymentHistory(histories), [histories]);
   const activeHistory = useMemo(
     () => histories.find((item) => item.status === "working" && !item.leave_date) || null,
     [histories],
   );
-  const canOperate = viewer?.role === "admin" || latestHistory?.recruiter_staff === viewer?.id;
+  const recentRecruiter = isRecentRecruiter(viewer, histories);
+  const canReportAdvanceForWorker = canReportAdvance(viewer, histories);
+  const canViewPayrollForWorker = canViewPayroll(viewer, histories);
+  const canReportLeaveForWorker = canReportLeave(viewer, activeHistory, histories, managedFactoryIds);
+  const canSubmitJoinForWorker = canReportJoin(viewer, histories, managedFactoryIds, joinForm.factory);
+  const canOpenJoinForm = canReportJoin(viewer, histories, managedFactoryIds);
+  const canUpdateBankForWorker = canReportAdvanceForWorker;
+  const canDoAnyAction =
+    canReportAdvanceForWorker ||
+    canViewPayrollForWorker ||
+    canReportLeaveForWorker ||
+    canOpenJoinForm ||
+    canUpdateBankForWorker;
+  const joinableFactories = useMemo(() => {
+    if (viewer?.role === "admin" || recentRecruiter) return factories;
+    return factories.filter((factory) => managedFactoryIds.has(factory.id));
+  }, [factories, managedFactoryIds, recentRecruiter, viewer?.role]);
 
   const reloadHistories = async () => {
     const nextRows = await fetchEmploymentHistories([workerId]);
@@ -254,6 +281,10 @@ function StaffWorkerDetailPage() {
 
   const submitAdvance = async () => {
     if (!workerUser || !latestHistory || !viewer?.id) return;
+    if (!canReportAdvanceForWorker) {
+      toast.error("Bạn không có quyền báo ứng cho hồ sơ này");
+      return;
+    }
 
     const amount = Number(amountText.replace(/\D/g, ""));
     if (!amount) {
@@ -298,6 +329,10 @@ function StaffWorkerDetailPage() {
   };
 
   const submitLeave = async () => {
+    if (!canReportLeaveForWorker) {
+      toast.error("Bạn không có quyền báo nghỉ cho hồ sơ này");
+      return;
+    }
     if (!activeHistory || !viewer?.id) {
       toast.warning("Không có bản ghi đang làm để báo nghỉ");
       return;
@@ -342,6 +377,10 @@ function StaffWorkerDetailPage() {
       toast.warning("Điền đủ thông tin đi làm nhà máy mới");
       return;
     }
+    if (!canSubmitJoinForWorker) {
+      toast.error("Bạn không có quyền báo đi làm tại nhà máy đã chọn");
+      return;
+    }
 
     const active = await findActiveEmploymentByUser(workerUser.id);
     if (active) {
@@ -379,6 +418,10 @@ function StaffWorkerDetailPage() {
 
   const submitBankUpdate = async () => {
     if (!workerUser || !viewer?.id) return;
+    if (!canUpdateBankForWorker) {
+      toast.error("Bạn không có quyền cập nhật ngân hàng cho hồ sơ này");
+      return;
+    }
 
     const before = {
       bank_name: workerUser.bank_name || "",
@@ -488,8 +531,10 @@ function StaffWorkerDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           {viewer?.role === "admin" ? (
             <StatusChip tone="info">Admin có toàn quyền sửa lịch sử</StatusChip>
-          ) : canOperate ? (
-            <StatusChip tone="success">Bạn có quyền cập nhật</StatusChip>
+          ) : recentRecruiter ? (
+            <StatusChip tone="success">Bạn là người tuyển trong 3 lịch sử gần nhất</StatusChip>
+          ) : canDoAnyAction ? (
+            <StatusChip tone="info">Bạn có quyền theo nhà máy phụ trách</StatusChip>
           ) : (
             <StatusChip tone="neutral">Bạn chỉ có quyền xem</StatusChip>
           )}
@@ -519,31 +564,31 @@ function StaffWorkerDetailPage() {
         <ActionButton
           icon={Wallet}
           label="Báo ứng"
-          disabled={!canOperate}
+          disabled={!canReportAdvanceForWorker}
           onClick={() => setAdvanceOpen(true)}
         />
         <ActionButton
           icon={CalendarRange}
           label="Check công lương"
-          disabled={!canOperate}
+          disabled={!canViewPayrollForWorker}
           onClick={() => setPayrollOpen(true)}
         />
         <ActionButton
           icon={Clock3}
           label="Báo nghỉ"
-          disabled={!canOperate || !activeHistory}
+          disabled={!canReportLeaveForWorker}
           onClick={() => setLeaveOpen(true)}
         />
         <ActionButton
           icon={Plus}
           label="Báo đi làm mới"
-          disabled={!canOperate}
+          disabled={!canOpenJoinForm}
           onClick={() => setJoinOpen(true)}
         />
         <ActionButton
           icon={Landmark}
           label="Cập nhật ngân hàng"
-          disabled={!canOperate}
+          disabled={!canUpdateBankForWorker}
           onClick={() => setBankOpen(true)}
         />
       </div>
@@ -747,7 +792,7 @@ function StaffWorkerDetailPage() {
                   <SelectValue placeholder="Chọn nhà máy" />
                 </SelectTrigger>
                 <SelectContent>
-                  {factories.map((factory) => (
+                  {joinableFactories.map((factory) => (
                     <SelectItem key={factory.id} value={factory.id}>
                       {factory.name}
                     </SelectItem>
@@ -818,7 +863,7 @@ function StaffWorkerDetailPage() {
             <Button variant="outline" onClick={() => setJoinOpen(false)} className="rounded-xl">
               Đóng
             </Button>
-            <Button onClick={submitJoin} className="rounded-xl">
+            <Button onClick={submitJoin} disabled={!canSubmitJoinForWorker} className="rounded-xl">
               Tạo bản ghi đi làm
             </Button>
           </DrawerFooter>

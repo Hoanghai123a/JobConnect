@@ -62,10 +62,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "description", content: "Kết nối nhà tuyển dụng và người lao động khu công nghiệp." },
     ],
     links: [
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      {
+        rel: "preconnect",
+        href: "https://fonts.gstatic.com",
+        crossOrigin: "anonymous",
+      },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap",
+      },
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/api/public/manifest/webmanifest" },
-      { rel: "apple-touch-icon", href: "/api/public/app-logo" },
-      { rel: "icon", href: "/api/public/app-logo" },
+      { rel: "apple-touch-icon", href: "/api/public/app-icon" },
+      { rel: "icon", href: "/api/public/app-icon" },
     ],
   }),
   shellComponent: RootShell,

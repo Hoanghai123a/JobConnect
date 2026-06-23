@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { pb } from "@/lib/pocketbase";
+import { pb, type Role, type UserRecord } from "@/lib/pocketbase";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,11 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -28,7 +30,17 @@ import {
 import { VN_BANKS } from "@/lib/vn-banks";
 import { exportToExcel } from "@/lib/excel";
 import { isUserApproved } from "@/lib/user-approval";
-import { DelegationPanel } from "@/components/delegations/DelegationPanel";
+import { UserWorkHistoryPanel } from "@/components/employment/UserWorkHistoryPanel";
+import { StatusChip } from "@/components/ui/status-chip";
+import {
+  fetchFactories,
+  fetchFactoryManagers,
+  isFactoryAssignmentActive,
+  type FactoryManagerRecord,
+  type FactoryRecord,
+  type FactoryStatus,
+} from "@/lib/factories";
+import { createStaffActionLog } from "@/lib/staff-log";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import {
@@ -40,12 +52,18 @@ import {
   FileDown,
   KeyRound,
   Trash2,
+  UserCog,
   Send,
   Ban,
   CheckCircle2,
   UserPlus,
   Upload,
   FileSpreadsheet,
+  Building2,
+  Plus,
+  CalendarRange,
+  Pencil,
+  CircleX,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/account")({
@@ -63,6 +81,12 @@ const NUM_FIELDS = [
   ["doi_song", "Đời sống"],
   ["tham_nien", "Thâm niên"],
 ] as const;
+
+const ROLE_LABELS: Record<Role, string> = {
+  admin: "Quản trị viên",
+  staff: "Staff",
+  user: "Người dùng",
+};
 
 function AccountPage() {
   const { user, logout, isAdmin } = useAuth();
@@ -110,22 +134,43 @@ function AccountPage() {
         </Card>
 
         {isAdmin ? (
-          <AdminUsersPanel />
+          <Tabs defaultValue="admin" className="space-y-3">
+            <TabsList className="grid h-10 w-full grid-cols-3 rounded-2xl">
+              <TabsTrigger value="admin" className="rounded-xl text-xs">
+                Quản trị tài khoản
+              </TabsTrigger>
+              <TabsTrigger value="factories" className="rounded-xl text-xs">
+                QLNM
+              </TabsTrigger>
+              <TabsTrigger value="profile" className="rounded-xl text-xs">
+                Thông tin của tôi
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="admin" className="mt-0">
+              <AdminUsersPanel />
+            </TabsContent>
+            <TabsContent value="factories" className="mt-0">
+              <FactoryAssignmentsPanel />
+            </TabsContent>
+            <TabsContent value="profile" className="mt-0 space-y-3">
+              <UserProfileForm />
+            </TabsContent>
+          </Tabs>
         ) : (
           <Tabs defaultValue="profile" className="space-y-3">
             <TabsList className="grid h-10 w-full grid-cols-2 rounded-2xl">
               <TabsTrigger value="profile" className="rounded-xl text-xs">
                 Thông tin
               </TabsTrigger>
-              <TabsTrigger value="delegations" className="rounded-xl text-xs">
-                Ủy quyền
+              <TabsTrigger value="work" className="rounded-xl text-xs">
+                Đi làm
               </TabsTrigger>
             </TabsList>
             <TabsContent value="profile" className="mt-0 space-y-3">
               <UserProfileForm />
             </TabsContent>
-            <TabsContent value="delegations" className="mt-0">
-              <DelegationPanel mode="user" />
+            <TabsContent value="work" className="mt-0">
+              <UserWorkHistoryPanel />
             </TabsContent>
           </Tabs>
         )}
@@ -137,17 +182,17 @@ function AccountPage() {
 /* ───────── USER PROFILE (non-admin) ───────── */
 
 function UserProfileForm() {
-  const { user, refresh } = useAuth();
+  const { user, refresh, isAdmin } = useAuth();
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
   const search = Route.useSearch();
   const showIncomplete = !!search.incomplete;
 
   useEffect(() => {
-    if (showIncomplete) {
+    if (showIncomplete && !isAdmin) {
       toast.info("Bổ sung đầy đủ thông tin để trải nghiệm tốt nhất");
     }
-  }, [showIncomplete]);
+  }, [isAdmin, showIncomplete]);
 
   useEffect(() => {
     setForm({
@@ -171,8 +216,15 @@ function UserProfileForm() {
     if (!user) return;
     setSaving(true);
     try {
-      const payload = { ...form };
-      for (const [k] of NUM_FIELDS) payload[k] = Number(payload[k]) || 0;
+      const payload = isAdmin
+        ? {
+            full_name: form.full_name || "",
+            phone: form.phone || "",
+          }
+        : { ...form };
+      if (!isAdmin) {
+        for (const [k] of NUM_FIELDS) payload[k] = Number(payload[k]) || 0;
+      }
       await pb.collection("users").update(user.id, payload);
       await refresh();
       toast.success("Đã lưu");
@@ -185,15 +237,15 @@ function UserProfileForm() {
 
   return (
     <>
-      {showIncomplete && (
+      {showIncomplete && !isAdmin && (
         <Card className="border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
           Bổ sung đầy đủ thông tin để trải nghiệm tốt nhất.
         </Card>
       )}
-      <Section title="Thông tin chung">
+      <Section title={isAdmin ? "Thông tin admin" : "Thông tin chung"}>
         <div className="space-y-1">
           <Label className="text-xs">Tên đăng nhập</Label>
-          <Input value={user?.username || ""} disabled />
+          <div className="rounded-md bg-muted px-3 py-2 text-sm">@{user?.username}</div>
         </div>
         <TextField
           label="Họ và tên"
@@ -205,55 +257,63 @@ function UserProfileForm() {
           value={form.phone}
           onChange={(v) => setForm({ ...form, phone: v })}
         />
-        <FactorySelect value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
-        <TextField
-          label="Mã NV"
-          value={form.employee_code}
-          onChange={(v) => setForm({ ...form, employee_code: v })}
-        />
+        {!isAdmin && (
+          <>
+            <FactorySelect value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
+            <TextField
+              label="Mã NV"
+              value={form.employee_code}
+              onChange={(v) => setForm({ ...form, employee_code: v })}
+            />
+          </>
+        )}
       </Section>
 
-      <Section title="Mặc định lương & giờ">
-        {NUM_FIELDS.map(([k, label]) => (
-          <NumberField
-            key={k}
-            label={label}
-            value={Number(form[k] ?? 0)}
-            onChange={(n) => setForm({ ...form, [k]: n })}
+      {!isAdmin && (
+        <Section title="Mặc định lương & giờ">
+          {NUM_FIELDS.map(([k, label]) => (
+            <NumberField
+              key={k}
+              label={label}
+              value={Number(form[k] ?? 0)}
+              onChange={(n) => setForm({ ...form, [k]: n })}
+            />
+          ))}
+        </Section>
+      )}
+
+      {!isAdmin && (
+        <Section title="Số tài khoản (STK)">
+          <div className="space-y-1">
+            <Label className="text-xs">Ngân hàng</Label>
+            <Select
+              value={form.bank_name || ""}
+              onValueChange={(v) => setForm({ ...form, bank_name: v })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Chọn ngân hàng" />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                {VN_BANKS.map((b) => (
+                  <SelectItem key={b.code} value={b.name}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <TextField
+            label="Số TK"
+            value={form.bank_account_number}
+            onChange={(v) => setForm({ ...form, bank_account_number: v.replace(/\D/g, "") })}
           />
-        ))}
-      </Section>
-
-      <Section title="Số tài khoản (STK)">
-        <div className="space-y-1">
-          <Label className="text-xs">Ngân hàng</Label>
-          <Select
-            value={form.bank_name || ""}
-            onValueChange={(v) => setForm({ ...form, bank_name: v })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Chọn ngân hàng" />
-            </SelectTrigger>
-            <SelectContent className="max-h-72">
-              {VN_BANKS.map((b) => (
-                <SelectItem key={b.code} value={b.name}>
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <TextField
-          label="Số TK"
-          value={form.bank_account_number}
-          onChange={(v) => setForm({ ...form, bank_account_number: v.replace(/\D/g, "") })}
-        />
-        <TextField
-          label="Tên TK"
-          value={form.bank_account_name}
-          onChange={(v) => setForm({ ...form, bank_account_name: v })}
-        />
-      </Section>
+          <TextField
+            label="Tên TK"
+            value={form.bank_account_name}
+            onChange={(v) => setForm({ ...form, bank_account_name: v })}
+          />
+        </Section>
+      )}
 
       <Button onClick={save} disabled={saving} className="w-full">
         <Save className="h-4 w-4" /> Lưu thay đổi
@@ -274,21 +334,40 @@ function AdminUsersPanel() {
   const [guide, setGuide] = useState({ title: "", content: "" });
   const [resetTarget, setResetTarget] = useState<any>(null);
   const [newPwd, setNewPwd] = useState("");
+  const [roleTarget, setRoleTarget] = useState<any>(null);
+  const [roleValue, setRoleValue] = useState<Role>("user");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [requireApproval, setRequireApproval] = useState(true);
+  const [settingsId, setSettingsId] = useState<string | null>(null);
+  const [pendingApprovalValue, setPendingApprovalValue] = useState<boolean | null>(null);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [confirmingApproval, setConfirmingApproval] = useState(false);
+  const emptyNew = { full_name: "", phone: "", username: "", password: "", company: "", employee_code: "" };
+  const [newUser, setNewUser] = useState<any>(emptyNew);
 
   const load = async () => {
     setLoading(true);
     try {
       const res = await pb.collection("users").getFullList({ sort: "-created" });
-      setUsers(res.filter((u: any) => u.role !== "admin"));
+      setUsers(res.filter((u: any) => u.id !== me?.id));
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải");
     } finally {
       setLoading(false);
     }
+
+    try {
+      const s = await pb.collection("settings").getList(1, 1);
+      if (s.items[0]) {
+        setSettingsId(s.items[0].id);
+        setRequireApproval(Boolean(s.items[0].require_approval));
+      }
+    } catch {
+      // Collection settings có thể chưa được khởi tạo ở môi trường mới.
+    }
   };
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const filtered = useMemo(() => {
     if (!search) return users;
@@ -310,7 +389,8 @@ function AdminUsersPanel() {
 
   const toggle = (id: string) => {
     const n = new Set(selected);
-    n.has(id) ? n.delete(id) : n.add(id);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
     setSelected(n);
   };
 
@@ -325,12 +405,11 @@ function AdminUsersPanel() {
       "Ngày tạo": new Date(u.created).toLocaleDateString("vi-VN"),
       "Trạng thái": isUserApproved(u) ? "Hoạt động" : "Vô hiệu hoá",
     }));
-    exportToExcel(`danh_sach_tai_khoan_${Date.now()}`, { Users: rows });
+    exportToExcel("danh_sach_tai_khoan_" + Date.now(), { Users: rows });
   };
 
   const bulkDisable = async (disable: boolean) => {
-    if (!selected.size) return;
-    if (!confirm(`${disable ? "Vô hiệu hoá" : "Kích hoạt"} ${selected.size} tài khoản?`)) return;
+    if (!confirm((disable ? "Vô hiệu hoá" : "Kích hoạt") + " " + selected.size + " tài khoản?")) return;
     try {
       for (const id of selected) {
         await pb.collection("users").update(id, {
@@ -348,8 +427,7 @@ function AdminUsersPanel() {
   };
 
   const bulkDelete = async () => {
-    if (!selected.size) return;
-    if (!confirm(`Xoá ${selected.size} tài khoản? Hành động không thể hoàn tác.`)) return;
+    if (!confirm("Xoá " + selected.size + " tài khoản? Hành động không thể hoàn tác.")) return;
     try {
       for (const id of selected) {
         await pb.collection("users").delete(id);
@@ -362,12 +440,73 @@ function AdminUsersPanel() {
     }
   };
 
+  const toggleApprovalRequirement = async (val: boolean) => {
+    setRequireApproval(val);
+    try {
+      if (settingsId) {
+        await pb.collection("settings").update(settingsId, { require_approval: val });
+      } else {
+        const r = await pb.collection("settings").create({ require_approval: val });
+        setSettingsId(r.id);
+      }
+      toast.success("Đã cập nhật kiểm duyệt đăng ký");
+    } catch (e: any) {
+      setRequireApproval((prev) => !prev);
+      toast.error(e?.message || "Lỗi cập nhật kiểm duyệt đăng ký");
+    }
+  };
+
+  const requestToggleApprovalRequirement = (val: boolean) => {
+    setPendingApprovalValue(val);
+    setAdminPassword("");
+  };
+
+  const closeApprovalConfirm = () => {
+    if (confirmingApproval) return;
+    setPendingApprovalValue(null);
+    setAdminPassword("");
+  };
+
+  const confirmToggleApprovalRequirement = async () => {
+    if (pendingApprovalValue === null) return;
+    const admin = pb.authStore.record as UserRecord | null;
+    const identity = admin?.username || admin?.email;
+    if (!identity) {
+      toast.error("Không xác định được tài khoản admin");
+      return;
+    }
+    if (!adminPassword) {
+      toast.error("Nhập mật khẩu admin");
+      return;
+    }
+
+    setConfirmingApproval(true);
+    try {
+      const res = await fetch("/api/public/pocketbase-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identity, password: adminPassword }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.message || "Mật khẩu admin không đúng");
+      if (payload?.record?.id !== admin?.id || payload?.record?.role !== "admin") {
+        throw new Error("Tài khoản xác thực không phải admin hiện tại");
+      }
+
+      await toggleApprovalRequirement(pendingApprovalValue);
+      closeApprovalConfirm();
+    } catch (e: any) {
+      toast.error(e?.message || "Không xác thực được mật khẩu admin");
+    } finally {
+      setConfirmingApproval(false);
+    }
+  };
+
   const deleteOne = async (u: any) => {
-    if (!confirm(`Xoá tài khoản ${u.full_name || u.username}?`)) return;
+    if (!confirm("Xoá tài khoản " + (u.full_name || u.username) + "?")) return;
     try {
       await pb.collection("users").delete(u.id);
       toast.success("Đã xoá");
-      load();
     } catch (e: any) {
       toast.error(e?.message || "Lỗi");
     }
@@ -392,6 +531,33 @@ function AdminUsersPanel() {
     }
   };
 
+  const openRoleDialog = (u: any) => {
+    setRoleTarget(u);
+    setRoleValue((u.role || "user") as Role);
+  };
+
+  const updateRole = async () => {
+    if (!roleTarget || !me) return;
+    try {
+      await pb.collection("users").update(roleTarget.id, { role: roleValue });
+      await createStaffActionLog({
+        actor: me as UserRecord,
+        targetUserId: roleTarget.id,
+        targetCollection: "users",
+        targetRecord: roleTarget.id,
+        action: "update",
+        before: { role: roleTarget.role || "user" },
+        after: { role: roleValue },
+        note: "Admin cập nhật vai trò tài khoản",
+      });
+      toast.success("Đã cập nhật vai trò");
+      setRoleTarget(null);
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message || "Không cập nhật được vai trò");
+    }
+  };
+
   const sendGuide = async () => {
     if (!guide.title.trim() || !guide.content.trim()) {
       toast.error("Nhập tiêu đề và nội dung");
@@ -407,7 +573,7 @@ function AdminUsersPanel() {
         target_factories: [],
         created_by: me?.id,
       });
-      toast.success(targets.length ? `Đã gửi đến ${targets.length} người` : "Đã gửi tới tất cả");
+      toast.success(targets.length ? "Đã gửi đến " + targets.length + " người" : "Đã gửi tới tất cả");
       setGuideOpen(false);
       setGuide({ title: "", content: "" });
       setSelected(new Set());
@@ -416,17 +582,6 @@ function AdminUsersPanel() {
     }
   };
 
-  // ── Create single account ──
-  const [createOpen, setCreateOpen] = useState(false);
-  const emptyNew = {
-    full_name: "",
-    phone: "",
-    username: "",
-    password: "",
-    company: "",
-    employee_code: "",
-  };
-  const [newUser, setNewUser] = useState<any>(emptyNew);
   const createOne = async () => {
     const full_name = (newUser.full_name || "").trim();
     const phone = (newUser.phone || "").trim();
@@ -465,8 +620,6 @@ function AdminUsersPanel() {
     }
   };
 
-  // ── Bulk import via Excel ──
-  const [importing, setImporting] = useState(false);
   const downloadTemplate = () => {
     const sample = [
       {
@@ -488,6 +641,7 @@ function AdminUsersPanel() {
     ];
     exportToExcel("mau_nhap_tai_khoan", { Users: sample });
   };
+
   const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.target.value = "";
@@ -516,7 +670,7 @@ function AdminUsersPanel() {
         }
         if (password.length < 8) {
           fail++;
-          errors.push(`${username}: mật khẩu < 8 ký tự`);
+          errors.push(username + ": mật khẩu < 8 ký tự");
           continue;
         }
         try {
@@ -530,16 +684,15 @@ function AdminUsersPanel() {
             employee_code,
             role: "user",
             approvalStatus: "approved",
-            approved: "true",
             status: "active",
           });
           ok++;
         } catch (err: any) {
           fail++;
-          errors.push(`${username}: ${err?.response?.message || err?.message || "lỗi"}`);
+          errors.push(username + ": " + (err?.response?.message || err?.message || "lỗi"));
         }
       }
-      toast.success(`Đã nhập ${ok} tài khoản${fail ? `, ${fail} lỗi` : ""}`);
+      toast.success("Đã nhập " + ok + " tài khoản" + (fail ? ", " + fail + " lỗi" : ""));
       if (errors.length) console.warn("Import errors:", errors);
       load();
     } catch (err: any) {
@@ -551,6 +704,19 @@ function AdminUsersPanel() {
 
   return (
     <Card className="space-y-3 p-4">
+      <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/30 p-3">
+        <div className="rounded-xl bg-primary/10 p-2 text-primary">
+          <ShieldCheck className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <Label className="text-sm font-semibold">Yêu cầu duyệt khi đăng ký</Label>
+          <div className="text-[11px] text-muted-foreground">
+            Tắt để tài khoản mới được dùng ngay sau khi đăng ký.
+          </div>
+        </div>
+        <Switch checked={requireApproval} onCheckedChange={requestToggleApprovalRequirement} />
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Quản lý tài khoản ({users.length})
@@ -632,23 +798,24 @@ function AdminUsersPanel() {
               ? "border-l-[color:var(--status-success)]"
               : "border-l-[color:var(--status-danger)]";
             return (
-              <div key={u.id} className={`list-card flex items-start gap-3 ${tone}`}>
+              <div key={u.id} className={"list-card flex items-start gap-3 " + tone}>
                 <Checkbox checked={isSel} onCheckedChange={() => toggle(u.id)} className="mt-1" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    📞 {u.phone || "—"}
+                    {"📞 " + (u.phone || "—")}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    Mã NV {u.employee_code || "—"} · {u.company || "—"}
+                    {"Mã NV " + (u.employee_code || "—") + " · " + (u.company || "—")}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    📅 {new Date(u.created).toLocaleDateString("vi-VN")}
+                    {"📅 " + new Date(u.created).toLocaleDateString("vi-VN")}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-1">
-                    <span className={`chip ${approved ? "chip-success" : "chip-danger"}`}>
+                    <span className={"chip " + (approved ? "chip-success" : "chip-danger")}>
                       {approved ? "Hoạt động" : "Vô hiệu hoá"}
                     </span>
+                    <span className="chip chip-info">{ROLE_LABELS[(u.role || "user") as Role]}</span>
                   </div>
                 </div>
                 <div className="flex flex-col gap-1">
@@ -661,6 +828,13 @@ function AdminUsersPanel() {
                     title="Đặt lại mật khẩu"
                   >
                     <KeyRound className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => openRoleDialog(u)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
+                    title="Chuyển quyền"
+                  >
+                    <UserCog className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => deleteOne(u)}
@@ -684,7 +858,7 @@ function AdminUsersPanel() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="text-sm text-muted-foreground">
-              {resetTarget?.full_name || resetTarget?.username} · {resetTarget?.phone}
+              {(resetTarget?.full_name || resetTarget?.username) + " · " + resetTarget?.phone}
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Mật khẩu mới (tối thiểu 8 ký tự)</Label>
@@ -698,10 +872,82 @@ function AdminUsersPanel() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setResetTarget(null)}>
-              Huỷ
+              Hủy
             </Button>
             <Button onClick={doResetPassword}>
               <Save className="h-4 w-4" /> Cập nhật
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!roleTarget} onOpenChange={(open) => !open && setRoleTarget(null)}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Chuyển quyền tài khoản</DialogTitle>
+            <DialogDescription>
+              Chọn vai trò mới cho {roleTarget?.full_name || roleTarget?.username || "tài khoản này"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Vai trò</Label>
+            <Select value={roleValue} onValueChange={(value) => setRoleValue(value as Role)}>
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="Chọn vai trò" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="user">Người dùng</SelectItem>
+                <SelectItem value="staff">Staff</SelectItem>
+                <SelectItem value="admin">Quản trị viên</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRoleTarget(null)}>
+              Hủy
+            </Button>
+            <Button onClick={updateRole}>
+              <UserCog className="h-4 w-4" /> Cập nhật
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingApprovalValue !== null}
+        onOpenChange={(open) => !open && closeApprovalConfirm()}
+      >
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Xác nhận mật khẩu admin</DialogTitle>
+            <DialogDescription>
+              Xác thực lại trước khi thay đổi cách duyệt tài khoản mới.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label className="text-xs">Mật khẩu admin</Label>
+            <Input
+              type="password"
+              className="rounded-xl"
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmToggleApprovalRequirement();
+              }}
+              autoComplete="current-password"
+              autoFocus
+            />
+            <div className="text-xs text-muted-foreground">
+              Sau khi xác thực, hệ thống sẽ {pendingApprovalValue ? "bật" : "tắt"} yêu cầu duyệt
+              khi đăng ký.
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeApprovalConfirm}>
+              Huỷ
+            </Button>
+            <Button onClick={confirmToggleApprovalRequirement} disabled={confirmingApproval}>
+              {confirmingApproval ? "Đang xác thực..." : "Xác nhận"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -712,7 +958,7 @@ function AdminUsersPanel() {
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>
-              Gửi hướng dẫn ({selected.size ? `${selected.size} người` : "tất cả"})
+              {"Gửi hướng dẫn (" + (selected.size ? selected.size + " người" : "tất cả") + ")"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
@@ -734,7 +980,7 @@ function AdminUsersPanel() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setGuideOpen(false)}>
-              Huỷ
+              Hủy
             </Button>
             <Button onClick={sendGuide}>
               <Send className="h-4 w-4" /> Gửi
@@ -783,10 +1029,444 @@ function AdminUsersPanel() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Huỷ
+              Hủy
             </Button>
             <Button onClick={createOne}>
               <UserPlus className="h-4 w-4" /> Tạo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
+type EditingAssignment = Partial<FactoryManagerRecord> & { staff?: string };
+
+function formatDateRange(record: FactoryManagerRecord) {
+  const from = record.active_from || "Ngay lập tức";
+  const to = record.active_to || "Không giới hạn";
+  return `${from} -> ${to}`;
+}
+
+function FactoryAssignmentsPanel() {
+  const { user: currentUser } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
+  const [factories, setFactories] = useState<FactoryRecord[]>([]);
+  const [assignments, setAssignments] = useState<FactoryManagerRecord[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState<EditingAssignment | null>(null);
+  const [selectedStaff, setSelectedStaff] = useState<UserRecord | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [userRows, factoryRows, assignmentRows] = await Promise.all([
+        pb.collection("users").getFullList<UserRecord>({
+          filter: `role="staff"`,
+          sort: "full_name,username",
+        }),
+        fetchFactories(),
+        fetchFactoryManagers(),
+      ]);
+      setStaffUsers(userRows);
+      setFactories(factoryRows);
+      setAssignments(assignmentRows);
+    } catch (error: any) {
+      toast.error(error?.message || "Không tải được dữ liệu phân công");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const assignmentsByStaff = useMemo(() => {
+    const map = new Map<string, FactoryManagerRecord[]>();
+    for (const assignment of assignments) {
+      const bucket = map.get(assignment.staff) || [];
+      bucket.push(assignment);
+      map.set(assignment.staff, bucket);
+    }
+    return map;
+  }, [assignments]);
+
+  const filteredStaff = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return staffUsers;
+    return staffUsers.filter((item) =>
+      [item.full_name, item.username, item.phone].filter(Boolean).join(" ").toLowerCase().includes(keyword),
+    );
+  }, [search, staffUsers]);
+
+  const openAdd = (staffId?: string) => {
+    setEditingAssignment({ staff: staffId, status: "active" });
+    setPickerOpen(true);
+  };
+
+  const openEdit = (assignment: FactoryManagerRecord) => {
+    setEditingAssignment({ ...assignment });
+    setPickerOpen(true);
+  };
+
+  const closePicker = () => {
+    setPickerOpen(false);
+    setEditingAssignment(null);
+  };
+
+  const saveAssignment = async () => {
+    if (!currentUser) return;
+    if (!editingAssignment?.staff) {
+      toast.warning("Chọn staff trước khi lưu");
+      return;
+    }
+    if (!editingAssignment?.factory) {
+      toast.warning("Chọn nhà máy trước khi lưu");
+      return;
+    }
+
+    const payload = {
+      staff: editingAssignment.staff,
+      factory: editingAssignment.factory,
+      active_from: editingAssignment.active_from || null,
+      active_to: editingAssignment.active_to || null,
+      status: (editingAssignment.status as FactoryStatus) || "active",
+      note: editingAssignment.note || "",
+    };
+
+    try {
+      if (editingAssignment.id) {
+        await pb.collection("factory_managers").update(editingAssignment.id, payload);
+        await createStaffActionLog({
+          actor: currentUser as UserRecord,
+          targetUserId: payload.staff,
+          targetCollection: "factory_managers",
+          targetRecord: editingAssignment.id,
+          action: "update",
+          after: payload,
+          note: "Admin cập nhật phân công nhà máy cho staff",
+        });
+      } else {
+        const created = await pb.collection("factory_managers").create(payload);
+        await createStaffActionLog({
+          actor: currentUser as UserRecord,
+          targetUserId: payload.staff,
+          targetCollection: "factory_managers",
+          targetRecord: created.id,
+          action: "create",
+          after: payload,
+          note: "Admin gán nhà máy cho staff",
+        });
+      }
+
+      toast.success(editingAssignment.id ? "Đã cập nhật phân công" : "Đã gán nhà máy cho staff");
+      closePicker();
+      await load();
+    } catch (error: any) {
+      toast.error(error?.message || "Không lưu được phân công");
+    }
+  };
+
+  const deleteAssignment = async (assignment: FactoryManagerRecord) => {
+    if (!currentUser) return;
+    if (!confirm(`Xóa quyền quản lý nhà máy "${assignment.expand?.factory?.name || assignment.factory}"?`)) return;
+
+    try {
+      await pb.collection("factory_managers").delete(assignment.id);
+      await createStaffActionLog({
+        actor: currentUser as UserRecord,
+        targetUserId: assignment.staff,
+        targetCollection: "factory_managers",
+        targetRecord: assignment.id,
+        action: "delete",
+        before: assignment,
+        note: "Admin thu hồi quyền quản lý nhà máy của staff",
+      });
+      toast.success("Đã thu hồi phân công");
+      await load();
+    } catch (error: any) {
+      toast.error(error?.message || "Không xóa được phân công");
+    }
+  };
+
+  const totalAssignments = assignments.length;
+  const activeAssignments = assignments.filter((item) => isFactoryAssignmentActive(item)).length;
+  const selectedStaffAssignments = selectedStaff ? assignmentsByStaff.get(selectedStaff.id) || [] : [];
+  const selectedStaffActiveCount = selectedStaffAssignments.filter((item) => isFactoryAssignmentActive(item)).length;
+
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Cấp quyền QLNM
+          </h2>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            <StatusChip tone="info">{totalAssignments} phân công</StatusChip>
+            <StatusChip tone="success">{activeAssignments} đang áp dụng</StatusChip>
+            <StatusChip tone="neutral">{staffUsers.length} staff</StatusChip>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Tìm staff theo tên, username, SĐT..."
+          className="rounded-full pl-9"
+        />
+      </div>
+
+      {loading ? (
+        <div className="py-6 text-center text-sm text-muted-foreground">Đang tải phân công...</div>
+      ) : staffUsers.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-center text-sm text-muted-foreground">
+          Chưa có staff. Hãy chuyển quyền một tài khoản sang Staff trước.
+        </div>
+      ) : filteredStaff.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-center text-sm text-muted-foreground">
+          Không tìm thấy staff phù hợp.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filteredStaff.map((staff) => {
+            const staffAssignments = assignmentsByStaff.get(staff.id) || [];
+            const activeCount = staffAssignments.filter((item) => isFactoryAssignmentActive(item)).length;
+
+            return (
+              <button
+                key={staff.id}
+                type="button"
+                onClick={() => setSelectedStaff(staff)}
+                className="w-full rounded-2xl border border-border/60 bg-card p-3 text-left shadow-soft transition active:scale-[0.99]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">
+                      {staff.full_name || staff.username || "Chưa có tên"}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      @{staff.username || "chưa có username"} · {staff.phone || "chưa có SĐT"}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <StatusChip tone={staffAssignments.length ? "success" : "neutral"}>
+                      {staffAssignments.length} nhà máy
+                    </StatusChip>
+                    <StatusChip tone={activeCount ? "info" : "neutral"}>
+                      {activeCount} hiệu lực
+                    </StatusChip>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <Dialog open={!!selectedStaff} onOpenChange={(open) => !open && setSelectedStaff(null)}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{selectedStaff?.full_name || selectedStaff?.username || "Staff"}</DialogTitle>
+            <DialogDescription>
+              Quản lý các nhà máy được gán cho staff này.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-1.5">
+              <StatusChip tone="success">{selectedStaffAssignments.length} nhà máy</StatusChip>
+              <StatusChip tone={selectedStaffActiveCount ? "info" : "neutral"}>
+                {selectedStaffActiveCount} hiệu lực
+              </StatusChip>
+            </div>
+
+            {selectedStaffAssignments.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-center text-sm text-muted-foreground">
+                Staff này chưa được gán nhà máy nào.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {selectedStaffAssignments.map((assignment) => {
+                  const active = isFactoryAssignmentActive(assignment);
+                  return (
+                    <div
+                      key={assignment.id}
+                      className="flex items-start justify-between gap-2 rounded-xl border border-border/60 bg-background/60 p-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium">
+                          {assignment.expand?.factory?.name || "Nhà máy"}
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <CalendarRange className="h-3 w-3" />
+                          <span>{formatDateRange(assignment)}</span>
+                          <StatusChip tone={active ? "success" : "neutral"}>
+                            {active ? "Đang áp dụng" : "Tạm dừng"}
+                          </StatusChip>
+                        </div>
+                        {assignment.note && (
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            Ghi chú: {assignment.note}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(assignment)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
+                          aria-label="Sửa phân công"
+                          title="Sửa phân công"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteAssignment(assignment)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
+                          aria-label="Thu hồi phân công"
+                          title="Thu hồi phân công"
+                        >
+                          <CircleX className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedStaff(null)} className="rounded-xl">
+              Đóng
+            </Button>
+            <Button onClick={() => selectedStaff && openAdd(selectedStaff.id)} className="rounded-xl">
+              <Plus className="h-4 w-4" />
+              Gán nhà máy
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pickerOpen} onOpenChange={(open) => !open && closePicker()}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingAssignment?.id ? "Sửa phân công nhà máy" : "Gán nhà máy cho staff"}</DialogTitle>
+            <DialogDescription>
+              Chọn staff và nhà máy để cấp quyền quản lý nhà máy.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Staff</Label>
+              <Select
+                value={editingAssignment?.staff || ""}
+                onValueChange={(value) => setEditingAssignment((current) => ({ ...(current || {}), staff: value }))}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Chọn staff" />
+                </SelectTrigger>
+                <SelectContent>
+                  {staffUsers.map((staff) => (
+                    <SelectItem key={staff.id} value={staff.id}>
+                      {staff.full_name || staff.username || staff.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Nhà máy</Label>
+              <Select
+                value={editingAssignment?.factory || ""}
+                onValueChange={(value) => setEditingAssignment((current) => ({ ...(current || {}), factory: value }))}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Chọn nhà máy" />
+                </SelectTrigger>
+                <SelectContent>
+                  {factories.map((factory) => (
+                    <SelectItem key={factory.id} value={factory.id}>
+                      {factory.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Từ ngày</Label>
+                <Input
+                  type="date"
+                  value={editingAssignment?.active_from || ""}
+                  onChange={(event) =>
+                    setEditingAssignment((current) => ({ ...(current || {}), active_from: event.target.value }))
+                  }
+                  className="rounded-xl"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Đến ngày</Label>
+                <Input
+                  type="date"
+                  value={editingAssignment?.active_to || ""}
+                  onChange={(event) =>
+                    setEditingAssignment((current) => ({ ...(current || {}), active_to: event.target.value }))
+                  }
+                  className="rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Trạng thái</Label>
+              <Select
+                value={editingAssignment?.status || "active"}
+                onValueChange={(value) =>
+                  setEditingAssignment((current) => ({ ...(current || {}), status: value as FactoryStatus }))
+                }
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Chọn trạng thái" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Đang áp dụng</SelectItem>
+                  <SelectItem value="inactive">Tạm dừng</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Ghi chú</Label>
+              <Input
+                value={editingAssignment?.note || ""}
+                onChange={(event) =>
+                  setEditingAssignment((current) => ({ ...(current || {}), note: event.target.value }))
+                }
+                className="rounded-xl"
+                placeholder="Ví dụ: phụ trách ca sáng, phụ trách tạm thời..."
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closePicker} className="rounded-xl">
+              Đóng
+            </Button>
+            <Button onClick={saveAssignment} className="rounded-xl">
+              <Plus className="h-4 w-4" />
+              {editingAssignment?.id ? "Lưu phân công" : "Gán nhà máy"}
             </Button>
           </DialogFooter>
         </DialogContent>

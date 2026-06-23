@@ -2,10 +2,8 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { pb, dataUrlToFile, fileUrl } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";
-import { isUserApproved } from "@/lib/user-approval";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { useQueryClient } from "@tanstack/react-query";
-import { DelegationPanel } from "@/components/delegations/DelegationPanel";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
@@ -13,7 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { FactoryManagersDialog } from "@/components/factories/FactoryManagersDialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
@@ -26,16 +31,13 @@ import { toast } from "sonner";
 import {
   Building2,
   Factory,
-  Users,
   Save,
   ImagePlus,
   Pencil,
   Trash2,
   Plus,
-  Check,
   X,
   ShieldCheck,
-  Search,
   Smartphone,
   CalendarDays,
   ChevronDown,
@@ -56,15 +58,12 @@ function AdminSettingsPage() {
       <AppHeader title="Cài đặt hệ thống" back />
       <div className="p-4">
         <Tabs defaultValue="company" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 rounded-2xl">
+          <TabsList className="grid w-full grid-cols-2 rounded-2xl">
             <TabsTrigger value="company" className="rounded-xl text-xs">
               <Building2 className="mr-1 h-4 w-4" /> Công ty
             </TabsTrigger>
             <TabsTrigger value="factories" className="rounded-xl text-xs">
               <Factory className="mr-1 h-4 w-4" /> Nhà máy
-            </TabsTrigger>
-            <TabsTrigger value="users" className="rounded-xl text-xs">
-              <Users className="mr-1 h-4 w-4" /> Người dùng
             </TabsTrigger>
           </TabsList>
           <TabsContent value="company" className="mt-4">
@@ -72,9 +71,6 @@ function AdminSettingsPage() {
           </TabsContent>
           <TabsContent value="factories" className="mt-4">
             <FactoriesTab />
-          </TabsContent>
-          <TabsContent value="users" className="mt-4">
-            <UsersTab />
           </TabsContent>
         </Tabs>
       </div>
@@ -346,6 +342,7 @@ function FactoriesTab() {
   const [areasLoading, setAreasLoading] = useState(false);
   const [factoriesOpen, setFactoriesOpen] = useState(true);
   const [areasOpen, setAreasOpen] = useState(true);
+  const [managingFactory, setManagingFactory] = useState<Factory | null>(null);
 
   const loadFactories = async () => {
     setLoading(true);
@@ -516,6 +513,14 @@ function FactoriesTab() {
                 </div>
                 <div className="flex gap-1">
                   <button
+                    onClick={() => setManagingFactory(f)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
+                    aria-label="Cấp quyền quản lý"
+                    title="Cấp quyền quản lý"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                  </button>
+                  <button
                     onClick={() => setEditing(f)}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
                     aria-label="Sửa"
@@ -595,6 +600,13 @@ function FactoriesTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <FactoryManagersDialog
+        factoryId={managingFactory?.id || null}
+        factoryName={managingFactory?.name || ""}
+        open={!!managingFactory}
+        onOpenChange={(open) => !open && setManagingFactory(null)}
+      />
 
       <Collapsible open={areasOpen} onOpenChange={setAreasOpen}>
         <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
@@ -701,311 +713,5 @@ function FactoriesTab() {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-/* ───────── USERS ───────── */
-
-function UsersTab() {
-  const [users, setUsers] = useState<any[]>([]);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [requireApproval, setRequireApproval] = useState(true);
-  const [settingsId, setSettingsId] = useState<string | null>(null);
-  const [pendingApprovalValue, setPendingApprovalValue] = useState<boolean | null>(null);
-  const [adminPassword, setAdminPassword] = useState("");
-  const [confirmingApproval, setConfirmingApproval] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await pb.collection("users").getFullList({ sort: "-created" });
-      setUsers(res as any);
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi tải user");
-    } finally {
-      setLoading(false);
-    }
-
-    try {
-      const s = await pb.collection("settings").getList(1, 1);
-      if (s.items[0]) {
-        setSettingsId(s.items[0].id);
-        setRequireApproval(Boolean(s.items[0].require_approval));
-      }
-    } catch {
-      // Settings collection may be initialized later by another admin screen.
-    }
-  };
-  useEffect(() => {
-    load();
-  }, []);
-
-  const toggleApproved = async (u: any) => {
-    const approved = isUserApproved(u);
-    try {
-      await pb.collection("users").update(u.id, {
-        approvalStatus: approved ? "pending" : "approved",
-        approved: approved ? "false" : "true",
-        status: approved ? "disabled" : "active",
-      });
-      toast.success(approved ? "Đã huỷ duyệt" : "Đã duyệt");
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
-    }
-  };
-
-  const toggleRole = async (u: any) => {
-    const newRole = u.role === "admin" ? "user" : "admin";
-    if (!confirm(`Đổi vai trò sang ${newRole}?`)) return;
-    try {
-      await pb.collection("users").update(u.id, { role: newRole });
-      toast.success("Đã đổi vai trò");
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
-    }
-  };
-
-  const remove = async (u: any) => {
-    if (!confirm(`Xoá user ${u.username || u.full_name}?`)) return;
-    try {
-      await pb.collection("users").delete(u.id);
-      toast.success("Đã xoá");
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
-    }
-  };
-
-  const toggleApprovalRequirement = async (val: boolean) => {
-    setRequireApproval(val);
-    try {
-      if (settingsId) {
-        await pb.collection("settings").update(settingsId, { require_approval: val });
-      } else {
-        const r = await pb.collection("settings").create({ require_approval: val });
-        setSettingsId(r.id);
-      }
-      toast.success("Đã cập nhật kiểm duyệt đăng ký");
-    } catch (e: any) {
-      setRequireApproval((prev) => !prev);
-      toast.error(e?.message || "Lỗi cập nhật");
-    }
-  };
-
-  const requestToggleApprovalRequirement = (val: boolean) => {
-    setPendingApprovalValue(val);
-    setAdminPassword("");
-  };
-
-  const closeApprovalConfirm = () => {
-    if (confirmingApproval) return;
-    setPendingApprovalValue(null);
-    setAdminPassword("");
-  };
-
-  const confirmToggleApprovalRequirement = async () => {
-    if (pendingApprovalValue === null) return;
-    const admin = pb.authStore.record as any;
-    const identity = admin?.username || admin?.email;
-    if (!identity) {
-      toast.error("Không xác định được tài khoản admin");
-      return;
-    }
-    if (!adminPassword) {
-      toast.error("Nhập mật khẩu admin");
-      return;
-    }
-
-    setConfirmingApproval(true);
-    try {
-      const res = await fetch("/api/public/pocketbase-auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identity, password: adminPassword }),
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload?.message || "Mật khẩu admin không đúng");
-      if (payload?.record?.id !== admin.id || payload?.record?.role !== "admin") {
-        throw new Error("Tài khoản xác thực không phải admin hiện tại");
-      }
-
-      await toggleApprovalRequirement(pendingApprovalValue);
-      closeApprovalConfirm();
-    } catch (e: any) {
-      toast.error(e?.message || "Không xác thực được mật khẩu admin");
-    } finally {
-      setConfirmingApproval(false);
-    }
-  };
-
-  const filtered = users.filter((u) => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return (
-      (u.username || "").toLowerCase().includes(s) ||
-      (u.full_name || "").toLowerCase().includes(s) ||
-      (u.phone || "").toLowerCase().includes(s)
-    );
-  });
-
-  return (
-    <Tabs defaultValue="accounts" className="space-y-3">
-      <TabsList className="grid h-10 w-full grid-cols-2 rounded-2xl">
-        <TabsTrigger value="accounts" className="rounded-xl text-xs">
-          Tài khoản
-        </TabsTrigger>
-        <TabsTrigger value="delegations" className="rounded-xl text-xs">
-          Ủy quyền
-        </TabsTrigger>
-      </TabsList>
-
-      <TabsContent value="accounts" className="mt-0 space-y-3">
-        <Card className="flex items-center gap-3 rounded-2xl border-border/60 p-3.5 shadow-soft">
-          <div className="rounded-xl bg-primary/10 p-2 text-primary">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <Label className="text-sm font-semibold">Yêu cầu duyệt khi đăng ký</Label>
-            <div className="text-[11px] text-muted-foreground">
-              Tắt để user tạo tài khoản và sử dụng ngay.
-            </div>
-          </div>
-          <Switch checked={requireApproval} onCheckedChange={requestToggleApprovalRequirement} />
-        </Card>
-
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="rounded-full pl-9"
-            placeholder="Tìm theo tên / username / SĐT"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        <div className="px-1 text-xs text-muted-foreground">
-          Tổng: {users.length} · Hiển thị: {filtered.length}
-        </div>
-
-        {loading && (
-          <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
-        )}
-        {!loading && filtered.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
-            Không có user.
-          </div>
-        )}
-        {filtered.map((u) => {
-          const avatar = u.avatar ? fileUrl(u, u.avatar) : "";
-          const approved = isUserApproved(u);
-          const borderTone = approved
-            ? "border-l-[color:var(--status-success)]"
-            : "border-l-[color:var(--status-warning)]";
-          return (
-            <div key={u.id} className={`list-card flex items-start gap-3 ${borderTone}`}>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
-                {avatar ? (
-                  <img src={avatar} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="text-sm font-semibold text-muted-foreground">
-                    {(u.full_name || u.username || "?").slice(0, 1).toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  @{u.username} {u.phone && `· ${u.phone}`}
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  <span className={`chip ${u.role === "admin" ? "chip-info" : "chip-neutral"}`}>
-                    {u.role === "admin" && <ShieldCheck className="h-3 w-3" />}
-                    {u.role === "admin" ? "Admin" : "User"}
-                  </span>
-                  <span className={`chip ${approved ? "chip-success" : "chip-warning"}`}>
-                    {approved ? "Đã duyệt" : "Chờ duyệt"}
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1">
-                <button
-                  onClick={() => toggleApproved(u)}
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                    approved
-                      ? "text-[color:var(--status-warning-fg)] hover:bg-[color:var(--status-warning-bg)]"
-                      : "text-[color:var(--status-success-fg)] hover:bg-[color:var(--status-success-bg)]"
-                  }`}
-                  title={approved ? "Huỷ duyệt" : "Duyệt"}
-                >
-                  {approved ? <X className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                </button>
-                <button
-                  onClick={() => toggleRole(u)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
-                  title="Đổi vai trò"
-                >
-                  <ShieldCheck className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => remove(u)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
-                  title="Xoá"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-
-        <Dialog
-          open={pendingApprovalValue !== null}
-          onOpenChange={(open) => !open && closeApprovalConfirm()}
-        >
-          <DialogContent className="rounded-2xl">
-            <DialogHeader>
-              <DialogTitle>Xác nhận mật khẩu admin</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Label className="text-xs">Mật khẩu admin</Label>
-              <Input
-                type="password"
-                className="rounded-xl"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") confirmToggleApprovalRequirement();
-                }}
-                autoComplete="current-password"
-                autoFocus
-              />
-              <div className="text-xs text-muted-foreground">
-                Sau khi xác thực, hệ thống sẽ {pendingApprovalValue ? "bật" : "tắt"} yêu cầu duyệt
-                khi đăng ký.
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={closeApprovalConfirm} className="rounded-xl">
-                Huỷ
-              </Button>
-              <Button
-                onClick={confirmToggleApprovalRequirement}
-                disabled={confirmingApproval}
-                className="rounded-xl"
-              >
-                {confirmingApproval ? "Đang xác thực..." : "Xác nhận"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </TabsContent>
-
-      <TabsContent value="delegations" className="mt-0">
-        <DelegationPanel mode="admin" />
-      </TabsContent>
-    </Tabs>
   );
 }

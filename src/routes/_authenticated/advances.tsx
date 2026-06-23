@@ -13,7 +13,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { UserCombobox } from "@/components/users/UserCombobox";
 import {
   Select,
   SelectContent,
@@ -29,7 +28,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { exportToExcel } from "@/lib/excel";
-import { fetchReceivedDelegations, relationInFilter } from "@/lib/delegations";
+import { escapePb } from "@/lib/delegations";
+import { markSeen } from "@/lib/seen";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { VN_BANKS } from "@/lib/vn-banks";
 import { toast } from "sonner";
@@ -110,8 +110,6 @@ export function AdvancesPage() {
   const [sending, setSending] = useState(false);
   const [amountText, setAmountText] = useState("");
   const [reason, setReason] = useState("");
-  const [delegatedUsers, setDelegatedUsers] = useState<UserRecord[]>([]);
-  const [selectedAdvanceUserId, setSelectedAdvanceUserId] = useState(user?.id || "");
   const [bankForm, setBankForm] = useState({
     bank_name: "",
     bank_account_number: "",
@@ -123,34 +121,7 @@ export function AdvancesPage() {
   const [loading, setLoading] = useState(false);
   const [advanceDetail, setAdvanceDetail] = useState<AdvanceRecord | null>(null);
 
-  const advanceUsers = useMemo(() => {
-    const self = user ? [user as UserRecord] : [];
-    const map = new Map<string, UserRecord>();
-    for (const item of [...self, ...delegatedUsers]) map.set(item.id, item);
-    return [...map.values()];
-  }, [delegatedUsers, user]);
-
-  const selectedAdvanceUser = useMemo(
-    () => advanceUsers.find((item) => item.id === selectedAdvanceUserId) || advanceUsers[0] || null,
-    [advanceUsers, selectedAdvanceUserId],
-  );
-
-  useEffect(() => {
-    if (isAdmin || !user?.id) return;
-    const ids = advanceUsers.map((item) => item.id);
-    if (!selectedAdvanceUserId || !ids.includes(selectedAdvanceUserId)) {
-      setSelectedAdvanceUserId(user.id);
-    }
-  }, [advanceUsers, isAdmin, selectedAdvanceUserId, user?.id]);
-
-  useEffect(() => {
-    if (isAdmin || !user?.id) return;
-    fetchReceivedDelegations(user.id, "advance")
-      .then((rows) =>
-        setDelegatedUsers(rows.map((row) => row.expand?.grantor).filter(Boolean) as UserRecord[]),
-      )
-      .catch(() => setDelegatedUsers([]));
-  }, [isAdmin, user?.id]);
+  const selectedAdvanceUser = user as UserRecord | null;
 
   useEffect(() => {
     if (!selectedAdvanceUser) return;
@@ -164,22 +135,27 @@ export function AdvancesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const visibleUserIds = advanceUsers.map((item) => item.id);
-      const filter = isAdmin
-        ? ""
-        : relationInFilter("user", visibleUserIds.length ? visibleUserIds : [user?.id || ""]);
+      const filter = isAdmin ? "" : `user="${escapePb(user?.id || "")}"`;
       const res = await pb.collection("advances").getFullList({
         filter,
         sort: "-created",
         expand: "requested_by",
       });
-      setItems(res as unknown as AdvanceRecord[]);
+      const rows = res as unknown as AdvanceRecord[];
+      setItems(rows);
+      if (!isAdmin) {
+        const latestResolved = rows.reduce(
+          (max, row) => Math.max(max, row.resolved_at ? new Date(row.resolved_at).getTime() : 0),
+          0,
+        );
+        markSeen("advances", user?.id, latestResolved || Date.now());
+      }
     } catch (error: any) {
       toast.error(error?.message || "Lỗi tải Ứng lương");
     } finally {
       setLoading(false);
     }
-  }, [advanceUsers, isAdmin, user?.id]);
+  }, [isAdmin, user?.id]);
 
   useEffect(() => {
     load();
@@ -417,19 +393,6 @@ export function AdvancesPage() {
         <AdvanceRulesCard rules={settings.advance_rules} />
         <form onSubmit={submit} className="space-y-3">
           <div className="card-soft space-y-3 rounded-2xl border bg-card p-4">
-            {advanceUsers.length > 1 && (
-              <div className="space-y-1">
-                <Label>Người báo ứng</Label>
-                <UserCombobox
-                  value={selectedAdvanceUserId}
-                  onChange={setSelectedAdvanceUserId}
-                  users={advanceUsers}
-                  currentUserId={user?.id}
-                  placeholder="Chọn người báo ứng"
-                />
-              </div>
-            )}
-
             <button
               type="button"
               onClick={() => setShowProfile((v) => !v)}

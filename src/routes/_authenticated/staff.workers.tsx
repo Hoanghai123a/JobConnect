@@ -150,7 +150,9 @@ function StaffWorkersPage() {
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {worker.reasons.includes("qlnm") && <StatusChip tone="info">Thuộc nhà máy phụ trách</StatusChip>}
                 {worker.reasons.includes("nvtd") && <StatusChip tone="primary">Bạn là người tuyển</StatusChip>}
-                {worker.canOperateLatestHistory && <StatusChip tone="success">Có thể cập nhật</StatusChip>}
+                {(worker.canReportAdvance || worker.canReportLeave || worker.canReportJoin) && (
+                  <StatusChip tone="success">Có thể thao tác</StatusChip>
+                )}
               </div>
             </Link>
           );

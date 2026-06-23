@@ -396,7 +396,7 @@ function GuidesPage() {
               ? "Không tìm thấy kết quả."
               : isAdmin
                 ? "Bấm + để gửi hướng dẫn."
-                : "Hướng dẫn sẽ xuất hiện ở đây."
+                : "Hướng dẫn sẽ xuất hiện tại đây."
           }
         />
       ) : (

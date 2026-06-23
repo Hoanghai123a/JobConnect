@@ -31,7 +31,11 @@ function StaffDashboardPage() {
       .then(([workspace, managerRows]) => {
         if (!alive) return;
         setWorkersCount(workspace.workers.length);
-        setOperableCount(workspace.workers.filter((item) => item.canOperateLatestHistory).length);
+        setOperableCount(
+          workspace.workers.filter(
+            (item) => item.canReportAdvance || item.canReportLeave || item.canReportJoin,
+          ).length,
+        );
         setAssignments(managerRows);
       })
       .finally(() => {

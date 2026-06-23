@@ -16,22 +16,93 @@ export interface StaffWorkerRecord {
   latestHistory: EmploymentHistoryRecord | null;
   recentHistories: EmploymentHistoryRecord[];
   reasons: StaffVisibilityReason[];
-  canOperateLatestHistory: boolean;
+  isRecentRecruiter: boolean;
+  canReportAdvance: boolean;
+  canViewPayroll: boolean;
+  canReportLeave: boolean;
+  canReportJoin: boolean;
 }
+
+const RECENT_RECRUITER_HISTORY_LIMIT = 3;
 
 export function canAccessStaffWorkspace(user?: Partial<UserRecord> | null) {
   return user?.role === "staff" || user?.role === "admin";
 }
 
 export function getStaffReasonsForHistory(
-  staffId: string,
+  _staffId: string,
   history: EmploymentHistoryRecord,
   managedFactoryIds: Set<string>,
 ) {
   const reasons = new Set<StaffVisibilityReason>();
   if (managedFactoryIds.has(history.factory)) reasons.add("qlnm");
-  if (history.recruiter_staff === staffId) reasons.add("nvtd");
   return [...reasons];
+}
+
+function toTimestamp(value?: string) {
+  const time = new Date(value || 0).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function compareRecentHistories(a: EmploymentHistoryRecord, b: EmploymentHistoryRecord) {
+  const joinDiff = toTimestamp(b.join_date) - toTimestamp(a.join_date);
+  if (joinDiff !== 0) return joinDiff;
+
+  return toTimestamp(b.leave_date || b.created) - toTimestamp(a.leave_date || a.created);
+}
+
+export function getRecentRecruiterHistories(histories: EmploymentHistoryRecord[]) {
+  return [...histories]
+    .sort(compareRecentHistories)
+    .slice(0, RECENT_RECRUITER_HISTORY_LIMIT);
+}
+
+export function isRecentRecruiter(
+  viewer: Partial<UserRecord> | null | undefined,
+  histories: EmploymentHistoryRecord[],
+) {
+  if (!viewer?.id || viewer.role !== "staff") return false;
+  return getRecentRecruiterHistories(histories).some((history) => history.recruiter_staff === viewer.id);
+}
+
+export function canReportAdvance(
+  viewer: Partial<UserRecord> | null | undefined,
+  histories: EmploymentHistoryRecord[],
+) {
+  return viewer?.role === "admin" || isRecentRecruiter(viewer, histories);
+}
+
+export function canViewPayroll(
+  viewer: Partial<UserRecord> | null | undefined,
+  histories: EmploymentHistoryRecord[],
+) {
+  return canReportAdvance(viewer, histories);
+}
+
+export function canReportLeave(
+  viewer: Partial<UserRecord> | null | undefined,
+  activeHistory: EmploymentHistoryRecord | null,
+  histories: EmploymentHistoryRecord[],
+  managedFactoryIds: Set<string>,
+) {
+  if (!viewer?.id || !activeHistory) return false;
+  if (viewer.role === "admin") return true;
+  if (isRecentRecruiter(viewer, histories)) return true;
+  return viewer.role === "staff" && managedFactoryIds.has(activeHistory.factory);
+}
+
+export function canReportJoin(
+  viewer: Partial<UserRecord> | null | undefined,
+  histories: EmploymentHistoryRecord[],
+  managedFactoryIds: Set<string>,
+  targetFactoryId?: string,
+) {
+  if (!viewer?.id) return false;
+  if (viewer.role === "admin") return true;
+  if (isRecentRecruiter(viewer, histories)) return true;
+  if (viewer.role !== "staff") return false;
+  if (!targetFactoryId) return managedFactoryIds.size > 0;
+  return managedFactoryIds.has(targetFactoryId);
 }
 
 export async function fetchStaffWorkspace(viewer: UserRecord) {
@@ -47,14 +118,6 @@ export async function fetchStaffWorkspace(viewer: UserRecord) {
   const grouped = new Map<string, EmploymentHistoryRecord[]>();
 
   for (const history of histories) {
-    if (!isHistoryWithinLast90Days(history)) continue;
-
-    const reasons =
-      viewer.role === "admin"
-        ? (["qlnm", "nvtd"] as StaffVisibilityReason[])
-        : getStaffReasonsForHistory(viewer.id, history, managedFactoryIds);
-    if (!reasons.length && viewer.role !== "admin") continue;
-
     const bucket = grouped.get(history.user) || [];
     bucket.push(history);
     grouped.set(history.user, bucket);
@@ -81,28 +144,40 @@ export async function fetchStaffWorkspace(viewer: UserRecord) {
       if (!user) return null;
 
       const latestHistory = getLatestEmploymentHistory(userHistories);
+      const activeHistory =
+        userHistories.find((item) => item.status === "working" && !item.leave_date) || null;
+      const recentRecruiter = isRecentRecruiter(viewer, userHistories);
       const reasons = new Set<StaffVisibilityReason>();
       for (const history of userHistories) {
+        if (!isHistoryWithinLast90Days(history) && !recentRecruiter && viewer.role !== "admin") {
+          continue;
+        }
         for (const reason of getStaffReasonsForHistory(viewer.id, history, managedFactoryIds)) {
           reasons.add(reason);
         }
       }
+      if (recentRecruiter) reasons.add("nvtd");
 
       if (viewer.role === "admin" && reasons.size === 0) {
         reasons.add("qlnm");
         reasons.add("nvtd");
       }
 
+      if (!reasons.size && viewer.role !== "admin") return null;
+
+      const sortedHistories = [...userHistories].sort(compareRecentHistories);
+
       return {
         user,
-        histories: userHistories.sort(
-          (a, b) => new Date(b.join_date || b.created || 0).getTime() - new Date(a.join_date || a.created || 0).getTime(),
-        ),
+        histories: sortedHistories,
         latestHistory,
-        recentHistories: userHistories,
+        recentHistories: getRecentRecruiterHistories(userHistories),
         reasons: [...reasons],
-        canOperateLatestHistory:
-          viewer.role === "admin" || latestHistory?.recruiter_staff === viewer.id,
+        isRecentRecruiter: recentRecruiter,
+        canReportAdvance: canReportAdvance(viewer, userHistories),
+        canViewPayroll: canViewPayroll(viewer, userHistories),
+        canReportLeave: canReportLeave(viewer, activeHistory, userHistories, managedFactoryIds),
+        canReportJoin: canReportJoin(viewer, userHistories, managedFactoryIds),
       } satisfies StaffWorkerRecord;
     })
     .filter(Boolean)
