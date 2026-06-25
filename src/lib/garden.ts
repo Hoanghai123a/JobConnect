@@ -58,11 +58,11 @@ export const FLOWERS: Flower[] = [
 
 export const PETS: Pet[] = [
   { id: "cat", name: "Mèo", emoji: "🐈", cost: 0, sprite: "/pets/cat-sprite.png", frameSize: 40, facesRight: true },
-  { id: "dog", name: "Cún", emoji: "🐕", cost: 60 },
-  { id: "rabbit", name: "Thỏ", emoji: "🐇", cost: 80 },
-  { id: "chick", name: "Gà con", emoji: "🐤", cost: 50 },
-  { id: "turtle", name: "Rùa", emoji: "🐢", cost: 150 },
-  { id: "hedgehog", name: "Nhím", emoji: "🦔", cost: 120 },
+  { id: "dog", name: "Cún", emoji: "🐕", cost: 60, sprite: "/pets/dog-sprite.png", frameSize: 40, facesRight: true },
+  { id: "rabbit", name: "Thỏ", emoji: "🐇", cost: 80, sprite: "/pets/rabbit-sprite.png", frameSize: 40, facesRight: true },
+  { id: "chick", name: "Gà con", emoji: "🐤", cost: 50, sprite: "/pets/chick-sprite.png", frameSize: 40, facesRight: true },
+  { id: "turtle", name: "Rùa", emoji: "🐢", cost: 150, sprite: "/pets/turtle-sprite.png", frameSize: 40, facesRight: true },
+  { id: "hedgehog", name: "Nhím", emoji: "🦔", cost: 120, sprite: "/pets/hedgehog-sprite.png", frameSize: 40, facesRight: true },
 ];
 
 export function flowerById(id: string | null): Flower | undefined {

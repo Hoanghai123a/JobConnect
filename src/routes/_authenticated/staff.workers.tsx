@@ -1,21 +1,37 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarRange, ChevronRight, Clock3, Landmark, Plus, Search, ShieldCheck, UserRoundSearch, UserSquare2, Wallet } from "lucide-react";
+import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/ui/status-chip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Drawer,
   DrawerContent,
   DrawerDescription,
+  DrawerFooter,
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { fetchStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
-import { maskCccd } from "@/lib/employment";
+import {
+  createEmploymentHistory,
+  fetchEmploymentHistories,
+  findActiveEmploymentByUser,
+  getLatestEmploymentHistory,
+  maskCccd,
+  syncLegacyUserWorkFields,
+  updateEmploymentHistory,
+} from "@/lib/employment";
+import { fetchFactories, type FactoryRecord } from "@/lib/factories";
+import { createStaffActionLog } from "@/lib/staff-log";
 import { useAuth } from "@/lib/auth";
-import type { UserRecord } from "@/lib/pocketbase";
+import { pb, type UserRecord } from "@/lib/pocketbase";
 
 export const Route = createFileRoute("/_authenticated/staff/workers")({
   component: StaffWorkersPage,
@@ -23,31 +39,43 @@ export const Route = createFileRoute("/_authenticated/staff/workers")({
 
 type WorkerScope = "all" | "qlnm" | "nvtd" | "working" | "left";
 
+function todayDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function StaffWorkersPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [workers, setWorkers] = useState<StaffWorkerRecord[]>([]);
+  const [factories, setFactories] = useState<FactoryRecord[]>([]);
+  const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<WorkerScope>("all");
   const [selected, setSelected] = useState<StaffWorkerRecord | null>(null);
 
-  useEffect(() => {
+  const loadWorkers = useCallback(async () => {
     if (!user?.id) return;
-    let alive = true;
-
     setLoading(true);
-    fetchStaffWorkspace(user as UserRecord)
-      .then((workspace) => {
-        if (alive) setWorkers(workspace.workers);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-
-    return () => {
-      alive = false;
-    };
+    try {
+      const [workspace, factoryList, staffList] = await Promise.all([
+        fetchStaffWorkspace(user as UserRecord),
+        fetchFactories(),
+        pb.collection("users").getFullList<UserRecord>({
+          filter: `role="staff" || role="admin"`,
+          sort: "full_name,username",
+        }),
+      ]);
+      setWorkers(workspace.workers);
+      setFactories(factoryList);
+      setStaffUsers(staffList);
+    } finally {
+      setLoading(false);
+    }
   }, [user?.id]);
+
+  useEffect(() => {
+    loadWorkers();
+  }, [loadWorkers]);
 
   const filteredWorkers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -169,141 +197,330 @@ function StaffWorkersPage() {
 
       <WorkerQuickDrawer
         worker={selected}
+        viewer={user as UserRecord}
+        factories={factories}
+        staffUsers={staffUsers}
         onClose={() => setSelected(null)}
-        viewerRole={user?.role}
+        onDataChanged={loadWorkers}
       />
     </PageContainer>
   );
 }
 
+type DrawerView = "summary" | "leave" | "join" | "advance" | "bank";
+
 function WorkerQuickDrawer({
   worker,
+  viewer,
+  factories,
+  staffUsers,
   onClose,
-  viewerRole,
+  onDataChanged,
 }: {
   worker: StaffWorkerRecord | null;
+  viewer: UserRecord;
+  factories: FactoryRecord[];
+  staffUsers: UserRecord[];
   onClose: () => void;
-  viewerRole?: string;
+  onDataChanged: () => void;
 }) {
+  const [view, setView] = useState<DrawerView>("summary");
+  const [leaveDate, setLeaveDate] = useState(todayDate());
+  const [leaveNote, setLeaveNote] = useState("");
+  const [joinForm, setJoinForm] = useState({ factory: "", employee_code: "", worker_name_snapshot: "", worker_cccd_snapshot: "", recruiter_staff: "", join_date: todayDate(), note: "" });
+  const [amountText, setAmountText] = useState("");
+  const [advanceReason, setAdvanceReason] = useState("");
+  const [bankForm, setBankForm] = useState({ bank_name: "", bank_account_number: "", bank_account_name: "" });
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!worker) return;
+    setView("summary");
+    setLeaveDate(todayDate());
+    setLeaveNote("");
+    setAmountText("");
+    setAdvanceReason("");
+    const latest = worker.latestHistory;
+    setJoinForm({
+      factory: "",
+      employee_code: latest?.employee_code || worker.user.employee_code || "",
+      worker_name_snapshot: latest?.worker_name_snapshot || worker.user.full_name || "",
+      worker_cccd_snapshot: latest?.worker_cccd_snapshot || worker.user.cccd || "",
+      recruiter_staff: viewer?.id || "",
+      join_date: todayDate(),
+      note: "",
+    });
+    setBankForm({
+      bank_name: worker.user.bank_name || "",
+      bank_account_number: worker.user.bank_account_number || "",
+      bank_account_name: worker.user.bank_account_name || "",
+    });
+  }, [worker, viewer?.id]);
+
   if (!worker) return null;
 
   const latest = worker.latestHistory;
   const isWorking = latest?.status === "working" && !latest.leave_date;
+  const activeHistory = worker.histories.find((h) => h.status === "working" && !h.leave_date) || null;
+
+  const submitLeave = async () => {
+    if (!activeHistory || !viewer?.id) return;
+    if (!leaveDate) { toast.warning("Chọn ngày nghỉ"); return; }
+    setSubmitting(true);
+    try {
+      await updateEmploymentHistory(activeHistory.id, { leave_date: `${leaveDate} 00:00:00.000Z`, status: "left", note: leaveNote.trim() });
+      const updated = await fetchEmploymentHistories([worker.user.id]);
+      const newLatest = getLatestEmploymentHistory(updated);
+      await syncLegacyUserWorkFields(worker.user.id, newLatest);
+      await createStaffActionLog({ actor: viewer, targetUserId: worker.user.id, targetCollection: "employment_histories", targetRecord: activeHistory.id, action: "report_leave", note: "Báo nghỉ từ danh sách lao động" });
+      toast.success("Đã cập nhật ngày nghỉ");
+      onClose();
+      onDataChanged();
+    } catch (e: any) { toast.error(e?.message || "Lỗi báo nghỉ"); } finally { setSubmitting(false); }
+  };
+
+  const submitJoin = async () => {
+    if (!viewer?.id) return;
+    if (!joinForm.factory || !joinForm.join_date || !joinForm.worker_name_snapshot || !joinForm.worker_cccd_snapshot) { toast.warning("Điền đủ thông tin"); return; }
+    setSubmitting(true);
+    try {
+      const active = await findActiveEmploymentByUser(worker.user.id);
+      if (active) { toast.error("Cần báo nghỉ nhà máy cũ trước"); setSubmitting(false); return; }
+      const created = await createEmploymentHistory({
+        user: worker.user.id, factory: joinForm.factory, employee_code: joinForm.employee_code.trim(),
+        worker_name_snapshot: joinForm.worker_name_snapshot.trim(), worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim(),
+        recruiter_staff: joinForm.recruiter_staff || viewer.id, join_date: `${joinForm.join_date} 00:00:00.000Z`, status: "working", note: joinForm.note.trim(),
+      });
+      await syncLegacyUserWorkFields(worker.user.id, created);
+      await createStaffActionLog({ actor: viewer, targetUserId: worker.user.id, targetCollection: "employment_histories", targetRecord: created.id, action: "report_join", note: "Báo đi làm mới từ danh sách" });
+      toast.success("Đã tạo bản ghi đi làm mới");
+      onClose();
+      onDataChanged();
+    } catch (e: any) { toast.error(e?.message || "Lỗi báo đi làm"); } finally { setSubmitting(false); }
+  };
+
+  const submitAdvance = async () => {
+    if (!viewer?.id || !latest) return;
+    const amount = Number(amountText.replace(/\D/g, ""));
+    if (!amount) { toast.warning("Nhập số tiền"); return; }
+    if (!advanceReason.trim()) { toast.warning("Nhập lý do"); return; }
+    setSubmitting(true);
+    try {
+      await pb.collection("advances").create({
+        user: worker.user.id, requested_by: viewer.id,
+        employee_code: latest.employee_code || worker.user.employee_code || "",
+        full_name: latest.worker_name_snapshot || worker.user.full_name || "",
+        company: latest.expand?.factory?.name || worker.user.company || "",
+        phone: worker.user.phone || "",
+        bank_name: worker.user.bank_name || "", bank_account_number: worker.user.bank_account_number || "", bank_account_name: worker.user.bank_account_name || "",
+        amount, reason: advanceReason.trim(), status: "pending", recovery_status: "none",
+      });
+      await createStaffActionLog({ actor: viewer, targetUserId: worker.user.id, targetCollection: "advances", action: "report_advance", note: "Báo ứng từ danh sách" });
+      toast.success("Đã gửi yêu cầu ứng lương");
+      onClose();
+      onDataChanged();
+    } catch (e: any) { toast.error(e?.message || "Lỗi báo ứng"); } finally { setSubmitting(false); }
+  };
+
+  const submitBank = async () => {
+    if (!viewer?.id) return;
+    setSubmitting(true);
+    try {
+      await pb.collection("users").update(worker.user.id, bankForm);
+      await createStaffActionLog({ actor: viewer, targetUserId: worker.user.id, targetCollection: "users", targetRecord: worker.user.id, action: "update_bank", note: "Cập nhật ngân hàng từ danh sách" });
+      toast.success("Đã cập nhật ngân hàng");
+      onClose();
+      onDataChanged();
+    } catch (e: any) { toast.error(e?.message || "Lỗi cập nhật"); } finally { setSubmitting(false); }
+  };
+
+  const joinableFactories = useMemo(() => {
+    if (viewer?.role === "admin") return factories;
+    return factories;
+  }, [factories, viewer?.role]);
 
   return (
     <Drawer open={!!worker} onOpenChange={(open) => !open && onClose()}>
-      <DrawerContent className="max-h-[88dvh]">
+      <DrawerContent className="max-h-[90dvh]">
         <DrawerHeader>
           <DrawerTitle>{worker.user.full_name || worker.user.username || "Người lao động"}</DrawerTitle>
           <DrawerDescription>
-            {latest?.expand?.factory?.name || "Chưa có nhà máy"} ·{" "}
-            {isWorking ? "Đang đi làm" : "Đã nghỉ"}
+            {latest?.expand?.factory?.name || "Chưa có nhà máy"} · {isWorking ? "Đang đi làm" : "Đã nghỉ"}
           </DrawerDescription>
         </DrawerHeader>
 
         <div className="space-y-4 overflow-y-auto px-4 pb-6">
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <InfoCell label="Họ tên (NM)" value={latest?.worker_name_snapshot || worker.user.full_name || "—"} />
-            <InfoCell label="CCCD (NM)" value={maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)} />
-            <InfoCell label="Mã NV" value={latest?.employee_code || worker.user.employee_code || "—"} />
-            <InfoCell label="SĐT" value={worker.user.phone || "—"} />
-            <InfoCell label="Nhà máy" value={latest?.expand?.factory?.name || "—"} />
-            <InfoCell
-              label="Người tuyển"
-              value={
-                latest?.expand?.recruiter_staff?.full_name ||
-                latest?.expand?.recruiter_staff?.username ||
-                "—"
-              }
-            />
-          </div>
+          {view === "summary" && (
+            <>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <InfoCell label="Họ tên (NM)" value={latest?.worker_name_snapshot || worker.user.full_name || "—"} />
+                <InfoCell label="CCCD (NM)" value={maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)} />
+                <InfoCell label="Mã NV" value={latest?.employee_code || worker.user.employee_code || "—"} />
+                <InfoCell label="SĐT" value={worker.user.phone || "—"} />
+                <InfoCell label="Nhà máy" value={latest?.expand?.factory?.name || "—"} />
+                <InfoCell label="Người tuyển" value={latest?.expand?.recruiter_staff?.full_name || latest?.expand?.recruiter_staff?.username || "—"} />
+              </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            {worker.canReportLeave && (
-              <ActionLink
-                to="/staff/workers/$workerId"
-                params={{ workerId: worker.user.id }}
-                icon={Clock3}
-                label="Báo nghỉ"
-              />
-            )}
-            {worker.canReportJoin && (
-              <ActionLink
-                to="/staff/workers/$workerId"
-                params={{ workerId: worker.user.id }}
-                icon={Plus}
-                label="Báo đi làm mới"
-              />
-            )}
-            {worker.canReportAdvance && (
-              <ActionLink
-                to="/staff/workers/$workerId"
-                params={{ workerId: worker.user.id }}
-                icon={Wallet}
-                label="Báo ứng lương"
-              />
-            )}
-            {worker.canViewPayroll && (
-              <ActionLink
-                to="/staff/workers/$workerId"
-                params={{ workerId: worker.user.id }}
-                icon={CalendarRange}
-                label="Check công lương"
-              />
-            )}
-            {worker.canReportAdvance && (
-              <ActionLink
-                to="/staff/workers/$workerId"
-                params={{ workerId: worker.user.id }}
-                icon={Landmark}
-                label="Cập nhật ngân hàng"
-              />
-            )}
-          </div>
+              <div className="grid grid-cols-2 gap-2">
+                {worker.canReportLeave && (
+                  <ActionButton icon={Clock3} label="Báo nghỉ" onClick={() => setView("leave")} />
+                )}
+                {worker.canReportJoin && (
+                  <ActionButton icon={Plus} label="Báo đi làm mới" onClick={() => setView("join")} />
+                )}
+                {worker.canReportAdvance && (
+                  <ActionButton icon={Wallet} label="Báo ứng lương" onClick={() => setView("advance")} />
+                )}
+                {worker.canReportAdvance && (
+                  <ActionButton icon={Landmark} label="Cập nhật ngân hàng" onClick={() => setView("bank")} />
+                )}
+              </div>
 
-          <Link
-            to="/staff/workers/$workerId"
-            params={{ workerId: worker.user.id }}
-            className="flex w-full items-center justify-between rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm font-medium shadow-soft"
-          >
-            <div className="flex items-center gap-2">
-              <UserSquare2 className="h-4 w-4 text-primary" />
-              <span>
-                {viewerRole === "admin"
-                  ? "Xem & chỉnh sửa toàn bộ lịch sử"
-                  : "Xem chi tiết đầy đủ"}
-              </span>
+              <Link
+                to="/staff/workers/$workerId"
+                params={{ workerId: worker.user.id }}
+                className="flex w-full items-center justify-between rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm font-medium shadow-soft"
+              >
+                <div className="flex items-center gap-2">
+                  <UserSquare2 className="h-4 w-4 text-primary" />
+                  <span>Xem chi tiết đầy đủ</span>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              </Link>
+            </>
+          )}
+
+          {view === "leave" && (
+            <div className="space-y-3">
+              <div className="text-sm font-semibold">Báo nghỉ nhà máy hiện tại</div>
+              {!activeHistory ? (
+                <div className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">Không có bản ghi đang làm để báo nghỉ.</div>
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Ngày nghỉ</Label>
+                    <Input type="date" value={leaveDate} onChange={(e) => setLeaveDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Ghi chú</Label>
+                    <Textarea rows={3} value={leaveNote} onChange={(e) => setLeaveNote(e.target.value)} placeholder="Ví dụ: nghỉ việc, chuyển nhà máy..." />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setView("summary")} className="flex-1">Quay lại</Button>
+                    <Button onClick={submitLeave} disabled={submitting} className="flex-1">{submitting ? "Đang lưu..." : "Xác nhận nghỉ"}</Button>
+                  </div>
+                </>
+              )}
             </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </Link>
+          )}
+
+          {view === "join" && (
+            <div className="space-y-3">
+              <div className="text-sm font-semibold">Báo đi làm nhà máy mới</div>
+              <div className="space-y-1">
+                <Label className="text-xs">Nhà máy</Label>
+                <Select value={joinForm.factory} onValueChange={(v) => setJoinForm((f) => ({ ...f, factory: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Chọn nhà máy" /></SelectTrigger>
+                  <SelectContent>{joinableFactories.map((f) => (<SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Họ tên (NM)</Label>
+                  <Input value={joinForm.worker_name_snapshot} onChange={(e) => setJoinForm((f) => ({ ...f, worker_name_snapshot: e.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">CCCD (NM)</Label>
+                  <Input value={joinForm.worker_cccd_snapshot} onChange={(e) => setJoinForm((f) => ({ ...f, worker_cccd_snapshot: e.target.value.replace(/[^\d]/g, "") }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Mã NV</Label>
+                  <Input value={joinForm.employee_code} onChange={(e) => setJoinForm((f) => ({ ...f, employee_code: e.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Ngày vào làm</Label>
+                  <Input type="date" value={joinForm.join_date} onChange={(e) => setJoinForm((f) => ({ ...f, join_date: e.target.value }))} max={todayDate()} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Người tuyển</Label>
+                <Select value={joinForm.recruiter_staff} onValueChange={(v) => setJoinForm((f) => ({ ...f, recruiter_staff: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Chọn người tuyển" /></SelectTrigger>
+                  <SelectContent>{staffUsers.map((s) => (<SelectItem key={s.id} value={s.id}>{s.full_name || s.username || s.id}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Ghi chú</Label>
+                <Textarea rows={2} value={joinForm.note} onChange={(e) => setJoinForm((f) => ({ ...f, note: e.target.value }))} placeholder="Tuỳ chọn" />
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setView("summary")} className="flex-1">Quay lại</Button>
+                <Button onClick={submitJoin} disabled={submitting} className="flex-1">{submitting ? "Đang lưu..." : "Tạo bản ghi"}</Button>
+              </div>
+            </div>
+          )}
+
+          {view === "advance" && (
+            <div className="space-y-3">
+              <div className="text-sm font-semibold">Báo ứng lương</div>
+              <div className="space-y-1">
+                <Label className="text-xs">Số tiền</Label>
+                <Input value={amountText} onChange={(e) => setAmountText(e.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" placeholder="Nhập số tiền" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Lý do</Label>
+                <Textarea rows={3} value={advanceReason} onChange={(e) => setAdvanceReason(e.target.value)} placeholder="Ví dụ: ứng tiền sinh hoạt..." />
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setView("summary")} className="flex-1">Quay lại</Button>
+                <Button onClick={submitAdvance} disabled={submitting} className="flex-1">{submitting ? "Đang gửi..." : "Gửi yêu cầu"}</Button>
+              </div>
+            </div>
+          )}
+
+          {view === "bank" && (
+            <div className="space-y-3">
+              <div className="text-sm font-semibold">Cập nhật tài khoản ngân hàng</div>
+              <div className="space-y-1">
+                <Label className="text-xs">Ngân hàng</Label>
+                <Input value={bankForm.bank_name} onChange={(e) => setBankForm((f) => ({ ...f, bank_name: e.target.value }))} placeholder="Tên ngân hàng" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Số TK</Label>
+                  <Input value={bankForm.bank_account_number} onChange={(e) => setBankForm((f) => ({ ...f, bank_account_number: e.target.value.replace(/\D/g, "") }))} inputMode="numeric" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Tên TK</Label>
+                  <Input value={bankForm.bank_account_name} onChange={(e) => setBankForm((f) => ({ ...f, bank_account_name: e.target.value }))} />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setView("summary")} className="flex-1">Quay lại</Button>
+                <Button onClick={submitBank} disabled={submitting} className="flex-1">{submitting ? "Đang lưu..." : "Lưu ngân hàng"}</Button>
+              </div>
+            </div>
+          )}
         </div>
+
+        <DrawerFooter>
+          <Button variant="outline" onClick={onClose}>Đóng</Button>
+        </DrawerFooter>
       </DrawerContent>
     </Drawer>
   );
 }
 
-function ActionLink({
-  to,
-  params,
-  icon: Icon,
-  label,
-}: {
-  to: string;
-  params: Record<string, string>;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-}) {
+function ActionButton({ icon: Icon, label, onClick }: { icon: React.ComponentType<{ className?: string }>; label: string; onClick: () => void }) {
   return (
-    <Link
-      to={to as any}
-      params={params as any}
-      className="flex min-h-[72px] flex-col items-start gap-1.5 rounded-2xl border border-border/60 bg-card p-3 text-left shadow-soft active:scale-[0.98]"
-    >
+    <button type="button" onClick={onClick} className="flex min-h-[72px] flex-col items-start gap-1.5 rounded-2xl border border-border/60 bg-card p-3 text-left shadow-soft active:scale-[0.98]">
       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
         <Icon className="h-4 w-4" />
       </div>
       <div className="text-xs font-semibold">{label}</div>
-    </Link>
+    </button>
   );
 }
 

@@ -150,16 +150,33 @@ function GardenPage() {
         <section className="gradient-hero relative overflow-hidden rounded-3xl p-4 text-white shadow-soft">
           <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
           <div className="relative flex items-center gap-4">
-            <div className="grid h-20 w-20 shrink-0 place-items-center rounded-2xl bg-white/20 text-5xl backdrop-blur">
-              <span
-                className={cn(
-                  "inline-block",
-                  mood === "great" && "animate-bounce",
-                  mood === "sad" && "opacity-70",
-                )}
-              >
-                {pet.emoji}
-              </span>
+            <div className="grid h-20 w-20 shrink-0 place-items-center rounded-2xl bg-white/20 backdrop-blur">
+              {pet.sprite ? (
+                <div
+                  className={cn(
+                    "h-14 w-14",
+                    mood === "great" && "animate-bounce",
+                    mood === "sad" && "opacity-70",
+                  )}
+                  style={{
+                    backgroundImage: `url(${pet.sprite})`,
+                    backgroundSize: "400% 100%",
+                    backgroundPosition: "0 0",
+                    backgroundRepeat: "no-repeat",
+                    imageRendering: "pixelated",
+                  }}
+                />
+              ) : (
+                <span
+                  className={cn(
+                    "inline-block text-5xl",
+                    mood === "great" && "animate-bounce",
+                    mood === "sad" && "opacity-70",
+                  )}
+                >
+                  {pet.emoji}
+                </span>
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
@@ -330,7 +347,20 @@ function GardenPage() {
                     active ? "border-primary bg-primary/10" : "border-border bg-card",
                   )}
                 >
-                  <span className="text-4xl">{p.emoji}</span>
+                  {p.sprite ? (
+                    <div
+                      className="h-12 w-12"
+                      style={{
+                        backgroundImage: `url(${p.sprite})`,
+                        backgroundSize: "400% 100%",
+                        backgroundPosition: "0 0",
+                        backgroundRepeat: "no-repeat",
+                        imageRendering: "pixelated",
+                      }}
+                    />
+                  ) : (
+                    <span className="text-4xl">{p.emoji}</span>
+                  )}
                   <span className="text-sm font-semibold">{p.name}</span>
                   {active ? (
                     <span className="text-[10px] font-semibold text-primary">Đang chọn</span>
