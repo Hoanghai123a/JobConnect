@@ -36,9 +36,12 @@ export interface Pet {
   name: string;
   emoji: string;
   cost: number;
-  gif?: string;
-  /** Hướng mặt mặc định của GIF. `true` (mặc định) = GIF vẽ thú quay phải. */
-  gifFacesRight?: boolean;
+  /** Sprite sheet chứa 4 frame ngang. Đặt trong public/pets/ */
+  sprite?: string;
+  /** Kích thước 1 frame (px). Default 40. */
+  frameSize?: number;
+  /** `true` = sprite vẽ thú quay phải. */
+  facesRight?: boolean;
 }
 
 export const PLOT_COUNT = 6;
@@ -54,7 +57,7 @@ export const FLOWERS: Flower[] = [
 ];
 
 export const PETS: Pet[] = [
-  { id: "cat", name: "Mèo", emoji: "🐈", cost: 0, gif: "/pets/cat-walk.gif", gifFacesRight: true },
+  { id: "cat", name: "Mèo", emoji: "🐈", cost: 0, sprite: "/pets/cat-sprite.png", frameSize: 40, facesRight: true },
   { id: "dog", name: "Cún", emoji: "🐕", cost: 60 },
   { id: "rabbit", name: "Thỏ", emoji: "🐇", cost: 80 },
   { id: "chick", name: "Gà con", emoji: "🐤", cost: 50 },
@@ -182,36 +185,53 @@ const GREETINGS = [
   "Chủ nhân cười lên nào, mọi chuyện sẽ ổn thôi.",
   "Chủ nhân hít thở sâu một hơi nhé.",
   "Chủ nhân đừng quên duỗi vai một chút!",
+  "Mình yêu chủ nhân lắm!",
+  "Chủ nhân có biết hôm nay trời đẹp lắm không?",
+  "Mình vui vì được ở bên chủ nhân.",
+  "Chủ nhân ơi, cố lên nha!",
+  "Chủ nhân có mệt không? Nghỉ chút đi!",
 ];
 
 const HUNGRY_LINES = [
   "Bụng mình kêu rồi... chủ nhân cho mình ăn với?",
   "Chủ nhân ơi, mình hơi đói, ghé vườn cho mình ăn nha!",
   "Có gì ăn không chủ nhân ơi?",
+  "Mình thèm ăn quá chủ nhân ơi...",
+  "Cho mình miếng gì đi chủ nhân!",
 ];
 
 const SAD_LINES = [
   "Lâu rồi mình chưa được chơi cùng chủ nhân...",
   "Mình hơi buồn, chủ nhân qua vườn chơi với mình nhé?",
   "Chủ nhân ghé thăm mình chút được không?",
+  "Mình nhớ chủ nhân lắm...",
+  "Chủ nhân quên mình rồi sao?",
 ];
 
 const HARVEST_LINES = [
   "Có hoa nở rồi kìa, chủ nhân vào thu hoạch thôi!",
   "Vườn của chủ nhân đang chờ đó nha!",
   "Chủ nhân ơi, hình như có hoa chín rồi đấy!",
+  "Chủ nhân nhớ thu hoạch nhé!",
+  "Hoa đẹp lắm, chủ nhân vào hái đi!",
+  "Vườn đang nở rộ kìa chủ nhân!",
 ];
 
 const ATTENDANCE_LINES = [
   "Chủ nhân nhớ chấm công nhé!",
   "Hôm nay chủ nhân chấm công chưa nhỉ?",
   "Chủ nhân ơi, ghé chấm công kẻo quên nha!",
+  "Chấm công đi chủ nhân!",
+  "Đừng quên chấm công nha chủ nhân!",
+  "Chủ nhân chấm công chưa? Đừng để muộn!",
 ];
 
 const NEWS_LINES = [
   "Có tin mới kìa chủ nhân!",
   "Chủ nhân ơi, có tin tuyển dụng mới!",
   "Bảng tin có cập nhật mới, chủ nhân xem chưa?",
+  "Tin mới nè chủ nhân, vào xem đi!",
+  "Chủ nhân ơi có thông báo mới kìa!",
 ];
 
 function pick(arr: string[], seed: number): string {

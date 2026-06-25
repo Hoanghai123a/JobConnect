@@ -1,10 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Search, ShieldCheck, UserRoundSearch } from "lucide-react";
+import { CalendarRange, ChevronRight, Clock3, Landmark, Plus, Search, ShieldCheck, UserRoundSearch, UserSquare2, Wallet } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/ui/status-chip";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import { fetchStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
 import { maskCccd } from "@/lib/employment";
 import { useAuth } from "@/lib/auth";
@@ -22,6 +29,7 @@ function StaffWorkersPage() {
   const [workers, setWorkers] = useState<StaffWorkerRecord[]>([]);
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<WorkerScope>("all");
+  const [selected, setSelected] = useState<StaffWorkerRecord | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -115,11 +123,11 @@ function StaffWorkersPage() {
           const statusTone = latest?.status === "working" ? "success" : "neutral";
 
           return (
-            <Link
+            <button
               key={worker.user.id}
-              to="/staff/workers/$workerId"
-              params={{ workerId: worker.user.id }}
-              className="list-card border-l-primary block"
+              type="button"
+              onClick={() => setSelected(worker)}
+              className="list-card border-l-primary block w-full text-left"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -154,11 +162,157 @@ function StaffWorkersPage() {
                   <StatusChip tone="success">Có thể thao tác</StatusChip>
                 )}
               </div>
-            </Link>
+            </button>
           );
         })
       )}
+
+      <WorkerQuickDrawer
+        worker={selected}
+        onClose={() => setSelected(null)}
+        viewerRole={user?.role}
+      />
     </PageContainer>
+  );
+}
+
+function WorkerQuickDrawer({
+  worker,
+  onClose,
+  viewerRole,
+}: {
+  worker: StaffWorkerRecord | null;
+  onClose: () => void;
+  viewerRole?: string;
+}) {
+  if (!worker) return null;
+
+  const latest = worker.latestHistory;
+  const isWorking = latest?.status === "working" && !latest.leave_date;
+
+  return (
+    <Drawer open={!!worker} onOpenChange={(open) => !open && onClose()}>
+      <DrawerContent className="max-h-[88dvh]">
+        <DrawerHeader>
+          <DrawerTitle>{worker.user.full_name || worker.user.username || "Người lao động"}</DrawerTitle>
+          <DrawerDescription>
+            {latest?.expand?.factory?.name || "Chưa có nhà máy"} ·{" "}
+            {isWorking ? "Đang đi làm" : "Đã nghỉ"}
+          </DrawerDescription>
+        </DrawerHeader>
+
+        <div className="space-y-4 overflow-y-auto px-4 pb-6">
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <InfoCell label="Họ tên (NM)" value={latest?.worker_name_snapshot || worker.user.full_name || "—"} />
+            <InfoCell label="CCCD (NM)" value={maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)} />
+            <InfoCell label="Mã NV" value={latest?.employee_code || worker.user.employee_code || "—"} />
+            <InfoCell label="SĐT" value={worker.user.phone || "—"} />
+            <InfoCell label="Nhà máy" value={latest?.expand?.factory?.name || "—"} />
+            <InfoCell
+              label="Người tuyển"
+              value={
+                latest?.expand?.recruiter_staff?.full_name ||
+                latest?.expand?.recruiter_staff?.username ||
+                "—"
+              }
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {worker.canReportLeave && (
+              <ActionLink
+                to="/staff/workers/$workerId"
+                params={{ workerId: worker.user.id }}
+                icon={Clock3}
+                label="Báo nghỉ"
+              />
+            )}
+            {worker.canReportJoin && (
+              <ActionLink
+                to="/staff/workers/$workerId"
+                params={{ workerId: worker.user.id }}
+                icon={Plus}
+                label="Báo đi làm mới"
+              />
+            )}
+            {worker.canReportAdvance && (
+              <ActionLink
+                to="/staff/workers/$workerId"
+                params={{ workerId: worker.user.id }}
+                icon={Wallet}
+                label="Báo ứng lương"
+              />
+            )}
+            {worker.canViewPayroll && (
+              <ActionLink
+                to="/staff/workers/$workerId"
+                params={{ workerId: worker.user.id }}
+                icon={CalendarRange}
+                label="Check công lương"
+              />
+            )}
+            {worker.canReportAdvance && (
+              <ActionLink
+                to="/staff/workers/$workerId"
+                params={{ workerId: worker.user.id }}
+                icon={Landmark}
+                label="Cập nhật ngân hàng"
+              />
+            )}
+          </div>
+
+          <Link
+            to="/staff/workers/$workerId"
+            params={{ workerId: worker.user.id }}
+            className="flex w-full items-center justify-between rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm font-medium shadow-soft"
+          >
+            <div className="flex items-center gap-2">
+              <UserSquare2 className="h-4 w-4 text-primary" />
+              <span>
+                {viewerRole === "admin"
+                  ? "Xem & chỉnh sửa toàn bộ lịch sử"
+                  : "Xem chi tiết đầy đủ"}
+              </span>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </Link>
+        </div>
+      </DrawerContent>
+    </Drawer>
+  );
+}
+
+function ActionLink({
+  to,
+  params,
+  icon: Icon,
+  label,
+}: {
+  to: string;
+  params: Record<string, string>;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+}) {
+  return (
+    <Link
+      to={to as any}
+      params={params as any}
+      className="flex min-h-[72px] flex-col items-start gap-1.5 rounded-2xl border border-border/60 bg-card p-3 text-left shadow-soft active:scale-[0.98]"
+    >
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="text-xs font-semibold">{label}</div>
+    </Link>
+  );
+}
+
+function InfoCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-muted/35 p-2.5">
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+      <div className="mt-0.5 text-sm font-semibold">{value}</div>
+    </div>
   );
 }
 

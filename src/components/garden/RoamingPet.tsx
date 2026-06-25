@@ -18,7 +18,7 @@ import {
 } from "@/lib/garden";
 
 const SPEAK_INTERVAL_MS = 10000;
-const SPEAK_DURATION_MS = 1000;
+const SPEAK_DURATION_MS = 2000;
 const REACT_INTERVAL_MS = 4500;
 
 const NAV_SAFE_PX = 96;
@@ -50,7 +50,7 @@ export function RoamingPet() {
   const [glide, setGlide] = useState(false);
   const [moving, setMoving] = useState(false);
   const [mood, setMood] = useState<"great" | "ok" | "sad">("great");
-  const [gifFailed, setGifFailed] = useState(false);
+  const [spriteFailed, setSpriteFailed] = useState(false);
   const moveEndTimer = useRef<number | null>(null);
   const ctxRef = useRef<PetContext>({ needsAttendance: false, unreadNews: 0 });
   const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -166,7 +166,7 @@ export function RoamingPet() {
       const finalDist = Math.abs(targetX - cur);
       const duration = (finalDist / speed) * 1000;
 
-      const facesRight = currentPet().gifFacesRight ?? false;
+      const facesRight = currentPet().facesRight ?? false;
       const movingRight = targetX > cur;
       setFacing(movingRight === facesRight ? 1 : -1);
 
@@ -276,6 +276,7 @@ export function RoamingPet() {
     };
   }, [enabled, garden, user]);
 
+
   if (!enabled || !garden || !pos) return null;
 
   const pet = petById(garden.pet.id);
@@ -291,9 +292,9 @@ export function RoamingPet() {
           : "none",
       }}
     >
-      <div className="pointer-events-auto flex flex-col items-center">
+      <div className="pointer-events-auto relative flex flex-col items-center">
         {speech && (
-          <div className="relative mb-1 max-w-[170px] animate-in fade-in slide-in-from-bottom-1 rounded-2xl border border-border/60 bg-card px-3 py-1.5 text-center text-[11px] font-medium leading-snug text-foreground shadow-soft">
+          <div className="absolute bottom-full left-1/2 mb-1 w-max max-w-[170px] -translate-x-1/2 animate-in fade-in slide-in-from-bottom-1 rounded-2xl border border-border/60 bg-card px-3 py-1.5 text-center text-[11px] font-medium leading-snug text-foreground shadow-soft">
             {speech.text}
             <span className="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 border-b border-r border-border/60 bg-card" />
           </div>
@@ -302,7 +303,7 @@ export function RoamingPet() {
           type="button"
           onClick={() => nav({ to: "/garden" })}
           aria-label={`Mở vườn của ${garden.pet.name}`}
-          className="relative grid h-12 w-12 place-items-center rounded-full bg-card/80 text-3xl shadow-soft backdrop-blur transition active:scale-90"
+          className="relative grid h-12 w-12 place-items-center text-3xl transition active:scale-90"
         >
           {reaction && (
             <span
@@ -316,15 +317,27 @@ export function RoamingPet() {
             className="pet-face inline-block"
             style={{ transform: `scaleX(${facing})` }}
           >
-            {pet.gif && !gifFailed ? (
-              <img
-                key={pet.gif}
-                src={pet.gif}
-                alt={pet.name}
-                className="h-10 w-10 select-none object-contain"
-                draggable={false}
-                onError={() => setGifFailed(true)}
-              />
+            {pet.sprite && !spriteFailed ? (
+              <div
+                className="pet-sprite"
+                style={{
+                  width: pet.frameSize ?? 40,
+                  height: pet.frameSize ?? 40,
+                  backgroundImage: `url(${pet.sprite})`,
+                  backgroundSize: `${(pet.frameSize ?? 40) * 4}px ${pet.frameSize ?? 40}px`,
+                  animationDuration: moving
+                    ? mood === "great" ? "0.4s" : mood === "ok" ? "0.6s" : "1s"
+                    : "0s",
+                }}
+                onAnimationIteration={() => {}}
+              >
+                <img
+                  src={pet.sprite}
+                  alt=""
+                  className="invisible h-0 w-0"
+                  onError={() => setSpriteFailed(true)}
+                />
+              </div>
             ) : (
               <span
                 className={

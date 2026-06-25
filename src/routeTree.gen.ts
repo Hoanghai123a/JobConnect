@@ -33,6 +33,7 @@ import { Route as ApiPublicAppLogoRouteImport } from './routes/api/public/app-lo
 import { Route as ApiPublicAppIconRouteImport } from './routes/api/public/app-icon'
 import { Route as AuthenticatedStaffWorkersRouteImport } from './routes/_authenticated/staff.workers'
 import { Route as AuthenticatedStaffExportRouteImport } from './routes/_authenticated/staff.export'
+import { Route as AuthenticatedAdminWorkforceRouteImport } from './routes/_authenticated/admin/workforce'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminImportsRouteImport } from './routes/_authenticated/admin/imports'
 import { Route as AuthenticatedAdminApprovalsRouteImport } from './routes/_authenticated/admin/approvals'
@@ -166,6 +167,12 @@ const AuthenticatedStaffExportRoute =
     path: '/export',
     getParentRoute: () => AuthenticatedStaffRoute,
   } as any)
+const AuthenticatedAdminWorkforceRoute =
+  AuthenticatedAdminWorkforceRouteImport.update({
+    id: '/admin/workforce',
+    path: '/admin/workforce',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedAdminSettingsRoute =
   AuthenticatedAdminSettingsRouteImport.update({
     id: '/admin/settings',
@@ -242,6 +249,7 @@ export interface FileRoutesByFullPath {
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/workers': typeof AuthenticatedStaffWorkersRouteWithChildren
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
@@ -275,6 +283,7 @@ export interface FileRoutesByTo {
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/workers': typeof AuthenticatedStaffWorkersRouteWithChildren
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
@@ -311,6 +320,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/_authenticated/admin/imports': typeof AuthenticatedAdminImportsRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/_authenticated/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
   '/_authenticated/staff/export': typeof AuthenticatedStaffExportRoute
   '/_authenticated/staff/workers': typeof AuthenticatedStaffWorkersRouteWithChildren
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
@@ -347,6 +357,7 @@ export interface FileRouteTypes {
     | '/admin/approvals'
     | '/admin/imports'
     | '/admin/settings'
+    | '/admin/workforce'
     | '/staff/export'
     | '/staff/workers'
     | '/api/public/app-icon'
@@ -380,6 +391,7 @@ export interface FileRouteTypes {
     | '/admin/approvals'
     | '/admin/imports'
     | '/admin/settings'
+    | '/admin/workforce'
     | '/staff/export'
     | '/staff/workers'
     | '/api/public/app-icon'
@@ -415,6 +427,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/approvals'
     | '/_authenticated/admin/imports'
     | '/_authenticated/admin/settings'
+    | '/_authenticated/admin/workforce'
     | '/_authenticated/staff/export'
     | '/_authenticated/staff/workers'
     | '/api/public/app-icon'
@@ -612,6 +625,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStaffExportRouteImport
       parentRoute: typeof AuthenticatedStaffRoute
     }
+    '/_authenticated/admin/workforce': {
+      id: '/_authenticated/admin/workforce'
+      path: '/admin/workforce'
+      fullPath: '/admin/workforce'
+      preLoaderRoute: typeof AuthenticatedAdminWorkforceRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/admin/settings': {
       id: '/_authenticated/admin/settings'
       path: '/admin/settings'
@@ -742,6 +762,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAdminApprovalsRoute: typeof AuthenticatedAdminApprovalsRoute
   AuthenticatedAdminImportsRoute: typeof AuthenticatedAdminImportsRoute
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
+  AuthenticatedAdminWorkforceRoute: typeof AuthenticatedAdminWorkforceRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -761,6 +782,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminApprovalsRoute: AuthenticatedAdminApprovalsRoute,
   AuthenticatedAdminImportsRoute: AuthenticatedAdminImportsRoute,
   AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
+  AuthenticatedAdminWorkforceRoute: AuthenticatedAdminWorkforceRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

@@ -23,6 +23,7 @@ import {
   Bell,
   Sprout,
   History,
+  Users,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -321,6 +322,12 @@ function DashboardPage() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <FeatureTile
+                to="/admin/workforce"
+                label="Nhân sự đi làm"
+                description="Tuyển dụng & danh sách NLĐ"
+                icon={Users}
+              />
               <FeatureTile
                 to="/admin/settings"
                 label="Cài đặt"

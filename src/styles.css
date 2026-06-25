@@ -317,6 +317,20 @@
     transition: transform 0.35s ease-out;
   }
 
+  .pet-sprite {
+    background-repeat: no-repeat;
+    background-position: 0 0;
+    animation: pet-sprite-play 0.5s steps(4) infinite;
+  }
+  @keyframes pet-sprite-play {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: -100% 0;
+    }
+  }
+
   .pet-rest {
     animation: pet-rest 3.2s ease-in-out infinite;
     transform-origin: 50% 90%;
