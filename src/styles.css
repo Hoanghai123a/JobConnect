@@ -321,13 +321,14 @@
     background-repeat: no-repeat;
     background-position: 0 0;
     animation: pet-sprite-play 0.5s steps(4) infinite;
+    image-rendering: pixelated;
   }
   @keyframes pet-sprite-play {
     from {
       background-position: 0 0;
     }
     to {
-      background-position: -100% 0;
+      background-position: -160px 0;
     }
   }
 
