@@ -36,6 +36,9 @@ export interface Pet {
   name: string;
   emoji: string;
   cost: number;
+  gif?: string;
+  /** Hướng mặt mặc định của GIF. `true` (mặc định) = GIF vẽ thú quay phải. */
+  gifFacesRight?: boolean;
 }
 
 export const PLOT_COUNT = 6;
@@ -51,7 +54,7 @@ export const FLOWERS: Flower[] = [
 ];
 
 export const PETS: Pet[] = [
-  { id: "cat", name: "Mèo", emoji: "🐈", cost: 0 },
+  { id: "cat", name: "Mèo", emoji: "🐈", cost: 0, gif: "/pets/cat-walk.gif", gifFacesRight: true },
   { id: "dog", name: "Cún", emoji: "🐕", cost: 60 },
   { id: "rabbit", name: "Thỏ", emoji: "🐇", cost: 80 },
   { id: "chick", name: "Gà con", emoji: "🐤", cost: 50 },

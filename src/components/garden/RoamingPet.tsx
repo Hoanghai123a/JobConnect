@@ -17,15 +17,26 @@ import {
   type PetSpeech,
 } from "@/lib/garden";
 
-const WANDER_MIN_MS = 6000;
-const WANDER_MAX_MS = 11000;
-const GLIDE_DURATION_MS = 2600;
 const SPEAK_INTERVAL_MS = 10000;
 const SPEAK_DURATION_MS = 1000;
 const REACT_INTERVAL_MS = 4500;
 
 const NAV_SAFE_PX = 96;
 const PET_SIZE = 56;
+
+// Tốc độ đi (px/giây) theo từng tâm trạng.
+const SPEED_PX_PER_S: Record<"great" | "ok" | "sad", number> = {
+  great: 22,
+  ok: 14,
+  sad: 7,
+};
+// Khoảng ngắn nghỉ giữa hai chặng đi.
+const PAUSE_MS: Record<"great" | "ok" | "sad", number> = {
+  great: 150,
+  ok: 400,
+  sad: 1500,
+};
+const MIN_LEG_DISTANCE_PX = 50;
 
 export function RoamingPet() {
   const { user, loading } = useAuth();
@@ -39,6 +50,7 @@ export function RoamingPet() {
   const [glide, setGlide] = useState(false);
   const [moving, setMoving] = useState(false);
   const [mood, setMood] = useState<"great" | "ok" | "sad">("great");
+  const [gifFailed, setGifFailed] = useState(false);
   const moveEndTimer = useRef<number | null>(null);
   const ctxRef = useRef<PetContext>({ needsAttendance: false, unreadNews: 0 });
   const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -112,7 +124,8 @@ export function RoamingPet() {
 
   const enabled = Boolean(user?.id) && !loading && garden?.roamingEnabled !== false;
 
-  // Vòng lặp đi lang thang (dùng CSS transition, không cần framer-motion).
+  const glideDurationRef = useRef(0);
+
   useEffect(() => {
     if (!enabled || typeof window === "undefined") return;
     let alive = true;
@@ -125,56 +138,66 @@ export function RoamingPet() {
       return { offsetLeft, maxX, y };
     };
 
-    const step = () => {
+    const currentPet = () => petById(loadGarden(user!.id).pet.id);
+
+    const planLeg = () => {
       if (!alive) return;
       const { offsetLeft, maxX, y } = bounds();
       seedRef.current = (seedRef.current * 9301 + 49297) % 233280;
       const r = seedRef.current / 233280;
-      const r2 = ((seedRef.current >> 3) % 1000) / 1000;
 
       const current = loadGarden(user!.id);
       const currentMood = petMood(current.pet);
       setMood(currentMood);
-      const moodFactor = currentMood === "great" ? 1 : currentMood === "ok" ? 1.8 : 3;
-      const skipMove = currentMood === "sad" && r > 0.4;
+      const speed = SPEED_PX_PER_S[currentMood];
 
-      let nextDelay = WANDER_MIN_MS + Math.floor(r2 * (WANDER_MAX_MS - WANDER_MIN_MS));
-      nextDelay = Math.floor(nextDelay * moodFactor);
+      const span = (maxX - offsetLeft - 12) * (currentMood === "sad" ? 0.35 : 1);
+      const minX = offsetLeft + 12;
+      const maxRight = offsetLeft + 12 + (maxX - offsetLeft - 12);
+      const cur = posRef.current.x;
+      let targetX = cur + (r - 0.5) * span * 2;
+      targetX = Math.max(minX, Math.min(maxRight, targetX));
 
-      if (!skipMove) {
-        const range = mood === "sad" ? 0.3 : 1;
-        const span = (maxX - offsetLeft - 12) * range;
-        const center = posRef.current.x;
-        const targetX = Math.max(
-          offsetLeft + 12,
-          Math.min(offsetLeft + 12 + (maxX - offsetLeft - 12), center + (r - 0.5) * span * 2),
-        );
-
-        setFacing(targetX >= posRef.current.x ? -1 : 1);
-        posRef.current = { x: targetX, y };
-        setGlide(true);
-        setMoving(true);
-        setPos({ x: targetX, y });
-
-        if (moveEndTimer.current) window.clearTimeout(moveEndTimer.current);
-        moveEndTimer.current = window.setTimeout(() => setMoving(false), GLIDE_DURATION_MS);
+      const distance = Math.abs(targetX - cur);
+      if (distance < MIN_LEG_DISTANCE_PX) {
+        const dir = cur < (minX + maxRight) / 2 ? 1 : -1;
+        targetX = Math.max(minX, Math.min(maxRight, cur + dir * MIN_LEG_DISTANCE_PX));
       }
+      const finalDist = Math.abs(targetX - cur);
+      const duration = (finalDist / speed) * 1000;
 
-      wanderTimer.current = window.setTimeout(step, nextDelay);
+      const facesRight = currentPet().gifFacesRight ?? false;
+      const movingRight = targetX > cur;
+      setFacing(movingRight === facesRight ? 1 : -1);
+
+      glideDurationRef.current = duration;
+      posRef.current = { x: targetX, y };
+      setGlide(true);
+      setMoving(true);
+      setPos({ x: targetX, y });
+
+      if (moveEndTimer.current) window.clearTimeout(moveEndTimer.current);
+      moveEndTimer.current = window.setTimeout(() => {
+        if (!alive) return;
+        setMoving(false);
+        wanderTimer.current = window.setTimeout(planLeg, PAUSE_MS[currentMood]);
+      }, duration);
     };
 
     const { offsetLeft, maxX, y } = bounds();
     const startX = offsetLeft + (maxX - offsetLeft) * 0.5;
     posRef.current = { x: startX, y };
+    glideDurationRef.current = 0;
     setGlide(false);
     setPos({ x: startX, y });
-    wanderTimer.current = window.setTimeout(step, 1500);
+    wanderTimer.current = window.setTimeout(planLeg, 800);
 
     return () => {
       alive = false;
       if (wanderTimer.current) window.clearTimeout(wanderTimer.current);
+      if (moveEndTimer.current) window.clearTimeout(moveEndTimer.current);
     };
-  }, [enabled]);
+  }, [enabled, user]);
 
   // Vòng lặp nói chuyện.
   useEffect(() => {
@@ -263,7 +286,9 @@ export function RoamingPet() {
       style={{
         width: PET_SIZE,
         transform: `translate(${pos.x}px, ${pos.y}px)`,
-        transition: glide ? "transform 2.6s ease-in-out" : "none",
+        transition: glide && glideDurationRef.current > 0
+          ? `transform ${glideDurationRef.current}ms linear`
+          : "none",
       }}
     >
       <div className="pointer-events-auto flex flex-col items-center">
@@ -291,17 +316,28 @@ export function RoamingPet() {
             className="pet-face inline-block"
             style={{ transform: `scaleX(${facing})` }}
           >
-            <span
-              className={
-                moving
-                  ? "pet-walk inline-block"
-                  : mood === "sad"
-                    ? "pet-rest inline-block"
-                    : "pet-bob inline-block"
-              }
-            >
-              {pet.emoji}
-            </span>
+            {pet.gif && !gifFailed ? (
+              <img
+                key={pet.gif}
+                src={pet.gif}
+                alt={pet.name}
+                className="h-10 w-10 select-none object-contain"
+                draggable={false}
+                onError={() => setGifFailed(true)}
+              />
+            ) : (
+              <span
+                className={
+                  moving
+                    ? "pet-walk inline-block"
+                    : mood === "sad"
+                      ? "pet-rest inline-block"
+                      : "pet-bob inline-block"
+                }
+              >
+                {pet.emoji}
+              </span>
+            )}
           </span>
         </button>
       </div>
