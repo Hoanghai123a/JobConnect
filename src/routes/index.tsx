@@ -21,6 +21,8 @@ import {
   MessagesSquare,
   BusFront,
   Bell,
+  Sprout,
+  History,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -141,53 +143,7 @@ function DashboardPage() {
 
   return (
     <div className="pb-nav">
-      <div className="gradient-hero relative overflow-hidden px-5 pb-10 pt-6 text-white">
-        <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/20 blur-2xl" />
-        <div className="absolute -bottom-16 -left-8 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
-
-        <div className="relative flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-white/95 shadow-soft">
-            {logoUrl ? (
-              <img src={logoUrl} alt="logo" className="logo-fit" />
-            ) : (
-              <Building2 className="h-6 w-6 text-primary" />
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-base font-semibold leading-tight">
-              {settings.company_name}
-            </div>
-            {settings.slogan && (
-              <div className="truncate text-xs text-white/80">{settings.slogan}</div>
-            )}
-          </div>
-        </div>
-
-        <div className="relative mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <div className="text-sm text-white/80">Xin chào,</div>
-          <div className="text-base font-semibold leading-tight">
-            {user?.full_name || user?.username || "Bạn"}
-          </div>
-
-          <div className="inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-[8px] uppercase tracking-wider backdrop-blur">
-            {isAdmin ? "Quản trị viên" : "Nhân viên"}
-          </div>
-          {!isAdmin && hasEmployment && (
-            <div className="inline-flex items-center rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] backdrop-blur">
-              {user.company}
-            </div>
-          )}
-        </div>
-
-        {summaryText && (
-          <div className="relative mt-3 flex items-start gap-2 rounded-2xl bg-white/15 px-3 py-2 backdrop-blur">
-            <Bell className="mt-0.5 h-4 w-4 shrink-0" />
-            <div className="text-xs leading-snug">{summaryText}</div>
-          </div>
-        )}
-      </div>
-
-      <div className="-mt-6 space-y-4 px-4">
+      <div className="space-y-4 px-4 pt-4">
         <section className="rounded-3xl bg-card p-3 shadow-soft">
           <div className="flex items-center justify-between px-1 pb-2 pt-1">
             <div>
@@ -227,6 +183,12 @@ function DashboardPage() {
               label="Tài khoản"
               description="Thông tin cá nhân"
               icon={User}
+            />
+            <FeatureTile
+              to="/garden"
+              label="Vườn cây"
+              description="Trồng hoa, nuôi thú"
+              icon={Sprout}
             />
           </div>
         </section>
@@ -288,6 +250,17 @@ function DashboardPage() {
                   : undefined
               }
             />
+            {!isAdmin && (
+              <FeatureTile
+                to="/work-history"
+                label="Lịch sử đi làm"
+                description="Nhà máy, ngày vào/nghỉ"
+                icon={History}
+                variant="accent"
+                disabled={workDisabled}
+                disabledReason={workDisabledReason}
+              />
+            )}
           </div>
         </section>
 
@@ -308,6 +281,52 @@ function DashboardPage() {
               />
             </div>
           </section>
+        )}
+      </div>
+
+      <div className="gradient-hero relative overflow-hidden px-5 pb-10 pt-6 text-white">
+        <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/20 blur-2xl" />
+        <div className="absolute -bottom-16 -left-8 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
+
+        <div className="relative flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-white/95 shadow-soft">
+            {logoUrl ? (
+              <img src={logoUrl} alt="logo" className="logo-fit" />
+            ) : (
+              <Building2 className="h-6 w-6 text-primary" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-base font-semibold leading-tight">
+              {settings.company_name}
+            </div>
+            {settings.slogan && (
+              <div className="truncate text-xs text-white/80">{settings.slogan}</div>
+            )}
+          </div>
+        </div>
+
+        <div className="relative mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <div className="text-sm text-white/80">Xin chào,</div>
+          <div className="text-base font-semibold leading-tight">
+            {user?.full_name || user?.username || "Bạn"}
+          </div>
+
+          <div className="inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-[8px] uppercase tracking-wider backdrop-blur">
+            {isAdmin ? "Quản trị viên" : "Nhân viên"}
+          </div>
+          {!isAdmin && hasEmployment && (
+            <div className="inline-flex items-center rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] backdrop-blur">
+              {user.company}
+            </div>
+          )}
+        </div>
+
+        {summaryText && (
+          <div className="relative mt-3 flex items-start gap-2 rounded-2xl bg-white/15 px-3 py-2 backdrop-blur">
+            <Bell className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="text-xs leading-snug">{summaryText}</div>
+          </div>
         )}
       </div>
 

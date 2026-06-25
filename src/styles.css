@@ -276,4 +276,82 @@
   .list-card:active {
     transform: scale(0.99);
   }
+
+  .pet-bob {
+    animation: pet-bob 1.4s ease-in-out infinite;
+  }
+  @keyframes pet-bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-3px);
+    }
+  }
+
+  .pet-walk {
+    animation: pet-walk 0.42s ease-in-out infinite;
+    transform-origin: 50% 90%;
+  }
+  @keyframes pet-walk {
+    0% {
+      transform: translateY(0) rotate(-5deg);
+    }
+    25% {
+      transform: translateY(-4px) rotate(0deg);
+    }
+    50% {
+      transform: translateY(0) rotate(5deg);
+    }
+    75% {
+      transform: translateY(-4px) rotate(0deg);
+    }
+    100% {
+      transform: translateY(0) rotate(-5deg);
+    }
+  }
+
+  .pet-face {
+    display: inline-block;
+    transition: transform 0.35s ease-out;
+  }
+
+  .pet-rest {
+    animation: pet-rest 3.2s ease-in-out infinite;
+    transform-origin: 50% 90%;
+    filter: saturate(0.7);
+  }
+  @keyframes pet-rest {
+    0%,
+    100% {
+      transform: rotate(-18deg) translateY(2px) scale(1);
+    }
+    50% {
+      transform: rotate(-18deg) translateY(1px) scale(1.04);
+    }
+  }
+
+  .pet-reaction {
+    animation: pet-reaction 1.8s ease-out forwards;
+    pointer-events: none;
+  }
+  @keyframes pet-reaction {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, 4px) scale(0.6);
+    }
+    20% {
+      opacity: 1;
+      transform: translate(-50%, -8px) scale(1.15);
+    }
+    70% {
+      opacity: 1;
+      transform: translate(-50%, -22px) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -32px) scale(0.9);
+    }
+  }
 }

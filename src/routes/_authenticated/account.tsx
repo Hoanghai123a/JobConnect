@@ -30,7 +30,6 @@ import {
 import { VN_BANKS } from "@/lib/vn-banks";
 import { exportToExcel } from "@/lib/excel";
 import { isUserApproved } from "@/lib/user-approval";
-import { UserWorkHistoryPanel } from "@/components/employment/UserWorkHistoryPanel";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
   fetchFactories,
@@ -157,22 +156,7 @@ function AccountPage() {
             </TabsContent>
           </Tabs>
         ) : (
-          <Tabs defaultValue="profile" className="space-y-3">
-            <TabsList className="grid h-10 w-full grid-cols-2 rounded-2xl">
-              <TabsTrigger value="profile" className="rounded-xl text-xs">
-                Thông tin
-              </TabsTrigger>
-              <TabsTrigger value="work" className="rounded-xl text-xs">
-                Đi làm
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="profile" className="mt-0 space-y-3">
-              <UserProfileForm />
-            </TabsContent>
-            <TabsContent value="work" className="mt-0">
-              <UserWorkHistoryPanel />
-            </TabsContent>
-          </Tabs>
+          <UserProfileForm />
         )}
       </div>
     </div>

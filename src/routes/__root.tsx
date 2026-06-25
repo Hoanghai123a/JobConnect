@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { AuthProvider } from "@/lib/auth";
 import { Toaster } from "@/components/ui/sonner";
 import { installPwaPromptListeners } from "@/lib/pwa-install";
+import { RoamingPet } from "@/components/garden/RoamingPet";
 
 function NotFoundComponent() {
   return (
@@ -113,6 +114,7 @@ function RootComponent() {
       <AuthProvider>
         <div className="app-shell">
           <Outlet />
+          <RoamingPet />
           <Toaster richColors position="top-center" />
         </div>
       </AuthProvider>

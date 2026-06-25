@@ -15,10 +15,12 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedWorkHistoryRouteImport } from './routes/_authenticated/work-history'
 import { Route as AuthenticatedTransportRouteImport } from './routes/_authenticated/transport'
 import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/staff'
 import { Route as AuthenticatedNewsRouteImport } from './routes/_authenticated/news'
 import { Route as AuthenticatedGuidesRouteImport } from './routes/_authenticated/guides'
+import { Route as AuthenticatedGardenRouteImport } from './routes/_authenticated/garden'
 import { Route as AuthenticatedComplaintsRouteImport } from './routes/_authenticated/complaints'
 import { Route as AuthenticatedCheckAttendanceRouteImport } from './routes/_authenticated/check-attendance'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
@@ -70,6 +72,12 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedWorkHistoryRoute =
+  AuthenticatedWorkHistoryRouteImport.update({
+    id: '/work-history',
+    path: '/work-history',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedTransportRoute = AuthenticatedTransportRouteImport.update({
   id: '/transport',
   path: '/transport',
@@ -88,6 +96,11 @@ const AuthenticatedNewsRoute = AuthenticatedNewsRouteImport.update({
 const AuthenticatedGuidesRoute = AuthenticatedGuidesRouteImport.update({
   id: '/guides',
   path: '/guides',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedGardenRoute = AuthenticatedGardenRouteImport.update({
+  id: '/garden',
+  path: '/garden',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedComplaintsRoute = AuthenticatedComplaintsRouteImport.update({
@@ -219,10 +232,12 @@ export interface FileRoutesByFullPath {
   '/chat': typeof AuthenticatedChatRoute
   '/check-attendance': typeof AuthenticatedCheckAttendanceRoute
   '/complaints': typeof AuthenticatedComplaintsRoute
+  '/garden': typeof AuthenticatedGardenRoute
   '/guides': typeof AuthenticatedGuidesRoute
   '/news': typeof AuthenticatedNewsRoute
   '/staff': typeof AuthenticatedStaffRouteWithChildren
   '/transport': typeof AuthenticatedTransportRoute
+  '/work-history': typeof AuthenticatedWorkHistoryRoute
   '/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
@@ -251,9 +266,11 @@ export interface FileRoutesByTo {
   '/chat': typeof AuthenticatedChatRoute
   '/check-attendance': typeof AuthenticatedCheckAttendanceRoute
   '/complaints': typeof AuthenticatedComplaintsRoute
+  '/garden': typeof AuthenticatedGardenRoute
   '/guides': typeof AuthenticatedGuidesRoute
   '/news': typeof AuthenticatedNewsRoute
   '/transport': typeof AuthenticatedTransportRoute
+  '/work-history': typeof AuthenticatedWorkHistoryRoute
   '/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
@@ -284,10 +301,12 @@ export interface FileRoutesById {
   '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/check-attendance': typeof AuthenticatedCheckAttendanceRoute
   '/_authenticated/complaints': typeof AuthenticatedComplaintsRoute
+  '/_authenticated/garden': typeof AuthenticatedGardenRoute
   '/_authenticated/guides': typeof AuthenticatedGuidesRoute
   '/_authenticated/news': typeof AuthenticatedNewsRoute
   '/_authenticated/staff': typeof AuthenticatedStaffRouteWithChildren
   '/_authenticated/transport': typeof AuthenticatedTransportRoute
+  '/_authenticated/work-history': typeof AuthenticatedWorkHistoryRoute
   '/_authenticated/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/_authenticated/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/_authenticated/admin/imports': typeof AuthenticatedAdminImportsRoute
@@ -318,10 +337,12 @@ export interface FileRouteTypes {
     | '/chat'
     | '/check-attendance'
     | '/complaints'
+    | '/garden'
     | '/guides'
     | '/news'
     | '/staff'
     | '/transport'
+    | '/work-history'
     | '/admin/accounts'
     | '/admin/approvals'
     | '/admin/imports'
@@ -350,9 +371,11 @@ export interface FileRouteTypes {
     | '/chat'
     | '/check-attendance'
     | '/complaints'
+    | '/garden'
     | '/guides'
     | '/news'
     | '/transport'
+    | '/work-history'
     | '/admin/accounts'
     | '/admin/approvals'
     | '/admin/imports'
@@ -382,10 +405,12 @@ export interface FileRouteTypes {
     | '/_authenticated/chat'
     | '/_authenticated/check-attendance'
     | '/_authenticated/complaints'
+    | '/_authenticated/garden'
     | '/_authenticated/guides'
     | '/_authenticated/news'
     | '/_authenticated/staff'
     | '/_authenticated/transport'
+    | '/_authenticated/work-history'
     | '/_authenticated/admin/accounts'
     | '/_authenticated/admin/approvals'
     | '/_authenticated/admin/imports'
@@ -461,6 +486,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/work-history': {
+      id: '/_authenticated/work-history'
+      path: '/work-history'
+      fullPath: '/work-history'
+      preLoaderRoute: typeof AuthenticatedWorkHistoryRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/transport': {
       id: '/_authenticated/transport'
       path: '/transport'
@@ -487,6 +519,13 @@ declare module '@tanstack/react-router' {
       path: '/guides'
       fullPath: '/guides'
       preLoaderRoute: typeof AuthenticatedGuidesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/garden': {
+      id: '/_authenticated/garden'
+      path: '/garden'
+      fullPath: '/garden'
+      preLoaderRoute: typeof AuthenticatedGardenRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/complaints': {
@@ -693,10 +732,12 @@ interface AuthenticatedRouteChildren {
   AuthenticatedChatRoute: typeof AuthenticatedChatRoute
   AuthenticatedCheckAttendanceRoute: typeof AuthenticatedCheckAttendanceRoute
   AuthenticatedComplaintsRoute: typeof AuthenticatedComplaintsRoute
+  AuthenticatedGardenRoute: typeof AuthenticatedGardenRoute
   AuthenticatedGuidesRoute: typeof AuthenticatedGuidesRoute
   AuthenticatedNewsRoute: typeof AuthenticatedNewsRoute
   AuthenticatedStaffRoute: typeof AuthenticatedStaffRouteWithChildren
   AuthenticatedTransportRoute: typeof AuthenticatedTransportRoute
+  AuthenticatedWorkHistoryRoute: typeof AuthenticatedWorkHistoryRoute
   AuthenticatedAdminAccountsRoute: typeof AuthenticatedAdminAccountsRouteWithChildren
   AuthenticatedAdminApprovalsRoute: typeof AuthenticatedAdminApprovalsRoute
   AuthenticatedAdminImportsRoute: typeof AuthenticatedAdminImportsRoute
@@ -710,10 +751,12 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedChatRoute: AuthenticatedChatRoute,
   AuthenticatedCheckAttendanceRoute: AuthenticatedCheckAttendanceRoute,
   AuthenticatedComplaintsRoute: AuthenticatedComplaintsRoute,
+  AuthenticatedGardenRoute: AuthenticatedGardenRoute,
   AuthenticatedGuidesRoute: AuthenticatedGuidesRoute,
   AuthenticatedNewsRoute: AuthenticatedNewsRoute,
   AuthenticatedStaffRoute: AuthenticatedStaffRouteWithChildren,
   AuthenticatedTransportRoute: AuthenticatedTransportRoute,
+  AuthenticatedWorkHistoryRoute: AuthenticatedWorkHistoryRoute,
   AuthenticatedAdminAccountsRoute: AuthenticatedAdminAccountsRouteWithChildren,
   AuthenticatedAdminApprovalsRoute: AuthenticatedAdminApprovalsRoute,
   AuthenticatedAdminImportsRoute: AuthenticatedAdminImportsRoute,
