@@ -31,13 +31,13 @@ import { Route as AuthenticatedStaffIndexRouteImport } from './routes/_authentic
 import { Route as ApiPublicPocketbaseAuthRouteImport } from './routes/api/public/pocketbase-auth'
 import { Route as ApiPublicAppLogoRouteImport } from './routes/api/public/app-logo'
 import { Route as ApiPublicAppIconRouteImport } from './routes/api/public/app-icon'
-import { Route as AuthenticatedStaffWorkersRouteImport } from './routes/_authenticated/staff.workers'
 import { Route as AuthenticatedStaffExportRouteImport } from './routes/_authenticated/staff.export'
 import { Route as AuthenticatedAdminWorkforceRouteImport } from './routes/_authenticated/admin/workforce'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminImportsRouteImport } from './routes/_authenticated/admin/imports'
 import { Route as AuthenticatedAdminApprovalsRouteImport } from './routes/_authenticated/admin/approvals'
 import { Route as AuthenticatedAdminAccountsRouteImport } from './routes/_authenticated/admin/accounts'
+import { Route as AuthenticatedStaffWorkersIndexRouteImport } from './routes/_authenticated/staff.workers.index'
 import { Route as ApiPublicPbSplatRouteImport } from './routes/api/public/pb.$'
 import { Route as ApiPublicManifestWebmanifestRouteImport } from './routes/api/public/manifest.webmanifest'
 import { Route as AuthenticatedStaffWorkersWorkerIdRouteImport } from './routes/_authenticated/staff.workers.$workerId'
@@ -155,12 +155,6 @@ const ApiPublicAppIconRoute = ApiPublicAppIconRouteImport.update({
   path: '/api/public/app-icon',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedStaffWorkersRoute =
-  AuthenticatedStaffWorkersRouteImport.update({
-    id: '/workers',
-    path: '/workers',
-    getParentRoute: () => AuthenticatedStaffRoute,
-  } as any)
 const AuthenticatedStaffExportRoute =
   AuthenticatedStaffExportRouteImport.update({
     id: '/export',
@@ -197,6 +191,12 @@ const AuthenticatedAdminAccountsRoute =
     path: '/admin/accounts',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedStaffWorkersIndexRoute =
+  AuthenticatedStaffWorkersIndexRouteImport.update({
+    id: '/workers/',
+    path: '/workers/',
+    getParentRoute: () => AuthenticatedStaffRoute,
+  } as any)
 const ApiPublicPbSplatRoute = ApiPublicPbSplatRouteImport.update({
   id: '/api/public/pb/$',
   path: '/api/public/pb/$',
@@ -210,9 +210,9 @@ const ApiPublicManifestWebmanifestRoute =
   } as any)
 const AuthenticatedStaffWorkersWorkerIdRoute =
   AuthenticatedStaffWorkersWorkerIdRouteImport.update({
-    id: '/$workerId',
-    path: '/$workerId',
-    getParentRoute: () => AuthenticatedStaffWorkersRoute,
+    id: '/workers/$workerId',
+    path: '/workers/$workerId',
+    getParentRoute: () => AuthenticatedStaffRoute,
   } as any)
 const AuthenticatedAdminAccountsLogsRoute =
   AuthenticatedAdminAccountsLogsRouteImport.update({
@@ -251,7 +251,6 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
-  '/staff/workers': typeof AuthenticatedStaffWorkersRouteWithChildren
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
@@ -261,6 +260,7 @@ export interface FileRoutesByFullPath {
   '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
+  '/staff/workers/': typeof AuthenticatedStaffWorkersIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -285,7 +285,6 @@ export interface FileRoutesByTo {
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
-  '/staff/workers': typeof AuthenticatedStaffWorkersRouteWithChildren
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
@@ -295,6 +294,7 @@ export interface FileRoutesByTo {
   '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
+  '/staff/workers': typeof AuthenticatedStaffWorkersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -322,7 +322,6 @@ export interface FileRoutesById {
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
   '/_authenticated/staff/export': typeof AuthenticatedStaffExportRoute
-  '/_authenticated/staff/workers': typeof AuthenticatedStaffWorkersRouteWithChildren
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
@@ -332,6 +331,7 @@ export interface FileRoutesById {
   '/_authenticated/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
+  '/_authenticated/staff/workers/': typeof AuthenticatedStaffWorkersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -359,7 +359,6 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/workforce'
     | '/staff/export'
-    | '/staff/workers'
     | '/api/public/app-icon'
     | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
@@ -369,6 +368,7 @@ export interface FileRouteTypes {
     | '/staff/workers/$workerId'
     | '/api/public/manifest/webmanifest'
     | '/api/public/pb/$'
+    | '/staff/workers/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -393,7 +393,6 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/workforce'
     | '/staff/export'
-    | '/staff/workers'
     | '/api/public/app-icon'
     | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
@@ -403,6 +402,7 @@ export interface FileRouteTypes {
     | '/staff/workers/$workerId'
     | '/api/public/manifest/webmanifest'
     | '/api/public/pb/$'
+    | '/staff/workers'
   id:
     | '__root__'
     | '/'
@@ -429,7 +429,6 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/workforce'
     | '/_authenticated/staff/export'
-    | '/_authenticated/staff/workers'
     | '/api/public/app-icon'
     | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
@@ -439,6 +438,7 @@ export interface FileRouteTypes {
     | '/_authenticated/staff/workers/$workerId'
     | '/api/public/manifest/webmanifest'
     | '/api/public/pb/$'
+    | '/_authenticated/staff/workers/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -611,13 +611,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicAppIconRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/staff/workers': {
-      id: '/_authenticated/staff/workers'
-      path: '/workers'
-      fullPath: '/staff/workers'
-      preLoaderRoute: typeof AuthenticatedStaffWorkersRouteImport
-      parentRoute: typeof AuthenticatedStaffRoute
-    }
     '/_authenticated/staff/export': {
       id: '/_authenticated/staff/export'
       path: '/export'
@@ -660,6 +653,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAccountsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/staff/workers/': {
+      id: '/_authenticated/staff/workers/'
+      path: '/workers'
+      fullPath: '/staff/workers/'
+      preLoaderRoute: typeof AuthenticatedStaffWorkersIndexRouteImport
+      parentRoute: typeof AuthenticatedStaffRoute
+    }
     '/api/public/pb/$': {
       id: '/api/public/pb/$'
       path: '/api/public/pb/$'
@@ -676,10 +676,10 @@ declare module '@tanstack/react-router' {
     }
     '/_authenticated/staff/workers/$workerId': {
       id: '/_authenticated/staff/workers/$workerId'
-      path: '/$workerId'
+      path: '/workers/$workerId'
       fullPath: '/staff/workers/$workerId'
       preLoaderRoute: typeof AuthenticatedStaffWorkersWorkerIdRouteImport
-      parentRoute: typeof AuthenticatedStaffWorkersRoute
+      parentRoute: typeof AuthenticatedStaffRoute
     }
     '/_authenticated/admin/accounts/logs': {
       id: '/_authenticated/admin/accounts/logs'
@@ -698,31 +698,19 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface AuthenticatedStaffWorkersRouteChildren {
-  AuthenticatedStaffWorkersWorkerIdRoute: typeof AuthenticatedStaffWorkersWorkerIdRoute
-}
-
-const AuthenticatedStaffWorkersRouteChildren: AuthenticatedStaffWorkersRouteChildren =
-  {
-    AuthenticatedStaffWorkersWorkerIdRoute:
-      AuthenticatedStaffWorkersWorkerIdRoute,
-  }
-
-const AuthenticatedStaffWorkersRouteWithChildren =
-  AuthenticatedStaffWorkersRoute._addFileChildren(
-    AuthenticatedStaffWorkersRouteChildren,
-  )
-
 interface AuthenticatedStaffRouteChildren {
   AuthenticatedStaffExportRoute: typeof AuthenticatedStaffExportRoute
-  AuthenticatedStaffWorkersRoute: typeof AuthenticatedStaffWorkersRouteWithChildren
   AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
+  AuthenticatedStaffWorkersWorkerIdRoute: typeof AuthenticatedStaffWorkersWorkerIdRoute
+  AuthenticatedStaffWorkersIndexRoute: typeof AuthenticatedStaffWorkersIndexRoute
 }
 
 const AuthenticatedStaffRouteChildren: AuthenticatedStaffRouteChildren = {
   AuthenticatedStaffExportRoute: AuthenticatedStaffExportRoute,
-  AuthenticatedStaffWorkersRoute: AuthenticatedStaffWorkersRouteWithChildren,
   AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
+  AuthenticatedStaffWorkersWorkerIdRoute:
+    AuthenticatedStaffWorkersWorkerIdRoute,
+  AuthenticatedStaffWorkersIndexRoute: AuthenticatedStaffWorkersIndexRoute,
 }
 
 const AuthenticatedStaffRouteWithChildren =

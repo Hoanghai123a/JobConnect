@@ -67,6 +67,15 @@ type AttendanceItem = {
   created?: string;
 };
 
+type AdvanceItem = {
+  id: string;
+  amount?: number;
+  reason?: string;
+  status?: string;
+  recovery_status?: string;
+  created?: string;
+};
+
 function StaffWorkerDetailPage() {
   const { workerId } = Route.useParams();
   const { user: viewer } = useAuth();
@@ -80,6 +89,7 @@ function StaffWorkerDetailPage() {
   const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
   const [attendanceItems, setAttendanceItems] = useState<AttendanceItem[]>([]);
   const [salaryItems, setSalaryItems] = useState<SalaryItem[]>([]);
+  const [advances, setAdvances] = useState<AdvanceItem[]>([]);
 
   const [advanceOpen, setAdvanceOpen] = useState(false);
   const [payrollOpen, setPayrollOpen] = useState(false);
@@ -132,8 +142,12 @@ function StaffWorkerDetailPage() {
         filter: `role="staff" || role="admin"`,
         sort: "full_name,username",
       }).catch(() => []),
+      pb.collection("advances").getFullList({
+        filter: `user="${workerId}"`,
+        sort: "-created",
+      }).catch(() => []),
     ])
-      .then(([historyRows, factoryRows, managerRows, rawUser, staffRows]) => {
+      .then(([historyRows, factoryRows, managerRows, rawUser, staffRows, advanceRows]) => {
         if (!alive) return;
 
         const managedFactoryIds = new Set(
@@ -145,8 +159,7 @@ function StaffWorkerDetailPage() {
           historyRows.some((history) => getStaffReasonsForHistory(viewer.id, history, managedFactoryIds).length > 0);
 
         if (!canAccessWorker) {
-          toast.warning("Bạn không có quyền xem hồ sơ này");
-          navigate({ to: "/staff/workers" });
+          setLoading(false);
           return;
         }
 
@@ -159,6 +172,7 @@ function StaffWorkerDetailPage() {
         setManagedFactoryIds(managedFactoryIds);
         setFactories(factoryRows);
         setStaffUsers(staffRows as UserRecord[]);
+        setAdvances(advanceRows as AdvanceItem[]);
         setJoinForm((prev) => ({
           ...prev,
           employee_code: latest?.employee_code || userRecord?.employee_code || "",
@@ -293,6 +307,17 @@ function StaffWorkerDetailPage() {
     }
     if (!advanceReason.trim()) {
       toast.warning("Nhập lý do ứng");
+      return;
+    }
+
+    const existingAdvances = await pb.collection("advances").getFullList({
+      filter: `user="${workerUser.id}" && (status="pending" || (status="accepted" && recovery_status="none"))`,
+    });
+    const outstanding = existingAdvances.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
+    const settings = await (await import("@/lib/app-settings")).fetchAppSettings();
+    const limit = Number(settings.advance_limit || 0);
+    if (limit > 0 && outstanding + amount > limit) {
+      toast.error(`Vượt hạn mức ứng lương. Đang dùng ${outstanding.toLocaleString("vi-VN")} đ / ${limit.toLocaleString("vi-VN")} đ. Còn lại ${(limit - outstanding).toLocaleString("vi-VN")} đ`);
       return;
     }
 
@@ -592,6 +617,30 @@ function StaffWorkerDetailPage() {
           onClick={() => setBankOpen(true)}
         />
       </div>
+
+      {canReportAdvanceForWorker && advances.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-sm font-semibold">Tình trạng báo ứng</div>
+          {advances.slice(0, 10).map((adv) => (
+            <Card key={adv.id} className="space-y-1 rounded-2xl border-border/60 p-4 shadow-soft">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold">
+                    {formatMoney(adv.amount || 0)}
+                  </div>
+                  {adv.reason && (
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">{adv.reason}</div>
+                  )}
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    {formatDate(adv.created)}
+                  </div>
+                </div>
+                <AdvanceStatusChip status={adv.status} recoveryStatus={adv.recovery_status} />
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <div className="space-y-2">
         <div className="text-sm font-semibold">Lịch sử đi làm theo nhà máy</div>
@@ -1095,4 +1144,13 @@ function formatMoney(value: number) {
     currency: "VND",
     maximumFractionDigits: 0,
   }).format(value || 0);
+}
+
+function AdvanceStatusChip({ status, recoveryStatus }: { status?: string; recoveryStatus?: string }) {
+  if (status === "rejected") return <StatusChip tone="danger">Từ chối</StatusChip>;
+  if (status === "pending") return <StatusChip tone="warning">Chờ duyệt</StatusChip>;
+  if (status === "accepted" && recoveryStatus === "recovered") return <StatusChip tone="success">Đã thu hồi</StatusChip>;
+  if (status === "accepted" && recoveryStatus === "partial") return <StatusChip tone="info">Thu hồi 1 phần</StatusChip>;
+  if (status === "accepted") return <StatusChip tone="success">Đã duyệt</StatusChip>;
+  return <StatusChip tone="neutral">{status || "—"}</StatusChip>;
 }

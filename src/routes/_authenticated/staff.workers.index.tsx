@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarRange, ChevronRight, Clock3, Landmark, Plus, Search, ShieldCheck, UserRoundSearch, UserSquare2, Wallet } from "lucide-react";
 import { toast } from "sonner";
@@ -31,9 +31,10 @@ import {
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { useAuth } from "@/lib/auth";
+import { useAppSettings } from "@/lib/app-settings";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 
-export const Route = createFileRoute("/_authenticated/staff/workers")({
+export const Route = createFileRoute("/_authenticated/staff/workers/")({
   component: StaffWorkersPage,
 });
 
@@ -52,6 +53,16 @@ function StaffWorkersPage() {
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<WorkerScope>("all");
   const [selected, setSelected] = useState<StaffWorkerRecord | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const openWorker = (w: StaffWorkerRecord) => {
+    setSelected(w);
+    setDrawerOpen(true);
+  };
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    setTimeout(() => setSelected(null), 300);
+  };
 
   const loadWorkers = useCallback(async () => {
     if (!user?.id) return;
@@ -154,7 +165,7 @@ function StaffWorkersPage() {
             <button
               key={worker.user.id}
               type="button"
-              onClick={() => setSelected(worker)}
+              onClick={() => openWorker(worker)}
               className="list-card border-l-primary block w-full text-left"
             >
               <div className="flex items-start justify-between gap-3">
@@ -197,20 +208,22 @@ function StaffWorkersPage() {
 
       <WorkerQuickDrawer
         worker={selected}
+        open={drawerOpen}
         viewer={user as UserRecord}
         factories={factories}
         staffUsers={staffUsers}
-        onClose={() => setSelected(null)}
+        onClose={closeDrawer}
         onDataChanged={loadWorkers}
       />
     </PageContainer>
   );
 }
 
-type DrawerView = "summary" | "leave" | "join" | "advance" | "bank";
+type DrawerView = "summary" | "leave" | "join" | "advance" | "bank" | "payroll";
 
 function WorkerQuickDrawer({
   worker,
+  open,
   viewer,
   factories,
   staffUsers,
@@ -218,20 +231,26 @@ function WorkerQuickDrawer({
   onDataChanged,
 }: {
   worker: StaffWorkerRecord | null;
+  open: boolean;
   viewer: UserRecord;
   factories: FactoryRecord[];
   staffUsers: UserRecord[];
   onClose: () => void;
   onDataChanged: () => void;
 }) {
+  const navigate = useNavigate();
   const [view, setView] = useState<DrawerView>("summary");
   const [leaveDate, setLeaveDate] = useState(todayDate());
   const [leaveNote, setLeaveNote] = useState("");
   const [joinForm, setJoinForm] = useState({ factory: "", employee_code: "", worker_name_snapshot: "", worker_cccd_snapshot: "", recruiter_staff: "", join_date: todayDate(), note: "" });
   const [amountText, setAmountText] = useState("");
   const [advanceReason, setAdvanceReason] = useState("");
+  const [bankChoice, setBankChoice] = useState<"worker" | "viewer">("worker");
   const [bankForm, setBankForm] = useState({ bank_name: "", bank_account_number: "", bank_account_name: "" });
   const [submitting, setSubmitting] = useState(false);
+  const [payrollLoading, setPayrollLoading] = useState(false);
+  const [attendanceItems, setAttendanceItems] = useState<Array<{ id: string; month?: string; round_no?: number; created?: string }>>([]);
+  const [salaryItems, setSalaryItems] = useState<Array<{ id: string; month?: string; round_no?: number; totals?: { net?: number }; created?: string }>>([]);
 
   useEffect(() => {
     if (!worker) return;
@@ -257,14 +276,32 @@ function WorkerQuickDrawer({
     });
   }, [worker, viewer?.id]);
 
-  if (!worker) return null;
+  useEffect(() => {
+    if (view !== "payroll" || !worker || !viewer?.id) return;
+    let alive = true;
+    setPayrollLoading(true);
+    Promise.all([
+      pb.collection("check_attendance_items").getFullList({ filter: `user="${worker.user.id}"`, sort: "-created" }).catch(() => []),
+      pb.collection("check_salary_items").getFullList({ filter: `user="${worker.user.id}"`, sort: "-created" }).catch(() => []),
+      createStaffActionLog({ actor: viewer, targetUserId: worker.user.id, targetCollection: "check_salary_items", action: "check_payroll", note: "Xem check công/lương từ drawer nhanh" }),
+    ]).then(([attendanceRows, salaryRows]) => {
+      if (!alive) return;
+      setAttendanceItems(attendanceRows as typeof attendanceItems);
+      setSalaryItems(salaryRows as typeof salaryItems);
+    }).finally(() => { if (alive) setPayrollLoading(false); });
+    return () => { alive = false; };
+  }, [view, worker, viewer?.id]);
 
-  const latest = worker.latestHistory;
+  const joinableFactories = useMemo(() => {
+    return factories;
+  }, [factories]);
+
+  const latest = worker?.latestHistory ?? null;
   const isWorking = latest?.status === "working" && !latest.leave_date;
-  const activeHistory = worker.histories.find((h) => h.status === "working" && !h.leave_date) || null;
+  const activeHistory = worker?.histories.find((h) => h.status === "working" && !h.leave_date) || null;
 
   const submitLeave = async () => {
-    if (!activeHistory || !viewer?.id) return;
+    if (!worker || !activeHistory || !viewer?.id) return;
     if (!leaveDate) { toast.warning("Chọn ngày nghỉ"); return; }
     setSubmitting(true);
     try {
@@ -280,7 +317,7 @@ function WorkerQuickDrawer({
   };
 
   const submitJoin = async () => {
-    if (!viewer?.id) return;
+    if (!worker || !viewer?.id) return;
     if (!joinForm.factory || !joinForm.join_date || !joinForm.worker_name_snapshot || !joinForm.worker_cccd_snapshot) { toast.warning("Điền đủ thông tin"); return; }
     setSubmitting(true);
     try {
@@ -300,19 +337,32 @@ function WorkerQuickDrawer({
   };
 
   const submitAdvance = async () => {
-    if (!viewer?.id || !latest) return;
+    if (!worker || !viewer?.id || !latest) return;
     const amount = Number(amountText.replace(/\D/g, ""));
     if (!amount) { toast.warning("Nhập số tiền"); return; }
     if (!advanceReason.trim()) { toast.warning("Nhập lý do"); return; }
+    const bankSource = bankChoice === "viewer" ? viewer : worker.user;
+    if (!bankSource.bank_account_number) { toast.warning("Tài khoản ngân hàng chưa có"); return; }
     setSubmitting(true);
     try {
+      const existingAdvances = await pb.collection("advances").getFullList({
+        filter: `user="${worker.user.id}" && (status="pending" || (status="accepted" && recovery_status="none"))`,
+      });
+      const outstanding = existingAdvances.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
+      const settings = await (await import("@/lib/app-settings")).fetchAppSettings();
+      const limit = Number(settings.advance_limit || 0);
+      if (limit > 0 && outstanding + amount > limit) {
+        toast.error(`Vượt hạn mức ứng lương. Đang dùng ${outstanding.toLocaleString("vi-VN")} đ / ${limit.toLocaleString("vi-VN")} đ. Còn lại ${(limit - outstanding).toLocaleString("vi-VN")} đ`);
+        setSubmitting(false);
+        return;
+      }
       await pb.collection("advances").create({
         user: worker.user.id, requested_by: viewer.id,
         employee_code: latest.employee_code || worker.user.employee_code || "",
         full_name: latest.worker_name_snapshot || worker.user.full_name || "",
         company: latest.expand?.factory?.name || worker.user.company || "",
         phone: worker.user.phone || "",
-        bank_name: worker.user.bank_name || "", bank_account_number: worker.user.bank_account_number || "", bank_account_name: worker.user.bank_account_name || "",
+        bank_name: bankSource.bank_name || "", bank_account_number: bankSource.bank_account_number || "", bank_account_name: bankSource.bank_account_name || "",
         amount, reason: advanceReason.trim(), status: "pending", recovery_status: "none",
       });
       await createStaffActionLog({ actor: viewer, targetUserId: worker.user.id, targetCollection: "advances", action: "report_advance", note: "Báo ứng từ danh sách" });
@@ -323,7 +373,7 @@ function WorkerQuickDrawer({
   };
 
   const submitBank = async () => {
-    if (!viewer?.id) return;
+    if (!worker || !viewer?.id) return;
     setSubmitting(true);
     try {
       await pb.collection("users").update(worker.user.id, bankForm);
@@ -334,23 +384,18 @@ function WorkerQuickDrawer({
     } catch (e: any) { toast.error(e?.message || "Lỗi cập nhật"); } finally { setSubmitting(false); }
   };
 
-  const joinableFactories = useMemo(() => {
-    if (viewer?.role === "admin") return factories;
-    return factories;
-  }, [factories, viewer?.role]);
-
   return (
-    <Drawer open={!!worker} onOpenChange={(open) => !open && onClose()}>
+    <Drawer open={open} onOpenChange={(v) => !v && onClose()}>
       <DrawerContent className="max-h-[90dvh]">
         <DrawerHeader>
-          <DrawerTitle>{worker.user.full_name || worker.user.username || "Người lao động"}</DrawerTitle>
+          <DrawerTitle>{worker?.user.full_name || worker?.user.username || "Người lao động"}</DrawerTitle>
           <DrawerDescription>
             {latest?.expand?.factory?.name || "Chưa có nhà máy"} · {isWorking ? "Đang đi làm" : "Đã nghỉ"}
           </DrawerDescription>
         </DrawerHeader>
 
         <div className="space-y-4 overflow-y-auto px-4 pb-6">
-          {view === "summary" && (
+          {view === "summary" && worker && (
             <>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <InfoCell label="Họ tên (NM)" value={latest?.worker_name_snapshot || worker.user.full_name || "—"} />
@@ -371,14 +416,21 @@ function WorkerQuickDrawer({
                 {worker.canReportAdvance && (
                   <ActionButton icon={Wallet} label="Báo ứng lương" onClick={() => setView("advance")} />
                 )}
+                {worker.canViewPayroll && (
+                  <ActionButton icon={CalendarRange} label="Check công lương" onClick={() => setView("payroll")} />
+                )}
                 {worker.canReportAdvance && (
                   <ActionButton icon={Landmark} label="Cập nhật ngân hàng" onClick={() => setView("bank")} />
                 )}
               </div>
 
-              <Link
-                to="/staff/workers/$workerId"
-                params={{ workerId: worker.user.id }}
+              <button
+                type="button"
+                onClick={() => {
+                  const id = worker.user.id;
+                  onClose();
+                  setTimeout(() => navigate({ to: "/staff/workers/$workerId", params: { workerId: id } }), 150);
+                }}
                 className="flex w-full items-center justify-between rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm font-medium shadow-soft"
               >
                 <div className="flex items-center gap-2">
@@ -386,7 +438,7 @@ function WorkerQuickDrawer({
                   <span>Xem chi tiết đầy đủ</span>
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </Link>
+              </button>
             </>
           )}
 
@@ -462,22 +514,20 @@ function WorkerQuickDrawer({
             </div>
           )}
 
-          {view === "advance" && (
-            <div className="space-y-3">
-              <div className="text-sm font-semibold">Báo ứng lương</div>
-              <div className="space-y-1">
-                <Label className="text-xs">Số tiền</Label>
-                <Input value={amountText} onChange={(e) => setAmountText(e.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" placeholder="Nhập số tiền" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Lý do</Label>
-                <Textarea rows={3} value={advanceReason} onChange={(e) => setAdvanceReason(e.target.value)} placeholder="Ví dụ: ứng tiền sinh hoạt..." />
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setView("summary")} className="flex-1">Quay lại</Button>
-                <Button onClick={submitAdvance} disabled={submitting} className="flex-1">{submitting ? "Đang gửi..." : "Gửi yêu cầu"}</Button>
-              </div>
-            </div>
+          {view === "advance" && worker && (
+            <AdvanceForm
+              worker={worker}
+              viewer={viewer}
+              amountText={amountText}
+              setAmountText={setAmountText}
+              advanceReason={advanceReason}
+              setAdvanceReason={setAdvanceReason}
+              bankChoice={bankChoice}
+              setBankChoice={setBankChoice}
+              submitting={submitting}
+              onSubmit={submitAdvance}
+              onBack={() => setView("summary")}
+            />
           )}
 
           {view === "bank" && (
@@ -501,6 +551,51 @@ function WorkerQuickDrawer({
                 <Button variant="outline" onClick={() => setView("summary")} className="flex-1">Quay lại</Button>
                 <Button onClick={submitBank} disabled={submitting} className="flex-1">{submitting ? "Đang lưu..." : "Lưu ngân hàng"}</Button>
               </div>
+            </div>
+          )}
+
+          {view === "payroll" && (
+            <div className="space-y-4">
+              <div className="text-sm font-semibold">Check công / lương gần nhất</div>
+              {payrollLoading ? (
+                <div className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">Đang tải dữ liệu...</div>
+              ) : (
+                <>
+                  <div>
+                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Check công</div>
+                    {attendanceItems.length === 0 ? (
+                      <div className="rounded-xl border border-border/60 bg-card p-3 text-sm text-muted-foreground">Chưa có bản ghi check công.</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {attendanceItems.slice(0, 6).map((item) => (
+                          <div key={item.id} className="rounded-xl border border-border/60 bg-card p-3 text-sm">
+                            <div className="font-semibold">{item.month || "Không rõ tháng"} · Lần {item.round_no || 1}</div>
+                            <div className="mt-0.5 text-[11px] text-muted-foreground">Tạo lúc {item.created ? new Date(item.created).toLocaleDateString("vi-VN") : "—"}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Check lương</div>
+                    {salaryItems.length === 0 ? (
+                      <div className="rounded-xl border border-border/60 bg-card p-3 text-sm text-muted-foreground">Chưa có bản ghi check lương.</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {salaryItems.slice(0, 6).map((item) => (
+                          <div key={item.id} className="rounded-xl border border-border/60 bg-card p-3 text-sm">
+                            <div className="font-semibold">{item.month || "Không rõ tháng"} · Lần {item.round_no || 1}</div>
+                            <div className="mt-0.5 text-[11px] text-muted-foreground">
+                              Thực nhận: {new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(item.totals?.net || 0)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+              <Button variant="outline" onClick={() => setView("summary")} className="w-full">Quay lại</Button>
             </div>
           )}
         </div>
@@ -554,5 +649,123 @@ function ScopeChip({
     >
       {label}
     </button>
+  );
+}
+
+function formatMoneyDisplay(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return "";
+  return Number(digits).toLocaleString("vi-VN");
+}
+
+function AdvanceForm({
+  worker,
+  viewer,
+  amountText,
+  setAmountText,
+  advanceReason,
+  setAdvanceReason,
+  bankChoice,
+  setBankChoice,
+  submitting,
+  onSubmit,
+  onBack,
+}: {
+  worker: StaffWorkerRecord;
+  viewer: UserRecord;
+  amountText: string;
+  setAmountText: (v: string) => void;
+  advanceReason: string;
+  setAdvanceReason: (v: string) => void;
+  bankChoice: "worker" | "viewer";
+  setBankChoice: (v: "worker" | "viewer") => void;
+  submitting: boolean;
+  onSubmit: () => void;
+  onBack: () => void;
+}) {
+  const { data: settings } = useAppSettings();
+  const limit = Number(settings.advance_limit || 0);
+
+  const workerBank = worker.user.bank_account_number
+    ? `${worker.user.bank_name || "NH"} · ${worker.user.bank_account_number} · ${worker.user.bank_account_name || ""}`
+    : "";
+  const viewerBank = viewer.bank_account_number
+    ? `${viewer.bank_name || "NH"} · ${viewer.bank_account_number} · ${viewer.bank_account_name || ""}`
+    : "";
+
+  return (
+    <div className="space-y-3">
+      <div className="text-sm font-semibold">Báo ứng lương</div>
+
+      {limit > 0 && (
+        <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+          Hạn mức ứng lương: <span className="font-semibold text-foreground">{limit.toLocaleString("vi-VN")} đ</span>
+        </div>
+      )}
+
+      <div className="space-y-1">
+        <Label className="text-xs">Số tiền</Label>
+        <Input
+          value={formatMoneyDisplay(amountText)}
+          onChange={(e) => setAmountText(e.target.value.replace(/\D/g, ""))}
+          inputMode="numeric"
+          placeholder="Nhập số tiền"
+        />
+        {amountText && (
+          <div className="text-[11px] text-muted-foreground">
+            = {Number(amountText).toLocaleString("vi-VN")} đ
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Tài khoản nhận tiền</Label>
+        <div className="space-y-1.5">
+          {workerBank && (
+            <button
+              type="button"
+              onClick={() => setBankChoice("worker")}
+              className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${bankChoice === "worker" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+            >
+              <div className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${bankChoice === "worker" ? "border-primary bg-primary" : "border-muted-foreground"}`} />
+              <div>
+                <div className="font-medium">STK của NLĐ</div>
+                <div className="text-muted-foreground">{workerBank}</div>
+              </div>
+            </button>
+          )}
+          {viewerBank && (
+            <button
+              type="button"
+              onClick={() => setBankChoice("viewer")}
+              className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${bankChoice === "viewer" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+            >
+              <div className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${bankChoice === "viewer" ? "border-primary bg-primary" : "border-muted-foreground"}`} />
+              <div>
+                <div className="font-medium">STK của tôi (Staff)</div>
+                <div className="text-muted-foreground">{viewerBank}</div>
+              </div>
+            </button>
+          )}
+          {!workerBank && !viewerBank && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+              Chưa có STK nào. Cập nhật ngân hàng trước khi báo ứng.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Lý do</Label>
+        <Textarea rows={3} value={advanceReason} onChange={(e) => setAdvanceReason(e.target.value)} placeholder="Ví dụ: ứng tiền sinh hoạt..." />
+      </div>
+
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={onBack} className="flex-1">Quay lại</Button>
+        <Button onClick={onSubmit} disabled={submitting || (!workerBank && !viewerBank)} className="flex-1">
+          {submitting ? "Đang gửi..." : "Gửi yêu cầu"}
+        </Button>
+      </div>
+    </div>
   );
 }
