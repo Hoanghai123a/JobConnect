@@ -1,7 +1,8 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { pb, dataUrlToFile, fileUrl } from "@/lib/pocketbase";
+import { pb, dataUrlToFile, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";
+import { createStaffActionLog } from "@/lib/staff-log";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppHeader } from "@/components/layout/BottomNav";
@@ -103,6 +104,7 @@ function CompanyTab() {
       about: settings.about || "",
       advance_limit: formatMoneyInput(settings.advance_limit || 0),
       advance_rules: settings.advance_rules || "",
+      account_code_prefix: settings.account_code_prefix || "",
     });
     setLogoPreview(logoUrl);
   }, [settings.id]);
@@ -190,6 +192,19 @@ function CompanyTab() {
         onChange={(v) => setForm({ ...form, hotline: v })}
       />
       <Field label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
+      <div>
+        <Label className="text-xs">Tiền tố UID</Label>
+        <Input
+          className="mt-1 rounded-xl uppercase"
+          placeholder="VD: HL"
+          maxLength={6}
+          value={form.account_code_prefix || ""}
+          onChange={(e) => setForm({ ...form, account_code_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })}
+        />
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          UID sẽ có dạng <span className="font-mono font-semibold">{(form.account_code_prefix || "HL") + "000001"}</span> và tăng dần. Đổi tiền tố chỉ áp dụng cho UID cấp mới.
+        </p>
+      </div>
       <div>
         <Label className="text-xs">Hạn mức Ứng lương</Label>
         <Input
@@ -334,6 +349,7 @@ interface RecruitmentArea {
 }
 
 function FactoriesTab() {
+  const currentUser = pb.authStore.record as UserRecord | null;
   const [items, setItems] = useState<Factory[]>([]);
   const [areas, setAreas] = useState<RecruitmentArea[]>([]);
   const [editing, setEditing] = useState<Partial<Factory> | null>(null);
@@ -387,9 +403,27 @@ function FactoriesTab() {
         attendance_cutoff_day: Number(editing.attendance_cutoff_day) || 31,
       };
       if (editing.id) {
+        const before = items.find((it) => it.id === editing.id);
         await pb.collection("factories").update(editing.id, payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "factories",
+          targetRecord: editing.id,
+          action: "update",
+          before,
+          after: payload,
+          note: "Admin cập nhật nhà máy",
+        });
       } else {
-        await pb.collection("factories").create(payload);
+        const created = await pb.collection("factories").create(payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "factories",
+          targetRecord: created.id,
+          action: "create",
+          after: payload,
+          note: "Admin tạo nhà máy mới",
+        });
       }
       toast.success("Đã lưu");
       setEditing(null);
@@ -402,7 +436,16 @@ function FactoriesTab() {
   const remove = async (id: string) => {
     if (!confirm("Xoá nhà máy này?")) return;
     try {
+      const before = items.find((it) => it.id === id);
       await pb.collection("factories").delete(id);
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "factories",
+        targetRecord: id,
+        action: "delete",
+        before,
+        note: "Admin xoá nhà máy",
+      });
       toast.success("Đã xoá");
       loadFactories();
     } catch (e: any) {
@@ -422,9 +465,27 @@ function FactoriesTab() {
         note: editingArea?.note || "",
       };
       if (editingArea?.id) {
+        const before = areas.find((a) => a.id === editingArea.id);
         await pb.collection("recruitment_areas").update(editingArea.id, payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "recruitment_areas",
+          targetRecord: editingArea.id,
+          action: "update",
+          before,
+          after: payload,
+          note: "Admin cập nhật khu vực tuyển dụng",
+        });
       } else {
-        await pb.collection("recruitment_areas").create(payload);
+        const created = await pb.collection("recruitment_areas").create(payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "recruitment_areas",
+          targetRecord: created.id,
+          action: "create",
+          after: payload,
+          note: "Admin tạo khu vực tuyển dụng",
+        });
       }
       toast.success("Đã lưu khu vực");
       setEditingArea(null);
@@ -437,7 +498,16 @@ function FactoriesTab() {
   const removeArea = async (id: string) => {
     if (!confirm("Xoá khu vực này?")) return;
     try {
+      const before = areas.find((a) => a.id === id);
       await pb.collection("recruitment_areas").delete(id);
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "recruitment_areas",
+        targetRecord: id,
+        action: "delete",
+        before,
+        note: "Admin xoá khu vực tuyển dụng",
+      });
       toast.success("Đã xoá khu vực");
       loadAreas();
     } catch (e: any) {

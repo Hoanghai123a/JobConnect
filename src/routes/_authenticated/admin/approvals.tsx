@@ -1,7 +1,9 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { pb } from "@/lib/pocketbase";
+import { pb, type UserRecord } from "@/lib/pocketbase";
 import { isUserApproved } from "@/lib/user-approval";
+import { createStaffActionLog } from "@/lib/staff-log";
+import { assignUidIfMissing } from "@/lib/uid";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusChip, toneBorder } from "@/components/ui/status-chip";
@@ -50,14 +52,48 @@ function ApprovalsPage() {
 
   const approveSelected = async (approve: boolean) => {
     if (!selected.size) return;
+    const actor = pb.authStore.record as UserRecord | null;
     for (const id of selected) {
-      if (approve)
-        await pb.collection("users").update(id, {
-          approvalStatus: "approved",
-          approved: "true",
-          status: "active",
+      const before = users.find((u) => u.id === id);
+      if (approve) {
+        const after = { approvalStatus: "approved", approved: "true", status: "active" };
+        await pb.collection("users").update(id, after);
+        try {
+          const uid = await assignUidIfMissing(id);
+          await createStaffActionLog({
+            actor,
+            targetUserId: id,
+            targetCollection: "users",
+            targetRecord: id,
+            action: "update",
+            before: before ? { approvalStatus: before.approvalStatus, approved: before.approved, status: before.status, uid: before.uid } : undefined,
+            after: { ...after, uid },
+            note: "Admin duyệt đăng ký tài khoản và cấp UID",
+          });
+        } catch {
+          await createStaffActionLog({
+            actor,
+            targetUserId: id,
+            targetCollection: "users",
+            targetRecord: id,
+            action: "update",
+            before: before ? { approvalStatus: before.approvalStatus, approved: before.approved, status: before.status } : undefined,
+            after,
+            note: "Admin duyệt đăng ký tài khoản (chưa cấp được UID)",
+          });
+        }
+      } else {
+        await pb.collection("users").delete(id);
+        await createStaffActionLog({
+          actor,
+          targetUserId: id,
+          targetCollection: "users",
+          targetRecord: id,
+          action: "delete",
+          before,
+          note: "Admin từ chối/xoá đăng ký tài khoản",
         });
-      else await pb.collection("users").delete(id);
+      }
     }
     toast.success(approve ? "Đã duyệt" : "Đã từ chối");
     setSelected(new Set());

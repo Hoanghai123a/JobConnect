@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { pb, type Role, type UserRecord } from "@/lib/pocketbase";
+import { assignUidIfMissing } from "@/lib/uid";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -582,7 +583,7 @@ function AdminUsersPanel() {
       return;
     }
     try {
-      await pb.collection("users").create({
+      const created = await pb.collection("users").create({
         full_name,
         phone,
         username,
@@ -595,6 +596,11 @@ function AdminUsersPanel() {
         approved: "true",
         status: "active",
       });
+      try {
+        await assignUidIfMissing(created.id);
+      } catch {
+        // best-effort; admin can backfill later
+      }
       toast.success("Đã tạo tài khoản");
       setCreateOpen(false);
       setNewUser(emptyNew);
@@ -658,7 +664,7 @@ function AdminUsersPanel() {
           continue;
         }
         try {
-          await pb.collection("users").create({
+          const created = await pb.collection("users").create({
             full_name,
             phone,
             username,
@@ -670,6 +676,11 @@ function AdminUsersPanel() {
             approvalStatus: "approved",
             status: "active",
           });
+          try {
+            await assignUidIfMissing(created.id);
+          } catch {
+            // best-effort
+          }
           ok++;
         } catch (err: any) {
           fail++;

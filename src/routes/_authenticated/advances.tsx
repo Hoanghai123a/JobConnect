@@ -31,6 +31,7 @@ import { exportToExcel } from "@/lib/excel";
 import { escapePb } from "@/lib/delegations";
 import { markSeen } from "@/lib/seen";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
+import { createStaffActionLog } from "@/lib/staff-log";
 import { VN_BANKS } from "@/lib/vn-banks";
 import { toast } from "sonner";
 import {
@@ -120,8 +121,16 @@ export function AdvancesPage() {
   const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(false);
   const [advanceDetail, setAdvanceDetail] = useState<AdvanceRecord | null>(null);
+  const [adminNoteDraft, setAdminNoteDraft] = useState("");
+  const [recoveryNoteDraft, setRecoveryNoteDraft] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
 
   const selectedAdvanceUser = user as UserRecord | null;
+
+  useEffect(() => {
+    setAdminNoteDraft(advanceDetail?.admin_note || "");
+    setRecoveryNoteDraft(advanceDetail?.recovery_note || "");
+  }, [advanceDetail?.id]);
 
   useEffect(() => {
     if (!selectedAdvanceUser) return;
@@ -287,10 +296,21 @@ export function AdvancesPage() {
     if (!rows.length) return;
     try {
       for (const row of rows) {
-        await updateRow(row.id, {
+        const after = {
           status,
           resolved_at: new Date().toISOString(),
           admin_note: row.admin_note || "",
+        };
+        await updateRow(row.id, after);
+        await createStaffActionLog({
+          actor: user,
+          targetUserId: row.user,
+          targetCollection: "advances",
+          targetRecord: row.id,
+          action: "update",
+          before: { status: row.status || "pending" },
+          after,
+          note: status === "accepted" ? "Admin duyệt báo ứng" : "Admin từ chối báo ứng",
         });
       }
       toast.success(status === "accepted" ? "Đã duyệt" : "Đã từ chối");
@@ -311,9 +331,20 @@ export function AdvancesPage() {
     if (!rows.length) return;
     try {
       for (const row of rows) {
-        await updateRow(row.id, {
+        const after = {
           recovery_status: recoveryStatus,
           recovered_at: recoveryStatus === "recovered" ? new Date().toISOString() : "",
+        };
+        await updateRow(row.id, after);
+        await createStaffActionLog({
+          actor: user,
+          targetUserId: row.user,
+          targetCollection: "advances",
+          targetRecord: row.id,
+          action: "update",
+          before: { recovery_status: row.recovery_status || "none" },
+          after,
+          note: recoveryStatus === "recovered" ? "Admin đánh dấu đã thu hồi" : "Admin đánh dấu không thu hồi",
         });
       }
       toast.success(
@@ -331,9 +362,20 @@ export function AdvancesPage() {
     recoveryStatus: Exclude<RecoveryStatus, "none">,
   ) => {
     try {
-      await updateRow(row.id, {
+      const after = {
         recovery_status: recoveryStatus,
         recovered_at: recoveryStatus === "recovered" ? new Date().toISOString() : "",
+      };
+      await updateRow(row.id, after);
+      await createStaffActionLog({
+        actor: user,
+        targetUserId: row.user,
+        targetCollection: "advances",
+        targetRecord: row.id,
+        action: "update",
+        before: { recovery_status: row.recovery_status || "none" },
+        after,
+        note: recoveryStatus === "recovered" ? "Admin đánh dấu đã thu hồi" : "Admin đánh dấu không thể thu hồi",
       });
       toast.success(
         recoveryStatus === "recovered" ? "Đã đánh dấu thu hồi" : "Đã đánh dấu không thể thu hồi",
@@ -900,8 +942,67 @@ export function AdvancesPage() {
               </div>
 
               <AdvanceTextBlock label="Lý do ứng" value={advanceDetail.reason} />
-              <AdvanceTextBlock label="Ghi chú admin" value={advanceDetail.admin_note} />
-              <AdvanceTextBlock label="Ghi chú thu hồi" value={advanceDetail.recovery_note} />
+              {isAdmin ? (
+                <>
+                  <div className="rounded-xl border bg-card p-3 text-sm">
+                    <Label className="text-[11px] text-muted-foreground">Ghi chú admin</Label>
+                    <Textarea
+                      rows={3}
+                      value={adminNoteDraft}
+                      onChange={(e) => setAdminNoteDraft(e.target.value)}
+                      className="mt-1"
+                      placeholder="Lý do duyệt/từ chối, ghi chú nội bộ…"
+                    />
+                  </div>
+                  {advanceDetail.status === "accepted" && (
+                    <div className="rounded-xl border bg-card p-3 text-sm">
+                      <Label className="text-[11px] text-muted-foreground">Ghi chú thu hồi</Label>
+                      <Textarea
+                        rows={3}
+                        value={recoveryNoteDraft}
+                        onChange={(e) => setRecoveryNoteDraft(e.target.value)}
+                        className="mt-1"
+                        placeholder="Tình trạng thu hồi, lý do không thu hồi…"
+                      />
+                    </div>
+                  )}
+                  <Button
+                    className="w-full"
+                    disabled={
+                      savingNotes ||
+                      (adminNoteDraft === (advanceDetail.admin_note || "") &&
+                        recoveryNoteDraft === (advanceDetail.recovery_note || ""))
+                    }
+                    onClick={async () => {
+                      if (!advanceDetail) return;
+                      setSavingNotes(true);
+                      try {
+                        const payload: Partial<AdvanceRecord> = {
+                          admin_note: adminNoteDraft,
+                        };
+                        if (advanceDetail.status === "accepted") {
+                          payload.recovery_note = recoveryNoteDraft;
+                        }
+                        await updateRow(advanceDetail.id, payload);
+                        toast.success("Đã lưu ghi chú");
+                        setAdvanceDetail({ ...advanceDetail, ...payload });
+                        load();
+                      } catch (error: any) {
+                        toast.error(error?.message || "Lỗi lưu ghi chú");
+                      } finally {
+                        setSavingNotes(false);
+                      }
+                    }}
+                  >
+                    {savingNotes ? "Đang lưu…" : "Lưu ghi chú"}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <AdvanceTextBlock label="Ghi chú admin" value={advanceDetail.admin_note} />
+                  <AdvanceTextBlock label="Ghi chú thu hồi" value={advanceDetail.recovery_note} />
+                </>
+              )}
             </div>
           )}
         </DialogContent>
