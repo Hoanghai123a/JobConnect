@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { BriefcaseBusiness, Building2, Download, NotebookPen, ShieldCheck, Users } from "lucide-react";
+import { BriefcaseBusiness, Building2, BusFront, Download, Newspaper, NotebookPen, ShieldCheck, Sprout, Users } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -96,6 +96,24 @@ function StaffDashboardPage() {
           title="Xuất dữ liệu"
           description="Lọc 90 ngày gần đây và xuất Excel nhanh."
           icon={Download}
+        />
+        <DashboardLink
+          to="/news"
+          title="Bảng tin"
+          description="Xem tin tuyển dụng và thông báo mới."
+          icon={Newspaper}
+        />
+        <DashboardLink
+          to="/transport"
+          title="Tìm nhà xe"
+          description="Tra cứu nhà xe đưa đón công nhân."
+          icon={BusFront}
+        />
+        <DashboardLink
+          to="/garden"
+          title="Vườn cây"
+          description="Trồng hoa, nuôi thú, thư giãn chút nha."
+          icon={Sprout}
         />
       </div>
 

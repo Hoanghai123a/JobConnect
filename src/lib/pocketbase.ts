@@ -14,6 +14,7 @@ export interface UserRecord {
   phone?: string;
   full_name?: string;
   cccd?: string;
+  uid?: string;
   role?: Role;
   approved?: boolean | string;
   approvalStatus?: "pending" | "approved" | "rejected";
@@ -32,6 +33,8 @@ export interface UserRecord {
   collectionId?: string;
   collectionName?: string;
   avatar?: string;
+  cccd_front?: string;
+  cccd_back?: string;
 }
 
 /** Convert base64 dataURL to File (per HRJob skill rule #1) */

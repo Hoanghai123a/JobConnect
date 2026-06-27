@@ -1,7 +1,7 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { pb, type Role, type UserRecord } from "@/lib/pocketbase";
+import { pb, type Role, type UserRecord, dataUrlToFile, fileUrl } from "@/lib/pocketbase";
 import { assignUidIfMissing } from "@/lib/uid";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ import { createStaffActionLog } from "@/lib/staff-log";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import {
+  ClipboardList,
   LogOut,
   Save,
   ShieldCheck,
@@ -64,6 +65,9 @@ import {
   CalendarRange,
   Pencil,
   CircleX,
+  ImagePlus,
+  IdCard,
+  Trash,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/account")({
@@ -170,6 +174,12 @@ function UserProfileForm() {
   const { user, refresh, isAdmin } = useAuth();
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
+  const [cccdFrontFile, setCccdFrontFile] = useState<File | null>(null);
+  const [cccdBackFile, setCccdBackFile] = useState<File | null>(null);
+  const [cccdFrontPreview, setCccdFrontPreview] = useState<string>("");
+  const [cccdBackPreview, setCccdBackPreview] = useState<string>("");
+  const [removeFront, setRemoveFront] = useState(false);
+  const [removeBack, setRemoveBack] = useState(false);
   const search = Route.useSearch();
   const showIncomplete = !!search.incomplete;
 
@@ -183,6 +193,7 @@ function UserProfileForm() {
     setForm({
       full_name: user?.full_name || "",
       phone: user?.phone || "",
+      cccd: user?.cccd || "",
       default_hc_hours: user?.default_hc_hours ?? 8,
       default_ot_hours: user?.default_ot_hours ?? 0,
       company: user?.company || "",
@@ -195,13 +206,55 @@ function UserProfileForm() {
       bank_account_number: user?.bank_account_number || "",
       bank_account_name: user?.bank_account_name || "",
     });
-  }, [user?.id]);
+    setCccdFrontFile(null);
+    setCccdBackFile(null);
+    setCccdFrontPreview(user?.cccd_front ? fileUrl(user, user.cccd_front) : "");
+    setCccdBackPreview(user?.cccd_back ? fileUrl(user, user.cccd_back) : "");
+    setRemoveFront(false);
+    setRemoveBack(false);
+  }, [user?.id, user?.cccd_front, user?.cccd_back]);
+
+  const pickCccd = (side: "front" | "back") => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Vui lòng chọn ảnh");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = reader.result as string;
+      if (side === "front") {
+        setCccdFrontPreview(url);
+        setCccdFrontFile(dataUrlToFile(url, file.name || "cccd_front.jpg"));
+        setRemoveFront(false);
+      } else {
+        setCccdBackPreview(url);
+        setCccdBackFile(dataUrlToFile(url, file.name || "cccd_back.jpg"));
+        setRemoveBack(false);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const clearCccd = (side: "front" | "back") => {
+    if (side === "front") {
+      setCccdFrontFile(null);
+      setCccdFrontPreview("");
+      setRemoveFront(true);
+    } else {
+      setCccdBackFile(null);
+      setCccdBackPreview("");
+      setRemoveBack(true);
+    }
+  };
 
   const save = async () => {
     if (!user) return;
     setSaving(true);
     try {
-      const payload = isAdmin
+      const payload: Record<string, any> = isAdmin
         ? {
             full_name: form.full_name || "",
             phone: form.phone || "",
@@ -210,7 +263,25 @@ function UserProfileForm() {
       if (!isAdmin) {
         for (const [k] of NUM_FIELDS) payload[k] = Number(payload[k]) || 0;
       }
-      await pb.collection("users").update(user.id, payload);
+
+      const hasFileChange = cccdFrontFile || cccdBackFile || removeFront || removeBack;
+      if (hasFileChange && !isAdmin) {
+        const fd = new FormData();
+        for (const [k, v] of Object.entries(payload)) {
+          fd.append(k, (v as any) ?? "");
+        }
+        if (cccdFrontFile) fd.append("cccd_front", cccdFrontFile);
+        else if (removeFront) fd.append("cccd_front", "");
+        if (cccdBackFile) fd.append("cccd_back", cccdBackFile);
+        else if (removeBack) fd.append("cccd_back", "");
+        await pb.collection("users").update(user.id, fd);
+      } else {
+        await pb.collection("users").update(user.id, payload);
+      }
+      setCccdFrontFile(null);
+      setCccdBackFile(null);
+      setRemoveFront(false);
+      setRemoveBack(false);
       await refresh();
       toast.success("Đã lưu");
     } catch (e: any) {
@@ -244,6 +315,11 @@ function UserProfileForm() {
         />
         {!isAdmin && (
           <>
+            <TextField
+              label="CCCD"
+              value={form.cccd || ""}
+              onChange={(v) => setForm({ ...form, cccd: v.replace(/\D/g, "") })}
+            />
             <FactorySelect value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
             <TextField
               label="Mã NV"
@@ -253,6 +329,28 @@ function UserProfileForm() {
           </>
         )}
       </Section>
+
+      {!isAdmin && (
+        <Section title="Ảnh CCCD">
+          <p className="text-[11px] text-muted-foreground">
+            Tải lên 2 ảnh CCCD: mặt trước và mặt sau. Ảnh dùng cho hồ sơ cá nhân, không gắn với từng lịch sử đi làm.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <CccdUploader
+              label="Mặt trước"
+              preview={cccdFrontPreview}
+              onPick={pickCccd("front")}
+              onClear={() => clearCccd("front")}
+            />
+            <CccdUploader
+              label="Mặt sau"
+              preview={cccdBackPreview}
+              onPick={pickCccd("back")}
+              onClear={() => clearCccd("back")}
+            />
+          </div>
+        </Section>
+      )}
 
       {!isAdmin && (
         <Section title="Mặc định lương & giờ">
@@ -699,6 +797,21 @@ function AdminUsersPanel() {
 
   return (
     <Card className="space-y-3 p-4">
+      <Link
+        to="/admin/accounts/logs"
+        className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/30 p-3 transition hover:bg-muted/50"
+      >
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <ClipboardList className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">Nhật ký thao tác</span>
+          <span className="block text-[11px] text-muted-foreground">
+            Xem lịch sử tác động của staff và admin lên tài khoản
+          </span>
+        </span>
+      </Link>
+
       <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/30 p-3">
         <div className="rounded-xl bg-primary/10 p-2 text-primary">
           <ShieldCheck className="h-5 w-5" />
@@ -1531,6 +1644,53 @@ function TextField({
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>
       <Input type={type} value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function CccdUploader({
+  label,
+  preview,
+  onPick,
+  onClear,
+}: {
+  label: string;
+  preview: string;
+  onPick: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-muted/30">
+        {preview ? (
+          <>
+            <img src={preview} alt={label} className="h-full w-full object-cover" />
+            <button
+              type="button"
+              onClick={onClear}
+              className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white"
+              aria-label={`Xoá ${label}`}
+            >
+              <Trash className="h-3.5 w-3.5" />
+            </button>
+          </>
+        ) : (
+          <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1 text-muted-foreground">
+            <input type="file" accept="image/*" hidden onChange={onPick} />
+            <IdCard className="h-6 w-6" />
+            <span className="text-[11px] font-medium">Bấm để chọn ảnh</span>
+          </label>
+        )}
+      </div>
+      {preview && (
+        <label className="block cursor-pointer">
+          <input type="file" accept="image/*" hidden onChange={onPick} />
+          <span className="inline-flex items-center gap-1 text-[11px] text-primary">
+            <ImagePlus className="h-3 w-3" /> Đổi ảnh
+          </span>
+        </label>
+      )}
     </div>
   );
 }

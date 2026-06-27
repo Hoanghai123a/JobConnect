@@ -134,6 +134,22 @@ export function onGardenChange(cb: () => void): () => void {
   };
 }
 
+// ---- fullness / food ----
+
+const HUNGER_FULL_PERCENT = 100;
+
+/**
+ * Apply food fullness to pet. Returns new lastFedAt that shifts hunger bar.
+ * fullness: 1-100, maps to % of HUNGER_FULL_MS restored.
+ */
+export function applyFood(pet: PetState, fullness: number, now = Date.now()): PetState {
+  const restoredMs = (fullness / HUNGER_FULL_PERCENT) * HUNGER_FULL_MS;
+  const currentHunger = hunger(pet, now);
+  const currentFedAgo = now - pet.lastFedAt;
+  const newFedAgo = Math.max(0, currentFedAgo - restoredMs);
+  return { ...pet, lastFedAt: now - newFedAgo };
+}
+
 // ---- logic dẫn xuất ----
 
 export function growthProgress(plot: Plot, now = Date.now()): number {

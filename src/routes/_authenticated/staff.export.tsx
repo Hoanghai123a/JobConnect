@@ -9,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { exportToExcel } from "@/lib/excel";
 import { fetchFactories } from "@/lib/factories";
 import { fetchStaffWorkspace } from "@/lib/staff-permissions";
-import { createStaffActionLog } from "@/lib/staff-log";
 import { useAuth } from "@/lib/auth";
 import type { FactoryRecord } from "@/lib/factories";
 import type { StaffWorkerRecord } from "@/lib/staff-permissions";
@@ -81,17 +80,6 @@ function StaffExportPage() {
     }
 
     exportToExcel(`jobconnect_staff_export_${Date.now()}`, { "Lao dong": exportRows });
-    await createStaffActionLog({
-      actor: user || undefined,
-      targetCollection: "employment_histories",
-      action: "export",
-      after: {
-        factoryFilter,
-        statusFilter,
-        rowCount: exportRows.length,
-      },
-      note: "Xuất dữ liệu từ màn hình staff/export",
-    });
     toast.success("Đã xuất Excel");
   };
 

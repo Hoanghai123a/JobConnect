@@ -38,6 +38,7 @@ import { Route as AuthenticatedAdminImportsRouteImport } from './routes/_authent
 import { Route as AuthenticatedAdminApprovalsRouteImport } from './routes/_authenticated/admin/approvals'
 import { Route as AuthenticatedAdminAccountsRouteImport } from './routes/_authenticated/admin/accounts'
 import { Route as AuthenticatedStaffWorkersIndexRouteImport } from './routes/_authenticated/staff.workers.index'
+import { Route as AuthenticatedAdminAccountsIndexRouteImport } from './routes/_authenticated/admin/accounts.index'
 import { Route as ApiPublicPbSplatRouteImport } from './routes/api/public/pb.$'
 import { Route as ApiPublicManifestWebmanifestRouteImport } from './routes/api/public/manifest.webmanifest'
 import { Route as AuthenticatedStaffWorkersWorkerIdRouteImport } from './routes/_authenticated/staff.workers.$workerId'
@@ -197,6 +198,12 @@ const AuthenticatedStaffWorkersIndexRoute =
     path: '/workers/',
     getParentRoute: () => AuthenticatedStaffRoute,
   } as any)
+const AuthenticatedAdminAccountsIndexRoute =
+  AuthenticatedAdminAccountsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAdminAccountsRoute,
+  } as any)
 const ApiPublicPbSplatRoute = ApiPublicPbSplatRouteImport.update({
   id: '/api/public/pb/$',
   path: '/api/public/pb/$',
@@ -260,6 +267,7 @@ export interface FileRoutesByFullPath {
   '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
+  '/admin/accounts/': typeof AuthenticatedAdminAccountsIndexRoute
   '/staff/workers/': typeof AuthenticatedStaffWorkersIndexRoute
 }
 export interface FileRoutesByTo {
@@ -279,7 +287,6 @@ export interface FileRoutesByTo {
   '/news': typeof AuthenticatedNewsRoute
   '/transport': typeof AuthenticatedTransportRoute
   '/work-history': typeof AuthenticatedWorkHistoryRoute
-  '/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
@@ -294,6 +301,7 @@ export interface FileRoutesByTo {
   '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
+  '/admin/accounts': typeof AuthenticatedAdminAccountsIndexRoute
   '/staff/workers': typeof AuthenticatedStaffWorkersIndexRoute
 }
 export interface FileRoutesById {
@@ -331,6 +339,7 @@ export interface FileRoutesById {
   '/_authenticated/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
+  '/_authenticated/admin/accounts/': typeof AuthenticatedAdminAccountsIndexRoute
   '/_authenticated/staff/workers/': typeof AuthenticatedStaffWorkersIndexRoute
 }
 export interface FileRouteTypes {
@@ -368,6 +377,7 @@ export interface FileRouteTypes {
     | '/staff/workers/$workerId'
     | '/api/public/manifest/webmanifest'
     | '/api/public/pb/$'
+    | '/admin/accounts/'
     | '/staff/workers/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -387,7 +397,6 @@ export interface FileRouteTypes {
     | '/news'
     | '/transport'
     | '/work-history'
-    | '/admin/accounts'
     | '/admin/approvals'
     | '/admin/imports'
     | '/admin/settings'
@@ -402,6 +411,7 @@ export interface FileRouteTypes {
     | '/staff/workers/$workerId'
     | '/api/public/manifest/webmanifest'
     | '/api/public/pb/$'
+    | '/admin/accounts'
     | '/staff/workers'
   id:
     | '__root__'
@@ -438,6 +448,7 @@ export interface FileRouteTypes {
     | '/_authenticated/staff/workers/$workerId'
     | '/api/public/manifest/webmanifest'
     | '/api/public/pb/$'
+    | '/_authenticated/admin/accounts/'
     | '/_authenticated/staff/workers/'
   fileRoutesById: FileRoutesById
 }
@@ -660,6 +671,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStaffWorkersIndexRouteImport
       parentRoute: typeof AuthenticatedStaffRoute
     }
+    '/_authenticated/admin/accounts/': {
+      id: '/_authenticated/admin/accounts/'
+      path: '/'
+      fullPath: '/admin/accounts/'
+      preLoaderRoute: typeof AuthenticatedAdminAccountsIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminAccountsRoute
+    }
     '/api/public/pb/$': {
       id: '/api/public/pb/$'
       path: '/api/public/pb/$'
@@ -719,6 +737,7 @@ const AuthenticatedStaffRouteWithChildren =
 interface AuthenticatedAdminAccountsRouteChildren {
   AuthenticatedAdminAccountsFactoriesRoute: typeof AuthenticatedAdminAccountsFactoriesRoute
   AuthenticatedAdminAccountsLogsRoute: typeof AuthenticatedAdminAccountsLogsRoute
+  AuthenticatedAdminAccountsIndexRoute: typeof AuthenticatedAdminAccountsIndexRoute
 }
 
 const AuthenticatedAdminAccountsRouteChildren: AuthenticatedAdminAccountsRouteChildren =
@@ -726,6 +745,7 @@ const AuthenticatedAdminAccountsRouteChildren: AuthenticatedAdminAccountsRouteCh
     AuthenticatedAdminAccountsFactoriesRoute:
       AuthenticatedAdminAccountsFactoriesRoute,
     AuthenticatedAdminAccountsLogsRoute: AuthenticatedAdminAccountsLogsRoute,
+    AuthenticatedAdminAccountsIndexRoute: AuthenticatedAdminAccountsIndexRoute,
   }
 
 const AuthenticatedAdminAccountsRouteWithChildren =

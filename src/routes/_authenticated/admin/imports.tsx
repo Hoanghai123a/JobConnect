@@ -16,6 +16,7 @@ import {
 } from "@/lib/employment";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { pb, type UserRecord } from "@/lib/pocketbase";
+import { assignUidIfMissing } from "@/lib/uid";
 
 export const Route = createFileRoute("/_authenticated/admin/imports")({
   beforeLoad: () => {
@@ -34,6 +35,7 @@ function AdminImportsPage() {
     exportToExcel("mau_import_lich_su_di_lam", {
       Histories: [
         {
+          uid: "",
           username: "nguyenvana",
           factory_name: "Nhà máy A",
           employee_code: "NM001",
@@ -82,10 +84,11 @@ function AdminImportsPage() {
       let created = 0;
       let updated = 0;
       let failed = 0;
-      const touchedUsers = new Set<string>();
+      const touchedUsers = new Map<string, string>();
 
       for (const row of rows) {
         const userId = pickValue(row, ["user_id", "User ID", "userId"]);
+        const uid = pickValue(row, ["uid", "Mã TK", "Ma TK"]);
         const username = pickValue(row, ["username", "Tên đăng nhập"]);
         const phone = pickValue(row, ["phone", "Số điện thoại"]);
         const factoryName = pickValue(row, ["factory_name", "Nhà máy"]);
@@ -148,17 +151,22 @@ function AdminImportsPage() {
             await pb.collection("employment_histories").create(payload);
             created++;
           }
-          touchedUsers.add(user.id);
+          if (!touchedUsers.has(user.id)) touchedUsers.set(user.id, uid);
         } catch {
           failed++;
         }
       }
 
-      for (const id of touchedUsers) {
+      for (const [id, manualUid] of touchedUsers) {
         const userHistories = (await fetchEmploymentHistories([id])).filter(
           (item) => item.user === id,
         );
         await syncLegacyUserWorkFields(id, getLatestEmploymentHistory(userHistories));
+        try {
+          await assignUidIfMissing(id, manualUid || undefined);
+        } catch {
+          // ignore single-user uid failure; summary still reflects history result
+        }
       }
 
       const summary = `Lịch sử: tạo ${created}, cập nhật ${updated}, lỗi ${failed}`;

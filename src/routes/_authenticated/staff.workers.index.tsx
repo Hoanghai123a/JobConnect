@@ -18,7 +18,8 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import { fetchStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
+import { canReportJoin, fetchStaffWorkspace, isRecentRecruiter, type StaffWorkerRecord } from "@/lib/staff-permissions";
+import { fetchFactoryManagers, isFactoryAssignmentActive } from "@/lib/factories";
 import {
   createEmploymentHistory,
   fetchEmploymentHistories,
@@ -49,6 +50,7 @@ function StaffWorkersPage() {
   const [loading, setLoading] = useState(true);
   const [workers, setWorkers] = useState<StaffWorkerRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
+  const [managedFactoryIds, setManagedFactoryIds] = useState<Set<string>>(new Set());
   const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<WorkerScope>("all");
@@ -68,17 +70,21 @@ function StaffWorkersPage() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [workspace, factoryList, staffList] = await Promise.all([
+      const [workspace, factoryList, staffList, managerRows] = await Promise.all([
         fetchStaffWorkspace(user as UserRecord),
         fetchFactories(),
         pb.collection("users").getFullList<UserRecord>({
           filter: `role="staff" || role="admin"`,
           sort: "full_name,username",
         }),
+        fetchFactoryManagers(user.id),
       ]);
       setWorkers(workspace.workers);
       setFactories(factoryList);
       setStaffUsers(staffList);
+      setManagedFactoryIds(
+        new Set(managerRows.filter((item) => isFactoryAssignmentActive(item)).map((item) => item.factory)),
+      );
     } finally {
       setLoading(false);
     }
@@ -211,6 +217,7 @@ function StaffWorkersPage() {
         open={drawerOpen}
         viewer={user as UserRecord}
         factories={factories}
+        managedFactoryIds={managedFactoryIds}
         staffUsers={staffUsers}
         onClose={closeDrawer}
         onDataChanged={loadWorkers}
@@ -226,6 +233,7 @@ function WorkerQuickDrawer({
   open,
   viewer,
   factories,
+  managedFactoryIds,
   staffUsers,
   onClose,
   onDataChanged,
@@ -234,6 +242,7 @@ function WorkerQuickDrawer({
   open: boolean;
   viewer: UserRecord;
   factories: FactoryRecord[];
+  managedFactoryIds: Set<string>;
   staffUsers: UserRecord[];
   onClose: () => void;
   onDataChanged: () => void;
@@ -283,7 +292,6 @@ function WorkerQuickDrawer({
     Promise.all([
       pb.collection("check_attendance_items").getFullList({ filter: `user="${worker.user.id}"`, sort: "-created" }).catch(() => []),
       pb.collection("check_salary_items").getFullList({ filter: `user="${worker.user.id}"`, sort: "-created" }).catch(() => []),
-      createStaffActionLog({ actor: viewer, targetUserId: worker.user.id, targetCollection: "check_salary_items", action: "check_payroll", note: "Xem check công/lương từ drawer nhanh" }),
     ]).then(([attendanceRows, salaryRows]) => {
       if (!alive) return;
       setAttendanceItems(attendanceRows as typeof attendanceItems);
@@ -293,8 +301,10 @@ function WorkerQuickDrawer({
   }, [view, worker, viewer?.id]);
 
   const joinableFactories = useMemo(() => {
-    return factories;
-  }, [factories]);
+    if (viewer?.role === "admin") return factories;
+    if (worker && isRecentRecruiter(viewer, worker.histories)) return factories;
+    return factories.filter((factory) => managedFactoryIds.has(factory.id));
+  }, [factories, managedFactoryIds, viewer, worker]);
 
   const latest = worker?.latestHistory ?? null;
   const isWorking = latest?.status === "working" && !latest.leave_date;
@@ -305,7 +315,7 @@ function WorkerQuickDrawer({
     if (!leaveDate) { toast.warning("Chọn ngày nghỉ"); return; }
     setSubmitting(true);
     try {
-      await updateEmploymentHistory(activeHistory.id, { leave_date: `${leaveDate} 00:00:00.000Z`, status: "left", note: leaveNote.trim() });
+      await updateEmploymentHistory(activeHistory.id, { leave_date: leaveDate, status: "left", note: leaveNote.trim() });
       const updated = await fetchEmploymentHistories([worker.user.id]);
       const newLatest = getLatestEmploymentHistory(updated);
       await syncLegacyUserWorkFields(worker.user.id, newLatest);
@@ -319,6 +329,10 @@ function WorkerQuickDrawer({
   const submitJoin = async () => {
     if (!worker || !viewer?.id) return;
     if (!joinForm.factory || !joinForm.join_date || !joinForm.worker_name_snapshot || !joinForm.worker_cccd_snapshot) { toast.warning("Điền đủ thông tin"); return; }
+    if (!canReportJoin(viewer, worker.histories, managedFactoryIds, joinForm.factory)) {
+      toast.error("Bạn không có quyền báo đi làm tại nhà máy đã chọn");
+      return;
+    }
     setSubmitting(true);
     try {
       const active = await findActiveEmploymentByUser(worker.user.id);
@@ -326,7 +340,7 @@ function WorkerQuickDrawer({
       const created = await createEmploymentHistory({
         user: worker.user.id, factory: joinForm.factory, employee_code: joinForm.employee_code.trim(),
         worker_name_snapshot: joinForm.worker_name_snapshot.trim(), worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim(),
-        recruiter_staff: joinForm.recruiter_staff || viewer.id, join_date: `${joinForm.join_date} 00:00:00.000Z`, status: "working", note: joinForm.note.trim(),
+        recruiter_staff: joinForm.recruiter_staff || viewer.id, join_date: joinForm.join_date, status: "working", note: joinForm.note.trim(),
       });
       await syncLegacyUserWorkFields(worker.user.id, created);
       await createStaffActionLog({ actor: viewer, targetUserId: worker.user.id, targetCollection: "employment_histories", targetRecord: created.id, action: "report_join", note: "Báo đi làm mới từ danh sách" });
@@ -351,7 +365,12 @@ function WorkerQuickDrawer({
       const outstanding = existingAdvances.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
       const settings = await (await import("@/lib/app-settings")).fetchAppSettings();
       const limit = Number(settings.advance_limit || 0);
-      if (limit > 0 && outstanding + amount > limit) {
+      if (limit <= 0) {
+        toast.error("Admin chưa cài hạn mức Ứng lương");
+        setSubmitting(false);
+        return;
+      }
+      if (outstanding + amount > limit) {
         toast.error(`Vượt hạn mức ứng lương. Đang dùng ${outstanding.toLocaleString("vi-VN")} đ / ${limit.toLocaleString("vi-VN")} đ. Còn lại ${(limit - outstanding).toLocaleString("vi-VN")} đ`);
         setSubmitting(false);
         return;

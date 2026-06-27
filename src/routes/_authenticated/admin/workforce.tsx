@@ -6,6 +6,7 @@ import {
   ChevronRight,
   FileDown,
   FileSpreadsheet,
+  IdCard,
   Plus,
   Search,
   ShieldCheck,
@@ -60,7 +61,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { pb, type UserRecord } from "@/lib/pocketbase";
+import { pb, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import {
   createEmploymentHistory,
   fetchEmploymentHistories,
@@ -72,6 +73,10 @@ import {
 } from "@/lib/employment";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { cn } from "@/lib/utils";
+import { assignUidIfMissing } from "@/lib/uid";
+import { CccdManager } from "@/components/cccd/CccdManager";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 
 export const Route = createFileRoute("/_authenticated/admin/workforce")({
   beforeLoad: () => {
@@ -120,6 +125,7 @@ function WorkforcePage() {
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [openRegister, setOpenRegister] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [cccdExportOpen, setCccdExportOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -283,6 +289,14 @@ function WorkforcePage() {
               <FileDown className="h-4 w-4" />
               Xuất Excel
             </Link>
+            <button
+              type="button"
+              onClick={() => setCccdExportOpen(true)}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
+            >
+              <IdCard className="h-4 w-4" />
+              Xuất CCCD
+            </button>
           </div>
 
           <RecruitGroups
@@ -325,6 +339,16 @@ function WorkforcePage() {
         open={!!selectedUserId}
         onClose={() => setSelectedUserId(null)}
         onDataChanged={load}
+      />
+
+      <CccdExportDialog
+        open={cccdExportOpen}
+        onClose={() => setCccdExportOpen(false)}
+        histories={histories}
+        users={users}
+        factories={factories}
+        from={from}
+        to={to}
       />
     </PageContainer>
   );
@@ -800,7 +824,7 @@ function WorkerList({
                   {user.full_name || user.username || "Người lao động"}
                 </div>
                 <div className="mt-0.5 text-[11px] text-muted-foreground">
-                  Mã NV: {latest?.employee_code || user.employee_code || "—"} · CCCD:{" "}
+                  {user.uid && <><span className="text-primary font-medium">{user.uid}</span> · </>}Mã NV: {latest?.employee_code || user.employee_code || "—"} · CCCD:{" "}
                   {maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
                 </div>
                 <div className="mt-0.5 text-[11px] text-muted-foreground">
@@ -874,8 +898,8 @@ function AdminWorkerDrawer({
         worker_name_snapshot: form.worker_name_snapshot.trim(),
         worker_cccd_snapshot: form.worker_cccd_snapshot.trim(),
         recruiter_staff: form.recruiter_staff || undefined,
-        join_date: form.join_date ? `${form.join_date} 00:00:00.000Z` : undefined,
-        leave_date: form.leave_date ? `${form.leave_date} 00:00:00.000Z` : undefined,
+        join_date: form.join_date || undefined,
+        leave_date: form.leave_date || undefined,
         status: form.status as "working" | "left",
         note: form.note.trim(),
       });
@@ -919,6 +943,12 @@ function AdminWorkerDrawer({
 
         <div className="space-y-4 overflow-y-auto px-4 pb-6">
           <div className="grid grid-cols-2 gap-2 text-sm">
+            {user.uid && (
+              <div className="col-span-2 rounded-xl bg-primary/10 p-2.5">
+                <div className="text-[10px] text-muted-foreground">Mã tài khoản</div>
+                <div className="mt-0.5 text-sm font-semibold text-primary">{user.uid}</div>
+              </div>
+            )}
             <div className="rounded-xl bg-muted/35 p-2.5">
               <div className="text-[10px] text-muted-foreground">Họ tên (TK)</div>
               <div className="mt-0.5 text-sm font-semibold">{user.full_name || "—"}</div>
@@ -936,6 +966,11 @@ function AdminWorkerDrawer({
               <div className="mt-0.5 text-sm font-semibold">{user.username || "—"}</div>
             </div>
           </div>
+
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Ảnh CCCD
+          </div>
+          <CccdManager targetUser={user} actor={pb.authStore.record as UserRecord | null} onUpdated={onDataChanged} />
 
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Lịch sử đi làm ({histories.length})
@@ -1159,6 +1194,7 @@ function RegisterDialog({
   const [employeeCode, setEmployeeCode] = useState("");
   const [workerName, setWorkerName] = useState("");
   const [workerCccd, setWorkerCccd] = useState("");
+  const [uidInput, setUidInput] = useState("");
   const [joinDate, setJoinDate] = useState(todayIso());
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -1170,6 +1206,7 @@ function RegisterDialog({
     setEmployeeCode("");
     setWorkerName("");
     setWorkerCccd("");
+    setUidInput("");
     setJoinDate(todayIso());
     setNote("");
   };
@@ -1210,11 +1247,12 @@ function RegisterDialog({
         worker_name_snapshot: workerName.trim(),
         worker_cccd_snapshot: workerCccd.trim(),
         recruiter_staff: recruiterId || undefined,
-        join_date: `${joinDate} 00:00:00.000Z`,
+        join_date: joinDate,
         status: "working",
         note: note.trim() || undefined,
       });
       await syncLegacyUserWorkFields(userId, created);
+      await assignUidIfMissing(userId, uidInput.trim() || undefined);
       toast.success("Đã đăng ký đi làm");
       onClose();
       onCreated();
@@ -1308,7 +1346,15 @@ function RegisterDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Mã TK (uid)</Label>
+              <Input
+                value={uidInput}
+                onChange={(e) => setUidInput(e.target.value)}
+                placeholder="Tự sinh nếu trống"
+              />
+            </div>
             <div className="space-y-1">
               <Label className="text-xs">Mã NV</Label>
               <Input
@@ -1481,5 +1527,178 @@ function FactoryPicker({
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function CccdExportDialog({
+  open,
+  onClose,
+  histories,
+  users,
+  factories,
+  from: defaultFrom,
+  to: defaultTo,
+}: {
+  open: boolean;
+  onClose: () => void;
+  histories: EmploymentHistoryRecord[];
+  users: UserRecord[];
+  factories: FactoryRecord[];
+  from: string;
+  to: string;
+}) {
+  const [factory, setFactory] = useState("all");
+  const [from, setFrom] = useState(defaultFrom);
+  const [to, setTo] = useState(defaultTo);
+  const [exporting, setExporting] = useState(false);
+  const [progress, setProgress] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setFrom(defaultFrom);
+      setTo(defaultTo);
+      setFactory("all");
+      setProgress("");
+    }
+  }, [open, defaultFrom, defaultTo]);
+
+  const matchingUsers = useMemo(() => {
+    const fromT = new Date(`${from}T00:00:00`).getTime();
+    const toT = new Date(`${to}T23:59:59.999`).getTime();
+
+    const userIdsInRange = new Set<string>();
+    for (const h of histories) {
+      if (factory !== "all" && h.factory !== factory) continue;
+      const joinT = new Date(h.join_date).getTime();
+      if (Number.isNaN(joinT)) continue;
+      if (joinT >= fromT && joinT <= toT) {
+        userIdsInRange.add(h.user);
+      }
+      if (h.leave_date) {
+        const leaveT = new Date(h.leave_date).getTime();
+        if (!Number.isNaN(leaveT) && leaveT >= fromT && leaveT <= toT) {
+          userIdsInRange.add(h.user);
+        }
+      }
+    }
+
+    return users.filter(
+      (u) => userIdsInRange.has(u.id) && (u.cccd_front || u.cccd_back),
+    );
+  }, [histories, users, factory, from, to]);
+
+  const doExport = async () => {
+    if (!matchingUsers.length) {
+      toast.warning("Không có ảnh CCCD phù hợp để xuất");
+      return;
+    }
+    setExporting(true);
+    setProgress("Đang chuẩn bị...");
+    try {
+      const zip = new JSZip();
+      let count = 0;
+
+      for (const u of matchingUsers) {
+        const name = (u.full_name || u.username || u.id).replace(/[/\\:*?"<>|]/g, "_");
+        if (u.cccd_front) {
+          const url = fileUrl(u, u.cccd_front);
+          try {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            zip.file(`${name}_mat_truoc.jpg`, blob);
+            count++;
+          } catch { /* skip failed */ }
+        }
+        if (u.cccd_back) {
+          const url = fileUrl(u, u.cccd_back);
+          try {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            zip.file(`${name}_mat_sau.jpg`, blob);
+            count++;
+          } catch { /* skip failed */ }
+        }
+        setProgress(`Đã tải ${count} ảnh...`);
+      }
+
+      if (!count) {
+        toast.warning("Không tải được ảnh nào");
+        return;
+      }
+
+      setProgress("Đang nén file...");
+      const content = await zip.generateAsync({ type: "blob" });
+      const factoryName = factory === "all" ? "tat_ca" : (factories.find((f) => f.id === factory)?.name || factory).replace(/[/\\:*?"<>|]/g, "_");
+      saveAs(content, `CCCD_${factoryName}_${from}_${to}.zip`);
+
+      toast.success(`Đã xuất ${count} ảnh CCCD`);
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.message || "Lỗi xuất CCCD");
+    } finally {
+      setExporting(false);
+      setProgress("");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="rounded-2xl">
+        <DialogHeader>
+          <DialogTitle>Xuất ảnh CCCD hàng loạt</DialogTitle>
+          <DialogDescription>
+            Tải toàn bộ ảnh CCCD (mặt trước + mặt sau) theo công ty và khoảng ngày thành file ZIP.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Nhà máy / Công ty</Label>
+            <Select value={factory} onValueChange={setFactory}>
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="Chọn nhà máy" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả nhà máy</SelectItem>
+                {factories.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Từ ngày</Label>
+              <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-xl" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Đến ngày</Label>
+              <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-xl" />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-center text-sm">
+            <span className="font-semibold text-primary">{matchingUsers.length}</span>{" "}
+            người lao động có ảnh CCCD phù hợp
+          </div>
+
+          {progress && (
+            <div className="rounded-xl bg-primary/5 p-2.5 text-center text-xs text-primary">
+              {progress}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={exporting} className="rounded-xl">
+            Đóng
+          </Button>
+          <Button onClick={doExport} disabled={exporting || !matchingUsers.length} className="rounded-xl">
+            {exporting ? "Đang xuất..." : "Tải ZIP"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

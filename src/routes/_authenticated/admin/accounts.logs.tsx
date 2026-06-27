@@ -2,7 +2,6 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Search } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
-import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import { pb } from "@/lib/pocketbase";
-import type { StaffActionLogRecord } from "@/lib/staff-types";
+import type { StaffActionLogRecord } from "@/lib/staff-log";
 
 export const Route = createFileRoute("/_authenticated/admin/accounts/logs")({
   beforeLoad: () => {
@@ -28,13 +27,11 @@ const ACTION_LABELS: Record<string, string> = {
   create: "Tạo mới",
   update: "Cập nhật",
   delete: "Xóa",
-  export: "Xuất dữ liệu",
   import: "Import",
   report_advance: "Báo ứng",
   report_leave: "Báo nghỉ",
   report_join: "Báo đi làm mới",
   update_bank: "Cập nhật ngân hàng",
-  check_payroll: "Check công lương",
 };
 
 function AccountLogsPage() {
@@ -123,7 +120,7 @@ function AccountLogsPage() {
       </Select>
 
       {loading ? (
-        <Card className="rounded-2xl p-4 text-sm text-muted-foreground">Đang tải nhật ký...</Card>
+        <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">Đang tải nhật ký...</div>
       ) : filteredLogs.length === 0 ? (
         <EmptyState
           icon={Search}
@@ -131,50 +128,50 @@ function AccountLogsPage() {
           description="Thử đổi bộ lọc hoặc thao tác thêm trên màn hình staff/admin để hệ thống ghi log mới."
         />
       ) : (
-        filteredLogs.map((item) => (
-          <Card key={item.id} className="space-y-3 rounded-2xl p-4 shadow-soft">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">
-                  {ACTION_LABELS[item.action] || item.action}
+        filteredLogs.map((item) => {
+          const actorName = item.expand?.actor?.full_name || item.expand?.actor?.username || item.actor;
+          const actorUsername = item.expand?.actor?.username;
+          const targetName =
+            item.expand?.target_user?.full_name ||
+            item.expand?.target_user?.username ||
+            item.target_user ||
+            "";
+          const roleLabel = item.actor_role_snapshot || "user";
+          return (
+            <div
+              key={item.id}
+              className="rounded-xl border border-border/60 bg-card px-3 py-2.5 shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-semibold">
+                      {ACTION_LABELS[item.action] || item.action}
+                    </span>
+                    <StatusChip tone="info">{item.target_collection}</StatusChip>
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    {actorName}
+                    {actorUsername ? ` @${actorUsername}` : ""}
+                    {" · "}
+                    {roleLabel}
+                    {targetName ? ` → ${targetName}` : ""}
+                  </div>
                 </div>
-                <div className="mt-0.5 text-[11px] text-muted-foreground">
-                  {item.expand?.actor?.full_name || item.expand?.actor?.username || item.actor} ·{" "}
+                <span className="shrink-0 text-[11px] text-muted-foreground">
                   {formatDateTime(item.created)}
-                </div>
+                </span>
               </div>
-              <StatusChip tone="info">{item.target_collection}</StatusChip>
+              {item.note && (
+                <div className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                  {item.note}
+                </div>
+              )}
             </div>
-
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <InfoCell
-                label="User đích"
-                value={
-                  item.expand?.target_user?.full_name ||
-                  item.expand?.target_user?.username ||
-                  item.target_user ||
-                  "Không có"
-                }
-              />
-              <InfoCell label="Role actor" value={item.actor_role_snapshot || "Không rõ"} />
-            </div>
-
-            {item.note && (
-              <div className="rounded-2xl bg-muted/35 p-3 text-sm text-muted-foreground">{item.note}</div>
-            )}
-          </Card>
-        ))
+          );
+        })
       )}
     </PageContainer>
-  );
-}
-
-function InfoCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-muted/35 p-3">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className="mt-1 text-sm font-semibold">{value}</div>
-    </div>
   );
 }
 

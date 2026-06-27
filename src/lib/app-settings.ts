@@ -11,6 +11,7 @@ export interface AppSettings {
   about?: string;
   advance_limit?: number;
   advance_rules?: string;
+  account_code_prefix?: string;
   logo?: string;
   install_guide_images?: string[];
   collectionId?: string;

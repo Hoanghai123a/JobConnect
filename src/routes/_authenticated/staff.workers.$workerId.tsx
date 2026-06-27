@@ -34,6 +34,7 @@ import {
 } from "@/lib/employment";
 import { fetchFactories, fetchFactoryManagers, isFactoryAssignmentActive, type FactoryRecord } from "@/lib/factories";
 import { createStaffActionLog } from "@/lib/staff-log";
+import { CccdManager } from "@/components/cccd/CccdManager";
 import {
   canAccessStaffWorkspace,
   canReportAdvance,
@@ -210,13 +211,6 @@ function StaffWorkerDetailPage() {
         filter: `user="${workerUser.id}"`,
         sort: "-created",
       }).catch(() => []),
-      createStaffActionLog({
-        actor: viewer,
-        targetUserId: workerUser.id,
-        targetCollection: "check_salary_items",
-        action: "check_payroll",
-        note: "Mở drawer xem check công / lương",
-      }),
     ]).then(([attendanceRows, salaryRows]) => {
       if (!alive) return;
       setAttendanceItems(attendanceRows as AttendanceItem[]);
@@ -282,14 +276,6 @@ function StaffWorkerDetailPage() {
       })),
     });
 
-    await createStaffActionLog({
-      actor: viewer || undefined,
-      targetUserId: workerId,
-      targetCollection: "employment_histories",
-      action: "export",
-      note: "Xuất lịch sử đi làm chi tiết của một user",
-    });
-
     toast.success("Đã xuất Excel");
   };
 
@@ -316,7 +302,11 @@ function StaffWorkerDetailPage() {
     const outstanding = existingAdvances.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
     const settings = await (await import("@/lib/app-settings")).fetchAppSettings();
     const limit = Number(settings.advance_limit || 0);
-    if (limit > 0 && outstanding + amount > limit) {
+    if (limit <= 0) {
+      toast.error("Admin chưa cài hạn mức Ứng lương");
+      return;
+    }
+    if (outstanding + amount > limit) {
       toast.error(`Vượt hạn mức ứng lương. Đang dùng ${outstanding.toLocaleString("vi-VN")} đ / ${limit.toLocaleString("vi-VN")} đ. Còn lại ${(limit - outstanding).toLocaleString("vi-VN")} đ`);
       return;
     }
@@ -478,8 +468,8 @@ function StaffWorkerDetailPage() {
       worker_name_snapshot: history.worker_name_snapshot || "",
       worker_cccd_snapshot: history.worker_cccd_snapshot || "",
       recruiter_staff: history.recruiter_staff || "",
-      join_date: history.join_date || "",
-      leave_date: history.leave_date || "",
+      join_date: history.join_date?.slice(0, 10) || "",
+      leave_date: history.leave_date?.slice(0, 10) || "",
       status: history.status || "working",
       note: history.note || "",
     });
@@ -617,6 +607,20 @@ function StaffWorkerDetailPage() {
           onClick={() => setBankOpen(true)}
         />
       </div>
+
+      {workerUser && (
+        <div className="space-y-2">
+          <div className="text-sm font-semibold">Ảnh CCCD</div>
+          <CccdManager
+            targetUser={workerUser}
+            actor={viewer as UserRecord}
+            onUpdated={async () => {
+              const refreshed = await pb.collection("users").getOne<UserRecord>(workerId).catch(() => null);
+              if (refreshed) setWorkerUser(refreshed);
+            }}
+          />
+        </div>
+      )}
 
       {canReportAdvanceForWorker && advances.length > 0 && (
         <div className="space-y-2">
