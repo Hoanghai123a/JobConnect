@@ -33,6 +33,7 @@ import {
   type EmploymentHistoryRecord,
 } from "@/lib/employment";
 import { fetchFactories, fetchFactoryManagers, isFactoryAssignmentActive, type FactoryRecord } from "@/lib/factories";
+import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
 import {
@@ -105,6 +106,7 @@ function StaffWorkerDetailPage() {
   const [leaveNote, setLeaveNote] = useState("");
   const [joinForm, setJoinForm] = useState({
     factory: "",
+    main_house: "",
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
@@ -122,11 +124,13 @@ function StaffWorkerDetailPage() {
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
     recruiter_staff: "",
+    main_house: "",
     join_date: "",
     leave_date: "",
     status: "working",
     note: "",
   });
+  const [mainHouses, setMainHouses] = useState<MainHouseRecord[]>([]);
 
   useEffect(() => {
     if (!viewer?.id || !canAccessStaffWorkspace(viewer)) return;
@@ -147,8 +151,9 @@ function StaffWorkerDetailPage() {
         filter: `user="${workerId}"`,
         sort: "-created",
       }).catch(() => []),
+      fetchMainHouses().catch(() => [] as MainHouseRecord[]),
     ])
-      .then(([historyRows, factoryRows, managerRows, rawUser, staffRows, advanceRows]) => {
+      .then(([historyRows, factoryRows, managerRows, rawUser, staffRows, advanceRows, mainHouseRows]) => {
         if (!alive) return;
 
         const managedFactoryIds = new Set(
@@ -172,6 +177,7 @@ function StaffWorkerDetailPage() {
         setHistories(historyRows);
         setManagedFactoryIds(managedFactoryIds);
         setFactories(factoryRows);
+        setMainHouses(mainHouseRows);
         setStaffUsers(staffRows as UserRecord[]);
         setAdvances(advanceRows as AdvanceItem[]);
         setJoinForm((prev) => ({
@@ -180,6 +186,7 @@ function StaffWorkerDetailPage() {
           worker_name_snapshot: latest?.worker_name_snapshot || userRecord?.full_name || "",
           worker_cccd_snapshot: latest?.worker_cccd_snapshot || userRecord?.cccd || "",
           recruiter_staff: latest?.recruiter_staff || viewer.id,
+          main_house: latest?.main_house || "",
         }));
         setBankForm({
           bank_name: userRecord?.bank_name || "",
@@ -388,10 +395,10 @@ function StaffWorkerDetailPage() {
 
   const submitJoin = async () => {
     if (!viewer?.id || !workerUser) return;
-    if (!joinForm.factory || !joinForm.join_date || !joinForm.worker_name_snapshot || !joinForm.worker_cccd_snapshot) {
-      toast.warning("Điền đủ thông tin đi làm nhà máy mới");
-      return;
-    }
+    if (!joinForm.factory) return toast.warning("Chọn nhà máy");
+    if (!joinForm.join_date) return toast.warning("Nhập ngày vào làm");
+    if (!joinForm.recruiter_staff) return toast.warning("Chọn người tuyển");
+    if (!joinForm.main_house) return toast.warning("Chọn nhà chính");
     if (!canSubmitJoinForWorker) {
       toast.error("Bạn không có quyền báo đi làm tại nhà máy đã chọn");
       return;
@@ -406,10 +413,11 @@ function StaffWorkerDetailPage() {
     const created = await createEmploymentHistory({
       user: workerUser.id,
       factory: joinForm.factory,
+      main_house: joinForm.main_house,
       employee_code: joinForm.employee_code.trim(),
-      worker_name_snapshot: joinForm.worker_name_snapshot.trim(),
-      worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim(),
-      recruiter_staff: joinForm.recruiter_staff || viewer.id,
+      worker_name_snapshot: joinForm.worker_name_snapshot.trim() || workerUser.full_name || workerUser.username || "",
+      worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim() || workerUser.cccd || "",
+      recruiter_staff: joinForm.recruiter_staff,
       join_date: joinForm.join_date,
       status: "working",
       note: joinForm.note.trim(),
@@ -468,6 +476,7 @@ function StaffWorkerDetailPage() {
       worker_name_snapshot: history.worker_name_snapshot || "",
       worker_cccd_snapshot: history.worker_cccd_snapshot || "",
       recruiter_staff: history.recruiter_staff || "",
+      main_house: history.main_house || "",
       join_date: history.join_date?.slice(0, 10) || "",
       leave_date: history.leave_date?.slice(0, 10) || "",
       status: history.status || "working",
@@ -483,6 +492,7 @@ function StaffWorkerDetailPage() {
       worker_name_snapshot: historyForm.worker_name_snapshot.trim(),
       worker_cccd_snapshot: historyForm.worker_cccd_snapshot.trim(),
       recruiter_staff: historyForm.recruiter_staff || undefined,
+      main_house: historyForm.main_house || undefined,
       join_date: historyForm.join_date,
       leave_date: historyForm.leave_date || undefined,
       status: historyForm.status as "working" | "left",
@@ -671,6 +681,9 @@ function StaffWorkerDetailPage() {
                       history.expand?.recruiter_staff?.username ||
                       "Chưa gán"}
                   </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    Nhà chính: {history.expand?.main_house?.name || "Chưa gán"}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -853,6 +866,24 @@ function StaffWorkerDetailPage() {
                 </SelectContent>
               </Select>
             </FormField>
+            <FormField label="Nhà chính">
+              <Select
+                value={joinForm.main_house || "__none__"}
+                onValueChange={(value) => setJoinForm((current) => ({ ...current, main_house: value === "__none__" ? "" : value }))}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Chọn nhà chính (tuỳ chọn)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Không gán</SelectItem>
+                  {mainHouses.map((house) => (
+                    <SelectItem key={house.id} value={house.id}>
+                      {house.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
             <FormField label="Mã NV">
               <Input
                 value={joinForm.employee_code}
@@ -1024,6 +1055,24 @@ function StaffWorkerDetailPage() {
                   {staffUsers.map((staffUser) => (
                     <SelectItem key={staffUser.id} value={staffUser.id}>
                       {staffUser.full_name || staffUser.username || staffUser.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Nhà chính">
+              <Select
+                value={historyForm.main_house || "__none__"}
+                onValueChange={(value) => setHistoryForm((current) => ({ ...current, main_house: value === "__none__" ? "" : value }))}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Chọn nhà chính (tuỳ chọn)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Không gán</SelectItem>
+                  {mainHouses.map((house) => (
+                    <SelectItem key={house.id} value={house.id}>
+                      {house.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

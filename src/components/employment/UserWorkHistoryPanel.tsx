@@ -20,6 +20,7 @@ import { useAuth } from "@/lib/auth";
 import {
   fetchEmploymentHistories,
   getLatestEmploymentHistory,
+  maskCccd,
   syncLegacyUserWorkFields,
   updateEmploymentHistory,
   type EmploymentHistoryRecord,
@@ -184,6 +185,13 @@ export function UserWorkHistoryPanel() {
                   </div>
                   <div className="text-[11px] text-muted-foreground">
                     Mã NV: {history.employee_code || "Chưa có"}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Họ tên (NM): {history.worker_name_snapshot || "—"} · CCCD:{" "}
+                    {maskCccd(history.worker_cccd_snapshot)}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Nhà chính: {history.expand?.main_house?.name || "Chưa gán"}
                   </div>
                 </div>
                 <StatusChip tone={history.status === "working" ? "success" : "neutral"}>

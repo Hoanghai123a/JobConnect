@@ -47,40 +47,91 @@ function StaffExportPage() {
     };
   }, [user?.id]);
 
-  const exportRows = useMemo(() => {
+  const filteredHistories = useMemo(() => {
     return workers
       .flatMap((worker) => worker.histories)
       .filter((history) => {
         if (factoryFilter !== "all" && history.factory !== factoryFilter) return false;
         if (statusFilter !== "all" && history.status !== statusFilter) return false;
         return true;
-      })
-      .map((history, index) => ({
+      });
+  }, [factoryFilter, statusFilter, workers]);
+
+  const basicRows = useMemo(() => {
+    return filteredHistories.map((history, index) => ({
+      STT: index + 1,
+      "Mã NV": history.employee_code || "",
+      "Họ tên tại nhà máy": history.worker_name_snapshot,
+      CCCD: history.worker_cccd_snapshot,
+      "Người tuyển":
+        history.expand?.recruiter_staff?.full_name ||
+        history.expand?.recruiter_staff?.username ||
+        "",
+      "Nhà máy": history.expand?.factory?.name || "",
+      "Nhà chính": history.expand?.main_house?.name || "",
+      "Ngày vào": history.join_date || "",
+      "Ngày nghỉ": history.leave_date || "",
+      "Trạng thái": history.status === "working" ? "Đang làm" : "Đã nghỉ",
+      "User gốc": history.expand?.user?.full_name || history.expand?.user?.username || "",
+      "Số điện thoại": history.expand?.user?.phone || "",
+    }));
+  }, [filteredHistories]);
+
+  const fullRows = useMemo(() => {
+    return filteredHistories.map((history, index) => {
+      const u = history.expand?.user;
+      return {
         STT: index + 1,
+        "Mã TK (UID)": u?.uid || "",
+        Username: u?.username || "",
+        "Họ tên gốc": u?.full_name || "",
+        "CCCD gốc": u?.cccd || "",
+        Email: u?.email || "",
+        "Số điện thoại": u?.phone || "",
+        "Vai trò": u?.role || "",
+        "Trạng thái TK": u?.status || "",
         "Mã NV": history.employee_code || "",
         "Họ tên tại nhà máy": history.worker_name_snapshot,
-        CCCD: history.worker_cccd_snapshot,
+        "CCCD tại nhà máy": history.worker_cccd_snapshot,
+        "Nhà máy": history.expand?.factory?.name || "",
+        "Nhà chính": history.expand?.main_house?.name || "",
         "Người tuyển":
           history.expand?.recruiter_staff?.full_name ||
           history.expand?.recruiter_staff?.username ||
           "",
-        "Nhà máy": history.expand?.factory?.name || "",
         "Ngày vào": history.join_date || "",
         "Ngày nghỉ": history.leave_date || "",
-        "Trạng thái": history.status === "working" ? "Đang làm" : "Đã nghỉ",
-        "User gốc": history.expand?.user?.full_name || history.expand?.user?.username || "",
-        "Số điện thoại": history.expand?.user?.phone || "",
-      }));
-  }, [factoryFilter, statusFilter, workers]);
+        "Trạng thái lịch sử": history.status === "working" ? "Đang làm" : "Đã nghỉ",
+        "Ghi chú": history.note || "",
+        "Ngân hàng": u?.bank_name || "",
+        "Số tài khoản": u?.bank_account_number || "",
+        "Tên chủ TK": u?.bank_account_name || "",
+        "LCB": u?.lcb ?? "",
+        "Chuyên cần": u?.chuyen_can ?? "",
+        "Đời sống": u?.doi_song ?? "",
+        "Thâm niên": u?.tham_nien ?? "",
+        "Giờ HC mặc định": u?.default_hc_hours ?? "",
+        "Giờ OT mặc định": u?.default_ot_hours ?? "",
+      };
+    });
+  }, [filteredHistories]);
 
-  const doExport = async () => {
-    if (!exportRows.length) {
+  const doExportBasic = async () => {
+    if (!basicRows.length) {
       toast.warning("Không có dữ liệu để xuất");
       return;
     }
+    exportToExcel(`jobconnect_export_co_ban_${Date.now()}`, { "Lao dong": basicRows });
+    toast.success("Đã xuất Excel cơ bản");
+  };
 
-    exportToExcel(`jobconnect_staff_export_${Date.now()}`, { "Lao dong": exportRows });
-    toast.success("Đã xuất Excel");
+  const doExportFull = async () => {
+    if (!fullRows.length) {
+      toast.warning("Không có dữ liệu để xuất");
+      return;
+    }
+    exportToExcel(`jobconnect_export_day_du_${Date.now()}`, { "Lao dong day du": fullRows });
+    toast.success("Đã xuất Excel đầy đủ");
   };
 
   return (
@@ -118,19 +169,27 @@ function StaffExportPage() {
         </div>
 
         <div className="rounded-2xl bg-muted/40 p-3 text-sm">
-          Sẵn sàng xuất <strong>{exportRows.length}</strong> dòng dữ liệu.
+          Sẵn sàng xuất <strong>{basicRows.length}</strong> dòng dữ liệu.
         </div>
 
-        <Button onClick={doExport} className="w-full rounded-xl">
-          <FileDown className="h-4 w-4" /> Xuất Excel
-        </Button>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <Button onClick={doExportBasic} variant="outline" className="w-full rounded-xl">
+            <FileDown className="h-4 w-4" /> Xuất cơ bản
+          </Button>
+          <Button onClick={doExportFull} className="w-full rounded-xl">
+            <FileDown className="h-4 w-4" /> Xuất đầy đủ
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Bản đầy đủ kèm thông tin cá nhân (UID, email, vai trò, CCCD gốc), tài khoản ngân hàng và các tham số lương.
+        </p>
       </div>
 
       {loading ? (
         <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">
           Đang tải dữ liệu để xuất...
         </div>
-      ) : exportRows.length === 0 ? (
+      ) : basicRows.length === 0 ? (
         <EmptyState
           icon={Download}
           title="Chưa có dữ liệu phù hợp"
@@ -138,7 +197,7 @@ function StaffExportPage() {
         />
       ) : (
         <div className="space-y-2">
-          {exportRows.slice(0, 12).map((row) => (
+          {basicRows.slice(0, 12).map((row) => (
             <div key={`${row.STT}-${row["Mã NV"]}-${row["Ngày vào"]}`} className="list-card border-l-[color:var(--status-info)]">
               <div className="text-sm font-semibold">{row["Họ tên tại nhà máy"]}</div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">

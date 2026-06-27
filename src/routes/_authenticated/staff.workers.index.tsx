@@ -30,6 +30,7 @@ import {
   updateEmploymentHistory,
 } from "@/lib/employment";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
+import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
@@ -50,6 +51,7 @@ function StaffWorkersPage() {
   const [loading, setLoading] = useState(true);
   const [workers, setWorkers] = useState<StaffWorkerRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
+  const [mainHouses, setMainHouses] = useState<MainHouseRecord[]>([]);
   const [managedFactoryIds, setManagedFactoryIds] = useState<Set<string>>(new Set());
   const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
   const [search, setSearch] = useState("");
@@ -70,7 +72,7 @@ function StaffWorkersPage() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [workspace, factoryList, staffList, managerRows] = await Promise.all([
+      const [workspace, factoryList, staffList, managerRows, mainHouseList] = await Promise.all([
         fetchStaffWorkspace(user as UserRecord),
         fetchFactories(),
         pb.collection("users").getFullList<UserRecord>({
@@ -78,10 +80,12 @@ function StaffWorkersPage() {
           sort: "full_name,username",
         }),
         fetchFactoryManagers(user.id),
+        fetchMainHouses().catch(() => [] as MainHouseRecord[]),
       ]);
       setWorkers(workspace.workers);
       setFactories(factoryList);
       setStaffUsers(staffList);
+      setMainHouses(mainHouseList);
       setManagedFactoryIds(
         new Set(managerRows.filter((item) => isFactoryAssignmentActive(item)).map((item) => item.factory)),
       );
@@ -189,6 +193,11 @@ function StaffWorkersPage() {
                       latest?.expand?.recruiter_staff?.username ||
                       "Chưa gán"}
                   </div>
+                  {latest?.expand?.main_house?.name && (
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      Nhà chính: {latest.expand.main_house.name}
+                    </div>
+                  )}
                 </div>
 
                 {user?.role === "admin" ? (
@@ -217,6 +226,7 @@ function StaffWorkersPage() {
         open={drawerOpen}
         viewer={user as UserRecord}
         factories={factories}
+        mainHouses={mainHouses}
         managedFactoryIds={managedFactoryIds}
         staffUsers={staffUsers}
         onClose={closeDrawer}
@@ -233,6 +243,7 @@ function WorkerQuickDrawer({
   open,
   viewer,
   factories,
+  mainHouses,
   managedFactoryIds,
   staffUsers,
   onClose,
@@ -242,6 +253,7 @@ function WorkerQuickDrawer({
   open: boolean;
   viewer: UserRecord;
   factories: FactoryRecord[];
+  mainHouses: MainHouseRecord[];
   managedFactoryIds: Set<string>;
   staffUsers: UserRecord[];
   onClose: () => void;
@@ -251,7 +263,7 @@ function WorkerQuickDrawer({
   const [view, setView] = useState<DrawerView>("summary");
   const [leaveDate, setLeaveDate] = useState(todayDate());
   const [leaveNote, setLeaveNote] = useState("");
-  const [joinForm, setJoinForm] = useState({ factory: "", employee_code: "", worker_name_snapshot: "", worker_cccd_snapshot: "", recruiter_staff: "", join_date: todayDate(), note: "" });
+  const [joinForm, setJoinForm] = useState({ factory: "", main_house: "", employee_code: "", worker_name_snapshot: "", worker_cccd_snapshot: "", recruiter_staff: "", join_date: todayDate(), note: "" });
   const [amountText, setAmountText] = useState("");
   const [advanceReason, setAdvanceReason] = useState("");
   const [bankChoice, setBankChoice] = useState<"worker" | "viewer">("worker");
@@ -271,6 +283,7 @@ function WorkerQuickDrawer({
     const latest = worker.latestHistory;
     setJoinForm({
       factory: "",
+      main_house: latest?.main_house || "",
       employee_code: latest?.employee_code || worker.user.employee_code || "",
       worker_name_snapshot: latest?.worker_name_snapshot || worker.user.full_name || "",
       worker_cccd_snapshot: latest?.worker_cccd_snapshot || worker.user.cccd || "",
@@ -328,7 +341,10 @@ function WorkerQuickDrawer({
 
   const submitJoin = async () => {
     if (!worker || !viewer?.id) return;
-    if (!joinForm.factory || !joinForm.join_date || !joinForm.worker_name_snapshot || !joinForm.worker_cccd_snapshot) { toast.warning("Điền đủ thông tin"); return; }
+    if (!joinForm.factory) { toast.warning("Chọn nhà máy"); return; }
+    if (!joinForm.join_date) { toast.warning("Nhập ngày vào làm"); return; }
+    if (!joinForm.recruiter_staff) { toast.warning("Chọn người tuyển"); return; }
+    if (!joinForm.main_house) { toast.warning("Chọn nhà chính"); return; }
     if (!canReportJoin(viewer, worker.histories, managedFactoryIds, joinForm.factory)) {
       toast.error("Bạn không có quyền báo đi làm tại nhà máy đã chọn");
       return;
@@ -338,9 +354,9 @@ function WorkerQuickDrawer({
       const active = await findActiveEmploymentByUser(worker.user.id);
       if (active) { toast.error("Cần báo nghỉ nhà máy cũ trước"); setSubmitting(false); return; }
       const created = await createEmploymentHistory({
-        user: worker.user.id, factory: joinForm.factory, employee_code: joinForm.employee_code.trim(),
-        worker_name_snapshot: joinForm.worker_name_snapshot.trim(), worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim(),
-        recruiter_staff: joinForm.recruiter_staff || viewer.id, join_date: joinForm.join_date, status: "working", note: joinForm.note.trim(),
+        user: worker.user.id, factory: joinForm.factory, main_house: joinForm.main_house, employee_code: joinForm.employee_code.trim(),
+        worker_name_snapshot: joinForm.worker_name_snapshot.trim() || worker.user.full_name || worker.user.username || "", worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim() || worker.user.cccd || "",
+        recruiter_staff: joinForm.recruiter_staff, join_date: joinForm.join_date, status: "working", note: joinForm.note.trim(),
       });
       await syncLegacyUserWorkFields(worker.user.id, created);
       await createStaffActionLog({ actor: viewer, targetUserId: worker.user.id, targetCollection: "employment_histories", targetRecord: created.id, action: "report_join", note: "Báo đi làm mới từ danh sách" });
@@ -422,6 +438,7 @@ function WorkerQuickDrawer({
                 <InfoCell label="Mã NV" value={latest?.employee_code || worker.user.employee_code || "—"} />
                 <InfoCell label="SĐT" value={worker.user.phone || "—"} />
                 <InfoCell label="Nhà máy" value={latest?.expand?.factory?.name || "—"} />
+                <InfoCell label="Nhà chính" value={latest?.expand?.main_house?.name || "—"} />
                 <InfoCell label="Người tuyển" value={latest?.expand?.recruiter_staff?.full_name || latest?.expand?.recruiter_staff?.username || "—"} />
               </div>
 
@@ -493,6 +510,21 @@ function WorkerQuickDrawer({
                 <Select value={joinForm.factory} onValueChange={(v) => setJoinForm((f) => ({ ...f, factory: v }))}>
                   <SelectTrigger><SelectValue placeholder="Chọn nhà máy" /></SelectTrigger>
                   <SelectContent>{joinableFactories.map((f) => (<SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Nhà chính</Label>
+                <Select
+                  value={joinForm.main_house || "__none__"}
+                  onValueChange={(v) => setJoinForm((f) => ({ ...f, main_house: v === "__none__" ? "" : v }))}
+                >
+                  <SelectTrigger><SelectValue placeholder="Chọn nhà chính (tuỳ chọn)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Không gán</SelectItem>
+                    {mainHouses.map((house) => (
+                      <SelectItem key={house.id} value={house.id}>{house.name}</SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
               <div className="grid grid-cols-2 gap-2">

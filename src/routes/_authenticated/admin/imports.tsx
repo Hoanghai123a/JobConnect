@@ -14,6 +14,7 @@ import {
   getLatestEmploymentHistory,
   syncLegacyUserWorkFields,
 } from "@/lib/employment";
+import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { assignUidIfMissing } from "@/lib/uid";
@@ -38,6 +39,7 @@ function AdminImportsPage() {
           uid: "",
           username: "nguyenvana",
           factory_name: "Nhà máy A",
+          main_house_name: "Nhà chính HN",
           employee_code: "NM001",
           worker_name_snapshot: "Nguyễn Văn A",
           worker_cccd_snapshot: "012345678901",
@@ -58,15 +60,17 @@ function AdminImportsPage() {
 
     setImportingHistories(true);
     try {
-      const [factoryRows, allUsers] = await Promise.all([
+      const [factoryRows, allUsers, mainHouseRows] = await Promise.all([
         fetchFactories(),
         pb.collection("users").getFullList<UserRecord>({ sort: "full_name,username" }),
+        fetchMainHouses().catch(() => [] as MainHouseRecord[]),
       ]);
       const staffUsers = allUsers.filter((item) => item.role === "staff" || item.role === "admin");
       const factoryByName = new Map(factoryRows.map((item) => [item.name.toLowerCase(), item]));
       const factoryByCode = new Map(
         factoryRows.map((item) => [(item.code || "").toLowerCase(), item]),
       );
+      const mainHouseByName = new Map(mainHouseRows.map((item) => [item.name.toLowerCase(), item]));
       const userByUsername = new Map(
         allUsers.map((item) => [(item.username || "").toLowerCase(), item]),
       );
@@ -93,6 +97,7 @@ function AdminImportsPage() {
         const phone = pickValue(row, ["phone", "Số điện thoại"]);
         const factoryName = pickValue(row, ["factory_name", "Nhà máy"]);
         const factoryCode = pickValue(row, ["factory_code", "Mã nhà máy"]);
+        const mainHouseName = pickValue(row, ["main_house_name", "Nhà chính"]);
         const employeeCode = pickValue(row, ["employee_code", "Mã NV"]);
         const workerName = pickValue(row, ["worker_name_snapshot", "Họ tên tại nhà máy"]);
         const workerCccd = pickValue(row, ["worker_cccd_snapshot", "CCCD tại nhà máy"]);
@@ -109,6 +114,9 @@ function AdminImportsPage() {
         const factory =
           factoryByName.get(factoryName.toLowerCase()) ||
           factoryByCode.get(factoryCode.toLowerCase());
+        const mainHouse = mainHouseName
+          ? mainHouseByName.get(mainHouseName.toLowerCase())
+          : undefined;
         const recruiter = staffByUsername.get(recruiterUsername.toLowerCase());
 
         if (!user || !factory || !joinDate || !workerName || !workerCccd) {
@@ -133,6 +141,7 @@ function AdminImportsPage() {
         const payload = {
           user: user.id,
           factory: factory.id,
+          main_house: mainHouse?.id || "",
           employee_code: employeeCode,
           worker_name_snapshot: workerName,
           worker_cccd_snapshot: workerCccd,

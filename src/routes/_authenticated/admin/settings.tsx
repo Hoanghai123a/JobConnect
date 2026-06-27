@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import {
   Building2,
   Factory,
+  Home,
   Save,
   ImagePlus,
   Pencil,
@@ -348,16 +349,28 @@ interface RecruitmentArea {
   note?: string;
 }
 
+interface MainHouse {
+  id: string;
+  name: string;
+  address?: string;
+  hotline?: string;
+  note?: string;
+}
+
 function FactoriesTab() {
   const currentUser = pb.authStore.record as UserRecord | null;
   const [items, setItems] = useState<Factory[]>([]);
   const [areas, setAreas] = useState<RecruitmentArea[]>([]);
+  const [mainHouses, setMainHouses] = useState<MainHouse[]>([]);
   const [editing, setEditing] = useState<Partial<Factory> | null>(null);
   const [editingArea, setEditingArea] = useState<Partial<RecruitmentArea> | null>(null);
+  const [editingMainHouse, setEditingMainHouse] = useState<Partial<MainHouse> | null>(null);
   const [loading, setLoading] = useState(false);
   const [areasLoading, setAreasLoading] = useState(false);
+  const [mainHousesLoading, setMainHousesLoading] = useState(false);
   const [factoriesOpen, setFactoriesOpen] = useState(true);
   const [areasOpen, setAreasOpen] = useState(true);
+  const [mainHousesOpen, setMainHousesOpen] = useState(true);
   const [managingFactory, setManagingFactory] = useState<Factory | null>(null);
 
   const loadFactories = async () => {
@@ -384,9 +397,22 @@ function FactoriesTab() {
     }
   };
 
+  const loadMainHouses = async () => {
+    setMainHousesLoading(true);
+    try {
+      const res = await pb.collection("main_houses").getFullList({ sort: "name" });
+      setMainHouses(res as any);
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi tải nhà chính. Hãy tạo collection 'main_houses'.");
+    } finally {
+      setMainHousesLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadFactories();
     loadAreas();
+    loadMainHouses();
   }, []);
 
   const save = async () => {
@@ -512,6 +538,70 @@ function FactoriesTab() {
       loadAreas();
     } catch (e: any) {
       toast.error(e?.message || "Lỗi xoá khu vực");
+    }
+  };
+
+  const saveMainHouse = async () => {
+    const name = editingMainHouse?.name?.trim();
+    if (!name) {
+      toast.error("Tên nhà chính bắt buộc");
+      return;
+    }
+    try {
+      const payload = {
+        name,
+        address: editingMainHouse?.address || "",
+        hotline: editingMainHouse?.hotline || "",
+        note: editingMainHouse?.note || "",
+      };
+      if (editingMainHouse?.id) {
+        const before = mainHouses.find((m) => m.id === editingMainHouse.id);
+        await pb.collection("main_houses").update(editingMainHouse.id, payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "main_houses",
+          targetRecord: editingMainHouse.id,
+          action: "update",
+          before,
+          after: payload,
+          note: "Admin cập nhật nhà chính",
+        });
+      } else {
+        const created = await pb.collection("main_houses").create(payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "main_houses",
+          targetRecord: created.id,
+          action: "create",
+          after: payload,
+          note: "Admin tạo nhà chính mới",
+        });
+      }
+      toast.success("Đã lưu nhà chính");
+      setEditingMainHouse(null);
+      loadMainHouses();
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi lưu nhà chính");
+    }
+  };
+
+  const removeMainHouse = async (id: string) => {
+    if (!confirm("Xoá nhà chính này?")) return;
+    try {
+      const before = mainHouses.find((m) => m.id === id);
+      await pb.collection("main_houses").delete(id);
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "main_houses",
+        targetRecord: id,
+        action: "delete",
+        before,
+        note: "Admin xoá nhà chính",
+      });
+      toast.success("Đã xoá nhà chính");
+      loadMainHouses();
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi xoá nhà chính");
     }
   };
 
@@ -777,6 +867,135 @@ function FactoriesTab() {
               Huỷ
             </Button>
             <Button onClick={saveArea} className="rounded-xl">
+              <Save className="h-4 w-4" /> Lưu
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Collapsible open={mainHousesOpen} onOpenChange={setMainHousesOpen}>
+        <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
+          <div className="flex items-center justify-between gap-2">
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                aria-label="Thu gọn hoặc mở rộng danh sách nhà chính"
+              >
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${mainHousesOpen ? "rotate-0" : "-rotate-90"}`}
+                />
+                <h2 className="text-sm font-semibold">
+                  Nhà chính <span className="text-muted-foreground">({mainHouses.length})</span>
+                </h2>
+              </button>
+            </CollapsibleTrigger>
+            <button
+              onClick={() => setEditingMainHouse({})}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-soft active:scale-95"
+              aria-label="Thêm nhà chính"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+
+          <CollapsibleContent className="mt-3 space-y-3">
+            {mainHousesLoading && (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                Đang tải nhà chính...
+              </div>
+            )}
+            {!mainHousesLoading && mainHouses.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
+                Chưa có nhà chính. Bấm nút + để thêm.
+              </div>
+            )}
+            {mainHouses.map((house) => (
+              <div
+                key={house.id}
+                className="list-card border-l-[color:var(--status-warning)] flex items-start gap-3"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Home className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{house.name}</div>
+                  {house.address && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(house.address)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-0.5 block text-[11px] text-muted-foreground hover:text-primary hover:underline"
+                    >
+                      📍 {house.address}
+                    </a>
+                  )}
+                  {house.hotline && (
+                    <div className="text-[11px] text-muted-foreground">📞 {house.hotline}</div>
+                  )}
+                  {house.note && (
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">{house.note}</div>
+                  )}
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setEditingMainHouse(house)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+                    aria-label="Sửa nhà chính"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => removeMainHouse(house.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
+                    aria-label="Xoá nhà chính"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+
+      <Dialog open={!!editingMainHouse} onOpenChange={(o) => !o && setEditingMainHouse(null)}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingMainHouse?.id ? "Sửa nhà chính" : "Thêm nhà chính"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Field
+              label="Tên nhà chính *"
+              value={editingMainHouse?.name || ""}
+              onChange={(v) => setEditingMainHouse({ ...editingMainHouse, name: v })}
+            />
+            <Field
+              label="Địa chỉ"
+              value={editingMainHouse?.address || ""}
+              onChange={(v) => setEditingMainHouse({ ...editingMainHouse, address: v })}
+            />
+            <Field
+              label="Hotline"
+              value={editingMainHouse?.hotline || ""}
+              onChange={(v) => setEditingMainHouse({ ...editingMainHouse, hotline: v })}
+            />
+            <div>
+              <Label className="text-xs">Ghi chú</Label>
+              <Textarea
+                className="mt-1 rounded-xl"
+                rows={3}
+                value={editingMainHouse?.note || ""}
+                onChange={(e) => setEditingMainHouse({ ...editingMainHouse, note: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingMainHouse(null)} className="rounded-xl">
+              Huỷ
+            </Button>
+            <Button onClick={saveMainHouse} className="rounded-xl">
               <Save className="h-4 w-4" /> Lưu
             </Button>
           </DialogFooter>

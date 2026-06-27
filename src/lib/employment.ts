@@ -1,5 +1,6 @@
 import { pb, type UserRecord } from "./pocketbase";
 import type { FactoryRecord } from "./factories";
+import type { MainHouseRecord } from "./main-houses";
 import { relationInFilter } from "./delegations";
 
 export type EmploymentStatus = "working" | "left";
@@ -8,6 +9,7 @@ export interface EmploymentHistoryRecord {
   id: string;
   user: string;
   factory: string;
+  main_house?: string;
   employee_code?: string;
   worker_name_snapshot: string;
   worker_cccd_snapshot: string;
@@ -21,6 +23,7 @@ export interface EmploymentHistoryRecord {
   expand?: {
     user?: UserRecord;
     factory?: FactoryRecord;
+    main_house?: MainHouseRecord;
     recruiter_staff?: UserRecord;
   };
 }
@@ -28,6 +31,7 @@ export interface EmploymentHistoryRecord {
 export interface EmploymentDraft {
   user: string;
   factory: string;
+  main_house?: string;
   employee_code?: string;
   worker_name_snapshot: string;
   worker_cccd_snapshot: string;

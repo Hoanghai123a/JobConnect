@@ -72,6 +72,7 @@ import {
   type EmploymentHistoryRecord,
 } from "@/lib/employment";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
+import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { cn } from "@/lib/utils";
 import { assignUidIfMissing } from "@/lib/uid";
 import { CccdManager } from "@/components/cccd/CccdManager";
@@ -123,6 +124,7 @@ function WorkforcePage() {
   const [histories, setHistories] = useState<EmploymentHistoryRecord[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
+  const [mainHouses, setMainHouses] = useState<MainHouseRecord[]>([]);
   const [openRegister, setOpenRegister] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [cccdExportOpen, setCccdExportOpen] = useState(false);
@@ -130,14 +132,16 @@ function WorkforcePage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [histList, userList, factoryList] = await Promise.all([
+      const [histList, userList, factoryList, mainHouseList] = await Promise.all([
         fetchEmploymentHistories(),
         pb.collection("users").getFullList<UserRecord>({ sort: "full_name,username" }),
         fetchFactories(),
+        fetchMainHouses().catch(() => [] as MainHouseRecord[]),
       ]);
       setHistories(histList);
       setUsers(userList);
       setFactories(factoryList);
+      setMainHouses(mainHouseList);
     } catch (error: any) {
       toast.error(error?.message || "Không tải được dữ liệu");
     } finally {
@@ -328,6 +332,7 @@ function WorkforcePage() {
         onClose={() => setOpenRegister(false)}
         users={users}
         factories={factories}
+        mainHouses={mainHouses}
         onCreated={load}
       />
 
@@ -335,6 +340,7 @@ function WorkforcePage() {
         user={selectedUserId ? userById.get(selectedUserId) || null : null}
         histories={selectedUserId ? histories.filter((h) => h.user === selectedUserId) : []}
         factories={factories}
+        mainHouses={mainHouses}
         users={users}
         open={!!selectedUserId}
         onClose={() => setSelectedUserId(null)}
@@ -847,6 +853,7 @@ function AdminWorkerDrawer({
   user,
   histories,
   factories,
+  mainHouses,
   users,
   open,
   onClose,
@@ -855,6 +862,7 @@ function AdminWorkerDrawer({
   user: UserRecord | null;
   histories: EmploymentHistoryRecord[];
   factories: FactoryRecord[];
+  mainHouses: MainHouseRecord[];
   users: UserRecord[];
   open: boolean;
   onClose: () => void;
@@ -866,6 +874,7 @@ function AdminWorkerDrawer({
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
     recruiter_staff: "",
+    main_house: "",
     join_date: "",
     leave_date: "",
     status: "working",
@@ -882,6 +891,7 @@ function AdminWorkerDrawer({
       worker_name_snapshot: h.worker_name_snapshot || "",
       worker_cccd_snapshot: h.worker_cccd_snapshot || "",
       recruiter_staff: h.recruiter_staff || "",
+      main_house: h.main_house || "",
       join_date: h.join_date?.slice(0, 10) || "",
       leave_date: h.leave_date?.slice(0, 10) || "",
       status: h.status || "working",
@@ -898,6 +908,7 @@ function AdminWorkerDrawer({
         worker_name_snapshot: form.worker_name_snapshot.trim(),
         worker_cccd_snapshot: form.worker_cccd_snapshot.trim(),
         recruiter_staff: form.recruiter_staff || undefined,
+        main_house: form.main_house || undefined,
         join_date: form.join_date || undefined,
         leave_date: form.leave_date || undefined,
         status: form.status as "working" | "left",
@@ -1022,6 +1033,7 @@ function AdminWorkerDrawer({
                           h.expand?.recruiter_staff?.username ||
                           "—"}
                       </div>
+                      <div>Nhà chính: {h.expand?.main_house?.name || "—"}</div>
                       {h.note && <div className="col-span-2 text-muted-foreground">{h.note}</div>}
                     </div>
                   )}
@@ -1121,6 +1133,27 @@ function AdminWorkerDrawer({
                         </Select>
                       </div>
                       <div className="space-y-1">
+                        <Label className="text-[10px]">Nhà chính</Label>
+                        <Select
+                          value={form.main_house || "__none__"}
+                          onValueChange={(v) =>
+                            setForm((f) => ({ ...f, main_house: v === "__none__" ? "" : v }))
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Chọn nhà chính" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Không gán</SelectItem>
+                            {mainHouses.map((m) => (
+                              <SelectItem key={m.id} value={m.id}>
+                                {m.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
                         <Label className="text-[10px]">Ghi chú</Label>
                         <Input
                           value={form.note}
@@ -1180,16 +1213,19 @@ function RegisterDialog({
   onClose,
   users,
   factories,
+  mainHouses,
   onCreated,
 }: {
   open: boolean;
   onClose: () => void;
   users: UserRecord[];
   factories: FactoryRecord[];
+  mainHouses: MainHouseRecord[];
   onCreated: () => void;
 }) {
   const [userId, setUserId] = useState("");
   const [factoryId, setFactoryId] = useState("");
+  const [mainHouseId, setMainHouseId] = useState("");
   const [recruiterId, setRecruiterId] = useState("");
   const [employeeCode, setEmployeeCode] = useState("");
   const [workerName, setWorkerName] = useState("");
@@ -1202,6 +1238,7 @@ function RegisterDialog({
   const reset = () => {
     setUserId("");
     setFactoryId("");
+    setMainHouseId("");
     setRecruiterId("");
     setEmployeeCode("");
     setWorkerName("");
@@ -1234,8 +1271,8 @@ function RegisterDialog({
     if (!userId) return toast.error("Chọn người lao động");
     if (!factoryId) return toast.error("Chọn nhà máy");
     if (!joinDate) return toast.error("Nhập ngày vào làm");
-    if (!workerName.trim()) return toast.error("Nhập họ tên cho lần đi làm này");
-    if (!workerCccd.trim()) return toast.error("Nhập CCCD cho lần đi làm này");
+    if (!recruiterId) return toast.error("Chọn người tuyển");
+    if (!mainHouseId) return toast.error("Chọn nhà chính");
     if (!selectedUser) return;
 
     setSubmitting(true);
@@ -1243,10 +1280,11 @@ function RegisterDialog({
       const created = await createEmploymentHistory({
         user: userId,
         factory: factoryId,
+        main_house: mainHouseId,
         employee_code: employeeCode.trim() || undefined,
-        worker_name_snapshot: workerName.trim(),
-        worker_cccd_snapshot: workerCccd.trim(),
-        recruiter_staff: recruiterId || undefined,
+        worker_name_snapshot: workerName.trim() || selectedUser.full_name || selectedUser.username || "",
+        worker_cccd_snapshot: workerCccd.trim() || selectedUser.cccd || "",
+        recruiter_staff: recruiterId,
         join_date: joinDate,
         status: "working",
         note: note.trim() || undefined,
@@ -1333,6 +1371,26 @@ function RegisterDialog({
               value={factoryId}
               onChange={setFactoryId}
             />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">Nhà chính</Label>
+            <Select
+              value={mainHouseId || "__none__"}
+              onValueChange={(v) => setMainHouseId(v === "__none__" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Chọn nhà chính (tuỳ chọn)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Không gán</SelectItem>
+                {mainHouses.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-1">
