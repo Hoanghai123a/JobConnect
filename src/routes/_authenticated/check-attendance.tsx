@@ -392,16 +392,19 @@ function AdminCheckAttendance() {
 
   const load = async () => {
     const [batchRes, userRes] = await Promise.all([
-      pb.collection("check_attendance_batches").getFullList({ sort: "-created" }),
-      pb.collection("users").getFullList({ sort: "full_name" }),
+      pb.collection("check_attendance_batches").getList(1, 100, {
+        filter: `month="${month}"`,
+        sort: "-created",
+      }),
+      pb.collection("users").getList(1, 500, { sort: "full_name" }),
     ]);
-    setBatches(batchRes as unknown as BatchRecord[]);
-    setUsers(userRes as unknown as UserRecord[]);
+    setBatches(batchRes.items as unknown as BatchRecord[]);
+    setUsers(userRes.items as unknown as UserRecord[]);
     try {
       const salaryBatchRes = await pb
         .collection("check_salary_batches")
-        .getFullList({ sort: "-created" });
-      setSalaryBatches(salaryBatchRes as unknown as BatchRecord[]);
+        .getList(1, 100, { filter: `month="${salaryMonth}"`, sort: "-created" });
+      setSalaryBatches(salaryBatchRes.items as unknown as BatchRecord[]);
     } catch {
       setSalaryBatches([]);
     }
@@ -409,7 +412,7 @@ function AdminCheckAttendance() {
 
   useEffect(() => {
     load().catch((error) => toast.error(error?.message || "Không tải được dữ liệu check công"));
-  }, []);
+  }, [month, salaryMonth]);
 
   const monthBatches = batches.filter((batch) => batch.month === month);
   const nextRound =
@@ -1056,22 +1059,23 @@ function UserCheckAttendance() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const res = await pb.collection("check_attendance_items").getFullList({
+      const res = await pb.collection("check_attendance_items").getList(1, 100, {
         filter: `user="${escapePb(user.id)}"`,
         sort: "-created",
         expand: "batch",
       });
       let salaryRes: unknown[] = [];
       try {
-        salaryRes = await pb.collection("check_salary_items").getFullList({
+        const salaryList = await pb.collection("check_salary_items").getList(1, 100, {
           filter: `user="${escapePb(user.id)}"`,
           sort: "-created",
           expand: "batch",
         });
+        salaryRes = salaryList.items;
       } catch {
         salaryRes = [];
       }
-      const normalized = (res as unknown as CheckItemRecord[]).map((item) => ({
+      const normalized = (res.items as unknown as CheckItemRecord[]).map((item) => ({
         ...item,
         rows: Array.isArray(item.rows) ? item.rows : [],
       }));

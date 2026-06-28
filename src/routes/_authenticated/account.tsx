@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { VN_BANKS } from "@/lib/vn-banks";
 import { exportToExcel } from "@/lib/excel";
+import { escapePb } from "@/lib/delegations";
 import { isUserApproved } from "@/lib/user-approval";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
@@ -91,6 +92,16 @@ const ROLE_LABELS: Record<Role, string> = {
   staff: "Staff",
   user: "Người dùng",
 };
+
+function buildUserSearchFilter(search: string, extraFilter = "") {
+  const q = escapePb(search.trim());
+  const searchFilter = q
+    ? `(${["full_name", "username", "phone", "employee_code", "company", "role"]
+        .map((field) => `${field}~"${q}"`)
+        .join(" || ")})`
+    : "";
+  return [extraFilter, searchFilter].filter(Boolean).join(" && ");
+}
 
 function AccountPage() {
   const { user, logout, isAdmin } = useAuth();
@@ -320,7 +331,10 @@ function UserProfileForm() {
               value={form.cccd || ""}
               onChange={(v) => setForm({ ...form, cccd: v.replace(/\D/g, "") })}
             />
-            <FactorySelect value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
+            <FactorySelect
+              value={form.company}
+              onChange={(v) => setForm({ ...form, company: v })}
+            />
             <TextField
               label="Mã NV"
               value={form.employee_code}
@@ -333,7 +347,8 @@ function UserProfileForm() {
       {!isAdmin && (
         <Section title="Ảnh CCCD">
           <p className="text-[11px] text-muted-foreground">
-            Tải lên 2 ảnh CCCD: mặt trước và mặt sau. Ảnh dùng cho hồ sơ cá nhân, không gắn với từng lịch sử đi làm.
+            Tải lên 2 ảnh CCCD: mặt trước và mặt sau. Ảnh dùng cho hồ sơ cá nhân, không gắn với từng
+            lịch sử đi làm.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <CccdUploader
@@ -426,14 +441,24 @@ function AdminUsersPanel() {
   const [pendingApprovalValue, setPendingApprovalValue] = useState<boolean | null>(null);
   const [adminPassword, setAdminPassword] = useState("");
   const [confirmingApproval, setConfirmingApproval] = useState(false);
-  const emptyNew = { full_name: "", phone: "", username: "", password: "", company: "", employee_code: "" };
+  const emptyNew = {
+    full_name: "",
+    phone: "",
+    username: "",
+    password: "",
+    company: "",
+    employee_code: "",
+  };
   const [newUser, setNewUser] = useState<any>(emptyNew);
 
   const load = async () => {
     setLoading(true);
     try {
-      const res = await pb.collection("users").getFullList({ sort: "-created" });
-      setUsers(res.filter((u: any) => u.id !== me?.id));
+      const res = await pb.collection("users").getList(1, 500, {
+        filter: buildUserSearchFilter(search, me?.id ? `id!="${escapePb(me.id)}"` : ""),
+        sort: "-created",
+      });
+      setUsers(res.items);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải");
     } finally {
@@ -450,18 +475,12 @@ function AdminUsersPanel() {
       // Collection settings có thể chưa được khởi tạo ở môi trường mới.
     }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, me?.id]);
 
-  const filtered = useMemo(() => {
-    if (!search) return users;
-    const s = search.toLowerCase();
-    return users.filter(
-      (u) =>
-        (u.full_name || "").toLowerCase().includes(s) ||
-        (u.phone || "").toLowerCase().includes(s) ||
-        (u.username || "").toLowerCase().includes(s),
-    );
-  }, [users, search]);
+  const filtered = users;
 
   const allSelected = filtered.length > 0 && filtered.every((u) => selected.has(u.id));
 
@@ -492,7 +511,8 @@ function AdminUsersPanel() {
   };
 
   const bulkDisable = async (disable: boolean) => {
-    if (!confirm((disable ? "Vô hiệu hoá" : "Kích hoạt") + " " + selected.size + " tài khoản?")) return;
+    if (!confirm((disable ? "Vô hiệu hoá" : "Kích hoạt") + " " + selected.size + " tài khoản?"))
+      return;
     try {
       for (const id of selected) {
         await pb.collection("users").update(id, {
@@ -656,7 +676,9 @@ function AdminUsersPanel() {
         target_factories: [],
         created_by: me?.id,
       });
-      toast.success(targets.length ? "Đã gửi đến " + targets.length + " người" : "Đã gửi tới tất cả");
+      toast.success(
+        targets.length ? "Đã gửi đến " + targets.length + " người" : "Đã gửi tới tất cả",
+      );
       setGuideOpen(false);
       setGuide({ title: "", content: "" });
       setSelected(new Set());
@@ -923,7 +945,9 @@ function AdminUsersPanel() {
                     <span className={"chip " + (approved ? "chip-success" : "chip-danger")}>
                       {approved ? "Hoạt động" : "Vô hiệu hoá"}
                     </span>
-                    <span className="chip chip-info">{ROLE_LABELS[(u.role || "user") as Role]}</span>
+                    <span className="chip chip-info">
+                      {ROLE_LABELS[(u.role || "user") as Role]}
+                    </span>
                   </div>
                 </div>
                 <div className="flex flex-col gap-1">
@@ -994,7 +1018,8 @@ function AdminUsersPanel() {
           <DialogHeader>
             <DialogTitle>Chuyển quyền tài khoản</DialogTitle>
             <DialogDescription>
-              Chọn vai trò mới cho {roleTarget?.full_name || roleTarget?.username || "tài khoản này"}.
+              Chọn vai trò mới cho{" "}
+              {roleTarget?.full_name || roleTarget?.username || "tài khoản này"}.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
@@ -1046,8 +1071,8 @@ function AdminUsersPanel() {
               autoFocus
             />
             <div className="text-xs text-muted-foreground">
-              Sau khi xác thực, hệ thống sẽ {pendingApprovalValue ? "bật" : "tắt"} yêu cầu duyệt
-              khi đăng ký.
+              Sau khi xác thực, hệ thống sẽ {pendingApprovalValue ? "bật" : "tắt"} yêu cầu duyệt khi
+              đăng ký.
             </div>
           </div>
           <DialogFooter>
@@ -1172,10 +1197,13 @@ function FactoryAssignmentsPanel() {
     setLoading(true);
     try {
       const [userRows, factoryRows, assignmentRows] = await Promise.all([
-        pb.collection("users").getFullList<UserRecord>({
-          filter: `role="staff"`,
-          sort: "full_name,username",
-        }),
+        pb
+          .collection("users")
+          .getList<UserRecord>(1, 200, {
+            filter: buildUserSearchFilter(search, `role="staff"`),
+            sort: "full_name,username",
+          })
+          .then((res) => res.items),
         fetchFactories(),
         fetchFactoryManagers(),
       ]);
@@ -1191,7 +1219,8 @@ function FactoryAssignmentsPanel() {
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const assignmentsByStaff = useMemo(() => {
     const map = new Map<string, FactoryManagerRecord[]>();
@@ -1203,13 +1232,7 @@ function FactoryAssignmentsPanel() {
     return map;
   }, [assignments]);
 
-  const filteredStaff = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) return staffUsers;
-    return staffUsers.filter((item) =>
-      [item.full_name, item.username, item.phone].filter(Boolean).join(" ").toLowerCase().includes(keyword),
-    );
-  }, [search, staffUsers]);
+  const filteredStaff = staffUsers;
 
   const openAdd = (staffId?: string) => {
     setEditingAssignment({ staff: staffId, status: "active" });
@@ -1281,7 +1304,12 @@ function FactoryAssignmentsPanel() {
 
   const deleteAssignment = async (assignment: FactoryManagerRecord) => {
     if (!currentUser) return;
-    if (!confirm(`Xóa quyền quản lý nhà máy "${assignment.expand?.factory?.name || assignment.factory}"?`)) return;
+    if (
+      !confirm(
+        `Xóa quyền quản lý nhà máy "${assignment.expand?.factory?.name || assignment.factory}"?`,
+      )
+    )
+      return;
 
     try {
       await pb.collection("factory_managers").delete(assignment.id);
@@ -1303,8 +1331,12 @@ function FactoryAssignmentsPanel() {
 
   const totalAssignments = assignments.length;
   const activeAssignments = assignments.filter((item) => isFactoryAssignmentActive(item)).length;
-  const selectedStaffAssignments = selectedStaff ? assignmentsByStaff.get(selectedStaff.id) || [] : [];
-  const selectedStaffActiveCount = selectedStaffAssignments.filter((item) => isFactoryAssignmentActive(item)).length;
+  const selectedStaffAssignments = selectedStaff
+    ? assignmentsByStaff.get(selectedStaff.id) || []
+    : [];
+  const selectedStaffActiveCount = selectedStaffAssignments.filter((item) =>
+    isFactoryAssignmentActive(item),
+  ).length;
 
   return (
     <Card className="space-y-3 p-4">
@@ -1345,7 +1377,9 @@ function FactoryAssignmentsPanel() {
         <div className="space-y-2">
           {filteredStaff.map((staff) => {
             const staffAssignments = assignmentsByStaff.get(staff.id) || [];
-            const activeCount = staffAssignments.filter((item) => isFactoryAssignmentActive(item)).length;
+            const activeCount = staffAssignments.filter((item) =>
+              isFactoryAssignmentActive(item),
+            ).length;
 
             return (
               <button
@@ -1381,10 +1415,10 @@ function FactoryAssignmentsPanel() {
       <Dialog open={!!selectedStaff} onOpenChange={(open) => !open && setSelectedStaff(null)}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
           <DialogHeader>
-            <DialogTitle>{selectedStaff?.full_name || selectedStaff?.username || "Staff"}</DialogTitle>
-            <DialogDescription>
-              Quản lý các nhà máy được gán cho staff này.
-            </DialogDescription>
+            <DialogTitle>
+              {selectedStaff?.full_name || selectedStaff?.username || "Staff"}
+            </DialogTitle>
+            <DialogDescription>Quản lý các nhà máy được gán cho staff này.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
@@ -1456,7 +1490,10 @@ function FactoryAssignmentsPanel() {
             <Button variant="outline" onClick={() => setSelectedStaff(null)} className="rounded-xl">
               Đóng
             </Button>
-            <Button onClick={() => selectedStaff && openAdd(selectedStaff.id)} className="rounded-xl">
+            <Button
+              onClick={() => selectedStaff && openAdd(selectedStaff.id)}
+              className="rounded-xl"
+            >
               <Plus className="h-4 w-4" />
               Gán nhà máy
             </Button>
@@ -1467,7 +1504,9 @@ function FactoryAssignmentsPanel() {
       <Dialog open={pickerOpen} onOpenChange={(open) => !open && closePicker()}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
           <DialogHeader>
-            <DialogTitle>{editingAssignment?.id ? "Sửa phân công nhà máy" : "Gán nhà máy cho staff"}</DialogTitle>
+            <DialogTitle>
+              {editingAssignment?.id ? "Sửa phân công nhà máy" : "Gán nhà máy cho staff"}
+            </DialogTitle>
             <DialogDescription>
               Chọn staff và nhà máy để cấp quyền quản lý nhà máy.
             </DialogDescription>
@@ -1478,7 +1517,9 @@ function FactoryAssignmentsPanel() {
               <Label className="text-xs">Staff</Label>
               <Select
                 value={editingAssignment?.staff || ""}
-                onValueChange={(value) => setEditingAssignment((current) => ({ ...(current || {}), staff: value }))}
+                onValueChange={(value) =>
+                  setEditingAssignment((current) => ({ ...(current || {}), staff: value }))
+                }
               >
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Chọn staff" />
@@ -1497,7 +1538,9 @@ function FactoryAssignmentsPanel() {
               <Label className="text-xs">Nhà máy</Label>
               <Select
                 value={editingAssignment?.factory || ""}
-                onValueChange={(value) => setEditingAssignment((current) => ({ ...(current || {}), factory: value }))}
+                onValueChange={(value) =>
+                  setEditingAssignment((current) => ({ ...(current || {}), factory: value }))
+                }
               >
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Chọn nhà máy" />
@@ -1519,7 +1562,10 @@ function FactoryAssignmentsPanel() {
                   type="date"
                   value={editingAssignment?.active_from || ""}
                   onChange={(event) =>
-                    setEditingAssignment((current) => ({ ...(current || {}), active_from: event.target.value }))
+                    setEditingAssignment((current) => ({
+                      ...(current || {}),
+                      active_from: event.target.value,
+                    }))
                   }
                   className="rounded-xl"
                 />
@@ -1530,7 +1576,10 @@ function FactoryAssignmentsPanel() {
                   type="date"
                   value={editingAssignment?.active_to || ""}
                   onChange={(event) =>
-                    setEditingAssignment((current) => ({ ...(current || {}), active_to: event.target.value }))
+                    setEditingAssignment((current) => ({
+                      ...(current || {}),
+                      active_to: event.target.value,
+                    }))
                   }
                   className="rounded-xl"
                 />
@@ -1542,7 +1591,10 @@ function FactoryAssignmentsPanel() {
               <Select
                 value={editingAssignment?.status || "active"}
                 onValueChange={(value) =>
-                  setEditingAssignment((current) => ({ ...(current || {}), status: value as FactoryStatus }))
+                  setEditingAssignment((current) => ({
+                    ...(current || {}),
+                    status: value as FactoryStatus,
+                  }))
                 }
               >
                 <SelectTrigger className="rounded-xl">
@@ -1560,7 +1612,10 @@ function FactoryAssignmentsPanel() {
               <Input
                 value={editingAssignment?.note || ""}
                 onChange={(event) =>
-                  setEditingAssignment((current) => ({ ...(current || {}), note: event.target.value }))
+                  setEditingAssignment((current) => ({
+                    ...(current || {}),
+                    note: event.target.value,
+                  }))
                 }
                 className="rounded-xl"
                 placeholder="Ví dụ: phụ trách ca sáng, phụ trách tạm thời..."
@@ -1702,9 +1757,9 @@ function FactorySelect({ value, onChange }: { value: string; onChange: (v: strin
     let cancelled = false;
     setLoading(true);
     pb.collection("factories")
-      .getFullList({ sort: "name" })
+      .getList(1, 300, { sort: "name" })
       .then((res) => {
-        if (!cancelled) setFactories(res as any);
+        if (!cancelled) setFactories(res.items as any);
       })
       .catch(() => {})
       .finally(() => !cancelled && setLoading(false));

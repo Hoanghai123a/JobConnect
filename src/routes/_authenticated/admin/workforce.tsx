@@ -33,11 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
   CommandEmpty,
@@ -134,7 +130,10 @@ function WorkforcePage() {
     try {
       const [histList, userList, factoryList, mainHouseList] = await Promise.all([
         fetchEmploymentHistories(),
-        pb.collection("users").getFullList<UserRecord>({ sort: "full_name,username" }),
+        pb
+          .collection("users")
+          .getList<UserRecord>(1, 1000, { sort: "full_name,username" })
+          .then((res) => res.items),
         fetchFactories(),
         fetchMainHouses().catch(() => [] as MainHouseRecord[]),
       ]);
@@ -526,8 +525,7 @@ function collectWorkersForFactory(
     if (h.status === "working" && !h.leave_date) {
       seen.set(`${userId}:working`, {
         userId,
-        fullName:
-          h.expand?.user?.full_name || h.worker_name_snapshot || "Người lao động",
+        fullName: h.expand?.user?.full_name || h.worker_name_snapshot || "Người lao động",
         factoryName: h.expand?.factory?.name || "",
         state: "working",
         date: h.join_date,
@@ -571,8 +569,7 @@ function collectWorkersForRecruiter(
     if (h.status === "working" && !h.leave_date) {
       seen.set(`${userId}:working`, {
         userId,
-        fullName:
-          h.expand?.user?.full_name || h.worker_name_snapshot || "Người lao động",
+        fullName: h.expand?.user?.full_name || h.worker_name_snapshot || "Người lao động",
         factoryName: h.expand?.factory?.name || "",
         state: "working",
         date: h.join_date,
@@ -635,9 +632,7 @@ function GroupCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">{title}</div>
-          {subtitle && (
-            <div className="truncate text-[11px] text-muted-foreground">{subtitle}</div>
-          )}
+          {subtitle && <div className="truncate text-[11px] text-muted-foreground">{subtitle}</div>}
           <div className="mt-1 flex flex-wrap gap-1.5">
             <StatusChip tone="success">Còn đi làm: {stats.working}</StatusChip>
             <StatusChip tone="primary">Tuyển mới: {stats.joined}</StatusChip>
@@ -687,8 +682,8 @@ function GroupCard({
                   <div className="min-w-0">
                     <div className="truncate font-medium">{w.fullName}</div>
                     <div className="truncate text-[11px] text-muted-foreground">
-                      {w.factoryName || "—"} ·{" "}
-                      {w.state === "left" ? "Nghỉ" : "Vào"} {formatDate(w.date)}
+                      {w.factoryName || "—"} · {w.state === "left" ? "Nghỉ" : "Vào"}{" "}
+                      {formatDate(w.date)}
                     </div>
                   </div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -817,7 +812,8 @@ function WorkerList({
         filtered.map(({ user, latest }) => {
           if (!user) return null;
           const isWorking = latest?.status === "working" && !latest.leave_date;
-          const factoryName = latest?.expand?.factory?.name || factoryById.get(latest?.factory || "")?.name;
+          const factoryName =
+            latest?.expand?.factory?.name || factoryById.get(latest?.factory || "")?.name;
           return (
             <button
               key={user.id}
@@ -830,7 +826,12 @@ function WorkerList({
                   {user.full_name || user.username || "Người lao động"}
                 </div>
                 <div className="mt-0.5 text-[11px] text-muted-foreground">
-                  {user.uid && <><span className="text-primary font-medium">{user.uid}</span> · </>}Mã NV: {latest?.employee_code || user.employee_code || "—"} · CCCD:{" "}
+                  {user.uid && (
+                    <>
+                      <span className="text-primary font-medium">{user.uid}</span> ·{" "}
+                    </>
+                  )}
+                  Mã NV: {latest?.employee_code || user.employee_code || "—"} · CCCD:{" "}
                   {maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
                 </div>
                 <div className="mt-0.5 text-[11px] text-muted-foreground">
@@ -882,7 +883,10 @@ function AdminWorkerDrawer({
   });
   const [saving, setSaving] = useState(false);
 
-  const staffUsers = useMemo(() => users.filter((u) => u.role === "staff" || u.role === "admin"), [users]);
+  const staffUsers = useMemo(
+    () => users.filter((u) => u.role === "staff" || u.role === "admin"),
+    [users],
+  );
 
   const startEdit = (h: EmploymentHistoryRecord) => {
     setEditingId(h.id);
@@ -981,7 +985,11 @@ function AdminWorkerDrawer({
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Ảnh CCCD
           </div>
-          <CccdManager targetUser={user} actor={pb.authStore.record as UserRecord | null} onUpdated={onDataChanged} />
+          <CccdManager
+            targetUser={user}
+            actor={pb.authStore.record as UserRecord | null}
+            onUpdated={onDataChanged}
+          />
 
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Lịch sử đi làm ({histories.length})
@@ -1094,9 +1102,7 @@ function AdminWorkerDrawer({
                           <Input
                             type="date"
                             value={form.join_date}
-                            onChange={(e) =>
-                              setForm((f) => ({ ...f, join_date: e.target.value }))
-                            }
+                            onChange={(e) => setForm((f) => ({ ...f, join_date: e.target.value }))}
                             className="h-8 text-xs"
                           />
                         </div>
@@ -1105,9 +1111,7 @@ function AdminWorkerDrawer({
                           <Input
                             type="date"
                             value={form.leave_date}
-                            onChange={(e) =>
-                              setForm((f) => ({ ...f, leave_date: e.target.value }))
-                            }
+                            onChange={(e) => setForm((f) => ({ ...f, leave_date: e.target.value }))}
                             className="h-8 text-xs"
                           />
                         </div>
@@ -1116,9 +1120,7 @@ function AdminWorkerDrawer({
                         <Label className="text-[10px]">Người tuyển</Label>
                         <Select
                           value={form.recruiter_staff}
-                          onValueChange={(v) =>
-                            setForm((f) => ({ ...f, recruiter_staff: v }))
-                          }
+                          onValueChange={(v) => setForm((f) => ({ ...f, recruiter_staff: v }))}
                         >
                           <SelectTrigger className="h-8 text-xs">
                             <SelectValue placeholder="Chọn người tuyển" />
@@ -1252,10 +1254,7 @@ function RegisterDialog({
     if (!open) reset();
   }, [open]);
 
-  const candidateUsers = useMemo(
-    () => users.filter((u) => u.role === "user" || !u.role),
-    [users],
-  );
+  const candidateUsers = useMemo(() => users.filter((u) => u.role === "user" || !u.role), [users]);
   const staffUsers = useMemo(() => users.filter((u) => u.role === "staff"), [users]);
 
   const selectedUser = users.find((u) => u.id === userId);
@@ -1282,7 +1281,8 @@ function RegisterDialog({
         factory: factoryId,
         main_house: mainHouseId,
         employee_code: employeeCode.trim() || undefined,
-        worker_name_snapshot: workerName.trim() || selectedUser.full_name || selectedUser.username || "",
+        worker_name_snapshot:
+          workerName.trim() || selectedUser.full_name || selectedUser.username || "",
         worker_cccd_snapshot: workerCccd.trim() || selectedUser.cccd || "",
         recruiter_staff: recruiterId,
         join_date: joinDate,
@@ -1302,7 +1302,9 @@ function RegisterDialog({
           .join("; ");
         toast.error(fieldErrors || error?.message || "Lỗi đăng ký đi làm");
       } else if (error?.message?.includes("UNIQUE")) {
-        toast.error("Người lao động này đã có lịch sử đang đi làm. Hãy cập nhật trạng thái nghỉ trước khi đăng ký mới.");
+        toast.error(
+          "Người lao động này đã có lịch sử đang đi làm. Hãy cập nhật trạng thái nghỉ trước khi đăng ký mới.",
+        );
       } else {
         toast.error(error?.message || "Lỗi đăng ký đi làm");
       }
@@ -1366,11 +1368,7 @@ function RegisterDialog({
 
           <div className="space-y-1">
             <Label className="text-xs">Nhà máy</Label>
-            <FactoryPicker
-              factories={factories}
-              value={factoryId}
-              onChange={setFactoryId}
-            />
+            <FactoryPicker factories={factories} value={factoryId} onChange={setFactoryId} />
           </div>
 
           <div className="space-y-1">
@@ -1640,9 +1638,7 @@ function CccdExportDialog({
       }
     }
 
-    return users.filter(
-      (u) => userIdsInRange.has(u.id) && (u.cccd_front || u.cccd_back),
-    );
+    return users.filter((u) => userIdsInRange.has(u.id) && (u.cccd_front || u.cccd_back));
   }, [histories, users, factory, from, to]);
 
   const doExport = async () => {
@@ -1665,7 +1661,9 @@ function CccdExportDialog({
             const blob = await res.blob();
             zip.file(`${name}_mat_truoc.jpg`, blob);
             count++;
-          } catch { /* skip failed */ }
+          } catch {
+            /* skip failed */
+          }
         }
         if (u.cccd_back) {
           const url = fileUrl(u, u.cccd_back);
@@ -1674,7 +1672,9 @@ function CccdExportDialog({
             const blob = await res.blob();
             zip.file(`${name}_mat_sau.jpg`, blob);
             count++;
-          } catch { /* skip failed */ }
+          } catch {
+            /* skip failed */
+          }
         }
         setProgress(`Đã tải ${count} ảnh...`);
       }
@@ -1686,7 +1686,13 @@ function CccdExportDialog({
 
       setProgress("Đang nén file...");
       const content = await zip.generateAsync({ type: "blob" });
-      const factoryName = factory === "all" ? "tat_ca" : (factories.find((f) => f.id === factory)?.name || factory).replace(/[/\\:*?"<>|]/g, "_");
+      const factoryName =
+        factory === "all"
+          ? "tat_ca"
+          : (factories.find((f) => f.id === factory)?.name || factory).replace(
+              /[/\\:*?"<>|]/g,
+              "_",
+            );
       saveAs(content, `CCCD_${factoryName}_${from}_${to}.zip`);
 
       toast.success(`Đã xuất ${count} ảnh CCCD`);
@@ -1719,7 +1725,9 @@ function CccdExportDialog({
               <SelectContent>
                 <SelectItem value="all">Tất cả nhà máy</SelectItem>
                 {factories.map((f) => (
-                  <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -1728,17 +1736,27 @@ function CccdExportDialog({
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label className="text-xs">Từ ngày</Label>
-              <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-xl" />
+              <Input
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                className="rounded-xl"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Đến ngày</Label>
-              <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-xl" />
+              <Input
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                className="rounded-xl"
+              />
             </div>
           </div>
 
           <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-center text-sm">
-            <span className="font-semibold text-primary">{matchingUsers.length}</span>{" "}
-            người lao động có ảnh CCCD phù hợp
+            <span className="font-semibold text-primary">{matchingUsers.length}</span> người lao
+            động có ảnh CCCD phù hợp
           </div>
 
           {progress && (
@@ -1752,7 +1770,11 @@ function CccdExportDialog({
           <Button variant="outline" onClick={onClose} disabled={exporting} className="rounded-xl">
             Đóng
           </Button>
-          <Button onClick={doExport} disabled={exporting || !matchingUsers.length} className="rounded-xl">
+          <Button
+            onClick={doExport}
+            disabled={exporting || !matchingUsers.length}
+            className="rounded-xl"
+          >
             {exporting ? "Đang xuất..." : "Tải ZIP"}
           </Button>
         </DialogFooter>

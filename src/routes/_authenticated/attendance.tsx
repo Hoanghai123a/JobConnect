@@ -93,13 +93,13 @@ function AdminAttendance() {
       const next = new Date(monthDate);
       next.setMonth(next.getMonth() + 1);
       const last = ym(next) + "-01";
-      const res = await pb.collection("attendance").getFullList({
+      const res = await pb.collection("attendance").getList(1, 500, {
         filter: `date>="${first}" && date<"${last}"`,
         sort: "date",
         expand: "user",
       });
       setRows(
-        res.map((r: any) => ({
+        res.items.map((r: any) => ({
           id: r.id,
           user: r.user,
           date: (r.date as string).substring(0, 10),
@@ -386,7 +386,7 @@ function UserAttendance() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const res = await pb.collection("attendance").getFullList({
+      const res = await pb.collection("attendance").getList(1, 100, {
         filter: `user="${user.id}" && date>="${payrollPeriod.start}" && date<"${addDaysToDateKey(
           payrollPeriod.end,
           1,
@@ -394,7 +394,7 @@ function UserAttendance() {
         sort: "date",
       });
       setRows(
-        res.map((r: any) => ({
+        res.items.map((r: any) => ({
           id: r.id,
           date: (r.date as string).substring(0, 10),
           shift: r.shift,

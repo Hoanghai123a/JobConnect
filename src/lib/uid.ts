@@ -7,9 +7,10 @@ export async function generateUid(manualUid?: string): Promise<string> {
   const settings = await fetchAppSettings();
   const prefix = (settings.account_code_prefix || "").trim();
 
-  const allUsers = await pb.collection("users").getFullList<UserRecord>({
+  const userRes = await pb.collection("users").getList<UserRecord>(1, 1000, {
     fields: "uid",
   });
+  const allUsers = userRes.items;
 
   let maxNum = 0;
   const regex = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\d{6})$`);

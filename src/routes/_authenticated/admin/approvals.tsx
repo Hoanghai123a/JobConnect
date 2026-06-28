@@ -29,11 +29,11 @@ function ApprovalsPage() {
 
   const load = async () => {
     try {
-      const res = await pb.collection("users").getFullList({
+      const res = await pb.collection("users").getList(1, 300, {
         filter: `approvalStatus = "pending" || approved = "false"`,
         sort: "-created",
       });
-      setUsers(res);
+      setUsers(res.items);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải");
     }
@@ -66,7 +66,14 @@ function ApprovalsPage() {
             targetCollection: "users",
             targetRecord: id,
             action: "update",
-            before: before ? { approvalStatus: before.approvalStatus, approved: before.approved, status: before.status, uid: before.uid } : undefined,
+            before: before
+              ? {
+                  approvalStatus: before.approvalStatus,
+                  approved: before.approved,
+                  status: before.status,
+                  uid: before.uid,
+                }
+              : undefined,
             after: { ...after, uid },
             note: "Admin duyệt đăng ký tài khoản và cấp UID",
           });
@@ -77,7 +84,13 @@ function ApprovalsPage() {
             targetCollection: "users",
             targetRecord: id,
             action: "update",
-            before: before ? { approvalStatus: before.approvalStatus, approved: before.approved, status: before.status } : undefined,
+            before: before
+              ? {
+                  approvalStatus: before.approvalStatus,
+                  approved: before.approved,
+                  status: before.status,
+                }
+              : undefined,
             after,
             note: "Admin duyệt đăng ký tài khoản (chưa cấp được UID)",
           });
@@ -101,10 +114,11 @@ function ApprovalsPage() {
   };
 
   const exportUsers = async () => {
-    const all = await pb.collection("users").getFullList({ sort: "-created" });
+    const allRes = await pb.collection("users").getList(1, 1000, { sort: "-created" });
+    const all = allRes.items;
     const rows = all.map((u: any) => ({
       "Họ tên": u.full_name,
-      "SĐT": u.phone,
+      SĐT: u.phone,
       Email: u.email,
       "Vai trò": u.role,
       "Đã duyệt": isUserApproved(u) ? "Có" : "Không",

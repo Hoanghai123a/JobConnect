@@ -209,8 +209,8 @@ function GuidesPage() {
 
   const load = async () => {
     try {
-      const res = await pb.collection("guides").getFullList({ sort: "order,created" });
-      setItems(res as any);
+      const res = await pb.collection("guides").getList(1, 200, { sort: "order,created" });
+      setItems(res.items as any);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải hướng dẫn");
     }
@@ -218,14 +218,14 @@ function GuidesPage() {
   const loadAdminRefs = async () => {
     if (!isAdmin) return;
     try {
-      const f = await pb.collection("factories").getFullList({ sort: "name" });
-      setFactories(f as any);
+      const f = await pb.collection("factories").getList(1, 300, { sort: "name" });
+      setFactories(f.items as any);
     } catch {
       /* optional */
     }
     try {
-      const u = await pb.collection("users").getFullList({ sort: "-created" });
-      const workerUsers = (u as any[])
+      const u = await pb.collection("users").getList(1, 500, { sort: "-created" });
+      const workerUsers = (u.items as any[])
         .filter((item) => item.role !== "admin")
         .sort((a, b) =>
           String(a.full_name || a.username || a.phone || "").localeCompare(

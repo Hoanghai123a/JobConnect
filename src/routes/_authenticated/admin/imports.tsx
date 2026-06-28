@@ -62,7 +62,10 @@ function AdminImportsPage() {
     try {
       const [factoryRows, allUsers, mainHouseRows] = await Promise.all([
         fetchFactories(),
-        pb.collection("users").getFullList<UserRecord>({ sort: "full_name,username" }),
+        pb
+          .collection("users")
+          .getList<UserRecord>(1, 1000, { sort: "full_name,username" })
+          .then((res) => res.items),
         fetchMainHouses().catch(() => [] as MainHouseRecord[]),
       ]);
       const staffUsers = allUsers.filter((item) => item.role === "staff" || item.role === "admin");

@@ -82,6 +82,62 @@ type AdvanceRecord = {
   created: string;
 };
 
+const ADVANCE_TAB_FILTERS: Record<AdminTab, string> = {
+  pending: 'status="pending"',
+  accepted: 'status="accepted" && (recovery_status="" || recovery_status="none")',
+  recovered: 'status="accepted" && recovery_status="recovered"',
+  unrecoverable: 'status="accepted" && recovery_status="unrecoverable"',
+  rejected: 'status="rejected"',
+  all: "",
+};
+
+function joinPbFilters(parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" && ");
+}
+
+function containsAny(fields: string[], keyword: string) {
+  const q = escapePb(keyword.trim());
+  if (!q) return "";
+  return `(${fields.map((field) => `${field}~"${q}"`).join(" || ")})`;
+}
+
+function buildAdvanceFilter(input: {
+  isAdmin: boolean;
+  userId?: string;
+  tab?: AdminTab;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+}) {
+  const searchFilter = containsAny(
+    [
+      "full_name",
+      "employee_code",
+      "company",
+      "phone",
+      "bank_name",
+      "bank_account_number",
+      "bank_account_name",
+      "reason",
+      "admin_note",
+      "recovery_note",
+    ],
+    input.search || "",
+  );
+  return joinPbFilters([
+    !input.isAdmin && input.userId ? `user="${escapePb(input.userId)}"` : "",
+    input.tab ? ADVANCE_TAB_FILTERS[input.tab] : "",
+    input.dateFrom ? `created>="${input.dateFrom} 00:00:00"` : "",
+    input.dateTo ? `created<="${input.dateTo} 23:59:59"` : "",
+    searchFilter,
+  ]);
+}
+
+async function countAdvances(filter: string) {
+  const res = await pb.collection("advances").getList(1, 1, { filter, fields: "id" });
+  return res.totalItems || 0;
+}
+
 const STATUS_META: Record<
   AdvanceStatus,
   { label: string; tone: "warning" | "success" | "danger" }
@@ -124,6 +180,15 @@ export function AdvancesPage() {
   const [adminNoteDraft, setAdminNoteDraft] = useState("");
   const [recoveryNoteDraft, setRecoveryNoteDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+  const [outstandingAmount, setOutstandingAmount] = useState(0);
+  const [stats, setStats] = useState<Record<AdminTab, number>>({
+    pending: 0,
+    accepted: 0,
+    recovered: 0,
+    unrecoverable: 0,
+    rejected: 0,
+    all: 0,
+  });
 
   const selectedAdvanceUser = user as UserRecord | null;
 
@@ -144,13 +209,20 @@ export function AdvancesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const filter = isAdmin ? "" : `user="${escapePb(user?.id || "")}"`;
-      const res = await pb.collection("advances").getFullList({
+      const filter = buildAdvanceFilter({
+        isAdmin,
+        userId: user?.id,
+        tab,
+        dateFrom,
+        dateTo,
+        search,
+      });
+      const res = await pb.collection("advances").getList(1, 300, {
         filter,
         sort: "-created",
         expand: "requested_by",
       });
-      const rows = res as unknown as AdvanceRecord[];
+      const rows = res.items as unknown as AdvanceRecord[];
       setItems(rows);
       if (!isAdmin) {
         const latestResolved = rows.reduce(
@@ -164,58 +236,62 @@ export function AdvancesPage() {
     } finally {
       setLoading(false);
     }
+  }, [dateFrom, dateTo, isAdmin, search, tab, user?.id]);
+
+  const loadStats = useCallback(async () => {
+    const base = buildAdvanceFilter({
+      isAdmin,
+      userId: user?.id,
+      dateFrom,
+      dateTo,
+      search,
+    });
+    const withBase = (statusFilter: string) => joinPbFilters([base, statusFilter]);
+    const [pending, accepted, recovered, unrecoverable, rejected, all] = await Promise.all([
+      countAdvances(withBase(ADVANCE_TAB_FILTERS.pending)),
+      countAdvances(withBase(ADVANCE_TAB_FILTERS.accepted)),
+      countAdvances(withBase(ADVANCE_TAB_FILTERS.recovered)),
+      countAdvances(withBase(ADVANCE_TAB_FILTERS.unrecoverable)),
+      countAdvances(withBase(ADVANCE_TAB_FILTERS.rejected)),
+      countAdvances(base),
+    ]);
+    setStats({ pending, accepted, recovered, unrecoverable, rejected, all });
+  }, [dateFrom, dateTo, isAdmin, search, user?.id]);
+
+  const loadOutstanding = useCallback(async () => {
+    if (!user?.id || isAdmin) {
+      setOutstandingAmount(0);
+      return;
+    }
+    const res = await pb.collection("advances").getList(1, 500, {
+      filter: joinPbFilters([
+        `user="${escapePb(user.id)}"`,
+        '(status="pending" || (status="accepted" && (recovery_status="" || recovery_status="none")))',
+      ]),
+      fields: "amount",
+    });
+    setOutstandingAmount(
+      (res.items as unknown as Pick<AdvanceRecord, "amount">[]).reduce(
+        (sum, row) => sum + Number(row.amount || 0),
+        0,
+      ),
+    );
   }, [isAdmin, user?.id]);
 
   useEffect(() => {
     load();
-  }, [load]);
+    loadStats().catch(() => {});
+  }, [load, loadStats]);
+
+  useEffect(() => {
+    loadOutstanding().catch(() => {});
+  }, [loadOutstanding]);
 
   const limit = Number(settings.advance_limit || 0);
-  const outstanding = useMemo(() => {
-    return items.reduce((sum, row) => {
-      if (!isAdmin && selectedAdvanceUser?.id && row.user !== selectedAdvanceUser.id) return sum;
-      const status = row.status || "pending";
-      const recovery = row.recovery_status || "none";
-      if (status === "pending") return sum + Number(row.amount || 0);
-      if (status === "accepted" && recovery === "none") return sum + Number(row.amount || 0);
-      return sum;
-    }, 0);
-  }, [isAdmin, items, selectedAdvanceUser?.id]);
+  const outstanding = isAdmin ? 0 : outstandingAmount;
   const available = limit > 0 ? Math.max(0, limit - outstanding) : 0;
 
-  const filtered = useMemo(() => {
-    const from = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
-    const to = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
-    return items.filter((row) => {
-      const status = row.status || "pending";
-      const recovery = row.recovery_status || "none";
-      if (tab === "pending" && status !== "pending") return false;
-      if (tab === "accepted" && (status !== "accepted" || recovery !== "none")) return false;
-      if (tab === "recovered" && (status !== "accepted" || recovery !== "recovered")) return false;
-      if (tab === "unrecoverable" && (status !== "accepted" || recovery !== "unrecoverable")) {
-        return false;
-      }
-      if (tab === "rejected" && status !== "rejected") return false;
-      const createdAt = new Date(row.created).getTime();
-      if (from && createdAt < from) return false;
-      if (to && createdAt > to) return false;
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return (
-        row.full_name?.toLowerCase().includes(q) ||
-        row.employee_code?.toLowerCase().includes(q) ||
-        row.company?.toLowerCase().includes(q) ||
-        row.phone?.toLowerCase().includes(q) ||
-        row.bank_name?.toLowerCase().includes(q) ||
-        row.bank_account_number?.toLowerCase().includes(q) ||
-        row.bank_account_name?.toLowerCase().includes(q) ||
-        getAdvanceRequesterName(row).toLowerCase().includes(q) ||
-        getAdvanceRequesterMeta(row).toLowerCase().includes(q) ||
-        row.reason?.toLowerCase().includes(q) ||
-        String(row.amount || 0).includes(q)
-      );
-    });
-  }, [items, search, tab, dateFrom, dateTo]);
+  const filtered = items;
   const isActionable = (row: AdvanceRecord) => {
     const status = row.status || "pending";
     const recovery = row.recovery_status || "none";
@@ -344,7 +420,10 @@ export function AdvancesPage() {
           action: "update",
           before: { recovery_status: row.recovery_status || "none" },
           after,
-          note: recoveryStatus === "recovered" ? "Admin đánh dấu đã thu hồi" : "Admin đánh dấu không thu hồi",
+          note:
+            recoveryStatus === "recovered"
+              ? "Admin đánh dấu đã thu hồi"
+              : "Admin đánh dấu không thu hồi",
         });
       }
       toast.success(
@@ -375,7 +454,10 @@ export function AdvancesPage() {
         action: "update",
         before: { recovery_status: row.recovery_status || "none" },
         after,
-        note: recoveryStatus === "recovered" ? "Admin đánh dấu đã thu hồi" : "Admin đánh dấu không thể thu hồi",
+        note:
+          recoveryStatus === "recovered"
+            ? "Admin đánh dấu đã thu hồi"
+            : "Admin đánh dấu không thể thu hồi",
       });
       toast.success(
         recoveryStatus === "recovered" ? "Đã đánh dấu thu hồi" : "Đã đánh dấu không thể thu hồi",
@@ -411,23 +493,6 @@ export function AdvancesPage() {
     }));
     exportToExcel(`ung_luong_${Date.now()}`, { "Ứng lương": rows });
   };
-
-  const stats = useMemo(
-    () => ({
-      pending: items.filter((row) => (row.status || "pending") === "pending").length,
-      accepted: items.filter(
-        (row) => row.status === "accepted" && (row.recovery_status || "none") === "none",
-      ).length,
-      rejected: items.filter((row) => row.status === "rejected").length,
-      recovered: items.filter(
-        (row) => row.status === "accepted" && row.recovery_status === "recovered",
-      ).length,
-      unrecoverable: items.filter(
-        (row) => row.status === "accepted" && row.recovery_status === "unrecoverable",
-      ).length,
-    }),
-    [items],
-  );
 
   if (!isAdmin) {
     return (

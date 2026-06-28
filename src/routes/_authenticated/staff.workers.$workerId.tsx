@@ -1,6 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { CalendarRange, CheckCircle2, Clock3, Download, Landmark, NotebookPen, Pencil, Plus, UserSquare2, Wallet } from "lucide-react";
+import {
+  CalendarRange,
+  CheckCircle2,
+  Clock3,
+  Download,
+  Landmark,
+  NotebookPen,
+  Pencil,
+  Plus,
+  UserSquare2,
+  Wallet,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card } from "@/components/ui/card";
@@ -10,7 +21,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Drawer,
   DrawerContent,
@@ -19,7 +37,13 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
 import { exportToExcel } from "@/lib/excel";
 import {
@@ -32,7 +56,12 @@ import {
   updateEmploymentHistory,
   type EmploymentHistoryRecord,
 } from "@/lib/employment";
-import { fetchFactories, fetchFactoryManagers, isFactoryAssignmentActive, type FactoryRecord } from "@/lib/factories";
+import {
+  fetchFactories,
+  fetchFactoryManagers,
+  isFactoryAssignmentActive,
+  type FactoryRecord,
+} from "@/lib/factories";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
@@ -142,58 +171,84 @@ function StaffWorkerDetailPage() {
       fetchEmploymentHistories([workerId]),
       fetchFactories(),
       fetchFactoryManagers(viewer.id),
-      pb.collection("users").getOne(workerId).catch(() => null),
-      pb.collection("users").getFullList({
-        filter: `role="staff" || role="admin"`,
-        sort: "full_name,username",
-      }).catch(() => []),
-      pb.collection("advances").getFullList({
-        filter: `user="${workerId}"`,
-        sort: "-created",
-      }).catch(() => []),
+      pb
+        .collection("users")
+        .getOne(workerId)
+        .catch(() => null),
+      pb
+        .collection("users")
+        .getList(1, 200, {
+          filter: `role="staff" || role="admin"`,
+          sort: "full_name,username",
+        })
+        .then((res) => res.items)
+        .catch(() => []),
+      pb
+        .collection("advances")
+        .getList(1, 50, {
+          filter: `user="${workerId}"`,
+          sort: "-created",
+        })
+        .then((res) => res.items)
+        .catch(() => []),
       fetchMainHouses().catch(() => [] as MainHouseRecord[]),
     ])
-      .then(([historyRows, factoryRows, managerRows, rawUser, staffRows, advanceRows, mainHouseRows]) => {
-        if (!alive) return;
+      .then(
+        ([
+          historyRows,
+          factoryRows,
+          managerRows,
+          rawUser,
+          staffRows,
+          advanceRows,
+          mainHouseRows,
+        ]) => {
+          if (!alive) return;
 
-        const managedFactoryIds = new Set(
-          managerRows.filter((item) => isFactoryAssignmentActive(item)).map((item) => item.factory),
-        );
-        const canAccessWorker =
-          viewer.role === "admin" ||
-          isRecentRecruiter(viewer, historyRows) ||
-          historyRows.some((history) => getStaffReasonsForHistory(viewer.id, history, managedFactoryIds).length > 0);
+          const managedFactoryIds = new Set(
+            managerRows
+              .filter((item) => isFactoryAssignmentActive(item))
+              .map((item) => item.factory),
+          );
+          const canAccessWorker =
+            viewer.role === "admin" ||
+            isRecentRecruiter(viewer, historyRows) ||
+            historyRows.some(
+              (history) =>
+                getStaffReasonsForHistory(viewer.id, history, managedFactoryIds).length > 0,
+            );
 
-        if (!canAccessWorker) {
-          setLoading(false);
-          return;
-        }
+          if (!canAccessWorker) {
+            setLoading(false);
+            return;
+          }
 
-        const historyUser = historyRows[0]?.expand?.user;
-        const userRecord = (historyUser || rawUser) as UserRecord | null;
-        const latest = getLatestEmploymentHistory(historyRows);
+          const historyUser = historyRows[0]?.expand?.user;
+          const userRecord = (historyUser || rawUser) as UserRecord | null;
+          const latest = getLatestEmploymentHistory(historyRows);
 
-        setWorkerUser(userRecord);
-        setHistories(historyRows);
-        setManagedFactoryIds(managedFactoryIds);
-        setFactories(factoryRows);
-        setMainHouses(mainHouseRows);
-        setStaffUsers(staffRows as UserRecord[]);
-        setAdvances(advanceRows as AdvanceItem[]);
-        setJoinForm((prev) => ({
-          ...prev,
-          employee_code: latest?.employee_code || userRecord?.employee_code || "",
-          worker_name_snapshot: latest?.worker_name_snapshot || userRecord?.full_name || "",
-          worker_cccd_snapshot: latest?.worker_cccd_snapshot || userRecord?.cccd || "",
-          recruiter_staff: latest?.recruiter_staff || viewer.id,
-          main_house: latest?.main_house || "",
-        }));
-        setBankForm({
-          bank_name: userRecord?.bank_name || "",
-          bank_account_number: userRecord?.bank_account_number || "",
-          bank_account_name: userRecord?.bank_account_name || "",
-        });
-      })
+          setWorkerUser(userRecord);
+          setHistories(historyRows);
+          setManagedFactoryIds(managedFactoryIds);
+          setFactories(factoryRows);
+          setMainHouses(mainHouseRows);
+          setStaffUsers(staffRows as UserRecord[]);
+          setAdvances(advanceRows as AdvanceItem[]);
+          setJoinForm((prev) => ({
+            ...prev,
+            employee_code: latest?.employee_code || userRecord?.employee_code || "",
+            worker_name_snapshot: latest?.worker_name_snapshot || userRecord?.full_name || "",
+            worker_cccd_snapshot: latest?.worker_cccd_snapshot || userRecord?.cccd || "",
+            recruiter_staff: latest?.recruiter_staff || viewer.id,
+            main_house: latest?.main_house || "",
+          }));
+          setBankForm({
+            bank_name: userRecord?.bank_name || "",
+            bank_account_number: userRecord?.bank_account_number || "",
+            bank_account_name: userRecord?.bank_account_name || "",
+          });
+        },
+      )
       .finally(() => {
         if (alive) setLoading(false);
       });
@@ -210,14 +265,22 @@ function StaffWorkerDetailPage() {
     let alive = true;
 
     Promise.all([
-      pb.collection("check_attendance_items").getFullList({
-        filter: `user="${workerUser.id}"`,
-        sort: "-created",
-      }).catch(() => []),
-      pb.collection("check_salary_items").getFullList({
-        filter: `user="${workerUser.id}"`,
-        sort: "-created",
-      }).catch(() => []),
+      pb
+        .collection("check_attendance_items")
+        .getList(1, 20, {
+          filter: `user="${workerUser.id}"`,
+          sort: "-created",
+        })
+        .then((res) => res.items)
+        .catch(() => []),
+      pb
+        .collection("check_salary_items")
+        .getList(1, 20, {
+          filter: `user="${workerUser.id}"`,
+          sort: "-created",
+        })
+        .then((res) => res.items)
+        .catch(() => []),
     ]).then(([attendanceRows, salaryRows]) => {
       if (!alive) return;
       setAttendanceItems(attendanceRows as AttendanceItem[]);
@@ -237,8 +300,18 @@ function StaffWorkerDetailPage() {
   const recentRecruiter = isRecentRecruiter(viewer, histories);
   const canReportAdvanceForWorker = canReportAdvance(viewer, histories);
   const canViewPayrollForWorker = canViewPayroll(viewer, histories);
-  const canReportLeaveForWorker = canReportLeave(viewer, activeHistory, histories, managedFactoryIds);
-  const canSubmitJoinForWorker = canReportJoin(viewer, histories, managedFactoryIds, joinForm.factory);
+  const canReportLeaveForWorker = canReportLeave(
+    viewer,
+    activeHistory,
+    histories,
+    managedFactoryIds,
+  );
+  const canSubmitJoinForWorker = canReportJoin(
+    viewer,
+    histories,
+    managedFactoryIds,
+    joinForm.factory,
+  );
   const canOpenJoinForm = canReportJoin(viewer, histories, managedFactoryIds);
   const canUpdateBankForWorker = canReportAdvanceForWorker;
   const canDoAnyAction =
@@ -303,10 +376,13 @@ function StaffWorkerDetailPage() {
       return;
     }
 
-    const existingAdvances = await pb.collection("advances").getFullList({
+    const existingAdvances = await pb.collection("advances").getList(1, 100, {
       filter: `user="${workerUser.id}" && (status="pending" || (status="accepted" && recovery_status="none"))`,
     });
-    const outstanding = existingAdvances.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
+    const outstanding = existingAdvances.items.reduce(
+      (sum: number, r: any) => sum + Number(r.amount || 0),
+      0,
+    );
     const settings = await (await import("@/lib/app-settings")).fetchAppSettings();
     const limit = Number(settings.advance_limit || 0);
     if (limit <= 0) {
@@ -314,7 +390,9 @@ function StaffWorkerDetailPage() {
       return;
     }
     if (outstanding + amount > limit) {
-      toast.error(`Vượt hạn mức ứng lương. Đang dùng ${outstanding.toLocaleString("vi-VN")} đ / ${limit.toLocaleString("vi-VN")} đ. Còn lại ${(limit - outstanding).toLocaleString("vi-VN")} đ`);
+      toast.error(
+        `Vượt hạn mức ứng lương. Đang dùng ${outstanding.toLocaleString("vi-VN")} đ / ${limit.toLocaleString("vi-VN")} đ. Còn lại ${(limit - outstanding).toLocaleString("vi-VN")} đ`,
+      );
       return;
     }
 
@@ -415,7 +493,8 @@ function StaffWorkerDetailPage() {
       factory: joinForm.factory,
       main_house: joinForm.main_house,
       employee_code: joinForm.employee_code.trim(),
-      worker_name_snapshot: joinForm.worker_name_snapshot.trim() || workerUser.full_name || workerUser.username || "",
+      worker_name_snapshot:
+        joinForm.worker_name_snapshot.trim() || workerUser.full_name || workerUser.username || "",
       worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim() || workerUser.cccd || "",
       recruiter_staff: joinForm.recruiter_staff,
       join_date: joinForm.join_date,
@@ -572,7 +651,10 @@ function StaffWorkerDetailPage() {
           <InfoCell label="Họ tên gốc" value={workerUser.full_name || "Chưa có"} />
           <InfoCell label="CCCD gốc" value={workerUser.cccd || "Chưa có"} />
           <InfoCell label="Điện thoại" value={workerUser.phone || "Chưa có"} />
-          <InfoCell label="Nhà máy gần nhất" value={latestHistory?.expand?.factory?.name || "Chưa có"} />
+          <InfoCell
+            label="Nhà máy gần nhất"
+            value={latestHistory?.expand?.factory?.name || "Chưa có"}
+          />
           <InfoCell label="Mã NV gần nhất" value={latestHistory?.employee_code || "Chưa có"} />
           <InfoCell
             label="Người tuyển gần nhất"
@@ -625,7 +707,10 @@ function StaffWorkerDetailPage() {
             targetUser={workerUser}
             actor={viewer as UserRecord}
             onUpdated={async () => {
-              const refreshed = await pb.collection("users").getOne<UserRecord>(workerId).catch(() => null);
+              const refreshed = await pb
+                .collection("users")
+                .getOne<UserRecord>(workerId)
+                .catch(() => null);
               if (refreshed) setWorkerUser(refreshed);
             }}
           />
@@ -639,9 +724,7 @@ function StaffWorkerDetailPage() {
             <Card key={adv.id} className="space-y-1 rounded-2xl border-border/60 p-4 shadow-soft">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold">
-                    {formatMoney(adv.amount || 0)}
-                  </div>
+                  <div className="text-sm font-semibold">{formatMoney(adv.amount || 0)}</div>
                   {adv.reason && (
                     <div className="mt-0.5 text-[11px] text-muted-foreground">{adv.reason}</div>
                   )}
@@ -666,7 +749,10 @@ function StaffWorkerDetailPage() {
           />
         ) : (
           histories.map((history) => (
-            <Card key={history.id} className="space-y-3 rounded-2xl border-border/60 p-4 shadow-soft">
+            <Card
+              key={history.id}
+              className="space-y-3 rounded-2xl border-border/60 p-4 shadow-soft"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">
@@ -722,7 +808,9 @@ function StaffWorkerDetailPage() {
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>Báo ứng lương</DialogTitle>
-            <DialogDescription>Tạo yêu cầu ứng lương cho người lao động từ hồ sơ gần nhất.</DialogDescription>
+            <DialogDescription>
+              Tạo yêu cầu ứng lương cho người lao động từ hồ sơ gần nhất.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <FormField label="Số tiền">
@@ -759,7 +847,9 @@ function StaffWorkerDetailPage() {
         <DrawerContent className="max-h-[88dvh]">
           <DrawerHeader>
             <DrawerTitle>Check công / lương gần nhất</DrawerTitle>
-            <DrawerDescription>Xem nhanh các kỳ gần đây đã được admin gửi cho người lao động.</DrawerDescription>
+            <DrawerDescription>
+              Xem nhanh các kỳ gần đây đã được admin gửi cho người lao động.
+            </DrawerDescription>
           </DrawerHeader>
           <div className="space-y-4 overflow-y-auto px-4 pb-4">
             <div>
@@ -768,7 +858,9 @@ function StaffWorkerDetailPage() {
               </div>
               <div className="space-y-2">
                 {attendanceItems.length === 0 ? (
-                  <Card className="rounded-2xl p-3 text-sm text-muted-foreground">Chưa có bản ghi check công.</Card>
+                  <Card className="rounded-2xl p-3 text-sm text-muted-foreground">
+                    Chưa có bản ghi check công.
+                  </Card>
                 ) : (
                   attendanceItems.slice(0, 6).map((item) => (
                     <Card key={item.id} className="rounded-2xl p-3 text-sm">
@@ -790,7 +882,9 @@ function StaffWorkerDetailPage() {
               </div>
               <div className="space-y-2">
                 {salaryItems.length === 0 ? (
-                  <Card className="rounded-2xl p-3 text-sm text-muted-foreground">Chưa có bản ghi check lương.</Card>
+                  <Card className="rounded-2xl p-3 text-sm text-muted-foreground">
+                    Chưa có bản ghi check lương.
+                  </Card>
                 ) : (
                   salaryItems.slice(0, 6).map((item) => (
                     <Card key={item.id} className="rounded-2xl p-3 text-sm">
@@ -818,11 +912,18 @@ function StaffWorkerDetailPage() {
         <DrawerContent className="max-h-[88dvh]">
           <DrawerHeader>
             <DrawerTitle>Báo nghỉ nhà máy hiện tại</DrawerTitle>
-            <DrawerDescription>Chỉ áp dụng với bản ghi đang làm hiện tại của người lao động.</DrawerDescription>
+            <DrawerDescription>
+              Chỉ áp dụng với bản ghi đang làm hiện tại của người lao động.
+            </DrawerDescription>
           </DrawerHeader>
           <div className="space-y-3 overflow-y-auto px-4 pb-4">
             <FormField label="Ngày nghỉ">
-              <Input type="date" value={leaveDate} onChange={(event) => setLeaveDate(event.target.value)} className="rounded-xl" />
+              <Input
+                type="date"
+                value={leaveDate}
+                onChange={(event) => setLeaveDate(event.target.value)}
+                className="rounded-xl"
+              />
             </FormField>
             <FormField label="Ghi chú">
               <Textarea
@@ -849,11 +950,18 @@ function StaffWorkerDetailPage() {
         <DrawerContent className="max-h-[90dvh]">
           <DrawerHeader>
             <DrawerTitle>Báo đi làm nhà máy mới</DrawerTitle>
-            <DrawerDescription>Hồ sơ cũ phải kết thúc trước khi tạo bản ghi đi làm mới.</DrawerDescription>
+            <DrawerDescription>
+              Hồ sơ cũ phải kết thúc trước khi tạo bản ghi đi làm mới.
+            </DrawerDescription>
           </DrawerHeader>
           <div className="space-y-3 overflow-y-auto px-4 pb-4">
             <FormField label="Nhà máy">
-              <Select value={joinForm.factory} onValueChange={(value) => setJoinForm((current) => ({ ...current, factory: value }))}>
+              <Select
+                value={joinForm.factory}
+                onValueChange={(value) =>
+                  setJoinForm((current) => ({ ...current, factory: value }))
+                }
+              >
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Chọn nhà máy" />
                 </SelectTrigger>
@@ -869,7 +977,12 @@ function StaffWorkerDetailPage() {
             <FormField label="Nhà chính">
               <Select
                 value={joinForm.main_house || "__none__"}
-                onValueChange={(value) => setJoinForm((current) => ({ ...current, main_house: value === "__none__" ? "" : value }))}
+                onValueChange={(value) =>
+                  setJoinForm((current) => ({
+                    ...current,
+                    main_house: value === "__none__" ? "" : value,
+                  }))
+                }
               >
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Chọn nhà chính (tuỳ chọn)" />
@@ -887,7 +1000,9 @@ function StaffWorkerDetailPage() {
             <FormField label="Mã NV">
               <Input
                 value={joinForm.employee_code}
-                onChange={(event) => setJoinForm((current) => ({ ...current, employee_code: event.target.value }))}
+                onChange={(event) =>
+                  setJoinForm((current) => ({ ...current, employee_code: event.target.value }))
+                }
                 className="rounded-xl"
               />
             </FormField>
@@ -895,7 +1010,10 @@ function StaffWorkerDetailPage() {
               <Input
                 value={joinForm.worker_name_snapshot}
                 onChange={(event) =>
-                  setJoinForm((current) => ({ ...current, worker_name_snapshot: event.target.value }))
+                  setJoinForm((current) => ({
+                    ...current,
+                    worker_name_snapshot: event.target.value,
+                  }))
                 }
                 className="rounded-xl"
               />
@@ -904,7 +1022,10 @@ function StaffWorkerDetailPage() {
               <Input
                 value={joinForm.worker_cccd_snapshot}
                 onChange={(event) =>
-                  setJoinForm((current) => ({ ...current, worker_cccd_snapshot: event.target.value }))
+                  setJoinForm((current) => ({
+                    ...current,
+                    worker_cccd_snapshot: event.target.value,
+                  }))
                 }
                 className="rounded-xl"
               />
@@ -913,14 +1034,18 @@ function StaffWorkerDetailPage() {
               <Input
                 type="date"
                 value={joinForm.join_date}
-                onChange={(event) => setJoinForm((current) => ({ ...current, join_date: event.target.value }))}
+                onChange={(event) =>
+                  setJoinForm((current) => ({ ...current, join_date: event.target.value }))
+                }
                 className="rounded-xl"
               />
             </FormField>
             <FormField label="Người tuyển">
               <Select
                 value={joinForm.recruiter_staff}
-                onValueChange={(value) => setJoinForm((current) => ({ ...current, recruiter_staff: value }))}
+                onValueChange={(value) =>
+                  setJoinForm((current) => ({ ...current, recruiter_staff: value }))
+                }
               >
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Chọn người tuyển" />
@@ -937,7 +1062,9 @@ function StaffWorkerDetailPage() {
             <FormField label="Ghi chú">
               <Textarea
                 value={joinForm.note}
-                onChange={(event) => setJoinForm((current) => ({ ...current, note: event.target.value }))}
+                onChange={(event) =>
+                  setJoinForm((current) => ({ ...current, note: event.target.value }))
+                }
                 rows={4}
                 className="rounded-xl"
               />
@@ -958,13 +1085,17 @@ function StaffWorkerDetailPage() {
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>Cập nhật tài khoản ngân hàng</DialogTitle>
-            <DialogDescription>Cập nhật trực tiếp thông tin ngân hàng của user gốc.</DialogDescription>
+            <DialogDescription>
+              Cập nhật trực tiếp thông tin ngân hàng của user gốc.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <FormField label="Ngân hàng">
               <Select
                 value={bankForm.bank_name}
-                onValueChange={(value) => setBankForm((current) => ({ ...current, bank_name: value }))}
+                onValueChange={(value) =>
+                  setBankForm((current) => ({ ...current, bank_name: value }))
+                }
               >
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Chọn ngân hàng" />
@@ -1015,13 +1146,17 @@ function StaffWorkerDetailPage() {
         <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle>Sửa lịch sử đi làm</DialogTitle>
-            <DialogDescription>Chỉ admin mới được chỉnh trực tiếp lịch sử đi làm của user.</DialogDescription>
+            <DialogDescription>
+              Chỉ admin mới được chỉnh trực tiếp lịch sử đi làm của user.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <FormField label="Mã NV">
               <Input
                 value={historyForm.employee_code}
-                onChange={(event) => setHistoryForm((current) => ({ ...current, employee_code: event.target.value }))}
+                onChange={(event) =>
+                  setHistoryForm((current) => ({ ...current, employee_code: event.target.value }))
+                }
                 className="rounded-xl"
               />
             </FormField>
@@ -1029,7 +1164,10 @@ function StaffWorkerDetailPage() {
               <Input
                 value={historyForm.worker_name_snapshot}
                 onChange={(event) =>
-                  setHistoryForm((current) => ({ ...current, worker_name_snapshot: event.target.value }))
+                  setHistoryForm((current) => ({
+                    ...current,
+                    worker_name_snapshot: event.target.value,
+                  }))
                 }
                 className="rounded-xl"
               />
@@ -1038,7 +1176,10 @@ function StaffWorkerDetailPage() {
               <Input
                 value={historyForm.worker_cccd_snapshot}
                 onChange={(event) =>
-                  setHistoryForm((current) => ({ ...current, worker_cccd_snapshot: event.target.value }))
+                  setHistoryForm((current) => ({
+                    ...current,
+                    worker_cccd_snapshot: event.target.value,
+                  }))
                 }
                 className="rounded-xl"
               />
@@ -1046,7 +1187,9 @@ function StaffWorkerDetailPage() {
             <FormField label="Người tuyển">
               <Select
                 value={historyForm.recruiter_staff}
-                onValueChange={(value) => setHistoryForm((current) => ({ ...current, recruiter_staff: value }))}
+                onValueChange={(value) =>
+                  setHistoryForm((current) => ({ ...current, recruiter_staff: value }))
+                }
               >
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Chọn người tuyển" />
@@ -1063,7 +1206,12 @@ function StaffWorkerDetailPage() {
             <FormField label="Nhà chính">
               <Select
                 value={historyForm.main_house || "__none__"}
-                onValueChange={(value) => setHistoryForm((current) => ({ ...current, main_house: value === "__none__" ? "" : value }))}
+                onValueChange={(value) =>
+                  setHistoryForm((current) => ({
+                    ...current,
+                    main_house: value === "__none__" ? "" : value,
+                  }))
+                }
               >
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Chọn nhà chính (tuỳ chọn)" />
@@ -1083,7 +1231,9 @@ function StaffWorkerDetailPage() {
                 <Input
                   type="date"
                   value={historyForm.join_date}
-                  onChange={(event) => setHistoryForm((current) => ({ ...current, join_date: event.target.value }))}
+                  onChange={(event) =>
+                    setHistoryForm((current) => ({ ...current, join_date: event.target.value }))
+                  }
                   className="rounded-xl"
                 />
               </FormField>
@@ -1091,13 +1241,20 @@ function StaffWorkerDetailPage() {
                 <Input
                   type="date"
                   value={historyForm.leave_date}
-                  onChange={(event) => setHistoryForm((current) => ({ ...current, leave_date: event.target.value }))}
+                  onChange={(event) =>
+                    setHistoryForm((current) => ({ ...current, leave_date: event.target.value }))
+                  }
                   className="rounded-xl"
                 />
               </FormField>
             </div>
             <FormField label="Trạng thái">
-              <Select value={historyForm.status} onValueChange={(value) => setHistoryForm((current) => ({ ...current, status: value }))}>
+              <Select
+                value={historyForm.status}
+                onValueChange={(value) =>
+                  setHistoryForm((current) => ({ ...current, status: value }))
+                }
+              >
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Chọn trạng thái" />
                 </SelectTrigger>
@@ -1110,14 +1267,20 @@ function StaffWorkerDetailPage() {
             <FormField label="Ghi chú">
               <Textarea
                 value={historyForm.note}
-                onChange={(event) => setHistoryForm((current) => ({ ...current, note: event.target.value }))}
+                onChange={(event) =>
+                  setHistoryForm((current) => ({ ...current, note: event.target.value }))
+                }
                 rows={4}
                 className="rounded-xl"
               />
             </FormField>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingHistory(null)} className="rounded-xl">
+            <Button
+              variant="outline"
+              onClick={() => setEditingHistory(null)}
+              className="rounded-xl"
+            >
               Đóng
             </Button>
             <Button onClick={saveEditedHistory} className="rounded-xl">
@@ -1165,13 +1328,7 @@ function InfoCell({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FormField({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
       <Label className="text-xs">{label}</Label>
@@ -1199,11 +1356,19 @@ function formatMoney(value: number) {
   }).format(value || 0);
 }
 
-function AdvanceStatusChip({ status, recoveryStatus }: { status?: string; recoveryStatus?: string }) {
+function AdvanceStatusChip({
+  status,
+  recoveryStatus,
+}: {
+  status?: string;
+  recoveryStatus?: string;
+}) {
   if (status === "rejected") return <StatusChip tone="danger">Từ chối</StatusChip>;
   if (status === "pending") return <StatusChip tone="warning">Chờ duyệt</StatusChip>;
-  if (status === "accepted" && recoveryStatus === "recovered") return <StatusChip tone="success">Đã thu hồi</StatusChip>;
-  if (status === "accepted" && recoveryStatus === "partial") return <StatusChip tone="info">Thu hồi 1 phần</StatusChip>;
+  if (status === "accepted" && recoveryStatus === "recovered")
+    return <StatusChip tone="success">Đã thu hồi</StatusChip>;
+  if (status === "accepted" && recoveryStatus === "partial")
+    return <StatusChip tone="info">Thu hồi 1 phần</StatusChip>;
   if (status === "accepted") return <StatusChip tone="success">Đã duyệt</StatusChip>;
   return <StatusChip tone="neutral">{status || "—"}</StatusChip>;
 }

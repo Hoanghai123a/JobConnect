@@ -30,25 +30,32 @@ export interface FactoryManagerRecord {
 }
 
 export async function fetchFactories() {
-  return (await pb.collection("factories").getFullList({
+  const res = await pb.collection("factories").getList(1, 300, {
     sort: "name",
-  })) as unknown as FactoryRecord[];
+  });
+  return res.items as unknown as FactoryRecord[];
 }
 
 export async function fetchFactoryManagers(staffId?: string) {
   const filter = staffId ? `staff="${escapePb(staffId)}"` : "";
-  return (await pb.collection("factory_managers").getFullList({
+  const res = await pb.collection("factory_managers").getList(1, 500, {
     filter,
     sort: "-created",
     expand: "factory",
-  })) as unknown as FactoryManagerRecord[];
+  });
+  return res.items as unknown as FactoryManagerRecord[];
 }
 
-export function isFactoryAssignmentActive(record: FactoryManagerRecord, referenceDate = new Date()) {
+export function isFactoryAssignmentActive(
+  record: FactoryManagerRecord,
+  referenceDate = new Date(),
+) {
   if (record.status === "inactive") return false;
 
   const refTime = referenceDate.getTime();
-  const fromTime = record.active_from ? new Date(record.active_from).getTime() : Number.NEGATIVE_INFINITY;
+  const fromTime = record.active_from
+    ? new Date(record.active_from).getTime()
+    : Number.NEGATIVE_INFINITY;
   const toTime = record.active_to ? new Date(record.active_to).getTime() : Number.POSITIVE_INFINITY;
 
   return fromTime <= refTime && toTime >= refTime;

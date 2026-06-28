@@ -107,9 +107,8 @@ export async function fetchFactoryAttendanceCutoffDay(company?: string) {
   if (!currentCompany) return null;
 
   try {
-    const factories = (await pb
-      .collection("factories")
-      .getFullList({ sort: "name" })) as FactoryPayrollSettings[];
+    const factoryRes = await pb.collection("factories").getList(1, 300, { sort: "name" });
+    const factories = factoryRes.items as unknown as FactoryPayrollSettings[];
     const factory = factories.find((item) => normalizeText(item.name) === currentCompany);
     return normalizeCutoffDay(
       factory?.attendance_cutoff_day ?? factory?.cutoff_day ?? factory?.closing_day,

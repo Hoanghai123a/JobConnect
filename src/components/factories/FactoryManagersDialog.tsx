@@ -49,10 +49,13 @@ export function FactoryManagersDialog({
     setLoading(true);
     try {
       const [staffRows, assignmentRows] = await Promise.all([
-        pb.collection("users").getFullList<UserRecord>({
-          filter: 'role = "staff"',
-          sort: "full_name,username",
-        }),
+        pb
+          .collection("users")
+          .getList<UserRecord>(1, 200, {
+            filter: 'role = "staff"',
+            sort: "full_name,username",
+          })
+          .then((res) => res.items),
         fetchFactoryManagers(),
       ]);
       setStaffUsers(staffRows);
@@ -190,7 +193,11 @@ export function FactoryManagersDialog({
                   )}
                 </SelectContent>
               </Select>
-              <Button className="rounded-xl" onClick={addManager} disabled={saving || !selectedStaff}>
+              <Button
+                className="rounded-xl"
+                onClick={addManager}
+                disabled={saving || !selectedStaff}
+              >
                 <Plus className="h-4 w-4" /> Thêm
               </Button>
             </div>
@@ -220,13 +227,16 @@ export function FactoryManagersDialog({
                       <ShieldCheck className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold">{staffName(assignment.staff)}</div>
+                      <div className="truncate text-sm font-semibold">
+                        {staffName(assignment.staff)}
+                      </div>
                       <button
                         type="button"
                         onClick={() => toggleStatus(assignment)}
                         className="mt-0.5 text-[11px] text-muted-foreground underline-offset-2 hover:underline"
                       >
-                        {assignment.status === "active" ? "Đang áp dụng" : "Tạm dừng"} · đổi trạng thái
+                        {assignment.status === "active" ? "Đang áp dụng" : "Tạm dừng"} · đổi trạng
+                        thái
                       </button>
                     </div>
                     <StatusChip tone={active ? "success" : "neutral"}>

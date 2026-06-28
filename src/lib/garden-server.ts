@@ -58,9 +58,10 @@ export interface GardenExchangeRequest {
 // ---- Foods ----
 
 export async function fetchFoods() {
-  return (await pb.collection("garden_foods").getFullList({
+  const res = await pb.collection("garden_foods").getList(1, 200, {
     sort: "price",
-  })) as unknown as GardenFood[];
+  });
+  return res.items as unknown as GardenFood[];
 }
 
 export async function createFood(data: Omit<GardenFood, "id" | "created">) {
@@ -78,17 +79,22 @@ export async function deleteFood(id: string) {
 // ---- Exchange Tiers ----
 
 export async function fetchExchangeTiers() {
-  return (await pb.collection("garden_exchange_tiers").getFullList({
+  const res = await pb.collection("garden_exchange_tiers").getList(1, 200, {
     sort: "min_coins",
-  })) as unknown as GardenExchangeTier[];
+  });
+  return res.items as unknown as GardenExchangeTier[];
 }
 
 export async function createExchangeTier(data: Omit<GardenExchangeTier, "id" | "created">) {
-  return (await pb.collection("garden_exchange_tiers").create(data)) as unknown as GardenExchangeTier;
+  return (await pb
+    .collection("garden_exchange_tiers")
+    .create(data)) as unknown as GardenExchangeTier;
 }
 
 export async function updateExchangeTier(id: string, data: Partial<GardenExchangeTier>) {
-  return (await pb.collection("garden_exchange_tiers").update(id, data)) as unknown as GardenExchangeTier;
+  return (await pb
+    .collection("garden_exchange_tiers")
+    .update(id, data)) as unknown as GardenExchangeTier;
 }
 
 export async function deleteExchangeTier(id: string) {
@@ -124,10 +130,11 @@ export async function updateBalance(id: string, data: Partial<GardenBalance>) {
 }
 
 export async function fetchAllBalances() {
-  return (await pb.collection("garden_balances").getFullList({
+  const res = await pb.collection("garden_balances").getList(1, 200, {
     sort: "-coins",
     expand: "user",
-  })) as unknown as (GardenBalance & { expand?: { user?: UserRecord } })[];
+  });
+  return res.items as unknown as (GardenBalance & { expand?: { user?: UserRecord } })[];
 }
 
 export async function addCoins(balanceId: string, currentCoins: number, amount: number) {
@@ -143,11 +150,12 @@ export async function deductCoins(balanceId: string, currentCoins: number, amoun
 
 export async function fetchExchangeRequests(userId?: string) {
   const filter = userId ? `user="${userId}"` : "";
-  return (await pb.collection("garden_exchange_requests").getFullList({
+  const res = await pb.collection("garden_exchange_requests").getList(1, 200, {
     filter,
     sort: "-created",
     expand: "user",
-  })) as unknown as GardenExchangeRequest[];
+  });
+  return res.items as unknown as GardenExchangeRequest[];
 }
 
 export async function createExchangeRequest(data: {
@@ -166,7 +174,9 @@ export async function createExchangeRequest(data: {
 }
 
 export async function approveExchangeRequest(requestId: string, adminNote?: string) {
-  const request = (await pb.collection("garden_exchange_requests").getOne(requestId)) as unknown as GardenExchangeRequest;
+  const request = (await pb
+    .collection("garden_exchange_requests")
+    .getOne(requestId)) as unknown as GardenExchangeRequest;
   if (request.status !== "pending") throw new Error("Yêu cầu đã được xử lý");
 
   const balance = await fetchBalance(request.user);
@@ -174,7 +184,9 @@ export async function approveExchangeRequest(requestId: string, adminNote?: stri
 
   await updateBalance(balance.id, {
     coins: balance.coins - request.coins_spent,
-    ...(request.type === "reserve" ? { reserve_balance: balance.reserve_balance + request.money_amount } : {}),
+    ...(request.type === "reserve"
+      ? { reserve_balance: balance.reserve_balance + request.money_amount }
+      : {}),
   });
 
   return (await pb.collection("garden_exchange_requests").update(requestId, {

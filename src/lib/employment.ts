@@ -44,11 +44,12 @@ export interface EmploymentDraft {
 
 export async function fetchEmploymentHistories(userIds?: string[]) {
   const filter = userIds?.length ? relationInFilter("user", userIds) : "";
-  return (await pb.collection("employment_histories").getFullList({
+  const res = await pb.collection("employment_histories").getList(1, 500, {
     filter,
     sort: "-join_date,-created",
-    expand: "user,factory,recruiter_staff",
-  })) as unknown as EmploymentHistoryRecord[];
+    expand: "user,factory,recruiter_staff,main_house",
+  });
+  return res.items as unknown as EmploymentHistoryRecord[];
 }
 
 export function isHistoryWithinLast90Days(

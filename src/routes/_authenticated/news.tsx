@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { pb, fileUrl } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { escapePb } from "@/lib/delegations";
 import { markSeen } from "@/lib/seen";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
@@ -168,17 +169,6 @@ type SelectOption = { value: string; label: string };
 const optionLabel = (options: readonly SelectOption[], value?: string) =>
   options.find((option) => option.value === value)?.label || "";
 
-const matchesInclusiveSelectFilter = (
-  value: string | undefined,
-  selected: string,
-  options: readonly SelectOption[],
-) => {
-  if (selected === "all") return true;
-  if (!value) return false;
-  if (selected === "both") return options.some((option) => option.value === value);
-  return value === selected || value === "both";
-};
-
 type FactoryOption = { id: string; name: string; address?: string; hotline?: string };
 type RecruitmentAreaOption = { id: string; name: string; note?: string };
 
@@ -191,6 +181,39 @@ const recruitmentEmploymentType = (item: Recruitment) => item.employment_type ||
 
 const errorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
+
+function joinPbFilters(parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" && ");
+}
+
+function inclusiveOptionFilter(field: string, selected: string) {
+  if (selected === "all" || selected === "both") return "";
+  return `(${field}="${escapePb(selected)}" || ${field}="both")`;
+}
+
+function buildRecruitmentFilter(input: {
+  isAdmin: boolean;
+  search: string;
+  gender: string;
+  area: string;
+  employmentType: string;
+  environment: string;
+  posture: string;
+  productionQc: string;
+}) {
+  const q = escapePb(input.search.trim());
+  const searchFilter = q ? `(company~"${q}" || area~"${q}")` : "";
+  return joinPbFilters([
+    input.isAdmin ? "" : "is_active!=false",
+    searchFilter,
+    input.area === "all" ? "" : `area="${escapePb(input.area)}"`,
+    input.gender === "all" ? "" : `gender~"${escapePb(input.gender)}"`,
+    input.employmentType === "all" ? "" : `employment_type="${escapePb(input.employmentType)}"`,
+    inclusiveOptionFilter("environment", input.environment),
+    inclusiveOptionFilter("work_posture", input.posture),
+    inclusiveOptionFilter("production_qc", input.productionQc),
+  ]);
+}
 
 const factoryMapUrl = (factory?: FactoryOption | null) => {
   const query = factory?.address?.trim() || factory?.name?.trim() || "";
@@ -215,9 +238,9 @@ function useFactoryOptions() {
     let cancelled = false;
     setLoading(true);
     pb.collection("factories")
-      .getFullList({ sort: "name" })
+      .getList(1, 300, { sort: "name" })
       .then((res) => {
-        if (!cancelled) setFactories(res as unknown as FactoryOption[]);
+        if (!cancelled) setFactories(res.items as unknown as FactoryOption[]);
       })
       .catch(() => {
         if (!cancelled) setFactories([]);
@@ -242,9 +265,9 @@ function useRecruitmentAreaOptions() {
     let cancelled = false;
     setLoading(true);
     pb.collection("recruitment_areas")
-      .getFullList({ sort: "name" })
+      .getList(1, 300, { sort: "name" })
       .then((res) => {
-        if (!cancelled) setAreas(res as unknown as RecruitmentAreaOption[]);
+        if (!cancelled) setAreas(res.items as unknown as RecruitmentAreaOption[]);
       })
       .catch(() => {
         if (!cancelled) setAreas([]);
@@ -285,8 +308,20 @@ function NewsPage() {
 
   const load = async () => {
     try {
-      const res = await pb.collection("recruitments").getFullList({ sort: "-created" });
-      const rows = res as unknown as Recruitment[];
+      const res = await pb.collection("recruitments").getList(1, 200, {
+        filter: buildRecruitmentFilter({
+          isAdmin,
+          search,
+          gender: filter,
+          area: areaFilter,
+          employmentType: employmentTypeFilter,
+          environment: environmentFilter,
+          posture: postureFilter,
+          productionQc: productionQcFilter,
+        }),
+        sort: "-created",
+      });
+      const rows = res.items as unknown as Recruitment[];
       setItems(rows);
       const latest = rows.reduce(
         (max, row) => Math.max(max, row.created ? new Date(row.created).getTime() : 0),
@@ -299,46 +334,8 @@ function NewsPage() {
   };
   useEffect(() => {
     load();
-  }, []);
-
-  const visibleItems = useMemo(
-    () => (isAdmin ? items : items.filter(isRecruitmentActive)),
-    [items, isAdmin],
-  );
-
-  const remove = async (id: string) => {
-    if (!confirm("Xoá tin tuyển dụng?")) return;
-    await pb.collection("recruitments").delete(id);
-    load();
-  };
-
-  const filtered = useMemo(() => {
-    return visibleItems.filter((r) => {
-      const q = search.toLowerCase();
-      if (search && ![r.company, r.area].some((value) => value?.toLowerCase().includes(q))) {
-        return false;
-      }
-      if (areaFilter !== "all" && normalizeArea(r.area) !== areaFilter) return false;
-      if (filter === "male" && !r.gender?.includes("male")) return false;
-      if (filter === "female" && !r.gender?.includes("female")) return false;
-      if (employmentTypeFilter !== "all" && recruitmentEmploymentType(r) !== employmentTypeFilter) {
-        return false;
-      }
-      if (!matchesInclusiveSelectFilter(r.environment, environmentFilter, ENVIRONMENT_OPTIONS)) {
-        return false;
-      }
-      if (!matchesInclusiveSelectFilter(r.work_posture, postureFilter, WORK_POSTURE_OPTIONS)) {
-        return false;
-      }
-      if (
-        !matchesInclusiveSelectFilter(r.production_qc, productionQcFilter, PRODUCTION_QC_OPTIONS)
-      ) {
-        return false;
-      }
-      return true;
-    });
   }, [
-    visibleItems,
+    isAdmin,
     search,
     filter,
     areaFilter,
@@ -347,6 +344,16 @@ function NewsPage() {
     postureFilter,
     productionQcFilter,
   ]);
+
+  const visibleItems = items;
+
+  const remove = async (id: string) => {
+    if (!confirm("Xoá tin tuyển dụng?")) return;
+    await pb.collection("recruitments").delete(id);
+    load();
+  };
+
+  const filtered = visibleItems;
 
   const areaOptions = useMemo(
     () =>
@@ -744,11 +751,7 @@ function DetailSheet({
                   />
                   <Info icon={MapPin} label={"Khu vực"} value={item.area} />
                   <Info icon={Users} label={"Tuyển"} value={genderLabel(item.gender)} />
-                  <Info
-                    icon={Clock}
-                    label={"Thời gian phỏng vấn"}
-                    value={item.interview_time}
-                  />
+                  <Info icon={Clock} label={"Thời gian phỏng vấn"} value={item.interview_time} />
                   <Info
                     icon={CalendarDays}
                     label={"Thời hạn tuyển dụng"}
@@ -760,19 +763,11 @@ function DetailSheet({
 
               <DetailSection icon={Wallet} title={"Chế độ"}>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Info
-                    icon={Banknote}
-                    label={"Lương cơ bản"}
-                    value={item.salary_base}
-                  />
+                  <Info icon={Banknote} label={"Lương cơ bản"} value={item.salary_base} />
                   <Info icon={Gift} label={"Phụ cấp"} value={item.allowance} />
                 </div>
                 <Info label={"Thưởng khác"} value={item.bonus_other} multiline />
-                <Info
-                  label={"Lương ngắn hạn"}
-                  value={item.short_term_salary}
-                  multiline
-                />
+                <Info label={"Lương ngắn hạn"} value={item.short_term_salary} multiline />
               </DetailSection>
 
               <DetailSection icon={Briefcase} title={"Đặc thù công việc"}>
@@ -802,11 +797,7 @@ function DetailSheet({
               </DetailSection>
 
               <DetailSection icon={FileText} title={"Thủ tục"}>
-                <Info
-                  label={"Giấy tờ yêu cầu"}
-                  value={item.documents}
-                  multiline
-                />
+                <Info label={"Giấy tờ yêu cầu"} value={item.documents} multiline />
                 <Info label={"Ghi chú khác"} value={item.notes} multiline />
               </DetailSection>
 

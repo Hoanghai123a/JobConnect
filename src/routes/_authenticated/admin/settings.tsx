@@ -200,10 +200,19 @@ function CompanyTab() {
           placeholder="VD: HL"
           maxLength={6}
           value={form.account_code_prefix || ""}
-          onChange={(e) => setForm({ ...form, account_code_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })}
+          onChange={(e) =>
+            setForm({
+              ...form,
+              account_code_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
+            })
+          }
         />
         <p className="mt-1 text-[11px] text-muted-foreground">
-          UID sẽ có dạng <span className="font-mono font-semibold">{(form.account_code_prefix || "HL") + "000001"}</span> và tăng dần. Đổi tiền tố chỉ áp dụng cho UID cấp mới.
+          UID sẽ có dạng{" "}
+          <span className="font-mono font-semibold">
+            {(form.account_code_prefix || "HL") + "000001"}
+          </span>{" "}
+          và tăng dần. Đổi tiền tố chỉ áp dụng cho UID cấp mới.
         </p>
       </div>
       <div>
@@ -376,8 +385,8 @@ function FactoriesTab() {
   const loadFactories = async () => {
     setLoading(true);
     try {
-      const res = await pb.collection("factories").getFullList({ sort: "name" });
-      setItems(res as any);
+      const res = await pb.collection("factories").getList(1, 300, { sort: "name" });
+      setItems(res.items as any);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải nhà máy. Hãy tạo collection 'factories'.");
     } finally {
@@ -388,8 +397,8 @@ function FactoriesTab() {
   const loadAreas = async () => {
     setAreasLoading(true);
     try {
-      const res = await pb.collection("recruitment_areas").getFullList({ sort: "name" });
-      setAreas(res as any);
+      const res = await pb.collection("recruitment_areas").getList(1, 300, { sort: "name" });
+      setAreas(res.items as any);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải khu vực. Hãy tạo collection 'recruitment_areas'.");
     } finally {
@@ -400,8 +409,8 @@ function FactoriesTab() {
   const loadMainHouses = async () => {
     setMainHousesLoading(true);
     try {
-      const res = await pb.collection("main_houses").getFullList({ sort: "name" });
-      setMainHouses(res as any);
+      const res = await pb.collection("main_houses").getList(1, 300, { sort: "name" });
+      setMainHouses(res.items as any);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải nhà chính. Hãy tạo collection 'main_houses'.");
     } finally {
@@ -992,7 +1001,11 @@ function FactoriesTab() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingMainHouse(null)} className="rounded-xl">
+            <Button
+              variant="outline"
+              onClick={() => setEditingMainHouse(null)}
+              className="rounded-xl"
+            >
               Huỷ
             </Button>
             <Button onClick={saveMainHouse} className="rounded-xl">

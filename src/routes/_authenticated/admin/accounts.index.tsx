@@ -17,6 +17,7 @@ import {
 import { pb, type Role, type UserRecord } from "@/lib/pocketbase";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { fetchFactoryManagers } from "@/lib/factories";
+import { escapePb } from "@/lib/delegations";
 
 const ROLE_LABELS: Record<Role, string> = {
   admin: "Quản trị viên",
@@ -29,6 +30,14 @@ const ROLE_TONES: Record<Role, "info" | "success" | "neutral"> = {
   staff: "success",
   user: "neutral",
 };
+
+function userSearchFilter(search: string) {
+  const q = escapePb(search.trim());
+  if (!q) return "";
+  return `(${["full_name", "username", "phone", "employee_code", "company", "role"]
+    .map((field) => `${field}~"${q}"`)
+    .join(" || ")})`;
+}
 
 export const Route = createFileRoute("/_authenticated/admin/accounts/")({
   component: AdminAccountsPage,
@@ -45,7 +54,13 @@ function AdminAccountsPage() {
     setLoading(true);
     try {
       const [userRows, assignmentRows] = await Promise.all([
-        pb.collection("users").getFullList<UserRecord>({ sort: "full_name,username" }),
+        pb
+          .collection("users")
+          .getList<UserRecord>(1, 500, {
+            filter: userSearchFilter(search),
+            sort: "full_name,username",
+          })
+          .then((res) => res.items),
         fetchFactoryManagers(),
       ]);
       setUsers(userRows);
@@ -63,19 +78,10 @@ function AdminAccountsPage() {
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
-  const filteredUsers = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) return users;
-    return users.filter((item) => {
-      const haystack = [item.full_name, item.username, item.phone, item.role]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(keyword);
-    });
-  }, [search, users]);
+  const filteredUsers = users;
 
   const roleSummary = useMemo(
     () => ({
@@ -167,7 +173,9 @@ function AdminAccountsPage() {
         </div>
 
         {loading ? (
-          <Card className="rounded-2xl p-4 text-sm text-muted-foreground">Đang tải tài khoản...</Card>
+          <Card className="rounded-2xl p-4 text-sm text-muted-foreground">
+            Đang tải tài khoản...
+          </Card>
         ) : filteredUsers.length === 0 ? (
           <EmptyState
             icon={ShieldCheck}
@@ -185,7 +193,8 @@ function AdminAccountsPage() {
                       {item.full_name || item.username || "Chưa có tên"}
                     </div>
                     <div className="mt-0.5 text-[11px] text-muted-foreground">
-                      @{item.username || "chưa có username"} · {item.phone || "chưa có số điện thoại"}
+                      @{item.username || "chưa có username"} ·{" "}
+                      {item.phone || "chưa có số điện thoại"}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1.5">
@@ -194,9 +203,7 @@ function AdminAccountsPage() {
                     </StatusChip>
                     {item.role === "staff" && (
                       <StatusChip tone={factoryCount ? "info" : "neutral"}>
-                        {factoryCount
-                          ? `${factoryCount} nhà máy`
-                          : "Chưa gán nhà máy"}
+                        {factoryCount ? `${factoryCount} nhà máy` : "Chưa gán nhà máy"}
                       </StatusChip>
                     )}
                   </div>
@@ -219,13 +226,8 @@ function AdminAccountsPage() {
 
                 {item.role === "staff" && (
                   <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                    <span>
-                      Xem và thay đổi nhà máy phụ trách ở trang cấp quyền QLNM.
-                    </span>
-                    <Link
-                      to="/admin/accounts/factories"
-                      className="font-medium text-primary"
-                    >
+                    <span>Xem và thay đổi nhà máy phụ trách ở trang cấp quyền QLNM.</span>
+                    <Link to="/admin/accounts/factories" className="font-medium text-primary">
                       Mở trang cấp quyền →
                     </Link>
                   </div>

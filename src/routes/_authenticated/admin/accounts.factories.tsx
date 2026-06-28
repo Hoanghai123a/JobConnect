@@ -44,6 +44,7 @@ import {
   type FactoryStatus,
 } from "@/lib/factories";
 import { createStaffActionLog } from "@/lib/staff-log";
+import { escapePb } from "@/lib/delegations";
 
 export const Route = createFileRoute("/_authenticated/admin/accounts/factories")({
   beforeLoad: () => {
@@ -57,6 +58,16 @@ export const Route = createFileRoute("/_authenticated/admin/accounts/factories")
 });
 
 type EditingAssignment = Partial<FactoryManagerRecord> & { staff?: string };
+
+function staffSearchFilter(search: string) {
+  const q = escapePb(search.trim());
+  const searchFilter = q
+    ? `(${["full_name", "username", "phone", "employee_code", "company"]
+        .map((field) => `${field}~"${q}"`)
+        .join(" || ")})`
+    : "";
+  return ['role="staff"', searchFilter].filter(Boolean).join(" && ");
+}
 
 function formatDateRange(record: FactoryManagerRecord) {
   const from = record.active_from || "Ngay lập tức";
@@ -79,10 +90,13 @@ function AccountStaffFactoriesPage() {
     setLoading(true);
     try {
       const [userRows, factoryRows, assignmentRows] = await Promise.all([
-        pb.collection("users").getFullList<UserRecord>({
-          filter: `role="staff"`,
-          sort: "full_name,username",
-        }),
+        pb
+          .collection("users")
+          .getList<UserRecord>(1, 200, {
+            filter: staffSearchFilter(search),
+            sort: "full_name,username",
+          })
+          .then((res) => res.items),
         fetchFactories(),
         fetchFactoryManagers(),
       ]);
@@ -98,7 +112,8 @@ function AccountStaffFactoriesPage() {
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const assignmentsByStaff = useMemo(() => {
     const map = new Map<string, FactoryManagerRecord[]>();
@@ -110,17 +125,7 @@ function AccountStaffFactoriesPage() {
     return map;
   }, [assignments]);
 
-  const filteredStaff = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) return staffUsers;
-    return staffUsers.filter((item) => {
-      const haystack = [item.full_name, item.username, item.phone, item.role]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(keyword);
-    });
-  }, [search, staffUsers]);
+  const filteredStaff = staffUsers;
 
   const totalAssignments = assignments.length;
   const activeAssignments = assignments.filter((item) => isFactoryAssignmentActive(item)).length;
@@ -191,11 +196,7 @@ function AccountStaffFactoriesPage() {
         });
       }
 
-      toast.success(
-        editingAssignment.id
-          ? "Đã cập nhật phân công"
-          : "Đã gán nhà máy cho staff",
-      );
+      toast.success(editingAssignment.id ? "Đã cập nhật phân công" : "Đã gán nhà máy cho staff");
       closePicker();
       await load();
     } catch (error: any) {
@@ -204,7 +205,11 @@ function AccountStaffFactoriesPage() {
   };
 
   const deleteAssignment = async (assignment: FactoryManagerRecord) => {
-    if (!confirm(`Xóa quyền quản lý nhà máy "${assignment.expand?.factory?.name || assignment.factory}"?`)) {
+    if (
+      !confirm(
+        `Xóa quyền quản lý nhà máy "${assignment.expand?.factory?.name || assignment.factory}"?`,
+      )
+    ) {
       return;
     }
 
@@ -283,7 +288,9 @@ function AccountStaffFactoriesPage() {
         <div className="space-y-3">
           {filteredStaff.map((staff) => {
             const staffAssignments = assignmentsByStaff.get(staff.id) || [];
-            const activeCount = staffAssignments.filter((item) => isFactoryAssignmentActive(item)).length;
+            const activeCount = staffAssignments.filter((item) =>
+              isFactoryAssignmentActive(item),
+            ).length;
 
             return (
               <Card key={staff.id} className="space-y-3 rounded-2xl p-4 shadow-soft">
@@ -293,7 +300,8 @@ function AccountStaffFactoriesPage() {
                       {staff.full_name || staff.username || "Chưa có tên"}
                     </div>
                     <div className="mt-0.5 text-[11px] text-muted-foreground">
-                      @{staff.username || "chưa có username"} · {staff.phone || "chưa có số điện thoại"}
+                      @{staff.username || "chưa có username"} ·{" "}
+                      {staff.phone || "chưa có số điện thoại"}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1.5">
@@ -402,7 +410,8 @@ function AccountStaffFactoriesPage() {
               {editingAssignment?.id ? "Sửa phân công nhà máy" : "Gán nhà máy cho staff"}
             </DialogTitle>
             <DialogDescription>
-              Mỗi staff có thể được gán nhiều nhà máy. Phạm vi quyền hạn chi tiết sẽ được nâng cấp sau.
+              Mỗi staff có thể được gán nhiều nhà máy. Phạm vi quyền hạn chi tiết sẽ được nâng cấp
+              sau.
             </DialogDescription>
           </DialogHeader>
 
@@ -506,7 +515,10 @@ function AccountStaffFactoriesPage() {
               <Input
                 value={editingAssignment?.note || ""}
                 onChange={(event) =>
-                  setEditingAssignment((current) => ({ ...(current || {}), note: event.target.value }))
+                  setEditingAssignment((current) => ({
+                    ...(current || {}),
+                    note: event.target.value,
+                  }))
                 }
                 className="rounded-xl"
                 placeholder="Ví dụ: phụ trách ca sáng, phụ trách tạm thời..."

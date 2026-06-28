@@ -52,9 +52,7 @@ function compareRecentHistories(a: EmploymentHistoryRecord, b: EmploymentHistory
 }
 
 export function getRecentRecruiterHistories(histories: EmploymentHistoryRecord[]) {
-  return [...histories]
-    .sort(compareRecentHistories)
-    .slice(0, RECENT_RECRUITER_HISTORY_LIMIT);
+  return [...histories].sort(compareRecentHistories).slice(0, RECENT_RECRUITER_HISTORY_LIMIT);
 }
 
 export function isRecentRecruiter(
@@ -62,7 +60,9 @@ export function isRecentRecruiter(
   histories: EmploymentHistoryRecord[],
 ) {
   if (!viewer?.id || viewer.role !== "staff") return false;
-  return getRecentRecruiterHistories(histories).some((history) => history.recruiter_staff === viewer.id);
+  return getRecentRecruiterHistories(histories).some(
+    (history) => history.recruiter_staff === viewer.id,
+  );
 }
 
 export function canReportAdvance(
@@ -131,10 +131,11 @@ export async function fetchStaffWorkspace(viewer: UserRecord) {
     };
   }
 
-  const users = (await pb.collection("users").getFullList({
+  const userRes = await pb.collection("users").getList(1, 500, {
     filter: relationInFilter("id", userIds),
     sort: "full_name,username",
-  })) as unknown as UserRecord[];
+  });
+  const users = userRes.items as unknown as UserRecord[];
 
   const workerMap = new Map(users.map((item) => [item.id, item]));
 
