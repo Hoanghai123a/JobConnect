@@ -18,8 +18,24 @@ import { fetchStaffWorkspace } from "@/lib/staff-permissions";
 import { useAuth } from "@/lib/auth";
 import type { FactoryRecord } from "@/lib/factories";
 import type { StaffWorkerRecord } from "@/lib/staff-permissions";
+import type { EmploymentHistoryRecord } from "@/lib/employment";
 import type { UserRecord } from "@/lib/pocketbase";
 import { toast } from "sonner";
+
+function computeTenureDays(histories: EmploymentHistoryRecord[], referenceDate = new Date()) {
+  const refTime = referenceDate.getTime();
+  let totalMs = 0;
+  for (const h of histories) {
+    if (!h.join_date) continue;
+    const joinTime = new Date(h.join_date).getTime();
+    if (Number.isNaN(joinTime)) continue;
+    const endSource = h.leave_date && new Date(h.leave_date).getTime();
+    const endTime = endSource && !Number.isNaN(endSource) ? endSource : refTime;
+    if (endTime <= joinTime) continue;
+    totalMs += endTime - joinTime;
+  }
+  return Math.floor(totalMs / (1000 * 60 * 60 * 24));
+}
 
 export const Route = createFileRoute("/_authenticated/staff/export")({
   component: StaffExportPage,
@@ -63,6 +79,14 @@ function StaffExportPage() {
       });
   }, [factoryFilter, statusFilter, workers]);
 
+  const tenureDaysByUserId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const worker of workers) {
+      map.set(worker.user.id, computeTenureDays(worker.histories));
+    }
+    return map;
+  }, [workers]);
+
   const basicRows = useMemo(() => {
     return filteredHistories.map((history, index) => ({
       STT: index + 1,
@@ -78,10 +102,11 @@ function StaffExportPage() {
       "Ngày vào": history.join_date || "",
       "Ngày nghỉ": history.leave_date || "",
       "Trạng thái": history.status === "working" ? "Đang làm" : "Đã nghỉ",
+      "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
       "Tài khoản gốc": history.expand?.user?.full_name || history.expand?.user?.username || "",
       "Số điện thoại": history.expand?.user?.phone || "",
     }));
-  }, [filteredHistories]);
+  }, [filteredHistories, tenureDaysByUserId]);
 
   const fullRows = useMemo(() => {
     return filteredHistories.map((history, index) => {
@@ -108,6 +133,7 @@ function StaffExportPage() {
         "Ngày vào": history.join_date || "",
         "Ngày nghỉ": history.leave_date || "",
         "Trạng thái lịch sử": history.status === "working" ? "Đang làm" : "Đã nghỉ",
+        "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
         "Ghi chú": history.note || "",
         "Ngân hàng": u?.bank_name || "",
         "Số tài khoản": u?.bank_account_number || "",

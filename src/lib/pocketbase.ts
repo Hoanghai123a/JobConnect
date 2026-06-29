@@ -35,6 +35,9 @@ export interface UserRecord {
   avatar?: string;
   cccd_front?: string;
   cccd_back?: string;
+  gender?: string;
+  date_of_birth?: string;
+  address?: string;
 }
 
 /** Convert base64 dataURL to File (per HRJob skill rule #1) */

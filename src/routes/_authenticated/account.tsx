@@ -739,6 +739,10 @@ function AdminUsersPanel() {
         "Mã tài khoản": "",
         "Nhà máy": "",
         "Mã nhân viên": "",
+        "Giới tính": "Nam",
+        "CCCD": "001099012345",
+        "Ngày sinh": "1990-01-15",
+        "Địa chỉ": "123 Đường ABC, Quận 1, TP.HCM",
       },
       {
         "Họ tên": "Trần Thị B",
@@ -748,6 +752,10 @@ function AdminUsersPanel() {
         "Mã tài khoản": "",
         "Nhà máy": "",
         "Mã nhân viên": "",
+        "Giới tính": "Nữ",
+        "CCCD": "001099067890",
+        "Ngày sinh": "1995-03-20",
+        "Địa chỉ": "456 Đường XYZ, Quận 7, TP.HCM",
       },
     ];
     exportToExcel("mau_nhap_tai_khoan", { "Tài khoản": sample });
@@ -778,6 +786,10 @@ function AdminUsersPanel() {
         const employee_code = String(
           r["Mã nhân viên"] || r["Mã NV"] || r["Ma NV"] || r["employee_code"] || "",
         ).trim();
+        const gender = String(r["Giới tính"] || r["gender"] || "").trim();
+        const cccd = String(r["CCCD"] || r["cccd"] || "").trim();
+        const date_of_birth = String(r["Ngày sinh"] || r["date_of_birth"] || "").trim();
+        const address = String(r["Địa chỉ"] || r["address"] || "").trim();
         if (!full_name || !phone || !username || !password) {
           fail++;
           continue;
@@ -798,6 +810,10 @@ function AdminUsersPanel() {
             passwordConfirm: password,
             company,
             employee_code,
+            gender,
+            cccd,
+            date_of_birth,
+            address,
             role: "user",
             approvalStatus: "approved",
             status: "active",
