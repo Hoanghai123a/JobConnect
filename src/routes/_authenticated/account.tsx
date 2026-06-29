@@ -503,10 +503,21 @@ function AdminUsersPanel() {
     const rows = filtered.map((u, i) => ({
       STT: i + 1,
       "Họ tên": u.full_name || "",
-      "Số điện thoại": u.phone || "",
       "Tên đăng nhập": u.username || "",
+      "Số điện thoại": u.phone || "",
+      "Giới tính": u.gender || "",
+      "CCCD": u.cccd || "",
+      "Ngày sinh": u.date_of_birth
+        ? new Date(u.date_of_birth).toLocaleDateString("vi-VN")
+        : "",
+      "Địa chỉ": u.address || "",
+      "Mã tài khoản": u.uid || "",
       "Mã nhân viên": u.employee_code || "",
       "Nhà máy": u.company || "",
+      "Ngân hàng": u.bank_name || "",
+      "Số tài khoản": u.bank_account_number || "",
+      "Tên tài khoản": u.bank_account_name || "",
+      "Vai trò": ROLE_LABELS[(u.role || "user") as Role],
       "Ngày tạo": new Date(u.created).toLocaleDateString("vi-VN"),
       "Trạng thái": isUserApproved(u) ? "Hoạt động" : "Vô hiệu hoá",
     }));
@@ -1225,7 +1236,7 @@ function AdminUsersPanel() {
                 label="Ngày sinh"
                 value={
                   detailUser.date_of_birth
-                    ? new Date(detailUser.date_of_birth).toLocaleDateString("vi-VN")
+                    ? detailUser.date_of_birth.slice(0, 10).split("-").reverse().join("/")
                     : ""
                 }
               />

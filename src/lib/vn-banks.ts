@@ -31,7 +31,7 @@ export const VN_BANKS: { code: string; name: string; bin: string }[] = [
   { code: "SCB", name: "SCB - NH TMCP Sài Gòn", bin: "970429" },
   { code: "DAB", name: "DongABank - NH TMCP Đông Á", bin: "970406" },
   { code: "PGB", name: "PGBank - NH TMCP Xăng dầu Petrolimex", bin: "970430" },
-  { code: "VCCB", name: "VietCapitalBank - NH Bản Việt", bin: "970409" },
+  { code: "VCCB", name: "VietCapitalBank - NH Bản Việt", bin: "970454" },
   { code: "CAKE", name: "Cake by VPBank", bin: "546034" },
   { code: "TIMO", name: "Timo", bin: "963388" },
   { code: "UB", name: "Ubank by VPBank", bin: "546035" },
@@ -47,7 +47,8 @@ export const VN_BANKS: { code: string; name: string; bin: string }[] = [
 ];
 
 export function getBankBin(bankName: string): string | undefined {
-  return VN_BANKS.find((b) => b.name === bankName)?.bin;
+  const resolved = resolveBankName(bankName);
+  return VN_BANKS.find((b) => b.name === resolved)?.bin;
 }
 
 export function resolveBankName(input: string): string {

@@ -45,6 +45,9 @@ export interface EmploymentDraft {
 }
 
 export function buildHistoryUid(prefix: string, year: number, month: number, seq: number): string {
+  if (seq < 1 || seq > 999) {
+    throw new Error(`Employment history UID sequence overflow: ${seq} (max 999 per month)`);
+  }
   const yy = String(year % 100).padStart(2, "0");
   const mm = String(month).padStart(2, "0");
   const nnn = String(seq).padStart(3, "0");

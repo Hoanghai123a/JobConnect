@@ -1002,6 +1002,14 @@ function AdvanceDetailDialog({
   useEffect(() => {
     if (!advanceDetail) return;
     const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         goPrev();
@@ -1207,8 +1215,8 @@ function AdvanceDetailDialog({
                       toast.success("Đã lưu ghi chú");
                       setAdvanceDetail({ ...advanceDetail, ...payload });
                       load();
-                    } catch (error: any) {
-                      toast.error(error?.message || "Lỗi lưu ghi chú");
+                    } catch (error: unknown) {
+                      toast.error(error instanceof Error ? error.message : "Lỗi lưu ghi chú");
                     } finally {
                       setSavingNotes(false);
                     }
