@@ -50,6 +50,18 @@ export function getBankBin(bankName: string): string | undefined {
   return VN_BANKS.find((b) => b.name === bankName)?.bin;
 }
 
+export function resolveBankName(input: string): string {
+  if (!input) return "";
+  const lower = input.toLowerCase().trim();
+  const byCode = VN_BANKS.find((b) => b.code.toLowerCase() === lower);
+  if (byCode) return byCode.name;
+  const byName = VN_BANKS.find((b) => b.name === input);
+  if (byName) return byName.name;
+  const byPartial = VN_BANKS.find((b) => b.name.toLowerCase().includes(lower));
+  if (byPartial) return byPartial.name;
+  return input;
+}
+
 export function buildVietQrUrl(opts: {
   bankName: string;
   accountNumber: string;

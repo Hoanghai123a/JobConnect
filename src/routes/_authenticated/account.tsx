@@ -28,8 +28,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { VN_BANKS } from "@/lib/vn-banks";
+import { VN_BANKS, resolveBankName } from "@/lib/vn-banks";
 import { exportToExcel } from "@/lib/excel";
+import { normalizeDate } from "@/lib/date-utils";
 import { escapePb } from "@/lib/delegations";
 import { isUserApproved } from "@/lib/user-approval";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -441,6 +442,7 @@ function AdminUsersPanel() {
   const [pendingApprovalValue, setPendingApprovalValue] = useState<boolean | null>(null);
   const [adminPassword, setAdminPassword] = useState("");
   const [confirmingApproval, setConfirmingApproval] = useState(false);
+  const [detailUser, setDetailUser] = useState<any>(null);
   const emptyNew = {
     full_name: "",
     phone: "",
@@ -737,12 +739,13 @@ function AdminUsersPanel() {
         "Tên đăng nhập": "nguyenvana",
         "Mật khẩu": "12345678",
         "Mã tài khoản": "",
-        "Nhà máy": "",
-        "Mã nhân viên": "",
         "Giới tính": "Nam",
         "CCCD": "001099012345",
         "Ngày sinh": "1990-01-15",
         "Địa chỉ": "123 Đường ABC, Quận 1, TP.HCM",
+        "Ngân hàng": "VCB",
+        "Số tài khoản": "1234567890",
+        "Tên tài khoản": "NGUYEN VAN A",
       },
       {
         "Họ tên": "Trần Thị B",
@@ -750,12 +753,13 @@ function AdminUsersPanel() {
         "Tên đăng nhập": "tranthib",
         "Mật khẩu": "12345678",
         "Mã tài khoản": "",
-        "Nhà máy": "",
-        "Mã nhân viên": "",
         "Giới tính": "Nữ",
         "CCCD": "001099067890",
-        "Ngày sinh": "1995-03-20",
+        "Ngày sinh": "20/03/1995",
         "Địa chỉ": "456 Đường XYZ, Quận 7, TP.HCM",
+        "Ngân hàng": "TCB",
+        "Số tài khoản": "0987654321",
+        "Tên tài khoản": "TRAN THI B",
       },
     ];
     exportToExcel("mau_nhap_tai_khoan", { "Tài khoản": sample });
@@ -782,14 +786,19 @@ function AdminUsersPanel() {
           .toLowerCase();
         const password = String(r["Mật khẩu"] || r["password"] || "").trim();
         const manualUid = String(r["Mã tài khoản"] || r["Mã TK"] || r["uid"] || "").trim();
-        const company = String(r["Nhà máy"] || r["Công ty"] || r["company"] || "").trim();
-        const employee_code = String(
-          r["Mã nhân viên"] || r["Mã NV"] || r["Ma NV"] || r["employee_code"] || "",
-        ).trim();
         const gender = String(r["Giới tính"] || r["gender"] || "").trim();
         const cccd = String(r["CCCD"] || r["cccd"] || "").trim();
-        const date_of_birth = String(r["Ngày sinh"] || r["date_of_birth"] || "").trim();
+        const date_of_birth = normalizeDate(r["Ngày sinh"] ?? r["date_of_birth"] ?? "");
         const address = String(r["Địa chỉ"] || r["address"] || "").trim();
+        const bank_name = resolveBankName(
+          String(r["Ngân hàng"] || r["bank_name"] || "").trim(),
+        );
+        const bank_account_number = String(
+          r["Số tài khoản"] || r["Số TK"] || r["bank_account_number"] || "",
+        ).trim();
+        const bank_account_name = String(
+          r["Tên tài khoản"] || r["Tên TK"] || r["bank_account_name"] || "",
+        ).trim();
         if (!full_name || !phone || !username || !password) {
           fail++;
           continue;
@@ -808,12 +817,13 @@ function AdminUsersPanel() {
             uid,
             password,
             passwordConfirm: password,
-            company,
-            employee_code,
             gender,
             cccd,
             date_of_birth,
             address,
+            bank_name,
+            bank_account_number,
+            bank_account_name,
             role: "user",
             approvalStatus: "approved",
             status: "active",
@@ -947,7 +957,10 @@ function AdminUsersPanel() {
             return (
               <div key={u.id} className={"list-card flex items-start gap-3 " + tone}>
                 <Checkbox checked={isSel} onCheckedChange={() => toggle(u.id)} className="mt-1" />
-                <div className="min-w-0 flex-1">
+                <div
+                  className="min-w-0 flex-1 cursor-pointer"
+                  onClick={() => setDetailUser(u)}
+                >
                   <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {"📞 " + (u.phone || "—")}
@@ -1193,7 +1206,67 @@ function AdminUsersPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* User detail dialog */}
+      <Dialog open={!!detailUser} onOpenChange={(o) => !o && setDetailUser(null)}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{detailUser?.full_name || detailUser?.username || "Tài khoản"}</DialogTitle>
+            <DialogDescription>Thông tin chi tiết tài khoản</DialogDescription>
+          </DialogHeader>
+          {detailUser && (
+            <div className="space-y-3 text-sm">
+              <DetailRow label="Tên đăng nhập" value={detailUser.username} />
+              <DetailRow label="Họ và tên" value={detailUser.full_name} />
+              <DetailRow label="Số điện thoại" value={detailUser.phone} />
+              <DetailRow label="Giới tính" value={detailUser.gender} />
+              <DetailRow label="CCCD" value={detailUser.cccd} />
+              <DetailRow
+                label="Ngày sinh"
+                value={
+                  detailUser.date_of_birth
+                    ? new Date(detailUser.date_of_birth).toLocaleDateString("vi-VN")
+                    : ""
+                }
+              />
+              <DetailRow label="Địa chỉ" value={detailUser.address} />
+              <DetailRow label="Mã tài khoản (UID)" value={detailUser.uid} />
+              <DetailRow label="Mã nhân viên" value={detailUser.employee_code} />
+              <DetailRow label="Nhà máy" value={detailUser.company} />
+              <DetailRow label="Ngân hàng" value={detailUser.bank_name} />
+              <DetailRow label="Số tài khoản" value={detailUser.bank_account_number} />
+              <DetailRow label="Tên tài khoản" value={detailUser.bank_account_name} />
+              <DetailRow
+                label="Vai trò"
+                value={ROLE_LABELS[(detailUser.role || "user") as Role]}
+              />
+              <DetailRow
+                label="Trạng thái"
+                value={isUserApproved(detailUser) ? "Hoạt động" : "Vô hiệu hoá"}
+              />
+              <DetailRow
+                label="Ngày tạo"
+                value={new Date(detailUser.created).toLocaleDateString("vi-VN")}
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailUser(null)}>
+              Đóng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-border/40 pb-2 last:border-0">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right font-medium">{value || "—"}</span>
+    </div>
   );
 }
 
