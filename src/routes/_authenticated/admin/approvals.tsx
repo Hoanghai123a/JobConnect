@@ -118,18 +118,18 @@ function ApprovalsPage() {
     const all = allRes.items;
     const rows = all.map((u: any) => ({
       "Họ tên": u.full_name,
-      SĐT: u.phone,
-      Email: u.email,
+      "Số điện thoại": u.phone,
+      "Địa chỉ email": u.email,
       "Vai trò": u.role,
       "Đã duyệt": isUserApproved(u) ? "Có" : "Không",
       "Nhà máy": u.company,
-      LCB: u.lcb,
+      "Lương cơ bản": u.lcb,
       "Ngân hàng": u.bank_name,
-      "Số TK": u.bank_account_number,
-      "Tên TK": u.bank_account_name,
+      "Số tài khoản": u.bank_account_number,
+      "Tên chủ tài khoản": u.bank_account_name,
       "Tạo lúc": u.created,
     }));
-    exportToExcel(`danh_sach_user_${Date.now()}`, { Users: rows });
+    exportToExcel(`danh_sach_user_${Date.now()}`, { "Tài khoản chờ duyệt": rows });
   };
 
   return (

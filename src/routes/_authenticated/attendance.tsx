@@ -163,13 +163,13 @@ function AdminAttendance() {
       const u = r.expand?.user || {};
       return {
         "Họ tên": u.full_name || "",
-        SĐT: u.phone || "",
+        "Số điện thoại": u.phone || "",
         "Nhà máy": u.company || "",
         Ngày: r.date,
         Ca: r.shift === "day" ? "Ngày" : "Đêm",
         Lễ: r.is_holiday ? "x" : "",
-        "Giờ HC": r.hc_hours,
-        "Giờ TC": r.ot_hours,
+        "Giờ hành chính": r.hc_hours,
+        "Giờ tăng ca": r.ot_hours,
       };
     });
     const summary = grouped.map(({ user, rows: rs }) => {
@@ -179,16 +179,18 @@ function AdminAttendance() {
         chuyen_can: user.chuyen_can || 0,
         doi_song: user.doi_song || 0,
         tham_nien: user.tham_nien || 0,
+        rows: rs,
+        periodStart: ym(monthDate) + "-01",
       });
       const hc = rs.reduce((a, r) => a + r.hc_hours, 0);
       const ot = rs.reduce((a, r) => a + r.ot_hours, 0);
       return {
         "Họ tên": user.full_name || "",
-        SĐT: user.phone || "",
+        "Số điện thoại": user.phone || "",
         "Nhà máy": user.company || "",
-        "Số ngày": rs.length,
-        "Giờ HC": hc,
-        "Giờ TC": ot,
+        "Số ngày công": rs.length,
+        "Giờ hành chính": hc,
+        "Giờ tăng ca": ot,
         "Lương tạm tính": Math.round(s.total),
       };
     });
@@ -197,7 +199,7 @@ function AdminAttendance() {
 
   return (
     <PageContainer
-      title="Chấm công"
+      title="Tự chấm công"
       subtitle={`Tháng ${String(monthDate.getMonth() + 1).padStart(2, "0")}/${monthDate.getFullYear()}`}
       right={
         <button
@@ -288,6 +290,7 @@ function AdminAttendance() {
             <UserDetailMonth
               user={detailUser}
               rows={rows.filter((r) => r.user === detailUser.id)}
+              periodStart={ym(monthDate) + "-01"}
             />
           )}
         </DialogContent>
@@ -296,13 +299,15 @@ function AdminAttendance() {
   );
 }
 
-function UserDetailMonth({ user, rows }: { user: any; rows: RowWithUser[] }) {
+function UserDetailMonth({ user, rows, periodStart }: { user: any; rows: RowWithUser[]; periodStart: string }) {
   const buckets = aggregate(rows);
   const salary = calcSalary(buckets, {
     lcb: user.lcb || 0,
     chuyen_can: user.chuyen_can || 0,
     doi_song: user.doi_song || 0,
     tham_nien: user.tham_nien || 0,
+    rows,
+    periodStart,
   });
   return (
     <div className="space-y-3">
@@ -421,8 +426,10 @@ function UserAttendance() {
         chuyen_can: user?.chuyen_can || 0,
         doi_song: user?.doi_song || 0,
         tham_nien: user?.tham_nien || 0,
+        rows,
+        periodStart: payrollPeriod.start,
       }),
-    [buckets, user?.lcb, user?.chuyen_can, user?.doi_song, user?.tham_nien],
+    [buckets, user?.lcb, user?.chuyen_can, user?.doi_song, user?.tham_nien, rows, payrollPeriod.start],
   );
   const visibleRateCells = [
     { label: "100%", hours: buckets.r100 },
@@ -488,7 +495,7 @@ function UserAttendance() {
 
   return (
     <div>
-      <AppHeader title="Chấm công" />
+      <AppHeader title="Tự chấm công" />
       <div className="space-y-4 p-4">
         <Card className="overflow-hidden">
           <div className="gradient-accent p-4 text-accent-foreground">

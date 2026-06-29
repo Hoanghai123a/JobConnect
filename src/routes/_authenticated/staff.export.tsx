@@ -5,7 +5,13 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { exportToExcel } from "@/lib/excel";
 import { fetchFactories } from "@/lib/factories";
 import { fetchStaffWorkspace } from "@/lib/staff-permissions";
@@ -60,7 +66,7 @@ function StaffExportPage() {
   const basicRows = useMemo(() => {
     return filteredHistories.map((history, index) => ({
       STT: index + 1,
-      "Mã NV": history.employee_code || "",
+      "Mã nhân viên": history.employee_code || "",
       "Họ tên tại nhà máy": history.worker_name_snapshot,
       CCCD: history.worker_cccd_snapshot,
       "Người tuyển":
@@ -72,7 +78,7 @@ function StaffExportPage() {
       "Ngày vào": history.join_date || "",
       "Ngày nghỉ": history.leave_date || "",
       "Trạng thái": history.status === "working" ? "Đang làm" : "Đã nghỉ",
-      "User gốc": history.expand?.user?.full_name || history.expand?.user?.username || "",
+      "Tài khoản gốc": history.expand?.user?.full_name || history.expand?.user?.username || "",
       "Số điện thoại": history.expand?.user?.phone || "",
     }));
   }, [filteredHistories]);
@@ -82,15 +88,15 @@ function StaffExportPage() {
       const u = history.expand?.user;
       return {
         STT: index + 1,
-        "Mã TK (UID)": u?.uid || "",
-        Username: u?.username || "",
+        "Mã tài khoản (UID)": u?.uid || "",
+        "Tên đăng nhập": u?.username || "",
         "Họ tên gốc": u?.full_name || "",
         "CCCD gốc": u?.cccd || "",
-        Email: u?.email || "",
+        "Địa chỉ email": u?.email || "",
         "Số điện thoại": u?.phone || "",
         "Vai trò": u?.role || "",
-        "Trạng thái TK": u?.status || "",
-        "Mã NV": history.employee_code || "",
+        "Trạng thái tài khoản": u?.status || "",
+        "Mã nhân viên": history.employee_code || "",
         "Họ tên tại nhà máy": history.worker_name_snapshot,
         "CCCD tại nhà máy": history.worker_cccd_snapshot,
         "Nhà máy": history.expand?.factory?.name || "",
@@ -105,13 +111,13 @@ function StaffExportPage() {
         "Ghi chú": history.note || "",
         "Ngân hàng": u?.bank_name || "",
         "Số tài khoản": u?.bank_account_number || "",
-        "Tên chủ TK": u?.bank_account_name || "",
-        "LCB": u?.lcb ?? "",
+        "Tên chủ tài khoản": u?.bank_account_name || "",
+        "Lương cơ bản": u?.lcb ?? "",
         "Chuyên cần": u?.chuyen_can ?? "",
         "Đời sống": u?.doi_song ?? "",
         "Thâm niên": u?.tham_nien ?? "",
-        "Giờ HC mặc định": u?.default_hc_hours ?? "",
-        "Giờ OT mặc định": u?.default_ot_hours ?? "",
+        "Giờ hành chính mặc định": u?.default_hc_hours ?? "",
+        "Giờ tăng ca mặc định": u?.default_ot_hours ?? "",
       };
     });
   }, [filteredHistories]);
@@ -121,7 +127,7 @@ function StaffExportPage() {
       toast.warning("Không có dữ liệu để xuất");
       return;
     }
-    exportToExcel(`jobconnect_export_co_ban_${Date.now()}`, { "Lao dong": basicRows });
+    exportToExcel(`jobconnect_export_co_ban_${Date.now()}`, { "Lao động cơ bản": basicRows });
     toast.success("Đã xuất Excel cơ bản");
   };
 
@@ -130,7 +136,7 @@ function StaffExportPage() {
       toast.warning("Không có dữ liệu để xuất");
       return;
     }
-    exportToExcel(`jobconnect_export_day_du_${Date.now()}`, { "Lao dong day du": fullRows });
+    exportToExcel(`jobconnect_export_day_du_${Date.now()}`, { "Lao động đầy đủ": fullRows });
     toast.success("Đã xuất Excel đầy đủ");
   };
 
@@ -181,7 +187,8 @@ function StaffExportPage() {
           </Button>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Bản đầy đủ kèm thông tin cá nhân (UID, email, vai trò, CCCD gốc), tài khoản ngân hàng và các tham số lương.
+          Bản đầy đủ kèm thông tin cá nhân (UID, email, vai trò, CCCD gốc), tài khoản ngân hàng và
+          các tham số lương.
         </p>
       </div>
 
@@ -198,10 +205,13 @@ function StaffExportPage() {
       ) : (
         <div className="space-y-2">
           {basicRows.slice(0, 12).map((row) => (
-            <div key={`${row.STT}-${row["Mã NV"]}-${row["Ngày vào"]}`} className="list-card border-l-[color:var(--status-info)]">
+            <div
+              key={`${row.STT}-${row["Mã nhân viên"]}-${row["Ngày vào"]}`}
+              className="list-card border-l-[color:var(--status-info)]"
+            >
               <div className="text-sm font-semibold">{row["Họ tên tại nhà máy"]}</div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">
-                {row["Nhà máy"]} · {row["Mã NV"] || "Chưa có mã"} · {row["Trạng thái"]}
+                {row["Nhà máy"]} · {row["Mã nhân viên"] || "Chưa có mã"} · {row["Trạng thái"]}
               </div>
             </div>
           ))}

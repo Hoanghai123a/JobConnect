@@ -183,7 +183,7 @@ function ComplaintsPage() {
     const rows = items.map((i) => ({
       "Họ tên": i.full_name,
       "Nhà máy": i.company,
-      SĐT: i.phone,
+      "Số điện thoại": i.phone,
       "Nội dung": i.content,
       "Trạng thái": STATUS_META[(i.status || "pending") as Status].label,
       "Ghi chú admin": i.admin_note || "",

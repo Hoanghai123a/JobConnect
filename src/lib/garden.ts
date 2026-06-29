@@ -91,6 +91,12 @@ function defaultState(): GardenState {
   };
 }
 
+function normalizePastTimestamp(value: unknown, fallback: number, now = Date.now()): number {
+  const time = Number(value);
+  if (!Number.isFinite(time) || time <= 0) return fallback;
+  return Math.min(time, now);
+}
+
 export function loadGarden(userId?: string): GardenState {
   if (!userId || typeof window === "undefined") return defaultState();
   try {
@@ -105,13 +111,25 @@ export function loadGarden(userId?: string): GardenState {
         }))
       : base.plots;
     while (plots.length < PLOT_COUNT) plots.push({ flowerId: null, plantedAt: null });
-    return {
+    const next = {
       ...base,
       ...parsed,
       plots,
-      pet: { ...base.pet, ...parsed.pet },
+      pet: {
+        ...base.pet,
+        ...parsed.pet,
+        lastFedAt: normalizePastTimestamp(parsed.pet?.lastFedAt, base.pet.lastFedAt),
+        lastPlayedAt: normalizePastTimestamp(parsed.pet?.lastPlayedAt, base.pet.lastPlayedAt),
+      },
       ownedPets: parsed.ownedPets?.length ? parsed.ownedPets : base.ownedPets,
     };
+    if (
+      next.pet.lastFedAt !== parsed.pet?.lastFedAt ||
+      next.pet.lastPlayedAt !== parsed.pet?.lastPlayedAt
+    ) {
+      window.localStorage.setItem(key(userId), JSON.stringify(next));
+    }
+    return next;
   } catch {
     return defaultState();
   }
@@ -138,16 +156,25 @@ export function onGardenChange(cb: () => void): () => void {
 
 const HUNGER_FULL_PERCENT = 100;
 
+export function normalizeFullness(fullness: unknown): number {
+  const raw = Number(fullness);
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  const percent = raw > 0 && raw < 1 ? raw * HUNGER_FULL_PERCENT : raw;
+  return Math.max(0, Math.min(HUNGER_FULL_PERCENT, percent));
+}
+
 /**
- * Apply food fullness to pet. Returns new lastFedAt that shifts hunger bar.
- * fullness: 1-100, maps to % of HUNGER_FULL_MS restored.
+ * Apply food fullness to pet. Directly adds fullness% to current hunger level.
+ * fullness: 1-100 (percentage points to add).
  */
-export function applyFood(pet: PetState, fullness: number, now = Date.now()): PetState {
-  const restoredMs = (fullness / HUNGER_FULL_PERCENT) * HUNGER_FULL_MS;
-  const currentHunger = hunger(pet, now);
-  const currentFedAgo = now - pet.lastFedAt;
-  const newFedAgo = Math.max(0, currentFedAgo - restoredMs);
-  return { ...pet, lastFedAt: now - newFedAgo };
+export function applyFood(pet: PetState, fullness: unknown, now = Date.now()): PetState {
+  const safeFullness = normalizeFullness(fullness);
+  if (safeFullness <= 0) return pet;
+  const lastFedAt = normalizePastTimestamp(pet.lastFedAt, now, now);
+  const currentHunger = Math.max(0, Math.min(1, 1 - (now - lastFedAt) / HUNGER_FULL_MS));
+  const newHunger = Math.min(1, currentHunger + safeFullness / 100);
+  const newLastFedAt = Math.round(now - (1 - newHunger) * HUNGER_FULL_MS);
+  return { ...pet, lastFedAt: newLastFedAt };
 }
 
 // ---- logic dẫn xuất ----
@@ -173,12 +200,14 @@ export function readyInMinutes(plot: Plot, now = Date.now()): number {
 
 /** 0..1, 1 = no đủ */
 export function hunger(pet: PetState, now = Date.now()): number {
-  return Math.max(0, Math.min(1, 1 - (now - pet.lastFedAt) / HUNGER_FULL_MS));
+  const lastFedAt = normalizePastTimestamp(pet.lastFedAt, now, now);
+  return Math.max(0, Math.min(1, 1 - (now - lastFedAt) / HUNGER_FULL_MS));
 }
 
 /** 0..1, 1 = rất vui */
 export function happiness(pet: PetState, now = Date.now()): number {
-  return Math.max(0, Math.min(1, 1 - (now - pet.lastPlayedAt) / HAPPY_FULL_MS));
+  const lastPlayedAt = normalizePastTimestamp(pet.lastPlayedAt, now, now);
+  return Math.max(0, Math.min(1, 1 - (now - lastPlayedAt) / HAPPY_FULL_MS));
 }
 
 export function petMood(pet: PetState, now = Date.now()): "great" | "ok" | "sad" {

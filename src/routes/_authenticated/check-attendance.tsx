@@ -288,7 +288,9 @@ async function readAttendanceExcel(file: File): Promise<ParsedRow[]> {
 
   return rawRows
     .map((row) => {
-      const employeeCode = String(pick(row, ["Mã NV", "Ma NV", "employee_code"])).trim();
+      const employeeCode = String(
+        pick(row, ["Mã nhân viên", "Mã NV", "Ma NV", "employee_code"]),
+      ).trim();
       const rates = {
         r100: parseNumber(pick(row, ["100%", "100", "r100"])),
         r130: parseNumber(pick(row, ["130%", "130", "r130"])),
@@ -321,7 +323,9 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
 
   return rawRows
     .map((row) => {
-      const employeeCode = String(pick(row, ["Mã NV", "Ma NV", "employee_code"])).trim();
+      const employeeCode = String(
+        pick(row, ["Mã nhân viên", "Mã NV", "Ma NV", "employee_code"]),
+      ).trim();
       const company = String(pick(row, ["Nhà máy", "Công ty", "company", "factory"])).trim();
       const wageLine = {
         rate: formatSalaryRate(pick(row, ["Hệ số", "He so", "rate", "coefficient"])),
@@ -424,17 +428,17 @@ function AdminCheckAttendance() {
   const downloadTemplate = () => {
     const sampleUser = users[0];
     exportToExcel(`mau_check_cong_${month}`, {
-      "Check công": [
+      "Bảng kiểm công": [
         {
-          "Mã NV": sampleUser?.employee_code || "NV001",
+          "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
-          SĐT: sampleUser?.phone || "0900000000",
+          "Số điện thoại": sampleUser?.phone || "0900000000",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
           Ngày: formatTemplateDate(month, 1),
           Ca: "Ngày",
           Lễ: "",
-          "Giờ HC": 8,
-          "Giờ TC": 2,
+          "Giờ hành chính": 8,
+          "Giờ tăng ca": 2,
           "100%": 10,
           "130%": 6,
           "150%": 2,
@@ -444,15 +448,15 @@ function AdminCheckAttendance() {
           "390%": 0,
         },
         {
-          "Mã NV": sampleUser?.employee_code || "NV001",
+          "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
-          SĐT: sampleUser?.phone || "0900000000",
+          "Số điện thoại": sampleUser?.phone || "0900000000",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
           Ngày: formatTemplateDate(month, 2),
           Ca: "Đêm",
           Lễ: "",
-          "Giờ HC": 8,
-          "Giờ TC": 1,
+          "Giờ hành chính": 8,
+          "Giờ tăng ca": 1,
           "100%": "",
           "130%": "",
           "150%": "",
@@ -462,15 +466,15 @@ function AdminCheckAttendance() {
           "390%": "",
         },
         {
-          "Mã NV": sampleUser?.employee_code || "NV001",
+          "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
-          SĐT: sampleUser?.phone || "0900000000",
+          "Số điện thoại": sampleUser?.phone || "0900000000",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
           Ngày: formatTemplateDate(month, 3),
           Ca: "Ngày",
           Lễ: "x",
-          "Giờ HC": 8,
-          "Giờ TC": 0,
+          "Giờ hành chính": 8,
+          "Giờ tăng ca": 0,
           "100%": "",
           "130%": "",
           "150%": "",
@@ -573,9 +577,9 @@ function AdminCheckAttendance() {
   const downloadSalaryTemplate = () => {
     const sampleUser = users[0];
     exportToExcel(`mau_check_luong_${salaryMonth}`, {
-      "Check lương": [
+      "Bảng kiểm lương": [
         {
-          "Mã NV": sampleUser?.employee_code || "NV001",
+          "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
           "Ngày vào làm": formatTemplateDate(salaryMonth, 1),
@@ -591,7 +595,7 @@ function AdminCheckAttendance() {
           "Tiền khấu trừ": 525000,
         },
         {
-          "Mã NV": sampleUser?.employee_code || "NV001",
+          "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
           "Ngày vào làm": "",

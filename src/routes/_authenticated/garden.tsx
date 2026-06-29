@@ -36,6 +36,7 @@ import {
   happiness,
   petMood,
   applyFood,
+  normalizeFullness,
   type GardenState,
   type Flower,
 } from "@/lib/garden";
@@ -186,11 +187,16 @@ function GardenPage() {
       toast.error("Không đủ xu");
       return;
     }
+    const fullness = normalizeFullness(food.fullness);
+    if (fullness <= 0) {
+      toast.error("Thức ăn này chưa có điểm no hợp lệ");
+      return;
+    }
     const newCoins = isAdmin ? coins : coins - food.price;
-    const newPet = applyFood(state.pet, food.fullness, now);
+    const newPet = applyFood(state.pet, fullness, Date.now());
     commit({ ...state, coins: newCoins, pet: newPet });
     if (!isAdmin) syncCoins(newCoins);
-    toast.success(`${state.pet.name} ăn ${food.name}, no thêm ${food.fullness}%!`);
+    toast.success(`${state.pet.name} ăn ${food.name}, no thêm ${fullness}%!`);
   };
 
   const playPet = () => {
@@ -854,7 +860,13 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
 
   const add = async () => {
     if (!form.name.trim()) { toast.warning("Nhập tên thức ăn"); return; }
-    await createFood({ name: form.name, emoji: form.emoji, price: Number(form.price) || 10, fullness: Number(form.fullness) || 30, active: true });
+    await createFood({
+      name: form.name,
+      emoji: form.emoji,
+      price: Math.max(0, Number(form.price) || 10),
+      fullness: normalizeFullness(form.fullness) || 30,
+      active: true,
+    });
     setForm({ name: "", emoji: "🍖", price: "10", fullness: "30" });
     const updated = await fetchFoods();
     setFoods(updated);
@@ -869,7 +881,12 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
 
   const saveEdit = async () => {
     if (!editId) return;
-    await updateFood(editId, { name: editForm.name, emoji: editForm.emoji, price: Number(editForm.price) || 10, fullness: Number(editForm.fullness) || 30 });
+    await updateFood(editId, {
+      name: editForm.name,
+      emoji: editForm.emoji,
+      price: Math.max(0, Number(editForm.price) || 10),
+      fullness: normalizeFullness(editForm.fullness) || 30,
+    });
     setEditId(null);
     const updated = await fetchFoods();
     setFoods(updated);
@@ -892,7 +909,7 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
           <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Tên" className="h-8 text-xs" />
           <Input value={form.emoji} onChange={(e) => setForm((f) => ({ ...f, emoji: e.target.value }))} placeholder="Emoji" className="h-8 text-xs" />
           <Input value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="Giá (xu)" className="h-8 text-xs" type="number" />
-          <Input value={form.fullness} onChange={(e) => setForm((f) => ({ ...f, fullness: e.target.value }))} placeholder="No bụng (%)" className="h-8 text-xs" type="number" />
+          <Input value={form.fullness} onChange={(e) => setForm((f) => ({ ...f, fullness: e.target.value }))} placeholder="No bụng (%)" className="h-8 text-xs" type="number" min={1} max={100} step={1} />
         </div>
         <Button size="sm" onClick={add}><Plus className="h-3 w-3" /> Thêm</Button>
       </Card>
@@ -904,7 +921,7 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
                 <Input value={editForm.name} onChange={(e) => setEditForm((ef) => ({ ...ef, name: e.target.value }))} placeholder="Tên" className="h-8 text-xs" />
                 <Input value={editForm.emoji} onChange={(e) => setEditForm((ef) => ({ ...ef, emoji: e.target.value }))} placeholder="Emoji" className="h-8 text-xs" />
                 <Input value={editForm.price} onChange={(e) => setEditForm((ef) => ({ ...ef, price: e.target.value }))} placeholder="Giá (xu)" className="h-8 text-xs" type="number" />
-                <Input value={editForm.fullness} onChange={(e) => setEditForm((ef) => ({ ...ef, fullness: e.target.value }))} placeholder="No bụng (%)" className="h-8 text-xs" type="number" />
+                <Input value={editForm.fullness} onChange={(e) => setEditForm((ef) => ({ ...ef, fullness: e.target.value }))} placeholder="No bụng (%)" className="h-8 text-xs" type="number" min={1} max={100} step={1} />
               </div>
               <div className="flex gap-2">
                 <Button size="sm" onClick={saveEdit}>Lưu</Button>

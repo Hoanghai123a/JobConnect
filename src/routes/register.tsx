@@ -1,7 +1,7 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { pb } from "@/lib/pocketbase";
-import { assignUidIfMissing } from "@/lib/uid";
+import { generateUid } from "@/lib/uid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,8 +28,8 @@ export const Route = createFileRoute("/register")({
 
 async function fetchRequireApproval(): Promise<boolean> {
   try {
-    const list = await pb.collection("settings").getList(1, 1);
-    return Boolean(list.items[0]?.require_approval ?? true);
+    const list = await pb.collection("app_settings").getList(1, 1);
+    return Boolean(list.items[0]?.requireApproval ?? true);
   } catch {
     return true;
   }
@@ -97,9 +97,11 @@ function RegisterPage() {
       }
 
       const requireApproval = await fetchRequireApproval();
+      const uid = await generateUid();
 
-      const createdUser = await pb.collection("users").create({
+      await pb.collection("users").create({
         username,
+        uid,
         emailVisibility: false,
         password: form.password,
         passwordConfirm: form.passwordConfirm,
@@ -117,11 +119,6 @@ function RegisterPage() {
         setResult("pending");
       } else {
         await pb.collection("users").authWithPassword(username, form.password);
-        try {
-          await assignUidIfMissing(createdUser.id);
-        } catch {
-          // UID assignment is best-effort; admin can backfill later
-        }
         toast.success("Đăng ký thành công");
         setResult("approved");
       }

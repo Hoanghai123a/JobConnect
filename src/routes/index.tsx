@@ -256,7 +256,7 @@ function DashboardPage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <FeatureTile
               to="/attendance"
-              label="Chấm công"
+              label="Tự chấm công"
               description="Ghi nhận giờ làm"
               icon={Clock}
               variant="accent"

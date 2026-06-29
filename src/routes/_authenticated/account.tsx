@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { pb, type Role, type UserRecord, dataUrlToFile, fileUrl } from "@/lib/pocketbase";
-import { assignUidIfMissing } from "@/lib/uid";
+import { generateUid } from "@/lib/uid";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -446,6 +446,7 @@ function AdminUsersPanel() {
     phone: "",
     username: "",
     password: "",
+    uid: "",
     company: "",
     employee_code: "",
   };
@@ -466,10 +467,10 @@ function AdminUsersPanel() {
     }
 
     try {
-      const s = await pb.collection("settings").getList(1, 1);
+      const s = await pb.collection("app_settings").getList(1, 1);
       if (s.items[0]) {
         setSettingsId(s.items[0].id);
-        setRequireApproval(Boolean(s.items[0].require_approval));
+        setRequireApproval(Boolean(s.items[0].requireApproval));
       }
     } catch {
       // Collection settings có thể chưa được khởi tạo ở môi trường mới.
@@ -502,12 +503,12 @@ function AdminUsersPanel() {
       "Họ tên": u.full_name || "",
       "Số điện thoại": u.phone || "",
       "Tên đăng nhập": u.username || "",
-      "Mã NV": u.employee_code || "",
+      "Mã nhân viên": u.employee_code || "",
       "Nhà máy": u.company || "",
       "Ngày tạo": new Date(u.created).toLocaleDateString("vi-VN"),
       "Trạng thái": isUserApproved(u) ? "Hoạt động" : "Vô hiệu hoá",
     }));
-    exportToExcel("danh_sach_tai_khoan_" + Date.now(), { Users: rows });
+    exportToExcel("danh_sach_tai_khoan_" + Date.now(), { "Tài khoản": rows });
   };
 
   const bulkDisable = async (disable: boolean) => {
@@ -547,9 +548,9 @@ function AdminUsersPanel() {
     setRequireApproval(val);
     try {
       if (settingsId) {
-        await pb.collection("settings").update(settingsId, { require_approval: val });
+        await pb.collection("app_settings").update(settingsId, { requireApproval: val });
       } else {
-        const r = await pb.collection("settings").create({ require_approval: val });
+        const r = await pb.collection("app_settings").create({ requireApproval: val });
         setSettingsId(r.id);
       }
       toast.success("Đã cập nhật kiểm duyệt đăng ký");
@@ -692,6 +693,7 @@ function AdminUsersPanel() {
     const phone = (newUser.phone || "").trim();
     const username = (newUser.username || "").trim().toLowerCase();
     const password = newUser.password || "";
+    const manualUid = (newUser.uid || "").trim();
     const company = (newUser.company || "").trim();
     const employee_code = (newUser.employee_code || "").trim();
     if (!full_name || !phone || !username || !password) {
@@ -703,10 +705,12 @@ function AdminUsersPanel() {
       return;
     }
     try {
-      const created = await pb.collection("users").create({
+      const uid = await generateUid(manualUid || undefined);
+      await pb.collection("users").create({
         full_name,
         phone,
         username,
+        uid,
         password,
         company,
         employee_code,
@@ -716,11 +720,6 @@ function AdminUsersPanel() {
         approved: "true",
         status: "active",
       });
-      try {
-        await assignUidIfMissing(created.id);
-      } catch {
-        // best-effort; admin can backfill later
-      }
       toast.success("Đã tạo tài khoản");
       setCreateOpen(false);
       setNewUser(emptyNew);
@@ -737,19 +736,21 @@ function AdminUsersPanel() {
         "Số điện thoại": "0900000001",
         "Tên đăng nhập": "nguyenvana",
         "Mật khẩu": "12345678",
+        "Mã tài khoản": "",
         "Nhà máy": "",
-        "Mã NV": "",
+        "Mã nhân viên": "",
       },
       {
         "Họ tên": "Trần Thị B",
         "Số điện thoại": "0900000002",
         "Tên đăng nhập": "tranthib",
         "Mật khẩu": "12345678",
+        "Mã tài khoản": "",
         "Nhà máy": "",
-        "Mã NV": "",
+        "Mã nhân viên": "",
       },
     ];
-    exportToExcel("mau_nhap_tai_khoan", { Users: sample });
+    exportToExcel("mau_nhap_tai_khoan", { "Tài khoản": sample });
   };
 
   const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -772,8 +773,11 @@ function AdminUsersPanel() {
           .trim()
           .toLowerCase();
         const password = String(r["Mật khẩu"] || r["password"] || "").trim();
+        const manualUid = String(r["Mã tài khoản"] || r["Mã TK"] || r["uid"] || "").trim();
         const company = String(r["Nhà máy"] || r["Công ty"] || r["company"] || "").trim();
-        const employee_code = String(r["Mã NV"] || r["Ma NV"] || r["employee_code"] || "").trim();
+        const employee_code = String(
+          r["Mã nhân viên"] || r["Mã NV"] || r["Ma NV"] || r["employee_code"] || "",
+        ).trim();
         if (!full_name || !phone || !username || !password) {
           fail++;
           continue;
@@ -784,10 +788,12 @@ function AdminUsersPanel() {
           continue;
         }
         try {
-          const created = await pb.collection("users").create({
+          const uid = await generateUid(manualUid || undefined);
+          await pb.collection("users").create({
             full_name,
             phone,
             username,
+            uid,
             password,
             passwordConfirm: password,
             company,
@@ -796,11 +802,6 @@ function AdminUsersPanel() {
             approvalStatus: "approved",
             status: "active",
           });
-          try {
-            await assignUidIfMissing(created.id);
-          } catch {
-            // best-effort
-          }
           ok++;
         } catch (err: any) {
           fail++;
@@ -1148,6 +1149,12 @@ function AdminUsersPanel() {
               label="Mật khẩu * (≥ 8 ký tự)"
               value={newUser.password}
               onChange={(v) => setNewUser({ ...newUser, password: v })}
+            />
+            <TextField
+              label="Mã tài khoản"
+              value={newUser.uid}
+              onChange={(v) => setNewUser({ ...newUser, uid: v })}
+              placeholder="Để trống để tự sinh"
             />
             <TextField
               label="Nhà máy"
@@ -1689,16 +1696,23 @@ function TextField({
   value,
   onChange,
   type = "text",
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
+  placeholder?: string;
 }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>
-      <Input type={type} value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
+      <Input
+        type={type}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
     </div>
   );
 }

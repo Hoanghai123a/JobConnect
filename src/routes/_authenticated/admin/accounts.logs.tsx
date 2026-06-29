@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -14,27 +21,43 @@ import {
 } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
 import { escapePb } from "@/lib/delegations";
-import { pb } from "@/lib/pocketbase";
+import { pb, type UserRecord } from "@/lib/pocketbase";
 import type { StaffActionLogRecord } from "@/lib/staff-log";
 
 export const Route = createFileRoute("/_authenticated/admin/accounts/logs")({
   beforeLoad: () => {
-    const currentUser = pb.authStore.record as any;
+    const currentUser = pb.authStore.record as UserRecord | null;
     if (!currentUser || currentUser.role !== "admin")
-      throw redirect({ to: "/account", search: {} as any });
+      throw redirect({ to: "/account", search: {} as never });
   },
   component: AccountLogsPage,
 });
 
 const ACTION_LABELS: Record<string, string> = {
-  create: "T\u1ea1o m\u1edbi",
-  update: "C\u1eadp nh\u1eadt",
-  delete: "X\u00f3a",
-  import: "Import",
-  report_advance: "B\u00e1o \u1ee9ng",
-  report_leave: "B\u00e1o ngh\u1ec9",
-  report_join: "B\u00e1o \u0111i l\u00e0m m\u1edbi",
-  update_bank: "C\u1eadp nh\u1eadt ng\u00e2n h\u00e0ng",
+  create: "Tạo mới",
+  update: "Cập nhật",
+  delete: "Xóa",
+  import: "Nhập dữ liệu",
+  report_advance: "Báo ứng",
+  report_leave: "Báo nghỉ",
+  report_join: "Báo đi làm mới",
+  update_bank: "Cập nhật ngân hàng",
+};
+
+const COLLECTION_LABELS: Record<string, string> = {
+  employment_histories: "Lịch sử đi làm",
+  staff_action_logs: "Nhật ký thao tác",
+  users: "Tài khoản",
+  advances: "Tạm ứng",
+  check_attendance_items: "Chấm công",
+  check_salary_items: "Tính lương",
+  factory_managers: "Quản lý nhà máy",
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Quản trị viên",
+  staff: "Nhân sự",
+  user: "Người lao động",
 };
 
 function joinPbFilters(parts: Array<string | false | null | undefined>) {
@@ -70,6 +93,7 @@ function AccountLogsPage() {
   const [actionFilter, setActionFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [selectedLog, setSelectedLog] = useState<StaffActionLogRecord | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -110,15 +134,15 @@ function AccountLogsPage() {
 
   return (
     <PageContainer
-      title="Nh\u1eadt k\u00fd thay \u0111\u1ed5i"
-      subtitle="Theo d\u00f5i m\u1ecdi thao t\u00e1c staff v\u00e0 admin trong h\u1ec7 th\u1ed1ng"
+      title="Nhật ký thay đổi"
+      subtitle="Theo dõi mọi thao tác của nhân sự và quản trị viên trong hệ thống"
       right={
         <Link
           to="/admin/accounts"
           className="flex h-9 items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 text-xs font-medium text-foreground shadow-soft"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          {"T\u00e0i kho\u1ea3n"}
+          Tài khoản
         </Link>
       }
     >
@@ -127,17 +151,17 @@ function AccountLogsPage() {
         <Input
           value={search}
           onChange={(event) => updateSearch(event.target.value)}
-          placeholder="T\u00ecm theo actor, user \u0111\u00edch, collection, ghi ch\u00fa..."
+          placeholder="Tìm theo người thao tác, người liên quan, nhóm dữ liệu, ghi chú..."
           className="rounded-full pl-9"
         />
       </div>
 
       <Select value={actionFilter} onValueChange={updateActionFilter}>
         <SelectTrigger className="rounded-xl">
-          <SelectValue placeholder="L\u1ecdc theo thao t\u00e1c" />
+          <SelectValue placeholder="Lọc theo thao tác" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">{"T\u1ea5t c\u1ea3 thao t\u00e1c"}</SelectItem>
+          <SelectItem value="all">Tất cả thao tác</SelectItem>
           {Object.keys(ACTION_LABELS).map((action) => (
             <SelectItem key={action} value={action}>
               {ACTION_LABELS[action]}
@@ -148,13 +172,13 @@ function AccountLogsPage() {
 
       {loading ? (
         <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">
-          {"\u0110ang t\u1ea3i nh\u1eadt k\u00fd..."}
+          Đang tải nhật ký...
         </div>
       ) : logs.length === 0 ? (
         <EmptyState
           icon={Search}
-          title="Ch\u01b0a c\u00f3 log ph\u00f9 h\u1ee3p"
-          description="Th\u1eed \u0111\u1ed5i b\u1ed9 l\u1ecdc ho\u1eb7c thao t\u00e1c th\u00eam tr\u00ean m\u00e0n h\u00ecnh staff/admin \u0111\u1ec3 h\u1ec7 th\u1ed1ng ghi log m\u1edbi."
+          title="Chưa có nhật ký phù hợp"
+          description="Thử đổi bộ lọc hoặc thao tác thêm trên màn hình nhân sự/quản trị để hệ thống ghi nhật ký mới."
         />
       ) : (
         <>
@@ -168,37 +192,41 @@ function AccountLogsPage() {
               item.target_user ||
               "";
             const roleLabel = item.actor_role_snapshot || "user";
+            const collectionLabel =
+              COLLECTION_LABELS[item.target_collection] || item.target_collection;
             return (
-              <div
+              <button
+                type="button"
                 key={item.id}
-                className="rounded-xl border border-border/60 bg-card px-3 py-2.5 shadow-sm"
+                onClick={() => setSelectedLog(item)}
+                className="w-full rounded-xl border border-border/60 bg-card px-3 py-2.5 text-left shadow-sm active:scale-[0.99]"
               >
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-semibold">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-sm font-semibold">
                         {ACTION_LABELS[item.action] || item.action}
                       </span>
-                      <StatusChip tone="info">{item.target_collection}</StatusChip>
+                      <StatusChip tone="info">{collectionLabel}</StatusChip>
                     </div>
-                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
                       {actorName}
                       {actorUsername ? ` @${actorUsername}` : ""}
                       {" - "}
-                      {roleLabel}
+                      {ROLE_LABELS[roleLabel] || roleLabel}
                       {targetName ? ` -> ${targetName}` : ""}
                     </div>
                   </div>
-                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                  <span className="shrink-0 text-[11px] text-muted-foreground sm:text-right">
                     {formatDateTime(item.created)}
                   </span>
                 </div>
                 {item.note && (
-                  <div className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                  <div className="mt-1.5 line-clamp-1 text-[12px] leading-relaxed text-muted-foreground">
                     {item.note}
                   </div>
                 )}
-              </div>
+              </button>
             );
           })}
           {page < totalPages && (
@@ -209,17 +237,75 @@ function AccountLogsPage() {
               disabled={loading}
               onClick={() => setPage((current) => current + 1)}
             >
-              {loading ? "\u0110ang t\u1ea3i..." : "T\u1ea3i th\u00eam nh\u1eadt k\u00fd"}
+              {loading ? "Đang tải..." : "Tải thêm nhật ký"}
             </Button>
           )}
         </>
       )}
+
+      <LogDetailDialog log={selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)} />
     </PageContainer>
   );
 }
 
+function LogDetailDialog({
+  log,
+  onOpenChange,
+}: {
+  log: StaffActionLogRecord | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const actorName = log?.expand?.actor?.full_name || log?.expand?.actor?.username || log?.actor;
+  const targetName =
+    log?.expand?.target_user?.full_name || log?.expand?.target_user?.username || log?.target_user;
+  const collectionLabel = log
+    ? COLLECTION_LABELS[log.target_collection] || log.target_collection
+    : "";
+  const roleLabel = log ? ROLE_LABELS[log.actor_role_snapshot] || log.actor_role_snapshot : "";
+
+  return (
+    <Dialog open={!!log} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[88dvh] overflow-y-auto rounded-2xl">
+        <DialogHeader>
+          <DialogTitle>
+            {log ? ACTION_LABELS[log.action] || log.action : "Chi tiết nhật ký"}
+          </DialogTitle>
+          <DialogDescription>{formatDateTime(log?.created)}</DialogDescription>
+        </DialogHeader>
+        {log && (
+          <div className="space-y-3 text-sm">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <LogDetailItem label="Người thao tác" value={actorName || "Không rõ"} />
+              <LogDetailItem label="Vai trò" value={roleLabel || "Không rõ"} />
+              <LogDetailItem label="Người liên quan" value={targetName || "Không có"} />
+              <LogDetailItem label="Nhóm dữ liệu" value={collectionLabel} />
+              <LogDetailItem label="Bản ghi" value={log.target_record || "Không có"} />
+              <LogDetailItem label="Hành động" value={log.action} />
+            </div>
+            {log.note && (
+              <div className="rounded-xl bg-muted/40 p-3">
+                <div className="text-[11px] text-muted-foreground">Ghi chú</div>
+                <div className="mt-1 break-words">{log.note}</div>
+              </div>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function LogDetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-muted/40 p-3">
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="mt-1 break-words font-medium">{value}</div>
+    </div>
+  );
+}
+
 function formatDateTime(value?: string) {
-  if (!value) return "Kh\u00f4ng r\u00f5 th\u1eddi gian";
+  if (!value) return "Không rõ thời gian";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString("vi-VN");

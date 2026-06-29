@@ -70,7 +70,7 @@ import {
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { cn } from "@/lib/utils";
-import { assignUidIfMissing } from "@/lib/uid";
+import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
@@ -112,7 +112,29 @@ function formatDate(value?: string) {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : value;
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function getPocketBaseFieldErrors(error: unknown) {
+  const data =
+    typeof error === "object" && error !== null && "data" in error
+      ? (error.data as { data?: Record<string, unknown> }).data
+      : undefined;
+  if (!data) return "";
+  return Object.entries(data)
+    .map(([field, value]) => {
+      const message =
+        typeof value === "object" && value !== null && "message" in value
+          ? String(value.message)
+          : String(value);
+      return `${field}: ${message}`;
+    })
+    .join("; ");
+}
+
 function WorkforcePage() {
+  const currentUser = pb.authStore.record as UserRecord | null;
   const [tab, setTab] = useState<ActiveTab>("recruit");
   const [from, setFrom] = useState(daysAgoIso(30));
   const [to, setTo] = useState(todayIso());
@@ -141,8 +163,8 @@ function WorkforcePage() {
       setUsers(userList);
       setFactories(factoryList);
       setMainHouses(mainHouseList);
-    } catch (error: any) {
-      toast.error(error?.message || "Không tải được dữ liệu");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Không tải được dữ liệu"));
     } finally {
       setLoading(false);
     }
@@ -328,6 +350,7 @@ function WorkforcePage() {
 
       <RegisterDialog
         open={openRegister}
+        actor={currentUser}
         onClose={() => setOpenRegister(false)}
         users={users}
         factories={factories}
@@ -337,6 +360,7 @@ function WorkforcePage() {
 
       <AdminWorkerDrawer
         user={selectedUserId ? userById.get(selectedUserId) || null : null}
+        actor={currentUser}
         histories={selectedUserId ? histories.filter((h) => h.user === selectedUserId) : []}
         factories={factories}
         mainHouses={mainHouses}
@@ -490,7 +514,7 @@ function RecruitGroups({
             return (
               <GroupCard
                 key={staffId}
-                title={staff.full_name || staff.username || "Staff"}
+                title={staff.full_name || staff.username || "Nhân sự"}
                 subtitle={staff.phone || staff.username || ""}
                 icon={ShieldCheck}
                 stats={s}
@@ -852,6 +876,7 @@ function WorkerList({
 
 function AdminWorkerDrawer({
   user,
+  actor,
   histories,
   factories,
   mainHouses,
@@ -861,6 +886,7 @@ function AdminWorkerDrawer({
   onDataChanged,
 }: {
   user: UserRecord | null;
+  actor: UserRecord | null;
   histories: EmploymentHistoryRecord[];
   factories: FactoryRecord[];
   mainHouses: MainHouseRecord[];
@@ -907,7 +933,8 @@ function AdminWorkerDrawer({
     if (!editingId) return;
     setSaving(true);
     try {
-      await updateEmploymentHistory(editingId, {
+      const before = histories.find((item) => item.id === editingId) || null;
+      const updated = await updateEmploymentHistory(editingId, {
         employee_code: form.employee_code.trim(),
         worker_name_snapshot: form.worker_name_snapshot.trim(),
         worker_cccd_snapshot: form.worker_cccd_snapshot.trim(),
@@ -923,18 +950,25 @@ function AdminWorkerDrawer({
         const latest = getLatestEmploymentHistory(updatedHistories);
         await syncLegacyUserWorkFields(user.id, latest);
       }
+      await createStaffActionLog({
+        actor,
+        targetUserId: user?.id,
+        targetCollection: "employment_histories",
+        targetRecord: editingId,
+        action: "update",
+        before,
+        after: updated,
+        note: "Quản trị viên cập nhật lịch sử đi làm",
+      });
       toast.success("Đã lưu thay đổi");
       setEditingId(null);
       onDataChanged();
-    } catch (error: any) {
-      const pbData = error?.data?.data;
-      if (pbData) {
-        const fieldErrors = Object.entries(pbData)
-          .map(([k, v]: [string, any]) => `${k}: ${v?.message || v}`)
-          .join("; ");
-        toast.error(fieldErrors || error?.message || "Lỗi lưu");
+    } catch (error: unknown) {
+      const fieldErrors = getPocketBaseFieldErrors(error);
+      if (fieldErrors) {
+        toast.error(fieldErrors);
       } else {
-        toast.error(error?.message || "Lỗi lưu");
+        toast.error(getErrorMessage(error, "Lỗi lưu"));
       }
     } finally {
       setSaving(false);
@@ -952,7 +986,7 @@ function AdminWorkerDrawer({
         <DrawerHeader>
           <DrawerTitle>{user.full_name || user.username || "Người lao động"}</DrawerTitle>
           <DrawerDescription>
-            {isWorking ? "Đang đi làm" : "Đã nghỉ"} · Admin có toàn quyền chỉnh sửa
+            {isWorking ? "Đang đi làm" : "Đã nghỉ"} · Quản trị viên có toàn quyền chỉnh sửa
           </DrawerDescription>
         </DrawerHeader>
 
@@ -965,11 +999,11 @@ function AdminWorkerDrawer({
               </div>
             )}
             <div className="rounded-xl bg-muted/35 p-2.5">
-              <div className="text-[10px] text-muted-foreground">Họ tên (TK)</div>
+              <div className="text-[10px] text-muted-foreground">Họ tên tài khoản</div>
               <div className="mt-0.5 text-sm font-semibold">{user.full_name || "—"}</div>
             </div>
             <div className="rounded-xl bg-muted/35 p-2.5">
-              <div className="text-[10px] text-muted-foreground">CCCD (TK)</div>
+              <div className="text-[10px] text-muted-foreground">CCCD tài khoản</div>
               <div className="mt-0.5 text-sm font-semibold">{maskCccd(user.cccd)}</div>
             </div>
             <div className="rounded-xl bg-muted/35 p-2.5">
@@ -977,7 +1011,7 @@ function AdminWorkerDrawer({
               <div className="mt-0.5 text-sm font-semibold">{user.phone || "—"}</div>
             </div>
             <div className="rounded-xl bg-muted/35 p-2.5">
-              <div className="text-[10px] text-muted-foreground">Username</div>
+              <div className="text-[10px] text-muted-foreground">Tên đăng nhập</div>
               <div className="mt-0.5 text-sm font-semibold">{user.username || "—"}</div>
             </div>
           </div>
@@ -985,11 +1019,7 @@ function AdminWorkerDrawer({
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Ảnh CCCD
           </div>
-          <CccdManager
-            targetUser={user}
-            actor={pb.authStore.record as UserRecord | null}
-            onUpdated={onDataChanged}
-          />
+          <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} />
 
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Lịch sử đi làm ({histories.length})
@@ -1212,6 +1242,7 @@ function SkeletonRows() {
 
 function RegisterDialog({
   open,
+  actor,
   onClose,
   users,
   factories,
@@ -1219,6 +1250,7 @@ function RegisterDialog({
   onCreated,
 }: {
   open: boolean;
+  actor: UserRecord | null;
   onClose: () => void;
   users: UserRecord[];
   factories: FactoryRecord[];
@@ -1232,7 +1264,6 @@ function RegisterDialog({
   const [employeeCode, setEmployeeCode] = useState("");
   const [workerName, setWorkerName] = useState("");
   const [workerCccd, setWorkerCccd] = useState("");
-  const [uidInput, setUidInput] = useState("");
   const [joinDate, setJoinDate] = useState(todayIso());
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -1245,7 +1276,6 @@ function RegisterDialog({
     setEmployeeCode("");
     setWorkerName("");
     setWorkerCccd("");
-    setUidInput("");
     setJoinDate(todayIso());
     setNote("");
   };
@@ -1290,23 +1320,29 @@ function RegisterDialog({
         note: note.trim() || undefined,
       });
       await syncLegacyUserWorkFields(userId, created);
-      await assignUidIfMissing(userId, uidInput.trim() || undefined);
+      await createStaffActionLog({
+        actor,
+        targetUserId: userId,
+        targetCollection: "employment_histories",
+        targetRecord: created.id,
+        action: "create",
+        after: created,
+        note: "Quản trị viên đăng ký đi làm",
+      });
       toast.success("Đã đăng ký đi làm");
       onClose();
       onCreated();
-    } catch (error: any) {
-      const pbData = error?.data?.data;
-      if (pbData) {
-        const fieldErrors = Object.entries(pbData)
-          .map(([k, v]: [string, any]) => `${k}: ${v?.message || v}`)
-          .join("; ");
-        toast.error(fieldErrors || error?.message || "Lỗi đăng ký đi làm");
-      } else if (error?.message?.includes("UNIQUE")) {
+    } catch (error: unknown) {
+      const fieldErrors = getPocketBaseFieldErrors(error);
+      const message = getErrorMessage(error, "Lỗi đăng ký đi làm");
+      if (fieldErrors) {
+        toast.error(fieldErrors);
+      } else if (message.includes("UNIQUE")) {
         toast.error(
           "Người lao động này đã có lịch sử đang đi làm. Hãy cập nhật trạng thái nghỉ trước khi đăng ký mới.",
         );
       } else {
-        toast.error(error?.message || "Lỗi đăng ký đi làm");
+        toast.error(message);
       }
     } finally {
       setSubmitting(false);
@@ -1392,25 +1428,17 @@ function RegisterDialog({
           </div>
 
           <div className="space-y-1">
-            <Label className="text-xs">Người tuyển (staff)</Label>
+            <Label className="text-xs">Người tuyển</Label>
             <UserPicker
               users={staffUsers}
               value={recruiterId}
               onChange={setRecruiterId}
-              placeholder="Chọn staff (tuỳ chọn)"
+              placeholder="Chọn nhân sự tuyển"
               allowClear
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            <div className="space-y-1">
-              <Label className="text-xs">Mã TK (uid)</Label>
-              <Input
-                value={uidInput}
-                onChange={(e) => setUidInput(e.target.value)}
-                placeholder="Tự sinh nếu trống"
-              />
-            </div>
+          <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <Label className="text-xs">Mã NV</Label>
               <Input
@@ -1697,8 +1725,8 @@ function CccdExportDialog({
 
       toast.success(`Đã xuất ${count} ảnh CCCD`);
       onClose();
-    } catch (err: any) {
-      toast.error(err?.message || "Lỗi xuất CCCD");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Lỗi xuất CCCD"));
     } finally {
       setExporting(false);
       setProgress("");

@@ -10,14 +10,15 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { exportToExcel } from "@/lib/excel";
 import { fetchFactories } from "@/lib/factories";
 import {
+  createEmploymentHistory,
   fetchEmploymentHistories,
   getLatestEmploymentHistory,
   syncLegacyUserWorkFields,
+  updateEmploymentHistory,
 } from "@/lib/employment";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { pb, type UserRecord } from "@/lib/pocketbase";
-import { assignUidIfMissing } from "@/lib/uid";
 
 export const Route = createFileRoute("/_authenticated/admin/imports")({
   beforeLoad: () => {
@@ -34,20 +35,21 @@ function AdminImportsPage() {
 
   const downloadHistoriesTemplate = () => {
     exportToExcel("mau_import_lich_su_di_lam", {
-      Histories: [
+      "Lịch sử đi làm": [
         {
-          uid: "",
-          username: "nguyenvana",
-          factory_name: "Nhà máy A",
-          main_house_name: "Nhà chính HN",
-          employee_code: "NM001",
-          worker_name_snapshot: "Nguyễn Văn A",
-          worker_cccd_snapshot: "012345678901",
-          recruiter_username: "staff01",
-          join_date: "2026-05-01",
-          leave_date: "",
-          status: "working",
-          note: "Import mẫu",
+          "Mã tài khoản (UID)": "",
+          "Tên đăng nhập": "nguyenvana",
+          "Tên nhà máy": "Nhà máy A",
+          "Mã nhà máy": "",
+          "Nhà chính": "Nhà chính HN",
+          "Mã nhân viên": "NM001",
+          "Họ tên tại nhà máy": "Nguyễn Văn A",
+          "CCCD tại nhà máy": "012345678901",
+          "Người tuyển": "staff01",
+          "Ngày vào làm": "2026-05-01",
+          "Ngày nghỉ": "",
+          "Trạng thái": "Đang làm",
+          "Ghi chú": "Nhập mẫu",
         },
       ],
     });
@@ -77,7 +79,7 @@ function AdminImportsPage() {
       const userByUsername = new Map(
         allUsers.map((item) => [(item.username || "").toLowerCase(), item]),
       );
-      const userByPhone = new Map(allUsers.map((item) => [(item.phone || "").toLowerCase(), item]));
+      const userByUid = new Map(allUsers.map((item) => [(item.uid || "").toLowerCase(), item]));
       const staffByUsername = new Map(
         staffUsers.map((item) => [(item.username || "").toLowerCase(), item]),
       );
@@ -91,29 +93,46 @@ function AdminImportsPage() {
       let created = 0;
       let updated = 0;
       let failed = 0;
-      const touchedUsers = new Map<string, string>();
+      const touchedUsers = new Set<string>();
+      const failedRows: Array<Record<string, unknown>> = [];
 
-      for (const row of rows) {
-        const userId = pickValue(row, ["user_id", "User ID", "userId"]);
-        const uid = pickValue(row, ["uid", "Mã TK", "Ma TK"]);
+      const addFailedRow = (row: Record<string, unknown>, rowNumber: number, reason: string) => {
+        failed++;
+        failedRows.push({
+          Dòng: rowNumber,
+          "Lý do lỗi": reason,
+          "Mã tài khoản (UID)": pickValue(row, ["Mã tài khoản (UID)", "uid", "Mã TK", "Ma TK"]),
+          "Tên đăng nhập": pickValue(row, ["username", "Tên đăng nhập"]),
+          "Tên nhà máy": pickValue(row, ["Tên nhà máy", "factory_name", "Nhà máy"]),
+          "Mã nhà máy": pickValue(row, ["factory_code", "Mã nhà máy"]),
+          "Ngày vào làm": row["Ngày vào làm"] ?? row["join_date"] ?? row["Ngày vào"] ?? "",
+          "Họ tên tại nhà máy": pickValue(row, ["worker_name_snapshot", "Họ tên tại nhà máy"]),
+          "CCCD tại nhà máy": pickValue(row, ["worker_cccd_snapshot", "CCCD tại nhà máy"]),
+          "Ghi chú": pickValue(row, ["note", "Ghi chú"]),
+        });
+      };
+
+      for (const [index, row] of rows.entries()) {
+        const rowNumber = index + 2;
+        const uid = pickValue(row, ["Mã tài khoản (UID)", "uid", "Mã TK", "Ma TK"]);
         const username = pickValue(row, ["username", "Tên đăng nhập"]);
-        const phone = pickValue(row, ["phone", "Số điện thoại"]);
-        const factoryName = pickValue(row, ["factory_name", "Nhà máy"]);
+        const factoryName = pickValue(row, ["Tên nhà máy", "factory_name", "Nhà máy"]);
         const factoryCode = pickValue(row, ["factory_code", "Mã nhà máy"]);
         const mainHouseName = pickValue(row, ["main_house_name", "Nhà chính"]);
-        const employeeCode = pickValue(row, ["employee_code", "Mã NV"]);
+        const employeeCode = pickValue(row, ["employee_code", "Mã nhân viên", "Mã NV"]);
         const workerName = pickValue(row, ["worker_name_snapshot", "Họ tên tại nhà máy"]);
         const workerCccd = pickValue(row, ["worker_cccd_snapshot", "CCCD tại nhà máy"]);
         const recruiterUsername = pickValue(row, ["recruiter_username", "Người tuyển"]);
-        const joinDate = normalizeExcelDate(row["join_date"] ?? row["Ngày vào"]);
+        const joinDate = normalizeExcelDate(
+          row["Ngày vào làm"] ?? row["join_date"] ?? row["Ngày vào"],
+        );
         const leaveDate = normalizeExcelDate(row["leave_date"] ?? row["Ngày nghỉ"]);
         const status = pickHistoryStatus(pickValue(row, ["status", "Trạng thái"]), leaveDate);
         const note = pickValue(row, ["note", "Ghi chú"]);
 
         const user =
-          allUsers.find((item) => item.id === userId) ||
-          userByUsername.get(username.toLowerCase()) ||
-          userByPhone.get(phone.toLowerCase());
+          (uid ? userByUid.get(uid.toLowerCase()) : undefined) ||
+          (username ? userByUsername.get(username.toLowerCase()) : undefined);
         const factory =
           factoryByName.get(factoryName.toLowerCase()) ||
           factoryByCode.get(factoryCode.toLowerCase());
@@ -122,8 +141,24 @@ function AdminImportsPage() {
           : undefined;
         const recruiter = staffByUsername.get(recruiterUsername.toLowerCase());
 
-        if (!user || !factory || !joinDate || !workerName || !workerCccd) {
-          failed++;
+        if (!user) {
+          addFailedRow(
+            row,
+            rowNumber,
+            "Không tìm thấy tài khoản theo UID hoặc username. Cần tạo tài khoản trước.",
+          );
+          continue;
+        }
+        if (!factory) {
+          addFailedRow(row, rowNumber, "Không tìm thấy nhà máy theo tên hoặc mã nhà máy.");
+          continue;
+        }
+        if (!joinDate) {
+          addFailedRow(row, rowNumber, "Thiếu hoặc sai ngày vào làm.");
+          continue;
+        }
+        if (!workerName || !workerCccd) {
+          addFailedRow(row, rowNumber, "Thiếu họ tên hoặc CCCD snapshot tại nhà máy.");
           continue;
         }
 
@@ -137,7 +172,11 @@ function AdminImportsPage() {
         );
 
         if (status === "working" && activeHistory) {
-          failed++;
+          addFailedRow(
+            row,
+            rowNumber,
+            "Người lao động đang có lịch sử đi làm active, cần kết thúc lịch sử cũ trước.",
+          );
           continue;
         }
 
@@ -157,39 +196,62 @@ function AdminImportsPage() {
 
         try {
           if (sameHistory) {
-            await pb.collection("employment_histories").update(sameHistory.id, payload);
+            const updatedHistory = await updateEmploymentHistory(sameHistory.id, payload);
             updated++;
+            await createStaffActionLog({
+              actor: currentUser,
+              targetUserId: user.id,
+              targetCollection: "employment_histories",
+              targetRecord: sameHistory.id,
+              action: "update",
+              before: sameHistory,
+              after: updatedHistory,
+              note: "Quản trị viên nhập Excel cập nhật lịch sử đi làm",
+            });
           } else {
-            await pb.collection("employment_histories").create(payload);
+            const createdHistory = await createEmploymentHistory(payload);
             created++;
+            existingHistories.push(createdHistory);
+            await createStaffActionLog({
+              actor: currentUser,
+              targetUserId: user.id,
+              targetCollection: "employment_histories",
+              targetRecord: createdHistory.id,
+              action: "create",
+              after: createdHistory,
+              note: "Quản trị viên nhập Excel tạo lịch sử đi làm",
+            });
           }
-          if (!touchedUsers.has(user.id)) touchedUsers.set(user.id, uid);
-        } catch {
-          failed++;
+          touchedUsers.add(user.id);
+        } catch (error: unknown) {
+          addFailedRow(
+            row,
+            rowNumber,
+            error instanceof Error ? error.message : "Không lưu được lịch sử đi làm.",
+          );
         }
       }
 
-      for (const [id, manualUid] of touchedUsers) {
+      for (const id of touchedUsers) {
         const userHistories = (await fetchEmploymentHistories([id])).filter(
           (item) => item.user === id,
         );
         await syncLegacyUserWorkFields(id, getLatestEmploymentHistory(userHistories));
-        try {
-          await assignUidIfMissing(id, manualUid || undefined);
-        } catch {
-          // ignore single-user uid failure; summary still reflects history result
-        }
       }
 
-      const summary = `Lịch sử: tạo ${created}, cập nhật ${updated}, lỗi ${failed}`;
+      const summary = `Lịch sử đi làm: tạo ${created}, cập nhật ${updated}, lỗi ${failed}`;
       setLastResult(summary);
       toast.success(summary);
+      if (failedRows.length) {
+        exportToExcel(`lich_su_di_lam_loi_${Date.now()}`, { "Dòng lỗi": failedRows });
+        toast.warning("Đã xuất file các dòng lịch sử đi làm bị lỗi");
+      }
       await createStaffActionLog({
         actor: currentUser,
         targetCollection: "employment_histories",
         action: "import",
-        after: { created, updated, failed, file: file.name },
-        note: "Admin import lịch sử đi làm từ Excel",
+        after: { created, updated, failed, file: file.name, exported_errors: failedRows.length },
+        note: "Quản trị viên nhập lịch sử đi làm từ Excel",
       });
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Không đọc được file lịch sử đi làm");
@@ -199,12 +261,16 @@ function AdminImportsPage() {
   };
 
   return (
-    <PageContainer title="Import lịch sử đi làm" subtitle="Chỉ import lịch sử đi làm của user">
+    <PageContainer
+      title="Nhập lịch sử đi làm"
+      subtitle="Dùng UID để tìm tài khoản, nếu không khớp mới kiểm tra username"
+    >
       <Card className="space-y-3 rounded-2xl p-4 shadow-soft">
-        <div className="text-sm font-semibold">Import lịch sử đi làm</div>
+        <div className="text-sm font-semibold">Nhập lịch sử đi làm</div>
         <div className="text-sm text-muted-foreground">
-          File lịch sử phải chỉ rõ user, nhà máy, ngày vào và họ tên/CCCD dùng tại nhà máy. Nếu user
-          còn lịch sử đang làm thì file sẽ bị chặn tạo bản ghi đang làm mới.
+          File lịch sử phải có UID hoặc username của tài khoản đã tồn tại, nhà máy, ngày vào và họ
+          tên/CCCD dùng tại nhà máy. Nếu không tìm thấy tài khoản, hệ thống sẽ xuất lại danh sách
+          dòng lỗi để tạo tài khoản trước.
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" className="rounded-full" onClick={downloadHistoriesTemplate}>
@@ -214,7 +280,7 @@ function AdminImportsPage() {
             <input type="file" accept=".xlsx,.xls" className="hidden" onChange={importHistories} />
             <span className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground">
               <Upload className="h-4 w-4" />{" "}
-              {importingHistories ? "Đang import..." : "Chọn file import lịch sử"}
+              {importingHistories ? "Đang nhập..." : "Chọn file nhập lịch sử"}
             </span>
           </label>
         </div>
@@ -227,19 +293,20 @@ function AdminImportsPage() {
       ) : (
         <EmptyState
           icon={Workflow}
-          title="Chưa có kết quả import gần đây"
-          description="Tải file mẫu nếu cần rồi import lịch sử đi làm từ Excel."
+          title="Chưa có kết quả nhập gần đây"
+          description="Tải file mẫu nếu cần rồi nhập lịch sử đi làm từ Excel."
         />
       )}
 
       <Card className="space-y-2 rounded-2xl p-4 shadow-soft">
         <div className="flex items-center gap-2 text-sm font-semibold">
-          <Workflow className="h-4 w-4 text-primary" /> Quy tắc import lịch sử
+          <Workflow className="h-4 w-4 text-primary" /> Quy tắc nhập lịch sử
         </div>
         <ul className="space-y-1 text-sm text-muted-foreground">
           <li>- Muốn báo đi làm nhà máy mới thì hồ sơ cũ phải kết thúc trước.</li>
+          <li>- Import lịch sử không tạo UID và không tạo tài khoản mới.</li>
           <li>- Họ tên và CCCD trong lịch sử là snapshot riêng, không lấy cứng từ hồ sơ gốc.</li>
-          <li>- Import này ghi log đầy đủ để admin tra cứu người thay đổi.</li>
+          <li>- Lần nhập này ghi nhật ký đầy đủ để quản trị viên tra cứu người thay đổi.</li>
         </ul>
       </Card>
     </PageContainer>

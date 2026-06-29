@@ -339,10 +339,10 @@ function StaffWorkerDetailPage() {
     }
 
     exportToExcel(`lich_su_lao_dong_${workerId}_${Date.now()}`, {
-      "Lich su": histories.map((history, index) => ({
+      "Lịch sử đi làm": histories.map((history, index) => ({
         STT: index + 1,
         "Nhà máy": history.expand?.factory?.name || "",
-        "Mã NV": history.employee_code || "",
+        "Mã nhân viên": history.employee_code || "",
         "Họ tên tại nhà máy": history.worker_name_snapshot,
         CCCD: history.worker_cccd_snapshot,
         "Người tuyển":
