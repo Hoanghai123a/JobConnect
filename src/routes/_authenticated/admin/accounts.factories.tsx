@@ -52,7 +52,6 @@ export const Route = createFileRoute("/_authenticated/admin/accounts/factories")
     if (!currentUser || currentUser.role !== "admin") {
       throw redirect({ to: "/account", search: {} as any });
     }
-    throw redirect({ to: "/account", search: {} as any });
   },
   component: AccountStaffFactoriesPage,
 });

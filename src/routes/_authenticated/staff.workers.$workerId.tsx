@@ -976,19 +976,18 @@ function StaffWorkerDetailPage() {
             </FormField>
             <FormField label="Nhà chính">
               <Select
-                value={joinForm.main_house || "__none__"}
+                value={joinForm.main_house}
                 onValueChange={(value) =>
                   setJoinForm((current) => ({
                     ...current,
-                    main_house: value === "__none__" ? "" : value,
+                    main_house: value,
                   }))
                 }
               >
                 <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn nhà chính (tuỳ chọn)" />
+                  <SelectValue placeholder="Chọn nhà chính" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">Không gán</SelectItem>
                   {mainHouses.map((house) => (
                     <SelectItem key={house.id} value={house.id}>
                       {house.name}
@@ -1205,19 +1204,18 @@ function StaffWorkerDetailPage() {
             </FormField>
             <FormField label="Nhà chính">
               <Select
-                value={historyForm.main_house || "__none__"}
+                value={historyForm.main_house}
                 onValueChange={(value) =>
                   setHistoryForm((current) => ({
                     ...current,
-                    main_house: value === "__none__" ? "" : value,
+                    main_house: value,
                   }))
                 }
               >
                 <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn nhà chính (tuỳ chọn)" />
+                  <SelectValue placeholder="Chọn nhà chính" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">Không gán</SelectItem>
                   {mainHouses.map((house) => (
                     <SelectItem key={house.id} value={house.id}>
                       {house.name}
@@ -1345,7 +1343,8 @@ function formatDate(value?: string) {
 }
 
 function todayDate() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
 function formatMoney(value: number) {

@@ -88,13 +88,14 @@ type RecruitSubTab = "factory" | "recruiter";
 type ListScope = "all" | "working" | "left";
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
 function daysAgoIso(days: number) {
   const d = new Date();
   d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function inDateRange(value: string | undefined, from: string, to: string) {
@@ -1167,16 +1168,15 @@ function AdminWorkerDrawer({
                       <div className="space-y-1">
                         <Label className="text-[10px]">Nhà chính</Label>
                         <Select
-                          value={form.main_house || "__none__"}
+                          value={form.main_house}
                           onValueChange={(v) =>
-                            setForm((f) => ({ ...f, main_house: v === "__none__" ? "" : v }))
+                            setForm((f) => ({ ...f, main_house: v }))
                           }
                         >
                           <SelectTrigger className="h-8 text-xs">
                             <SelectValue placeholder="Chọn nhà chính" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="__none__">Không gán</SelectItem>
                             {mainHouses.map((m) => (
                               <SelectItem key={m.id} value={m.id}>
                                 {m.name}
@@ -1410,14 +1410,13 @@ function RegisterDialog({
           <div className="space-y-1">
             <Label className="text-xs">Nhà chính</Label>
             <Select
-              value={mainHouseId || "__none__"}
-              onValueChange={(v) => setMainHouseId(v === "__none__" ? "" : v)}
+              value={mainHouseId}
+              onValueChange={setMainHouseId}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Chọn nhà chính (tuỳ chọn)" />
+                <SelectValue placeholder="Chọn nhà chính" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">Không gán</SelectItem>
                 {mainHouses.map((m) => (
                   <SelectItem key={m.id} value={m.id}>
                     {m.name}

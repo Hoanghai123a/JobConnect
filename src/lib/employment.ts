@@ -2,11 +2,13 @@ import { pb, type UserRecord } from "./pocketbase";
 import type { FactoryRecord } from "./factories";
 import type { MainHouseRecord } from "./main-houses";
 import { relationInFilter } from "./delegations";
+import { fetchAppSettings } from "./app-settings";
 
 export type EmploymentStatus = "working" | "left";
 
 export interface EmploymentHistoryRecord {
   id: string;
+  uid?: string;
   user: string;
   factory: string;
   main_house?: string;
@@ -42,14 +44,60 @@ export interface EmploymentDraft {
   note?: string;
 }
 
+export function buildHistoryUid(prefix: string, year: number, month: number, seq: number): string {
+  const yy = String(year % 100).padStart(2, "0");
+  const mm = String(month).padStart(2, "0");
+  const nnn = String(seq).padStart(3, "0");
+  return `${prefix}${yy}${mm}${nnn}`;
+}
+
+export function extractHistoryUidSeq(
+  uid: string | undefined,
+  prefix: string,
+  year: number,
+  month: number,
+): number {
+  if (!uid) return 0;
+  const yy = String(year % 100).padStart(2, "0");
+  const mm = String(month).padStart(2, "0");
+  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = uid.match(new RegExp(`^${escapedPrefix}${yy}${mm}(\\d{3})$`));
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+export function computeMaxHistoryUidSeq(
+  histories: { uid?: string }[],
+  prefix: string,
+  year: number,
+  month: number,
+): number {
+  let max = 0;
+  for (const h of histories) {
+    const n = extractHistoryUidSeq(h.uid, prefix, year, month);
+    if (n > max) max = n;
+  }
+  return max;
+}
+
+export async function generateEmploymentHistoryUid(referenceDate = new Date()): Promise<string> {
+  const settings = await fetchAppSettings();
+  const prefix = (settings.account_code_prefix || "").trim();
+  const year = referenceDate.getFullYear();
+  const month = referenceDate.getMonth() + 1;
+
+  const res = await pb.collection("employment_histories").getFullList<{ uid?: string }>({
+    fields: "uid",
+  });
+  return buildHistoryUid(prefix, year, month, computeMaxHistoryUidSeq(res, prefix, year, month) + 1);
+}
+
 export async function fetchEmploymentHistories(userIds?: string[]) {
   const filter = userIds?.length ? relationInFilter("user", userIds) : "";
-  const res = await pb.collection("employment_histories").getList(1, 500, {
+  return (await pb.collection("employment_histories").getFullList({
     filter,
     sort: "-join_date,-created",
     expand: "user,factory,recruiter_staff,main_house",
-  });
-  return res.items as unknown as EmploymentHistoryRecord[];
+  })) as unknown as EmploymentHistoryRecord[];
 }
 
 export function isHistoryWithinLast90Days(
@@ -100,10 +148,15 @@ export async function findActiveEmploymentByUser(userId: string) {
   return list.items[0] || null;
 }
 
-export async function createEmploymentHistory(draft: EmploymentDraft) {
-  return (await pb.collection("employment_histories").create(draft, {
-    expand: "user,factory,recruiter_staff",
-  })) as unknown as EmploymentHistoryRecord;
+export async function createEmploymentHistory(
+  draft: EmploymentDraft,
+  opts?: { uid?: string },
+) {
+  const uid = opts?.uid || (await generateEmploymentHistoryUid());
+  return (await pb.collection("employment_histories").create(
+    { ...draft, uid },
+    { expand: "user,factory,recruiter_staff,main_house" },
+  )) as unknown as EmploymentHistoryRecord;
 }
 
 export async function updateEmploymentHistory(id: string, payload: Partial<EmploymentDraft>) {

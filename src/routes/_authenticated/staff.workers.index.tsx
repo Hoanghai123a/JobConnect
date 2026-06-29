@@ -65,7 +65,8 @@ export const Route = createFileRoute("/_authenticated/staff/workers/")({
 type WorkerScope = "all" | "qlnm" | "nvtd" | "working" | "left";
 
 function todayDate() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
 function StaffWorkersPage() {
@@ -759,16 +760,13 @@ function WorkerQuickDrawer({
               <div className="space-y-1">
                 <Label className="text-xs">Nhà chính</Label>
                 <Select
-                  value={joinForm.main_house || "__none__"}
-                  onValueChange={(v) =>
-                    setJoinForm((f) => ({ ...f, main_house: v === "__none__" ? "" : v }))
-                  }
+                  value={joinForm.main_house}
+                  onValueChange={(v) => setJoinForm((f) => ({ ...f, main_house: v }))}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Chọn nhà chính (tuỳ chọn)" />
+                    <SelectValue placeholder="Chọn nhà chính" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">Không gán</SelectItem>
                     {mainHouses.map((house) => (
                       <SelectItem key={house.id} value={house.id}>
                         {house.name}
