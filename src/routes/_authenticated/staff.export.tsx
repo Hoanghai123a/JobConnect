@@ -90,6 +90,7 @@ function StaffExportPage() {
   const basicRows = useMemo(() => {
     return filteredHistories.map((history, index) => ({
       STT: index + 1,
+      "Mã lịch sử": history.uid || "",
       "Mã nhân viên": history.employee_code || "",
       "Họ tên tại nhà máy": history.worker_name_snapshot,
       CCCD: history.worker_cccd_snapshot,
@@ -113,6 +114,7 @@ function StaffExportPage() {
       const u = history.expand?.user;
       return {
         STT: index + 1,
+        "Mã lịch sử": history.uid || "",
         "Mã tài khoản (UID)": u?.uid || "",
         "Tên đăng nhập": u?.username || "",
         "Họ tên gốc": u?.full_name || "",

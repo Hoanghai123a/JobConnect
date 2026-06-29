@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
@@ -32,11 +32,12 @@ import { escapePb } from "@/lib/delegations";
 import { markSeen } from "@/lib/seen";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { createStaffActionLog } from "@/lib/staff-log";
-import { VN_BANKS } from "@/lib/vn-banks";
+import { VN_BANKS, buildVietQrUrl } from "@/lib/vn-banks";
 import { toast } from "sonner";
 import {
   Banknote,
   Check,
+  ChevronLeft,
   ChevronRight,
   Clock,
   FileDown,
@@ -934,153 +935,306 @@ export function AdvancesPage() {
         })
       )}
 
-      <Dialog open={!!advanceDetail} onOpenChange={(open) => !open && setAdvanceDetail(null)}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>Chi tiết ứng lương</DialogTitle>
-            <DialogDescription>Thông tin đầy đủ của yêu cầu ứng lương.</DialogDescription>
-          </DialogHeader>
-          {advanceDetail && (
-            <div className="space-y-3">
-              <div className="rounded-xl border bg-muted/30 p-3">
-                <div className="text-[11px] uppercase text-muted-foreground">Số tiền</div>
-                <div className="mt-1 text-2xl font-bold text-primary">
-                  {formatMoney(advanceDetail.amount)}
+      <AdvanceDetailDialog
+        advanceDetail={advanceDetail}
+        setAdvanceDetail={setAdvanceDetail}
+        items={filtered}
+        isAdmin={isAdmin}
+        adminNoteDraft={adminNoteDraft}
+        setAdminNoteDraft={setAdminNoteDraft}
+        recoveryNoteDraft={recoveryNoteDraft}
+        setRecoveryNoteDraft={setRecoveryNoteDraft}
+        savingNotes={savingNotes}
+        setSavingNotes={setSavingNotes}
+        updateRow={updateRow}
+        load={load}
+      />
+    </PageContainer>
+  );
+}
+
+function AdvanceDetailDialog({
+  advanceDetail,
+  setAdvanceDetail,
+  items,
+  isAdmin,
+  adminNoteDraft,
+  setAdminNoteDraft,
+  recoveryNoteDraft,
+  setRecoveryNoteDraft,
+  savingNotes,
+  setSavingNotes,
+  updateRow,
+  load,
+}: {
+  advanceDetail: AdvanceRecord | null;
+  setAdvanceDetail: (v: AdvanceRecord | null) => void;
+  items: AdvanceRecord[];
+  isAdmin: boolean;
+  adminNoteDraft: string;
+  setAdminNoteDraft: (v: string) => void;
+  recoveryNoteDraft: string;
+  setRecoveryNoteDraft: (v: string) => void;
+  savingNotes: boolean;
+  setSavingNotes: (v: boolean) => void;
+  updateRow: (id: string, payload: Partial<AdvanceRecord>) => Promise<void>;
+  load: () => void;
+}) {
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+
+  const currentIndex = useMemo(() => {
+    if (!advanceDetail) return -1;
+    return items.findIndex((row) => row.id === advanceDetail.id);
+  }, [advanceDetail, items]);
+
+  const hasPrev = currentIndex > 0;
+  const hasNext = currentIndex >= 0 && currentIndex < items.length - 1;
+
+  const goPrev = useCallback(() => {
+    if (hasPrev) setAdvanceDetail(items[currentIndex - 1]);
+  }, [hasPrev, items, currentIndex, setAdvanceDetail]);
+
+  const goNext = useCallback(() => {
+    if (hasNext) setAdvanceDetail(items[currentIndex + 1]);
+  }, [hasNext, items, currentIndex, setAdvanceDetail]);
+
+  useEffect(() => {
+    if (!advanceDetail) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        goPrev();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        goNext();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [advanceDetail, goPrev, goNext]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    const diff = touchStartX.current - touchEndX.current;
+    const threshold = 50;
+    if (diff > threshold) goNext();
+    else if (diff < -threshold) goPrev();
+  };
+
+  return (
+    <Dialog open={!!advanceDetail} onOpenChange={(open) => !open && setAdvanceDetail(null)}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+        <DialogHeader>
+          <DialogTitle>Chi tiết ứng lương</DialogTitle>
+          <DialogDescription>
+            {currentIndex >= 0 && items.length > 1
+              ? `${currentIndex + 1} / ${items.length}`
+              : "Thông tin đầy đủ của yêu cầu ứng lương."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {items.length > 1 && (
+          <div className="flex items-center justify-between">
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-9 w-9 rounded-full"
+              disabled={!hasPrev}
+              onClick={goPrev}
+              aria-label="Card trước"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Vuốt hoặc bấm mũi tên để chuyển
+            </span>
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-9 w-9 rounded-full"
+              disabled={!hasNext}
+              onClick={goNext}
+              aria-label="Card tiếp theo"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
+        {advanceDetail && (
+          <div
+            className="space-y-3"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div className="rounded-xl border bg-muted/30 p-3">
+              <div className="text-sm font-semibold">{advanceDetail.full_name || "-"}</div>
+              <div className="text-[11px] text-muted-foreground">
+                {[advanceDetail.employee_code, advanceDetail.company].filter(Boolean).join(" - ") || "-"}
+                {advanceDetail.phone && (
+                  <>
+                    {" - "}
+                    <a
+                      href={`tel:${advanceDetail.phone.replace(/\s/g, "")}`}
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      {advanceDetail.phone}
+                    </a>
+                  </>
+                )}
+              </div>
+              <div className="mt-2 text-2xl font-bold text-primary">
+                {formatMoney(advanceDetail.amount)}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5 text-sm">
+              <AdvanceDetailCell
+                label="Người báo ứng"
+                value={getAdvanceRequesterName(advanceDetail)}
+              />
+              <AdvanceDetailCell
+                label="TT người báo"
+                value={getAdvanceRequesterMeta(advanceDetail)}
+              />
+              <AdvanceDetailCell
+                label="Trạng thái"
+                value={STATUS_META[(advanceDetail.status || "pending") as AdvanceStatus].label}
+              />
+              <AdvanceDetailCell
+                label="Thu hồi"
+                value={
+                  RECOVERY_META[(advanceDetail.recovery_status || "none") as RecoveryStatus].label
+                }
+              />
+              <AdvanceDetailCell label="Ngày gửi" value={formatDateTime(advanceDetail.created)} />
+              <AdvanceDetailCell
+                label="Ngày xử lý"
+                value={formatDateTime(advanceDetail.resolved_at)}
+              />
+              <AdvanceDetailCell
+                label="Ngày thu hồi"
+                value={formatDateTime(advanceDetail.recovered_at)}
+              />
+            </div>
+
+            <div className="rounded-xl border bg-card p-3 text-sm">
+              <div className="text-[11px] text-muted-foreground">Tài khoản nhận tiền</div>
+              <div className="mt-1 font-medium">{advanceDetail.bank_name || "-"}</div>
+              <div className="mt-0.5 text-muted-foreground">
+                {advanceDetail.bank_account_number || "-"} -{" "}
+                {advanceDetail.bank_account_name || "-"}
+              </div>
+              {advanceDetail.status === "accepted" && (() => {
+                const qrUrl = buildVietQrUrl({
+                  bankName: advanceDetail.bank_name || "",
+                  accountNumber: advanceDetail.bank_account_number || "",
+                  accountName: advanceDetail.bank_account_name,
+                  amount: advanceDetail.amount,
+                  description: `Ung luong ${advanceDetail.full_name}`,
+                });
+                if (!qrUrl) return null;
+                return (
+                  <div className="mt-3 flex flex-col items-center gap-2 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3">
+                    <div className="text-[11px] font-semibold text-primary">Mã QR chuyển khoản</div>
+                    <img
+                      src={qrUrl}
+                      alt="QR chuyển khoản"
+                      className="h-52 w-52 rounded-lg"
+                      loading="lazy"
+                    />
+                    <div className="text-center text-[11px] text-muted-foreground">
+                      Quét mã để chuyển {formatMoney(advanceDetail.amount)} VND
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <AdvanceTextBlock label="Lý do ứng" value={advanceDetail.reason} />
+            {isAdmin ? (
+              <>
+                <div className="rounded-xl border bg-card p-3 text-sm">
+                  <Label className="text-[11px] text-muted-foreground">Ghi chú admin</Label>
+                  <Textarea
+                    rows={3}
+                    value={adminNoteDraft}
+                    onChange={(e) => setAdminNoteDraft(e.target.value)}
+                    className="mt-1"
+                    placeholder="Lý do duyệt/từ chối, ghi chú nội bộ…"
+                  />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <AdvanceDetailCell label="Họ tên" value={advanceDetail.full_name} />
-                <AdvanceDetailCell label="Mã NV" value={advanceDetail.employee_code} />
-                <AdvanceDetailCell label="Nhà máy" value={advanceDetail.company} />
-                <AdvanceDetailCell
-                  label="Người báo ứng"
-                  value={getAdvanceRequesterName(advanceDetail)}
-                />
-                <AdvanceDetailCell
-                  label="Thông tin người báo ứng"
-                  value={getAdvanceRequesterMeta(advanceDetail)}
-                />
-                <AdvanceDetailCell
-                  label="Số điện thoại"
-                  value={
-                    advanceDetail.phone ? (
-                      <a
-                        href={`tel:${advanceDetail.phone.replace(/\s/g, "")}`}
-                        className="font-semibold text-primary underline-offset-2 hover:underline"
-                      >
-                        {advanceDetail.phone}
-                      </a>
-                    ) : (
-                      "-"
-                    )
-                  }
-                />
-                <AdvanceDetailCell
-                  label="Trạng thái"
-                  value={STATUS_META[(advanceDetail.status || "pending") as AdvanceStatus].label}
-                />
-                <AdvanceDetailCell
-                  label="Thu hồi"
-                  value={
-                    RECOVERY_META[(advanceDetail.recovery_status || "none") as RecoveryStatus].label
-                  }
-                />
-                <AdvanceDetailCell label="Ngày gửi" value={formatDateTime(advanceDetail.created)} />
-                <AdvanceDetailCell
-                  label="Ngày xử lý"
-                  value={formatDateTime(advanceDetail.resolved_at)}
-                />
-                <AdvanceDetailCell
-                  label="Ngày thu hồi"
-                  value={formatDateTime(advanceDetail.recovered_at)}
-                />
-              </div>
-
-              <div className="rounded-xl border bg-card p-3 text-sm">
-                <div className="text-[11px] text-muted-foreground">Tài khoản nhận tiền</div>
-                <div className="mt-1 font-medium">{advanceDetail.bank_name || "-"}</div>
-                <div className="mt-0.5 text-muted-foreground">
-                  {advanceDetail.bank_account_number || "-"} -{" "}
-                  {advanceDetail.bank_account_name || "-"}
-                </div>
-              </div>
-
-              <AdvanceTextBlock label="Lý do ứng" value={advanceDetail.reason} />
-              {isAdmin ? (
-                <>
+                {advanceDetail.status === "accepted" && (
                   <div className="rounded-xl border bg-card p-3 text-sm">
-                    <Label className="text-[11px] text-muted-foreground">Ghi chú admin</Label>
+                    <Label className="text-[11px] text-muted-foreground">Ghi chú thu hồi</Label>
                     <Textarea
                       rows={3}
-                      value={adminNoteDraft}
-                      onChange={(e) => setAdminNoteDraft(e.target.value)}
+                      value={recoveryNoteDraft}
+                      onChange={(e) => setRecoveryNoteDraft(e.target.value)}
                       className="mt-1"
-                      placeholder="Lý do duyệt/từ chối, ghi chú nội bộ…"
+                      placeholder="Tình trạng thu hồi, lý do không thu hồi…"
                     />
                   </div>
-                  {advanceDetail.status === "accepted" && (
-                    <div className="rounded-xl border bg-card p-3 text-sm">
-                      <Label className="text-[11px] text-muted-foreground">Ghi chú thu hồi</Label>
-                      <Textarea
-                        rows={3}
-                        value={recoveryNoteDraft}
-                        onChange={(e) => setRecoveryNoteDraft(e.target.value)}
-                        className="mt-1"
-                        placeholder="Tình trạng thu hồi, lý do không thu hồi…"
-                      />
-                    </div>
-                  )}
-                  <Button
-                    className="w-full"
-                    disabled={
-                      savingNotes ||
-                      (adminNoteDraft === (advanceDetail.admin_note || "") &&
-                        recoveryNoteDraft === (advanceDetail.recovery_note || ""))
-                    }
-                    onClick={async () => {
-                      if (!advanceDetail) return;
-                      setSavingNotes(true);
-                      try {
-                        const payload: Partial<AdvanceRecord> = {
-                          admin_note: adminNoteDraft,
-                        };
-                        if (advanceDetail.status === "accepted") {
-                          payload.recovery_note = recoveryNoteDraft;
-                        }
-                        await updateRow(advanceDetail.id, payload);
-                        toast.success("Đã lưu ghi chú");
-                        setAdvanceDetail({ ...advanceDetail, ...payload });
-                        load();
-                      } catch (error: any) {
-                        toast.error(error?.message || "Lỗi lưu ghi chú");
-                      } finally {
-                        setSavingNotes(false);
+                )}
+                <Button
+                  className="w-full"
+                  disabled={
+                    savingNotes ||
+                    (adminNoteDraft === (advanceDetail.admin_note || "") &&
+                      recoveryNoteDraft === (advanceDetail.recovery_note || ""))
+                  }
+                  onClick={async () => {
+                    if (!advanceDetail) return;
+                    setSavingNotes(true);
+                    try {
+                      const payload: Partial<AdvanceRecord> = {
+                        admin_note: adminNoteDraft,
+                      };
+                      if (advanceDetail.status === "accepted") {
+                        payload.recovery_note = recoveryNoteDraft;
                       }
-                    }}
-                  >
-                    {savingNotes ? "Đang lưu…" : "Lưu ghi chú"}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <AdvanceTextBlock label="Ghi chú admin" value={advanceDetail.admin_note} />
-                  <AdvanceTextBlock label="Ghi chú thu hồi" value={advanceDetail.recovery_note} />
-                </>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </PageContainer>
+                      await updateRow(advanceDetail.id, payload);
+                      toast.success("Đã lưu ghi chú");
+                      setAdvanceDetail({ ...advanceDetail, ...payload });
+                      load();
+                    } catch (error: any) {
+                      toast.error(error?.message || "Lỗi lưu ghi chú");
+                    } finally {
+                      setSavingNotes(false);
+                    }
+                  }}
+                >
+                  {savingNotes ? "Đang lưu…" : "Lưu ghi chú"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <AdvanceTextBlock label="Ghi chú admin" value={advanceDetail.admin_note} />
+                <AdvanceTextBlock label="Ghi chú thu hồi" value={advanceDetail.recovery_note} />
+              </>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
 function AdvanceDetailCell({ label, value }: { label: string; value?: ReactNode }) {
   return (
-    <div className="rounded-xl border bg-card p-3">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className="mt-0.5 break-words text-sm font-semibold">{value || "-"}</div>
+    <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+      <div className="break-words text-xs font-medium">{value || "-"}</div>
     </div>
   );
 }

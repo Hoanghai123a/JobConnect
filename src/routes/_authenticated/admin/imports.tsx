@@ -15,7 +15,10 @@ import {
   getLatestEmploymentHistory,
   syncLegacyUserWorkFields,
   updateEmploymentHistory,
+  buildHistoryUid,
+  computeMaxHistoryUidSeq,
 } from "@/lib/employment";
+import { fetchAppSettings } from "@/lib/app-settings";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { pb, type UserRecord } from "@/lib/pocketbase";
@@ -84,6 +87,17 @@ function AdminImportsPage() {
         staffUsers.map((item) => [(item.username || "").toLowerCase(), item]),
       );
       const existingHistories = await fetchEmploymentHistories();
+      const appSettings = await fetchAppSettings();
+      const historyUidPrefix = (appSettings.account_code_prefix || "").trim();
+      const importNow = new Date();
+      const importYear = importNow.getFullYear();
+      const importMonth = importNow.getMonth() + 1;
+      let nextHistoryUidSeq = computeMaxHistoryUidSeq(
+        existingHistories,
+        historyUidPrefix,
+        importYear,
+        importMonth,
+      );
 
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer);
@@ -209,7 +223,10 @@ function AdminImportsPage() {
               note: "Quản trị viên nhập Excel cập nhật lịch sử đi làm",
             });
           } else {
-            const createdHistory = await createEmploymentHistory(payload);
+            nextHistoryUidSeq++;
+            const createdHistory = await createEmploymentHistory(payload, {
+              uid: buildHistoryUid(historyUidPrefix, importYear, importMonth, nextHistoryUidSeq),
+            });
             created++;
             existingHistories.push(createdHistory);
             await createStaffActionLog({
