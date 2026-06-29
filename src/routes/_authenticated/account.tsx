@@ -417,7 +417,76 @@ function UserProfileForm() {
       <Button onClick={save} disabled={saving} className="w-full">
         <Save className="h-4 w-4" /> Lưu thay đổi
       </Button>
+
+      <ChangePasswordSection />
     </>
+  );
+}
+
+function ChangePasswordSection() {
+  const { user } = useAuth();
+  const [oldPwd, setOldPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [changing, setChanging] = useState(false);
+
+  const changePassword = async () => {
+    if (!user) return;
+    if (!oldPwd || !newPwd || !confirmPwd) {
+      toast.error("Vui lòng nhập đầy đủ thông tin");
+      return;
+    }
+    if (newPwd.length < 8) {
+      toast.error("Mật khẩu mới tối thiểu 8 ký tự");
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      toast.error("Mật khẩu mới không khớp");
+      return;
+    }
+    setChanging(true);
+    try {
+      await pb.collection("users").update(user.id, {
+        oldPassword: oldPwd,
+        password: newPwd,
+        passwordConfirm: confirmPwd,
+        must_change_password: false,
+      });
+      toast.success("Đổi mật khẩu thành công");
+      setOldPwd("");
+      setNewPwd("");
+      setConfirmPwd("");
+    } catch (e: any) {
+      toast.error(e?.response?.message || e?.message || "Mật khẩu cũ không đúng");
+    } finally {
+      setChanging(false);
+    }
+  };
+
+  return (
+    <Section title="Đổi mật khẩu">
+      <TextField
+        label="Mật khẩu hiện tại"
+        type="password"
+        value={oldPwd}
+        onChange={setOldPwd}
+      />
+      <TextField
+        label="Mật khẩu mới (≥ 8 ký tự)"
+        type="password"
+        value={newPwd}
+        onChange={setNewPwd}
+      />
+      <TextField
+        label="Xác nhận mật khẩu mới"
+        type="password"
+        value={confirmPwd}
+        onChange={setConfirmPwd}
+      />
+      <Button onClick={changePassword} disabled={changing} className="w-full" variant="outline">
+        <KeyRound className="h-4 w-4" /> Đổi mật khẩu
+      </Button>
+    </Section>
   );
 }
 
@@ -443,6 +512,7 @@ function AdminUsersPanel() {
   const [adminPassword, setAdminPassword] = useState("");
   const [confirmingApproval, setConfirmingApproval] = useState(false);
   const [detailUser, setDetailUser] = useState<any>(null);
+  const [bulkStaffProcessing, setBulkStaffProcessing] = useState(false);
   const emptyNew = {
     full_name: "",
     phone: "",
@@ -499,29 +569,41 @@ function AdminUsersPanel() {
     setSelected(n);
   };
 
+  const formatUserRow = (u: any, i: number) => ({
+    STT: i + 1,
+    "Họ tên": u.full_name || "",
+    "Tên đăng nhập": u.username || "",
+    "Số điện thoại": u.phone || "",
+    "Giới tính": u.gender || "",
+    "CCCD": u.cccd || "",
+    "Ngày sinh": u.date_of_birth
+      ? new Date(u.date_of_birth).toLocaleDateString("vi-VN")
+      : "",
+    "Địa chỉ": u.address || "",
+    "Mã tài khoản": u.uid || "",
+    "Mã nhân viên": u.employee_code || "",
+    "Nhà máy": u.company || "",
+    "Ngân hàng": u.bank_name || "",
+    "Số tài khoản": u.bank_account_number || "",
+    "Tên tài khoản": u.bank_account_name || "",
+    "Vai trò": ROLE_LABELS[(u.role || "user") as Role],
+    "Ngày tạo": new Date(u.created).toLocaleDateString("vi-VN"),
+    "Trạng thái": isUserApproved(u) ? "Hoạt động" : "Vô hiệu hoá",
+  });
+
   const exportExcel = () => {
-    const rows = filtered.map((u, i) => ({
-      STT: i + 1,
-      "Họ tên": u.full_name || "",
-      "Tên đăng nhập": u.username || "",
-      "Số điện thoại": u.phone || "",
-      "Giới tính": u.gender || "",
-      "CCCD": u.cccd || "",
-      "Ngày sinh": u.date_of_birth
-        ? new Date(u.date_of_birth).toLocaleDateString("vi-VN")
-        : "",
-      "Địa chỉ": u.address || "",
-      "Mã tài khoản": u.uid || "",
-      "Mã nhân viên": u.employee_code || "",
-      "Nhà máy": u.company || "",
-      "Ngân hàng": u.bank_name || "",
-      "Số tài khoản": u.bank_account_number || "",
-      "Tên tài khoản": u.bank_account_name || "",
-      "Vai trò": ROLE_LABELS[(u.role || "user") as Role],
-      "Ngày tạo": new Date(u.created).toLocaleDateString("vi-VN"),
-      "Trạng thái": isUserApproved(u) ? "Hoạt động" : "Vô hiệu hoá",
-    }));
+    const rows = filtered.map(formatUserRow);
     exportToExcel("danh_sach_tai_khoan_" + Date.now(), { "Tài khoản": rows });
+  };
+
+  const exportAll = async () => {
+    try {
+      const all = await pb.collection("users").getFullList({ sort: "-created" });
+      const rows = all.map(formatUserRow);
+      exportToExcel("tat_ca_tai_khoan_" + Date.now(), { "Tài khoản": rows });
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi xuất dữ liệu");
+    }
   };
 
   const bulkDisable = async (disable: boolean) => {
@@ -554,6 +636,95 @@ function AdminUsersPanel() {
       load();
     } catch (e: any) {
       toast.error(e?.message || "Lỗi");
+    }
+  };
+
+  const downloadStaffTemplate = () => {
+    const sample = [
+      { "Tên đăng nhập": "nguyenvana", "Nhà máy": "Nhà máy A" },
+      { "Tên đăng nhập": "tranthib", "Nhà máy": "Nhà máy B" },
+    ];
+    exportToExcel("mau_chuyen_staff", { "Chuyển Staff": sample });
+  };
+
+  const onImportStaff = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f || !me) return;
+    setBulkStaffProcessing(true);
+    try {
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<any>(ws, { defval: "" });
+
+      const factories = await pb.collection("factories").getList(1, 300, { sort: "name" });
+      const factoryMap = new Map(factories.items.map((f: any) => [f.name, f.id]));
+
+      let ok = 0;
+      let fail = 0;
+      const errors: string[] = [];
+
+      for (const r of rows) {
+        const username = String(r["Tên đăng nhập"] || r["username"] || r["Mã tài khoản"] || r["uid"] || "").trim().toLowerCase();
+        const factoryName = String(r["Nhà máy"] || r["factory"] || "").trim();
+
+        if (!username || !factoryName) {
+          fail++;
+          errors.push((username || "???") + ": thiếu tên đăng nhập hoặc nhà máy");
+          continue;
+        }
+
+        const factoryId = factoryMap.get(factoryName);
+        if (!factoryId) {
+          fail++;
+          errors.push(username + ": không tìm thấy nhà máy \"" + factoryName + "\"");
+          continue;
+        }
+
+        try {
+          const userRes = await pb.collection("users").getList(1, 1, {
+            filter: `username="${escapePb(username)}" || uid="${escapePb(username)}"`,
+          });
+          if (!userRes.items[0]) {
+            fail++;
+            errors.push(username + ": không tìm thấy tài khoản");
+            continue;
+          }
+          const user = userRes.items[0];
+
+          await pb.collection("users").update(user.id, { role: "staff" });
+          await pb.collection("factory_managers").create({
+            staff: user.id,
+            factory: factoryId,
+            status: "active",
+            active_from: null,
+            active_to: null,
+            note: "Gán từ Excel bởi admin",
+          });
+          await createStaffActionLog({
+            actor: me as UserRecord,
+            targetUserId: user.id,
+            targetCollection: "users",
+            targetRecord: user.id,
+            action: "update",
+            after: { role: "staff", factory: factoryId },
+            note: "Admin chuyển sang staff và gán nhà máy (import Excel)",
+          });
+          ok++;
+        } catch (err: any) {
+          fail++;
+          errors.push(username + ": " + (err?.message || "lỗi"));
+        }
+      }
+
+      toast.success("Đã chuyển " + ok + " tài khoản sang Staff" + (fail ? ", " + fail + " lỗi" : ""));
+      if (errors.length) console.warn("Import staff errors:", errors);
+      load();
+    } catch (err: any) {
+      toast.error(err?.message || "File không hợp lệ");
+    } finally {
+      setBulkStaffProcessing(false);
     }
   };
 
@@ -732,6 +903,7 @@ function AdminUsersPanel() {
         approvalStatus: "approved",
         approved: "true",
         status: "active",
+        must_change_password: password === "12345678",
       });
       toast.success("Đã tạo tài khoản");
       setCreateOpen(false);
@@ -838,6 +1010,7 @@ function AdminUsersPanel() {
             role: "user",
             approvalStatus: "approved",
             status: "active",
+            must_change_password: password === "12345678",
           });
           ok++;
         } catch (err: any) {
@@ -910,6 +1083,21 @@ function AdminUsersPanel() {
           </Button>
           <Button size="sm" variant="outline" onClick={exportExcel} className="rounded-full">
             <FileDown className="h-3.5 w-3.5" /> Xuất
+          </Button>
+          <label className="inline-flex">
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={onImportStaff}
+              disabled={bulkStaffProcessing}
+            />
+            <span className="inline-flex h-9 cursor-pointer items-center gap-1 rounded-full border border-input bg-background px-3 text-xs font-medium hover:bg-accent">
+              <Building2 className="h-3.5 w-3.5" /> {bulkStaffProcessing ? "Đang xử lý..." : "Nhập Staff"}
+            </span>
+          </label>
+          <Button size="sm" variant="outline" onClick={downloadStaffTemplate} className="rounded-full">
+            <FileSpreadsheet className="h-3.5 w-3.5" /> Mẫu Staff
           </Button>
         </div>
       </div>
@@ -1217,6 +1405,7 @@ function AdminUsersPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
 
       {/* User detail dialog */}
       <Dialog open={!!detailUser} onOpenChange={(o) => !o && setDetailUser(null)}>

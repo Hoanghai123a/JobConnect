@@ -57,6 +57,15 @@ function LoginPage() {
         return;
       }
 
+      if (loggedInUser.must_change_password) {
+        toast.info("Vui lòng đổi mật khẩu để tiếp tục", {
+          id: toastId,
+          description: "Tài khoản đang sử dụng mật khẩu mặc định.",
+        });
+        nav({ to: "/force-change-password" });
+        return;
+      }
+
       const role = loggedInUser.role;
       toast.success(`Chào mừng ${name}`, {
         id: toastId,

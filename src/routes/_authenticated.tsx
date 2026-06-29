@@ -16,6 +16,9 @@ export const Route = createFileRoute("/_authenticated")({
     if (u && !isUserApproved(u)) {
       throw redirect({ to: "/pending" });
     }
+    if (u?.must_change_password && !location.pathname.includes("force-change-password")) {
+      throw redirect({ to: "/force-change-password" });
+    }
   },
   component: AuthLayout,
 });

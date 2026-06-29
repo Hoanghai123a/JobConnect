@@ -38,6 +38,7 @@ export interface UserRecord {
   gender?: string;
   date_of_birth?: string;
   address?: string;
+  must_change_password?: boolean;
 }
 
 /** Convert base64 dataURL to File (per HRJob skill rule #1) */

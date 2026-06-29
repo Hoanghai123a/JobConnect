@@ -21,6 +21,7 @@ import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedNewsRouteImport } from './routes/_authenticated/news'
 import { Route as AuthenticatedGuidesRouteImport } from './routes/_authenticated/guides'
 import { Route as AuthenticatedGardenRouteImport } from './routes/_authenticated/garden'
+import { Route as AuthenticatedForceChangePasswordRouteImport } from './routes/_authenticated/force-change-password'
 import { Route as AuthenticatedComplaintsRouteImport } from './routes/_authenticated/complaints'
 import { Route as AuthenticatedCheckAttendanceRouteImport } from './routes/_authenticated/check-attendance'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
@@ -105,6 +106,12 @@ const AuthenticatedGardenRoute = AuthenticatedGardenRouteImport.update({
   path: '/garden',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedForceChangePasswordRoute =
+  AuthenticatedForceChangePasswordRouteImport.update({
+    id: '/force-change-password',
+    path: '/force-change-password',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedComplaintsRoute = AuthenticatedComplaintsRouteImport.update({
   id: '/complaints',
   path: '/complaints',
@@ -246,6 +253,7 @@ export interface FileRoutesByFullPath {
   '/chat': typeof AuthenticatedChatRoute
   '/check-attendance': typeof AuthenticatedCheckAttendanceRoute
   '/complaints': typeof AuthenticatedComplaintsRoute
+  '/force-change-password': typeof AuthenticatedForceChangePasswordRoute
   '/garden': typeof AuthenticatedGardenRoute
   '/guides': typeof AuthenticatedGuidesRoute
   '/news': typeof AuthenticatedNewsRoute
@@ -282,6 +290,7 @@ export interface FileRoutesByTo {
   '/chat': typeof AuthenticatedChatRoute
   '/check-attendance': typeof AuthenticatedCheckAttendanceRoute
   '/complaints': typeof AuthenticatedComplaintsRoute
+  '/force-change-password': typeof AuthenticatedForceChangePasswordRoute
   '/garden': typeof AuthenticatedGardenRoute
   '/guides': typeof AuthenticatedGuidesRoute
   '/news': typeof AuthenticatedNewsRoute
@@ -318,6 +327,7 @@ export interface FileRoutesById {
   '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/check-attendance': typeof AuthenticatedCheckAttendanceRoute
   '/_authenticated/complaints': typeof AuthenticatedComplaintsRoute
+  '/_authenticated/force-change-password': typeof AuthenticatedForceChangePasswordRoute
   '/_authenticated/garden': typeof AuthenticatedGardenRoute
   '/_authenticated/guides': typeof AuthenticatedGuidesRoute
   '/_authenticated/news': typeof AuthenticatedNewsRoute
@@ -356,6 +366,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/check-attendance'
     | '/complaints'
+    | '/force-change-password'
     | '/garden'
     | '/guides'
     | '/news'
@@ -392,6 +403,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/check-attendance'
     | '/complaints'
+    | '/force-change-password'
     | '/garden'
     | '/guides'
     | '/news'
@@ -427,6 +439,7 @@ export interface FileRouteTypes {
     | '/_authenticated/chat'
     | '/_authenticated/check-attendance'
     | '/_authenticated/complaints'
+    | '/_authenticated/force-change-password'
     | '/_authenticated/garden'
     | '/_authenticated/guides'
     | '/_authenticated/news'
@@ -550,6 +563,13 @@ declare module '@tanstack/react-router' {
       path: '/garden'
       fullPath: '/garden'
       preLoaderRoute: typeof AuthenticatedGardenRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/force-change-password': {
+      id: '/_authenticated/force-change-password'
+      path: '/force-change-password'
+      fullPath: '/force-change-password'
+      preLoaderRoute: typeof AuthenticatedForceChangePasswordRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/complaints': {
@@ -760,6 +780,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedChatRoute: typeof AuthenticatedChatRoute
   AuthenticatedCheckAttendanceRoute: typeof AuthenticatedCheckAttendanceRoute
   AuthenticatedComplaintsRoute: typeof AuthenticatedComplaintsRoute
+  AuthenticatedForceChangePasswordRoute: typeof AuthenticatedForceChangePasswordRoute
   AuthenticatedGardenRoute: typeof AuthenticatedGardenRoute
   AuthenticatedGuidesRoute: typeof AuthenticatedGuidesRoute
   AuthenticatedNewsRoute: typeof AuthenticatedNewsRoute
@@ -780,6 +801,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedChatRoute: AuthenticatedChatRoute,
   AuthenticatedCheckAttendanceRoute: AuthenticatedCheckAttendanceRoute,
   AuthenticatedComplaintsRoute: AuthenticatedComplaintsRoute,
+  AuthenticatedForceChangePasswordRoute: AuthenticatedForceChangePasswordRoute,
   AuthenticatedGardenRoute: AuthenticatedGardenRoute,
   AuthenticatedGuidesRoute: AuthenticatedGuidesRoute,
   AuthenticatedNewsRoute: AuthenticatedNewsRoute,
