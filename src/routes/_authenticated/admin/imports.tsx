@@ -1,7 +1,8 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import * as XLSX from "xlsx";
-import { FileSpreadsheet, Upload, Workflow } from "lucide-react";
+import JSZip from "jszip";
+import { FileSpreadsheet, IdCard, Upload, Workflow } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,141 @@ function AdminImportsPage() {
   const currentUser = pb.authStore.record as UserRecord;
   const [importingHistories, setImportingHistories] = useState(false);
   const [lastResult, setLastResult] = useState<string>("");
+  const [importingCccd, setImportingCccd] = useState(false);
+  const [cccdResult, setCccdResult] = useState<string>("");
+  const [cccdZipFile, setCccdZipFile] = useState<File | null>(null);
+
+  const downloadCccdTemplate = () => {
+    exportToExcel("mau_import_cccd", {
+      Mapping: [
+        {
+          ten_file: "nguyen_van_a_truoc.jpg",
+          uid: "HL000001",
+          mat: "truoc",
+        },
+        {
+          ten_file: "nguyen_van_a_sau.jpg",
+          uid: "HL000001",
+          mat: "sau",
+        },
+      ],
+    });
+  };
+
+  const importCccd = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const excelFile = event.target.files?.[0];
+    event.target.value = "";
+    if (!excelFile || !cccdZipFile) {
+      toast.warning("Cần chọn cả file ZIP và file Excel mapping");
+      return;
+    }
+
+    setImportingCccd(true);
+    setCccdResult("");
+    try {
+      const allUsers = await pb
+        .collection("users")
+        .getFullList<UserRecord>({ sort: "full_name,username" });
+      const userByUid = new Map(
+        allUsers.filter((u) => u.uid).map((u) => [u.uid!.toLowerCase(), u]),
+      );
+      const userByUsername = new Map(
+        allUsers.filter((u) => u.username).map((u) => [u.username!.toLowerCase(), u]),
+      );
+
+      const excelBuffer = await excelFile.arrayBuffer();
+      const workbook = XLSX.read(excelBuffer);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+
+      const zipBuffer = await cccdZipFile.arrayBuffer();
+      const zip = await JSZip.loadAsync(zipBuffer);
+
+      let success = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      for (const [index, row] of rows.entries()) {
+        const rowNum = index + 2;
+        const fileName = pickValue(row, ["ten_file", "Tên file", "filename"]);
+        const uid = pickValue(row, ["uid", "Mã TK", "UID"]);
+        const username = pickValue(row, ["username", "Tên đăng nhập"]);
+        const side = pickValue(row, ["mat", "Mặt", "side"]).toLowerCase();
+
+        if (!fileName) {
+          errors.push(`Dòng ${rowNum}: thiếu tên file`);
+          failed++;
+          continue;
+        }
+
+        const resolvedSide =
+          side === "truoc" || side === "trước" || side === "front"
+            ? "cccd_front"
+            : side === "sau" || side === "back"
+              ? "cccd_back"
+              : null;
+        if (!resolvedSide) {
+          errors.push(`Dòng ${rowNum}: cột "mặt" phải là truoc/sau (nhận: "${side}")`);
+          failed++;
+          continue;
+        }
+
+        const user =
+          (uid ? userByUid.get(uid.toLowerCase()) : undefined) ||
+          (username ? userByUsername.get(username.toLowerCase()) : undefined);
+        if (!user) {
+          errors.push(`Dòng ${rowNum}: không tìm thấy user (uid="${uid}", username="${username}")`);
+          failed++;
+          continue;
+        }
+
+        const zipEntry = zip.file(fileName) || zip.file(fileName.replace(/\\/g, "/"));
+        if (!zipEntry) {
+          const allFiles = Object.keys(zip.files).filter((f) => !zip.files[f].dir);
+          const match = allFiles.find((f) => f.endsWith(fileName) || f.split("/").pop() === fileName);
+          if (!match) {
+            errors.push(`Dòng ${rowNum}: không tìm thấy "${fileName}" trong ZIP`);
+            failed++;
+            continue;
+          }
+          const blob = await zip.files[match].async("blob");
+          const fd = new FormData();
+          fd.append(resolvedSide, new File([blob], fileName, { type: "image/jpeg" }));
+          await pb.collection("users").update(user.id, fd);
+          success++;
+          continue;
+        }
+
+        const blob = await zipEntry.async("blob");
+        const fd = new FormData();
+        fd.append(resolvedSide, new File([blob], fileName, { type: "image/jpeg" }));
+        await pb.collection("users").update(user.id, fd);
+        success++;
+      }
+
+      const summary = `Ảnh CCCD: thành công ${success}, lỗi ${failed}`;
+      setCccdResult(summary);
+      toast.success(summary);
+
+      if (errors.length) {
+        toast.warning(`${errors.length} dòng lỗi — xem chi tiết bên dưới`);
+      }
+
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "users",
+        action: "import",
+        after: { success, failed, zip: cccdZipFile.name, excel: excelFile.name },
+        note: "Admin import ảnh CCCD hàng loạt từ ZIP",
+      });
+
+      setCccdZipFile(null);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Lỗi import ảnh CCCD");
+    } finally {
+      setImportingCccd(false);
+    }
+  };
 
   const downloadHistoriesTemplate = () => {
     exportToExcel("mau_import_lich_su_di_lam", {
@@ -324,6 +460,83 @@ function AdminImportsPage() {
           <li>- Import lịch sử không tạo UID và không tạo tài khoản mới.</li>
           <li>- Họ tên và CCCD trong lịch sử là snapshot riêng, không lấy cứng từ hồ sơ gốc.</li>
           <li>- Lần nhập này ghi nhật ký đầy đủ để quản trị viên tra cứu người thay đổi.</li>
+        </ul>
+      </Card>
+
+      <Card className="space-y-3 rounded-2xl p-4 shadow-soft">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <IdCard className="h-4 w-4 text-primary" /> Nhập ảnh CCCD hàng loạt
+        </div>
+        <div className="text-sm text-muted-foreground">
+          Upload 1 file ZIP chứa ảnh CCCD kèm 1 file Excel mapping (tên file → UID/username → mặt
+          trước/sau). Hệ thống sẽ tự gán ảnh cho từng user.
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="rounded-full" onClick={downloadCccdTemplate}>
+            <FileSpreadsheet className="h-4 w-4" /> Tải file mẫu mapping
+          </Button>
+        </div>
+        <div className="space-y-2">
+          <div className="space-y-1">
+            <div className="text-xs font-medium text-muted-foreground">Bước 1: Chọn file ZIP ảnh</div>
+            <label className="inline-flex">
+              <input
+                type="file"
+                accept=".zip"
+                className="hidden"
+                onChange={(e) => {
+                  setCccdZipFile(e.target.files?.[0] || null);
+                  e.target.value = "";
+                }}
+              />
+              <span className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full border border-border px-4 text-sm font-medium">
+                <Upload className="h-4 w-4" />{" "}
+                {cccdZipFile ? cccdZipFile.name : "Chọn file ZIP"}
+              </span>
+            </label>
+          </div>
+          <div className="space-y-1">
+            <div className="text-xs font-medium text-muted-foreground">
+              Bước 2: Chọn file Excel mapping rồi bắt đầu import
+            </div>
+            <label className="inline-flex">
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                disabled={!cccdZipFile || importingCccd}
+                onChange={importCccd}
+              />
+              <span
+                className={`inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-medium ${
+                  cccdZipFile
+                    ? "cursor-pointer bg-primary text-primary-foreground"
+                    : "cursor-not-allowed bg-muted text-muted-foreground"
+                }`}
+              >
+                <Upload className="h-4 w-4" />{" "}
+                {importingCccd ? "Đang import..." : "Chọn Excel mapping & Import"}
+              </span>
+            </label>
+          </div>
+        </div>
+      </Card>
+
+      {cccdResult && (
+        <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4 text-sm text-primary shadow-soft">
+          {cccdResult}
+        </Card>
+      )}
+
+      <Card className="space-y-2 rounded-2xl p-4 shadow-soft">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <IdCard className="h-4 w-4 text-primary" /> Quy tắc import ảnh CCCD
+        </div>
+        <ul className="space-y-1 text-sm text-muted-foreground">
+          <li>- File ZIP chứa ảnh, tên file tuỳ ý (VD: abc_truoc.jpg, xyz.png).</li>
+          <li>- File Excel mapping có 3 cột: ten_file, uid (hoặc username), mat (truoc/sau).</li>
+          <li>- Nếu user không tồn tại hoặc file không tìm thấy trong ZIP → bỏ qua dòng đó.</li>
+          <li>- Ảnh cũ sẽ bị ghi đè nếu user đã có ảnh CCCD trước đó.</li>
         </ul>
       </Card>
     </PageContainer>
