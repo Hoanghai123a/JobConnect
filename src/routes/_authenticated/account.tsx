@@ -1082,7 +1082,10 @@ function AdminUsersPanel() {
             <FileSpreadsheet className="h-3.5 w-3.5" /> Mẫu
           </Button>
           <Button size="sm" variant="outline" onClick={exportExcel} className="rounded-full">
-            <FileDown className="h-3.5 w-3.5" /> Xuất
+            <FileDown className="h-3.5 w-3.5" /> Xuất DS
+          </Button>
+          <Button size="sm" variant="outline" onClick={exportAll} className="rounded-full">
+            <FileDown className="h-3.5 w-3.5" /> Xuất tất cả
           </Button>
           <label className="inline-flex">
             <input
