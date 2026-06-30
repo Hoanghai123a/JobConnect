@@ -652,14 +652,18 @@ export function AdvancesPage() {
           items.map((row) => (
             <div
               key={row.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setAdvanceDetail(row)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setAdvanceDetail(row); } }}
               className={cn(
-                "list-card",
+                "list-card cursor-pointer",
                 toneBorder[STATUS_META[(row.status || "pending") as AdvanceStatus].tone],
               )}
             >
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold">{formatMoney(row.amount)}</div>
+                  <div className="text-sm font-bold text-primary">{formatMoney(row.amount)}</div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {new Date(row.created).toLocaleString("vi-VN")}
                   </div>
@@ -670,41 +674,24 @@ export function AdvancesPage() {
                   {STATUS_META[(row.status || "pending") as AdvanceStatus].label}
                 </StatusChip>
               </div>
-              <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed">{row.reason}</p>
-              {(row.bank_name || row.bank_account_number || row.bank_account_name) && (
-                <div className="mt-2 rounded-lg bg-muted/60 p-2 text-[12px] text-muted-foreground">
-                  Nhận tiền: {row.bank_name || "—"} · {row.bank_account_number || "—"} ·{" "}
-                  {row.bank_account_name || "—"}
-                </div>
-              )}
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                <StatusChip
-                  tone={
-                    RECOVERY_META[(row.recovery_status || "none") as RecoveryStatus].tone as any
-                  }
-                >
-                  {RECOVERY_META[(row.recovery_status || "none") as RecoveryStatus].label}
-                </StatusChip>
-              </div>
-              {(row.admin_note || row.recovery_note) && (
-                <div className="mt-2 space-y-2 rounded-lg bg-muted/60 p-2 text-[12px]">
-                  {row.admin_note && (
-                    <div>
-                      <div className="font-semibold text-muted-foreground">Phản hồi admin:</div>
-                      <div className="whitespace-pre-wrap">{row.admin_note}</div>
-                    </div>
-                  )}
-                  {row.recovery_note && (
-                    <div>
-                      <div className="font-semibold text-muted-foreground">Ghi chú thu hồi:</div>
-                      <div className="whitespace-pre-wrap">{row.recovery_note}</div>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           ))
         )}
+
+        <AdvanceDetailDialog
+          advanceDetail={advanceDetail}
+          setAdvanceDetail={setAdvanceDetail}
+          items={items}
+          isAdmin={false}
+          adminNoteDraft={adminNoteDraft}
+          setAdminNoteDraft={setAdminNoteDraft}
+          recoveryNoteDraft={recoveryNoteDraft}
+          setRecoveryNoteDraft={setRecoveryNoteDraft}
+          savingNotes={savingNotes}
+          setSavingNotes={setSavingNotes}
+          updateRow={updateRow}
+          load={load}
+        />
       </PageContainer>
     );
   }
