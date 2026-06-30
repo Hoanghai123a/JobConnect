@@ -296,7 +296,7 @@ export function AdvancesPage() {
     const res = await pb.collection("advances").getList(1, 500, {
       filter: joinPbFilters([
         `user="${escapePb(user.id)}"`,
-        '(status="pending" || (status="accepted" && (recovery_status="" || recovery_status="none")))',
+        '(status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))',
       ]),
       fields: "amount",
     });
