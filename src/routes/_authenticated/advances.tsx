@@ -33,7 +33,7 @@ import { markSeen } from "@/lib/seen";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { findActiveEmploymentByUser } from "@/lib/employment";
-import { VN_BANKS, buildVietQrUrl } from "@/lib/vn-banks";
+import { VN_BANKS, buildVietQrUrl, resolveBankName } from "@/lib/vn-banks";
 import { toast } from "sonner";
 import {
   Banknote,
@@ -227,11 +227,11 @@ export function AdvancesPage() {
   useEffect(() => {
     if (!selectedAdvanceUser) return;
     setBankForm({
-      bank_name: selectedAdvanceUser.bank_name || "",
+      bank_name: resolveBankName(selectedAdvanceUser.bank_name || ""),
       bank_account_number: selectedAdvanceUser.bank_account_number || "",
       bank_account_name: selectedAdvanceUser.bank_account_name || "",
     });
-  }, [selectedAdvanceUser]);
+  }, [selectedAdvanceUser?.id, selectedAdvanceUser?.bank_name, selectedAdvanceUser?.bank_account_number, selectedAdvanceUser?.bank_account_name]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -533,112 +533,114 @@ export function AdvancesPage() {
     return (
       <PageContainer title="Ứng lương" subtitle="Xin ứng lương & xem lịch sử">
         <AdvanceRulesCard rules={settings.advance_rules} />
-        <form onSubmit={submit} className="space-y-3">
-          <div className="card-soft space-y-3 rounded-2xl border bg-card p-4">
-            <button
-              type="button"
-              onClick={() => setShowProfile((v) => !v)}
-              className="flex w-full items-center justify-between rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm font-medium"
-            >
-              <span>Thông tin người báo ứng</span>
-              <span className="text-xs text-muted-foreground">
-                {showProfile ? "Thu gọn" : "Xem"}
-              </span>
-            </button>
-            {showProfile && (
+
+        <Button className="w-full" onClick={() => setShowProfile(true)}>
+          <Send className="h-4 w-4" /> Báo ứng mới
+        </Button>
+
+        <Dialog open={showProfile} onOpenChange={setShowProfile}>
+          <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+            <DialogHeader>
+              <DialogTitle>Báo ứng mới</DialogTitle>
+              <DialogDescription>Nhập thông tin và gửi yêu cầu ứng lương.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={(e) => { submit(e).then(() => setShowProfile(false)); }} className="space-y-3">
               <div className="space-y-3">
-                <ReadOnlyField label="Mã NV" value={selectedAdvanceUser?.employee_code} />
-                <ReadOnlyField label="Họ và tên" value={selectedAdvanceUser?.full_name} />
-                <ReadOnlyField label="Nhà máy đang làm" value={selectedAdvanceUser?.company} />
-                <ReadOnlyField label="Số điện thoại liên hệ" value={selectedAdvanceUser?.phone} />
-              </div>
-            )}
+                <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
+                  <div className="text-xs font-semibold text-muted-foreground">Thông tin người báo ứng</div>
+                  <ReadOnlyField label="Mã NV" value={selectedAdvanceUser?.employee_code} />
+                  <ReadOnlyField label="Họ và tên" value={selectedAdvanceUser?.full_name} />
+                  <ReadOnlyField label="Nhà máy đang làm" value={selectedAdvanceUser?.company} />
+                  <ReadOnlyField label="Số điện thoại liên hệ" value={selectedAdvanceUser?.phone} />
+                </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <StatCard
-                label="Hạn mức"
-                value={limit > 0 ? formatMoney(limit) : "Chưa cài"}
-                icon={Wallet}
-                tone="primary"
-              />
-              <StatCard
-                label="Đang dùng"
-                value={formatMoney(outstanding)}
-                icon={Banknote}
-                tone="warning"
-              />
-            </div>
-            <div className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-              Còn lại:{" "}
-              <span className="font-semibold text-foreground">
-                {limit > 0 ? formatMoney(available) : "—"}
-              </span>
-            </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <StatCard
+                    label="Hạn mức"
+                    value={limit > 0 ? formatMoney(limit) : "Chưa cài"}
+                    icon={Wallet}
+                    tone="primary"
+                  />
+                  <StatCard
+                    label="Đang dùng"
+                    value={formatMoney(outstanding)}
+                    icon={Banknote}
+                    tone="warning"
+                  />
+                </div>
+                <div className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  Còn lại:{" "}
+                  <span className="font-semibold text-foreground">
+                    {limit > 0 ? formatMoney(available) : "—"}
+                  </span>
+                </div>
 
-            <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
-              <div className="text-xs font-semibold text-muted-foreground">Tài khoản nhận tiền</div>
-              <div className="space-y-1">
-                <Label>Ngân hàng</Label>
-                <Select
-                  value={bankForm.bank_name || ""}
-                  onValueChange={(value) => setBankForm({ ...bankForm, bank_name: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn ngân hàng" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-72">
-                    {VN_BANKS.map((bank) => (
-                      <SelectItem key={bank.code} value={bank.name}>
-                        {bank.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
+                  <div className="text-xs font-semibold text-muted-foreground">Tài khoản nhận tiền</div>
+                  <div className="space-y-1">
+                    <Label>Ngân hàng</Label>
+                    <Select
+                      value={bankForm.bank_name || ""}
+                      onValueChange={(value) => setBankForm({ ...bankForm, bank_name: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Chọn ngân hàng" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {VN_BANKS.map((bank) => (
+                          <SelectItem key={bank.code} value={bank.name}>
+                            {bank.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label>Số TK</Label>
+                      <Input
+                        value={bankForm.bank_account_number}
+                        inputMode="numeric"
+                        onChange={(e) =>
+                          setBankForm({
+                            ...bankForm,
+                            bank_account_number: e.target.value.replace(/\D/g, ""),
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Tên TK</Label>
+                      <Input
+                        value={bankForm.bank_account_name}
+                        onChange={(e) =>
+                          setBankForm({ ...bankForm, bank_account_name: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-1">
-                  <Label>Số TK</Label>
+                  <Label>Số tiền xin ứng</Label>
                   <Input
-                    value={bankForm.bank_account_number}
+                    value={amountText}
+                    onChange={(e) => setAmountText(formatMoneyInput(e.target.value))}
                     inputMode="numeric"
-                    onChange={(e) =>
-                      setBankForm({
-                        ...bankForm,
-                        bank_account_number: e.target.value.replace(/\D/g, ""),
-                      })
-                    }
+                    placeholder="0"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>Tên TK</Label>
-                  <Input
-                    value={bankForm.bank_account_name}
-                    onChange={(e) =>
-                      setBankForm({ ...bankForm, bank_account_name: e.target.value })
-                    }
-                  />
+                  <Label>Lý do ứng</Label>
+                  <Textarea rows={4} value={reason} onChange={(e) => setReason(e.target.value)} />
                 </div>
+                <Button type="submit" className="w-full" disabled={sending}>
+                  <Send className="h-4 w-4" /> {sending ? "Đang gửi…" : "Gửi Ứng lương"}
+                </Button>
               </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label>Số tiền xin ứng</Label>
-              <Input
-                value={amountText}
-                onChange={(e) => setAmountText(formatMoneyInput(e.target.value))}
-                inputMode="numeric"
-                placeholder="0"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Lý do ứng</Label>
-              <Textarea rows={4} value={reason} onChange={(e) => setReason(e.target.value)} />
-            </div>
-            <Button type="submit" className="w-full" disabled={sending}>
-              <Send className="h-4 w-4" /> {sending ? "Đang gửi…" : "Gửi Ứng lương"}
-            </Button>
-          </div>
-        </form>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         <div className="flex items-center gap-2 px-1 pt-2">
           <History className="h-4 w-4 text-muted-foreground" />
