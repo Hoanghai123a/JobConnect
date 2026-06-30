@@ -32,6 +32,7 @@ import { escapePb } from "@/lib/delegations";
 import { markSeen } from "@/lib/seen";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { createStaffActionLog } from "@/lib/staff-log";
+import { findActiveEmploymentByUser } from "@/lib/employment";
 import { VN_BANKS, buildVietQrUrl } from "@/lib/vn-banks";
 import { toast } from "sonner";
 import {
@@ -54,14 +55,15 @@ export const Route = createFileRoute("/_authenticated/advances")({
   component: AdvancesPage,
 });
 
-type AdvanceStatus = "pending" | "accepted" | "rejected";
+type AdvanceStatus = "pending" | "recruiter_approved" | "accepted" | "rejected";
 type RecoveryStatus = "none" | "recovered" | "unrecoverable";
-type AdminTab = "pending" | "accepted" | "recovered" | "unrecoverable" | "rejected" | "all";
+type AdminTab = "pending" | "recruiter_approved" | "accepted" | "recovered" | "unrecoverable" | "rejected" | "all";
 
 type AdvanceRecord = {
   id: string;
   user?: string;
   requested_by?: string;
+  recruiter_id?: string;
   expand?: {
     requested_by?: UserRecord;
   };
@@ -77,20 +79,22 @@ type AdvanceRecord = {
   status?: AdvanceStatus;
   recovery_status?: RecoveryStatus;
   admin_note?: string;
+  recruiter_note?: string;
   recovery_note?: string;
   resolved_at?: string;
   recovered_at?: string;
   created: string;
 };
 
-const ADVANCE_TAB_FILTERS: Record<AdminTab, string> = {
+const ADVANCE_TAB_FILTERS = {
   pending: 'status="pending"',
+  recruiter_approved: 'status="recruiter_approved"',
   accepted: 'status="accepted" && (recovery_status="" || recovery_status="none")',
   recovered: 'status="accepted" && recovery_status="recovered"',
   unrecoverable: 'status="accepted" && recovery_status="unrecoverable"',
   rejected: 'status="rejected"',
   all: "",
-};
+} satisfies Record<AdminTab, string>;
 
 function joinPbFilters(parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" && ");
@@ -104,6 +108,7 @@ function containsAny(fields: string[], keyword: string) {
 
 function buildAdvanceFilter(input: {
   isAdmin: boolean;
+  isStaff: boolean;
   userId?: string;
   tab?: AdminTab;
   dateFrom?: string;
@@ -125,9 +130,26 @@ function buildAdvanceFilter(input: {
     ],
     input.search || "",
   );
+
+  let roleFilter = "";
+  if (!input.isAdmin && !input.isStaff && input.userId) {
+    roleFilter = `user="${escapePb(input.userId)}"`;
+  } else if (input.isStaff && !input.isAdmin && input.userId) {
+    roleFilter = `recruiter_id="${escapePb(input.userId)}"`;
+  }
+
+  let tabFilter = "";
+  if (input.tab) {
+    if (input.isAdmin && input.tab === "pending") {
+      tabFilter = 'status="recruiter_approved"';
+    } else {
+      tabFilter = ADVANCE_TAB_FILTERS[input.tab];
+    }
+  }
+
   return joinPbFilters([
-    !input.isAdmin && input.userId ? `user="${escapePb(input.userId)}"` : "",
-    input.tab ? ADVANCE_TAB_FILTERS[input.tab] : "",
+    roleFilter,
+    tabFilter,
     input.dateFrom ? `created>="${input.dateFrom} 00:00:00"` : "",
     input.dateTo ? `created<="${input.dateTo} 23:59:59"` : "",
     searchFilter,
@@ -141,9 +163,10 @@ async function countAdvances(filter: string) {
 
 const STATUS_META: Record<
   AdvanceStatus,
-  { label: string; tone: "warning" | "success" | "danger" }
+  { label: string; tone: "warning" | "success" | "danger" | "primary" }
 > = {
-  pending: { label: "Chờ duyệt", tone: "warning" },
+  pending: { label: "Chờ người tuyển duyệt", tone: "warning" },
+  recruiter_approved: { label: "Chờ admin duyệt", tone: "primary" },
   accepted: { label: "Đã tiếp nhận", tone: "success" },
   rejected: { label: "Đã từ chối", tone: "danger" },
 };
@@ -158,7 +181,7 @@ const RECOVERY_META: Record<
 };
 
 export function AdvancesPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isStaff } = useAuth();
   const { data: settings } = useAppSettings();
 
   const [items, setItems] = useState<AdvanceRecord[]>([]);
@@ -184,6 +207,7 @@ export function AdvancesPage() {
   const [outstandingAmount, setOutstandingAmount] = useState(0);
   const [stats, setStats] = useState<Record<AdminTab, number>>({
     pending: 0,
+    recruiter_approved: 0,
     accepted: 0,
     recovered: 0,
     unrecoverable: 0,
@@ -212,6 +236,7 @@ export function AdvancesPage() {
     try {
       const filter = buildAdvanceFilter({
         isAdmin,
+        isStaff,
         userId: user?.id,
         tab,
         dateFrom,
@@ -237,27 +262,29 @@ export function AdvancesPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, isAdmin, search, tab, user?.id]);
+  }, [dateFrom, dateTo, isAdmin, isStaff, search, tab, user?.id]);
 
   const loadStats = useCallback(async () => {
     const base = buildAdvanceFilter({
       isAdmin,
+      isStaff,
       userId: user?.id,
       dateFrom,
       dateTo,
       search,
     });
     const withBase = (statusFilter: string) => joinPbFilters([base, statusFilter]);
-    const [pending, accepted, recovered, unrecoverable, rejected, all] = await Promise.all([
+    const [pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all] = await Promise.all([
       countAdvances(withBase(ADVANCE_TAB_FILTERS.pending)),
+      countAdvances(withBase(ADVANCE_TAB_FILTERS.recruiter_approved)),
       countAdvances(withBase(ADVANCE_TAB_FILTERS.accepted)),
       countAdvances(withBase(ADVANCE_TAB_FILTERS.recovered)),
       countAdvances(withBase(ADVANCE_TAB_FILTERS.unrecoverable)),
       countAdvances(withBase(ADVANCE_TAB_FILTERS.rejected)),
       countAdvances(base),
     ]);
-    setStats({ pending, accepted, recovered, unrecoverable, rejected, all });
-  }, [dateFrom, dateTo, isAdmin, search, user?.id]);
+    setStats({ pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all });
+  }, [dateFrom, dateTo, isAdmin, isStaff, search, user?.id]);
 
   const loadOutstanding = useCallback(async () => {
     if (!user?.id || isAdmin) {
@@ -296,11 +323,12 @@ export function AdvancesPage() {
   const isActionable = (row: AdvanceRecord) => {
     const status = row.status || "pending";
     const recovery = row.recovery_status || "none";
+    if (isAdmin) return status === "recruiter_approved" || (status === "accepted" && recovery === "none");
     return status === "pending" || (status === "accepted" && recovery === "none");
   };
   const selectableFiltered = useMemo(() => filtered.filter(isActionable), [filtered]);
   const selectedPendingCount = filtered.filter(
-    (row) => selectedIds.has(row.id) && (row.status || "pending") === "pending",
+    (row) => selectedIds.has(row.id) && (row.status || "pending") === (isAdmin ? "recruiter_approved" : "pending"),
   ).length;
   const selectedRecoverableCount = filtered.filter(
     (row) =>
@@ -336,9 +364,12 @@ export function AdvancesPage() {
 
     setSending(true);
     try {
+      const employment = await findActiveEmploymentByUser(selectedAdvanceUser.id);
+      const recruiterId = employment?.recruiter_staff || "";
       await pb.collection("advances").create({
         user: selectedAdvanceUser.id,
         requested_by: user?.id || selectedAdvanceUser.id,
+        recruiter_id: recruiterId,
         employee_code: selectedAdvanceUser.employee_code || "",
         full_name: selectedAdvanceUser.full_name || "",
         company: selectedAdvanceUser.company || "",
@@ -366,9 +397,10 @@ export function AdvancesPage() {
     await pb.collection("advances").update(id, payload);
   };
 
-  const bulkUpdate = async (status: Exclude<AdvanceStatus, "pending">) => {
+  const bulkUpdate = async (status: Exclude<AdvanceStatus, "pending" | "recruiter_approved">) => {
+    const targetStatus = isAdmin ? "recruiter_approved" : "pending";
     const rows = filtered.filter(
-      (row) => selectedIds.has(row.id) && (row.status || "pending") === "pending",
+      (row) => selectedIds.has(row.id) && (row.status || "pending") === targetStatus,
     );
     if (!rows.length) return;
     try {
@@ -495,7 +527,7 @@ export function AdvancesPage() {
     exportToExcel(`ung_luong_${Date.now()}`, { "Ứng lương": rows });
   };
 
-  if (!isAdmin) {
+  if (!isAdmin && !isStaff) {
     return (
       <PageContainer title="Ứng lương" subtitle="Xin ứng lương & xem lịch sử">
         <AdvanceRulesCard rules={settings.advance_rules} />
@@ -622,13 +654,7 @@ export function AdvancesPage() {
               key={row.id}
               className={cn(
                 "list-card",
-                toneBorder[
-                  row.status === "accepted"
-                    ? "success"
-                    : row.status === "rejected"
-                      ? "danger"
-                      : "warning"
-                ],
+                toneBorder[STATUS_META[(row.status || "pending") as AdvanceStatus].tone],
               )}
             >
               <div className="flex items-start justify-between gap-2">
@@ -639,13 +665,7 @@ export function AdvancesPage() {
                   </div>
                 </div>
                 <StatusChip
-                  tone={
-                    (row.status === "accepted"
-                      ? "success"
-                      : row.status === "rejected"
-                        ? "danger"
-                        : "warning") as any
-                  }
+                  tone={STATUS_META[(row.status || "pending") as AdvanceStatus].tone as any}
                 >
                   {STATUS_META[(row.status || "pending") as AdvanceStatus].label}
                 </StatusChip>
@@ -689,6 +709,143 @@ export function AdvancesPage() {
     );
   }
 
+  if (isStaff && !isAdmin) {
+    const staffResolve = async (row: AdvanceRecord, newStatus: "recruiter_approved" | "rejected") => {
+      try {
+        const after = {
+          status: newStatus,
+          ...(newStatus === "rejected" ? { resolved_at: new Date().toISOString() } : {}),
+        };
+        await updateRow(row.id, after);
+        await createStaffActionLog({
+          actor: user,
+          targetUserId: row.user,
+          targetCollection: "advances",
+          targetRecord: row.id,
+          action: "update",
+          before: { status: row.status || "pending" },
+          after,
+          note: newStatus === "recruiter_approved" ? "Người tuyển chấp nhận ứng lương" : "Người tuyển từ chối ứng lương",
+        });
+        toast.success(newStatus === "recruiter_approved" ? "Đã chấp nhận" : "Đã từ chối");
+        load();
+      } catch (error: any) {
+        toast.error(error?.message || "Lỗi xử lý");
+      }
+    };
+
+    return (
+      <PageContainer title="Ứng lương" subtitle="Đơn ứng của NLĐ bạn tuyển">
+        <div className="grid grid-cols-2 gap-2">
+          <StatCard label="Chờ duyệt" value={stats.pending} icon={Clock} tone="warning" />
+          <StatCard label="Đã chuyển admin" value={stats.recruiter_approved} icon={Check} tone="primary" />
+          <StatCard label="Đã duyệt" value={stats.accepted} icon={Check} tone="success" />
+          <StatCard label="Từ chối" value={stats.rejected} icon={X} tone="danger" />
+        </div>
+
+        <FilterBar
+          search={search}
+          onSearchChange={setSearch}
+          placeholder="Tìm theo tên, mã NV…"
+          chips={[
+            { key: "pending", label: `Chờ duyệt (${stats.pending})` },
+            { key: "recruiter_approved", label: `Đã chuyển admin (${stats.recruiter_approved})` },
+            { key: "accepted", label: `Đã duyệt (${stats.accepted})` },
+            { key: "rejected", label: `Từ chối (${stats.rejected})` },
+            { key: "all", label: "Tất cả" },
+          ]}
+          activeChip={tab}
+          onChipChange={(v) => setTab(v as AdminTab)}
+        />
+
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon={Wallet}
+            title="Không có đơn ứng lương"
+            description="Đơn ứng của NLĐ bạn tuyển sẽ hiển thị tại đây."
+          />
+        ) : (
+          filtered.map((row) => {
+            const status = (row.status || "pending") as AdvanceStatus;
+            return (
+              <div
+                key={row.id}
+                className={cn(
+                  "list-card cursor-pointer px-3 py-2",
+                  toneBorder[STATUS_META[status].tone] || "",
+                )}
+                role="button"
+                tabIndex={0}
+                onClick={() => setAdvanceDetail(row)}
+                onKeyDown={(event) => {
+                  if (event.currentTarget !== event.target) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setAdvanceDetail(row);
+                  }
+                }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold">
+                      {row.employee_code || "-"} - {row.full_name || "-"}
+                    </div>
+                    <div className="text-sm font-bold text-primary">{formatMoney(row.amount)}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {new Date(row.created).toLocaleString("vi-VN")}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <StatusChip tone={STATUS_META[status].tone as any}>
+                      {STATUS_META[status].label}
+                    </StatusChip>
+                    {status === "pending" && (
+                      <div className="flex gap-1">
+                        <Button
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Chấp nhận"
+                          onClick={(e) => { e.stopPropagation(); staffResolve(row, "recruiter_approved"); }}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="destructive"
+                          className="h-7 w-7"
+                          title="Từ chối"
+                          onClick={(e) => { e.stopPropagation(); staffResolve(row, "rejected"); }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <p className="mt-1 truncate text-[12px] text-muted-foreground">{row.reason}</p>
+              </div>
+            );
+          })
+        )}
+
+        <AdvanceDetailDialog
+          advanceDetail={advanceDetail}
+          setAdvanceDetail={setAdvanceDetail}
+          items={filtered}
+          isAdmin={false}
+          adminNoteDraft={adminNoteDraft}
+          setAdminNoteDraft={setAdminNoteDraft}
+          recoveryNoteDraft={recoveryNoteDraft}
+          setRecoveryNoteDraft={setRecoveryNoteDraft}
+          savingNotes={savingNotes}
+          setSavingNotes={setSavingNotes}
+          updateRow={updateRow}
+          load={load}
+        />
+      </PageContainer>
+    );
+  }
+
   return (
     <PageContainer
       title="Ứng lương"
@@ -705,7 +862,7 @@ export function AdvancesPage() {
     >
       <AdvanceRulesCard rules={settings.advance_rules} />
       <div className="grid grid-cols-2 gap-2">
-        <StatCard label="Chờ duyệt" value={stats.pending} icon={Clock} tone="warning" />
+        <StatCard label="Chờ duyệt" value={stats.recruiter_approved} icon={Clock} tone="warning" />
         <StatCard label="Đã tiếp nhận" value={stats.accepted} icon={Check} tone="success" />
         <StatCard label="Từ chối" value={stats.rejected} icon={X} tone="danger" />
         <StatCard label="Đã thu hồi" value={stats.recovered} icon={ShieldCheck} tone="primary" />
@@ -717,7 +874,7 @@ export function AdvancesPage() {
         onSearchChange={setSearch}
         placeholder="Tìm theo tên, mã NV, số tiền…"
         chips={[
-          { key: "pending", label: `Chờ (${stats.pending})` },
+          { key: "pending", label: `Chờ duyệt (${stats.recruiter_approved})` },
           { key: "accepted", label: `Đã tiếp nhận (${stats.accepted})` },
           { key: "recovered", label: `Đã thu hồi (${stats.recovered})` },
           { key: "unrecoverable", label: `Không thu hồi (${stats.unrecoverable})` },
@@ -865,7 +1022,7 @@ export function AdvancesPage() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                {status === "pending" && (
+                {status === "recruiter_approved" && (
                   <>
                     <Button
                       size="icon"

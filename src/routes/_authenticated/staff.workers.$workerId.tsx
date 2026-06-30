@@ -399,6 +399,7 @@ function StaffWorkerDetailPage() {
     const payload = {
       user: workerUser.id,
       requested_by: viewer.id,
+      recruiter_id: viewer.id,
       employee_code: latestHistory.employee_code || workerUser.employee_code || "",
       full_name: latestHistory.worker_name_snapshot || workerUser.full_name || "",
       company: latestHistory.expand?.factory?.name || workerUser.company || "",
@@ -408,7 +409,7 @@ function StaffWorkerDetailPage() {
       bank_account_name: workerUser.bank_account_name || "",
       amount,
       reason: advanceReason.trim(),
-      status: "pending",
+      status: "recruiter_approved",
       recovery_status: "none",
     };
 

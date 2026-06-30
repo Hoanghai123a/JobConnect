@@ -6,6 +6,7 @@ interface AuthCtx {
   user: UserRecord | null;
   loading: boolean;
   isAdmin: boolean;
+  isStaff: boolean;
   login: (identity: string, password: string) => Promise<UserRecord>;
   logout: () => void;
   refresh: () => Promise<void>;
@@ -112,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         loading,
         isAdmin: user?.role === "admin",
+        isStaff: user?.role === "staff",
         login,
         logout,
         refresh,
