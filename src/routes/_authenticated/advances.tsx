@@ -71,6 +71,7 @@ type AdvanceRecord = {
   full_name: string;
   company: string;
   phone: string;
+  join_date?: string;
   bank_name?: string;
   bank_account_number?: string;
   bank_account_name?: string;
@@ -367,15 +368,24 @@ export function AdvancesPage() {
     setSending(true);
     try {
       const employment = await findActiveEmploymentByUser(selectedAdvanceUser.id);
-      const recruiterId = employment?.recruiter_staff || "";
+      if (!employment) {
+        toast.error("Bạn hiện không đang đi làm nhà máy nào, không thể báo ứng");
+        setSending(false);
+        return false;
+      }
+      const recruiterId = employment.recruiter_staff || "";
+      const factoryName = employment.expand?.factory?.name || selectedAdvanceUser.company || "";
+      const employeeCode = employment.employee_code || selectedAdvanceUser.employee_code || "";
+      const joinDate = employment.join_date || "";
       await pb.collection("advances").create({
         user: selectedAdvanceUser.id,
         requested_by: user?.id || selectedAdvanceUser.id,
         recruiter_id: recruiterId,
-        employee_code: selectedAdvanceUser.employee_code || "",
+        employee_code: employeeCode,
         full_name: selectedAdvanceUser.full_name || "",
-        company: selectedAdvanceUser.company || "",
+        company: factoryName,
         phone: selectedAdvanceUser.phone || "",
+        join_date: joinDate,
         bank_name: bankForm.bank_name || "",
         bank_account_number: bankForm.bank_account_number || "",
         bank_account_name: bankForm.bank_account_name || "",
