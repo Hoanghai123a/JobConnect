@@ -541,7 +541,7 @@ export function AdvancesPage() {
         </Button>
 
         <Dialog open={showProfile} onOpenChange={setShowProfile}>
-          <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+          <DialogContent className="inset-0 h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 rounded-none border-0 left-0 top-0 overflow-y-auto p-4">
             <DialogHeader>
               <DialogTitle>Báo ứng mới</DialogTitle>
               <DialogDescription>Nhập thông tin và gửi yêu cầu ứng lương.</DialogDescription>
