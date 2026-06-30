@@ -131,11 +131,10 @@ export async function fetchStaffWorkspace(viewer: UserRecord) {
     };
   }
 
-  const userRes = await pb.collection("users").getList(1, 500, {
+  const users = (await pb.collection("users").getFullList({
     filter: relationInFilter("id", userIds),
     sort: "full_name,username",
-  });
-  const users = userRes.items as unknown as UserRecord[];
+  })) as unknown as UserRecord[];
 
   const workerMap = new Map(users.map((item) => [item.id, item]));
 
