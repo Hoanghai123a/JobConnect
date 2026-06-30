@@ -3,6 +3,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { pb, type Role, type UserRecord, dataUrlToFile, fileUrl } from "@/lib/pocketbase";
 import { generateUid } from "@/lib/uid";
+import {
+  accountIdentityKey,
+  buildUserIdentityMaps,
+  findUserByUidInsensitive,
+  findUserByUsernameInsensitive,
+  normalizeAccountUsername,
+} from "@/lib/account-identity";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -474,12 +481,7 @@ function ChangePasswordSection() {
 
   return (
     <Section title="Đổi mật khẩu">
-      <TextField
-        label="Mật khẩu hiện tại"
-        type="password"
-        value={oldPwd}
-        onChange={setOldPwd}
-      />
+      <TextField label="Mật khẩu hiện tại" type="password" value={oldPwd} onChange={setOldPwd} />
       <TextField
         label="Mật khẩu mới (≥ 8 ký tự)"
         type="password"
@@ -585,10 +587,8 @@ function AdminUsersPanel() {
     "Tên đăng nhập": u.username || "",
     "Số điện thoại": u.phone || "",
     "Giới tính": u.gender || "",
-    "CCCD": u.cccd || "",
-    "Ngày sinh": u.date_of_birth
-      ? new Date(u.date_of_birth).toLocaleDateString("vi-VN")
-      : "",
+    CCCD: u.cccd || "",
+    "Ngày sinh": u.date_of_birth ? new Date(u.date_of_birth).toLocaleDateString("vi-VN") : "",
     "Địa chỉ": u.address || "",
     "Mã tài khoản": u.uid || "",
     "Mã nhân viên": u.employee_code || "",
@@ -670,6 +670,10 @@ function AdminUsersPanel() {
 
       const factories = await pb.collection("factories").getFullList({ sort: "name" });
       const factoryMap = new Map(factories.map((f: any) => [f.name, f.id]));
+      const allUsers = await pb.collection("users").getFullList<UserRecord>({
+        fields: "id,username,uid,role",
+      });
+      const { userByUid, userByUsername } = buildUserIdentityMaps(allUsers);
 
       let ok = 0;
       let fail = 0;
@@ -679,12 +683,11 @@ function AdminUsersPanel() {
       for (const r of rows) {
         const username = String(
           r["Tên đăng nhập"] || r["username"] || r["Mã tài khoản"] || r["uid"] || "",
-        )
-          .trim()
-          .toLowerCase();
+        ).trim();
+        const identityKey = accountIdentityKey(username);
         const factoryName = String(r["Nhà máy"] || r["factory"] || "").trim();
 
-        if (!username) {
+        if (!identityKey) {
           fail++;
           errors.push("???: thiếu tên đăng nhập");
           continue;
@@ -698,16 +701,12 @@ function AdminUsersPanel() {
         }
 
         try {
-          const userRes = await pb.collection("users").getList(1, 1, {
-            filter: `username="${escapePb(username)}" || uid="${escapePb(username)}"`,
-          });
-          if (!userRes.items[0]) {
+          const user = userByUsername.get(identityKey) || userByUid.get(identityKey);
+          if (!user) {
             fail++;
             errors.push(username + ": không tìm thấy tài khoản");
             continue;
           }
-          const user = userRes.items[0];
-
           await pb.collection("users").update(user.id, { role: "staff" });
           if (factoryId) {
             await pb.collection("factory_managers").create({
@@ -901,7 +900,7 @@ function AdminUsersPanel() {
   const createOne = async () => {
     const full_name = (newUser.full_name || "").trim();
     const phone = (newUser.phone || "").trim();
-    const username = (newUser.username || "").trim().toLowerCase();
+    const username = normalizeAccountUsername(newUser.username);
     const password = newUser.password || "";
     const manualUid = (newUser.uid || "").trim();
     const company = (newUser.company || "").trim();
@@ -915,6 +914,15 @@ function AdminUsersPanel() {
       return;
     }
     try {
+      const existingUser = await findUserByUsernameInsensitive(username);
+      if (existingUser) {
+        toast.error("Tên đăng nhập đã tồn tại");
+        return;
+      }
+      if (manualUid && (await findUserByUidInsensitive(manualUid))) {
+        toast.error("Mã tài khoản đã tồn tại");
+        return;
+      }
       const uid = await generateUid(manualUid || undefined);
       await pb.collection("users").create({
         full_name,
@@ -949,7 +957,7 @@ function AdminUsersPanel() {
         "Mật khẩu": "12345678",
         "Mã tài khoản": "",
         "Giới tính": "Nam",
-        "CCCD": "001099012345",
+        CCCD: "001099012345",
         "Ngày sinh": "1990-01-15",
         "Địa chỉ": "123 Đường ABC, Quận 1, TP.HCM",
         "Ngân hàng": "VCB",
@@ -963,7 +971,7 @@ function AdminUsersPanel() {
         "Mật khẩu": "12345678",
         "Mã tài khoản": "",
         "Giới tính": "Nữ",
-        "CCCD": "001099067890",
+        CCCD: "001099067890",
         "Ngày sinh": "20/03/1995",
         "Địa chỉ": "456 Đường XYZ, Quận 7, TP.HCM",
         "Ngân hàng": "TCB",
@@ -987,29 +995,46 @@ function AdminUsersPanel() {
       let ok = 0;
       let fail = 0;
       const errors: string[] = [];
+      const existingUsers = await pb.collection("users").getFullList<UserRecord>({
+        fields: "id,username,uid",
+      });
+      const existingUsernameKeys = new Set(
+        existingUsers.map((user) => accountIdentityKey(user.username)).filter(Boolean),
+      );
+      const existingUidKeys = new Set(
+        existingUsers.map((user) => accountIdentityKey(user.uid)).filter(Boolean),
+      );
       for (const r of rows) {
         const full_name = String(r["Họ tên"] || r["full_name"] || "").trim();
         const phone = String(r["Số điện thoại"] || r["phone"] || "").trim();
-        const username = String(r["Tên đăng nhập"] || r["username"] || "")
-          .trim()
-          .toLowerCase();
+        const username = String(r["Tên đăng nhập"] || r["username"] || "").trim();
+        const normalizedUsername = normalizeAccountUsername(username);
         const password = String(r["Mật khẩu"] || r["password"] || "").trim();
         const manualUid = String(r["Mã tài khoản"] || r["Mã TK"] || r["uid"] || "").trim();
         const gender = String(r["Giới tính"] || r["gender"] || "").trim();
         const cccd = String(r["CCCD"] || r["cccd"] || "").trim();
         const date_of_birth = normalizeDate(r["Ngày sinh"] ?? r["date_of_birth"] ?? "");
         const address = String(r["Địa chỉ"] || r["address"] || "").trim();
-        const bank_name = resolveBankName(
-          String(r["Ngân hàng"] || r["bank_name"] || "").trim(),
-        );
+        const bank_name = resolveBankName(String(r["Ngân hàng"] || r["bank_name"] || "").trim());
         const bank_account_number = String(
           r["Số tài khoản"] || r["Số TK"] || r["bank_account_number"] || "",
         ).trim();
         const bank_account_name = String(
           r["Tên tài khoản"] || r["Tên TK"] || r["bank_account_name"] || "",
         ).trim();
-        if (!full_name || !phone || !username || !password) {
+        if (!full_name || !phone || !normalizedUsername || !password) {
           fail++;
+          continue;
+        }
+        if (existingUsernameKeys.has(normalizedUsername)) {
+          fail++;
+          errors.push(normalizedUsername + ": tên đăng nhập đã tồn tại");
+          continue;
+        }
+        const manualUidKey = accountIdentityKey(manualUid);
+        if (manualUidKey && existingUidKeys.has(manualUidKey)) {
+          fail++;
+          errors.push(manualUid + ": mã tài khoản đã tồn tại");
           continue;
         }
         if (password.length < 8) {
@@ -1022,7 +1047,7 @@ function AdminUsersPanel() {
           await pb.collection("users").create({
             full_name,
             phone,
-            username,
+            username: normalizedUsername,
             uid,
             password,
             passwordConfirm: password,
@@ -1038,6 +1063,8 @@ function AdminUsersPanel() {
             status: "active",
             must_change_password: password === "12345678",
           });
+          existingUsernameKeys.add(normalizedUsername);
+          existingUidKeys.add(accountIdentityKey(uid));
           ok++;
         } catch (err: any) {
           fail++;
@@ -1350,10 +1377,7 @@ function AdminUsersPanel() {
             return (
               <div key={u.id} className={"list-card flex items-start gap-3 " + tone}>
                 <Checkbox checked={isSel} onCheckedChange={() => toggle(u.id)} className="mt-1" />
-                <div
-                  className="min-w-0 flex-1 cursor-pointer"
-                  onClick={() => setDetailUser(u)}
-                >
+                <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setDetailUser(u)}>
                   <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {"📞 " + (u.phone || "—")}
@@ -1600,12 +1624,13 @@ function AdminUsersPanel() {
         </DialogContent>
       </Dialog>
 
-
       {/* User detail dialog */}
       <Dialog open={!!detailUser} onOpenChange={(o) => !o && setDetailUser(null)}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
           <DialogHeader>
-            <DialogTitle>{detailUser?.full_name || detailUser?.username || "Tài khoản"}</DialogTitle>
+            <DialogTitle>
+              {detailUser?.full_name || detailUser?.username || "Tài khoản"}
+            </DialogTitle>
             <DialogDescription>Thông tin chi tiết tài khoản</DialogDescription>
           </DialogHeader>
           {detailUser && (
@@ -1630,10 +1655,7 @@ function AdminUsersPanel() {
               <DetailRow label="Ngân hàng" value={detailUser.bank_name} />
               <DetailRow label="Số tài khoản" value={detailUser.bank_account_number} />
               <DetailRow label="Tên tài khoản" value={detailUser.bank_account_name} />
-              <DetailRow
-                label="Vai trò"
-                value={ROLE_LABELS[(detailUser.role || "user") as Role]}
-              />
+              <DetailRow label="Vai trò" value={ROLE_LABELS[(detailUser.role || "user") as Role]} />
               <DetailRow
                 label="Trạng thái"
                 value={isUserApproved(detailUser) ? "Hoạt động" : "Vô hiệu hoá"}

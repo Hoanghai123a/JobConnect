@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Loader2, LogIn } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
+import { normalizeAccountIdentity } from "@/lib/account-identity";
 import { pb } from "@/lib/pocketbase";
 import { isProfileComplete } from "@/lib/profile";
 import { isUserApproved } from "@/lib/user-approval";
@@ -28,7 +29,7 @@ function LoginPage() {
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const normalizedIdentity = identity.trim();
+    const normalizedIdentity = normalizeAccountIdentity(identity);
 
     if (!normalizedIdentity || !password) {
       toast.warning("Thiếu thông tin đăng nhập", {
@@ -130,7 +131,9 @@ function LoginPage() {
       <div className="gradient-primary relative px-6 pb-16 pt-16 text-primary-foreground">
         <BackButton className="absolute left-4 top-4 text-primary-foreground active:bg-white/15" />
         <h1 className="text-3xl font-bold tracking-tight">Hoàng Long DJC</h1>
-        <p className="mt-1 text-sm text-primary-foreground/80">Kết nối người lao động và nhà tuyển dụng</p>
+        <p className="mt-1 text-sm text-primary-foreground/80">
+          Kết nối người lao động và nhà tuyển dụng
+        </p>
       </div>
 
       <form

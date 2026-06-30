@@ -2,6 +2,7 @@ import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-ro
 import { useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { generateUid } from "@/lib/uid";
+import { findUserByUsernameInsensitive, normalizeAccountUsername } from "@/lib/account-identity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -74,7 +75,7 @@ function RegisterPage() {
       return;
     }
 
-    const username = form.username.trim().toLowerCase();
+    const username = normalizeAccountUsername(form.username);
     if (!/^[a-z0-9_.]{4,30}$/.test(username)) {
       toast.error("Tên đăng nhập 4-30 ký tự, chỉ chữ/số/._");
       return;
@@ -87,12 +88,9 @@ function RegisterPage() {
 
     setLoading(true);
     try {
-      const userTaken = await pb
-        .collection("users")
-        .getList(1, 1, { filter: `username="${username}"` })
-        .catch(() => ({ items: [] as any[] }));
+      const userTaken = await findUserByUsernameInsensitive(username);
 
-      if (userTaken.items.length) {
+      if (userTaken) {
         throw new Error("Tên đăng nhập đã tồn tại");
       }
 

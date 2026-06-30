@@ -23,6 +23,7 @@ import { fetchAppSettings } from "@/lib/app-settings";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { pb, type UserRecord } from "@/lib/pocketbase";
+import { accountIdentityKey, buildUserIdentityMaps } from "@/lib/account-identity";
 
 export const Route = createFileRoute("/_authenticated/admin/imports")({
   beforeLoad: () => {
@@ -71,12 +72,7 @@ function AdminImportsPage() {
       const allUsers = await pb
         .collection("users")
         .getFullList<UserRecord>({ sort: "full_name,username" });
-      const userByUid = new Map(
-        allUsers.filter((u) => u.uid).map((u) => [u.uid!.toLowerCase(), u]),
-      );
-      const userByUsername = new Map(
-        allUsers.filter((u) => u.username).map((u) => [u.username!.toLowerCase(), u]),
-      );
+      const { userByUid, userByUsername } = buildUserIdentityMaps(allUsers);
 
       const excelBuffer = await excelFile.arrayBuffer();
       const workbook = XLSX.read(excelBuffer);
@@ -116,8 +112,8 @@ function AdminImportsPage() {
         }
 
         const user =
-          (uid ? userByUid.get(uid.toLowerCase()) : undefined) ||
-          (username ? userByUsername.get(username.toLowerCase()) : undefined);
+          (uid ? userByUid.get(accountIdentityKey(uid)) : undefined) ||
+          (username ? userByUsername.get(accountIdentityKey(username)) : undefined);
         if (!user) {
           errors.push(`Dòng ${rowNum}: không tìm thấy user (uid="${uid}", username="${username}")`);
           failed++;
@@ -127,7 +123,9 @@ function AdminImportsPage() {
         const zipEntry = zip.file(fileName) || zip.file(fileName.replace(/\\/g, "/"));
         if (!zipEntry) {
           const allFiles = Object.keys(zip.files).filter((f) => !zip.files[f].dir);
-          const match = allFiles.find((f) => f.endsWith(fileName) || f.split("/").pop() === fileName);
+          const match = allFiles.find(
+            (f) => f.endsWith(fileName) || f.split("/").pop() === fileName,
+          );
           if (!match) {
             errors.push(`Dòng ${rowNum}: không tìm thấy "${fileName}" trong ZIP`);
             failed++;
@@ -212,12 +210,9 @@ function AdminImportsPage() {
         factoryRows.map((item) => [(item.code || "").toLowerCase(), item]),
       );
       const mainHouseByName = new Map(mainHouseRows.map((item) => [item.name.toLowerCase(), item]));
-      const userByUsername = new Map(
-        allUsers.map((item) => [(item.username || "").toLowerCase(), item]),
-      );
-      const userByUid = new Map(allUsers.map((item) => [(item.uid || "").toLowerCase(), item]));
+      const { userByUid, userByUsername } = buildUserIdentityMaps(allUsers);
       const staffByUsername = new Map(
-        staffUsers.map((item) => [(item.username || "").toLowerCase(), item]),
+        staffUsers.map((item) => [accountIdentityKey(item.username), item]),
       );
       const existingHistories = await fetchEmploymentHistories();
       const appSettings = await fetchAppSettings();
@@ -278,8 +273,8 @@ function AdminImportsPage() {
         const note = pickValue(row, ["note", "Ghi chú"]);
 
         const user =
-          (uid ? userByUid.get(uid.toLowerCase()) : undefined) ||
-          (username ? userByUsername.get(username.toLowerCase()) : undefined);
+          (uid ? userByUid.get(accountIdentityKey(uid)) : undefined) ||
+          (username ? userByUsername.get(accountIdentityKey(username)) : undefined);
         const factory =
           factoryByName.get(factoryName.toLowerCase()) ||
           factoryByCode.get(factoryCode.toLowerCase());
@@ -475,7 +470,9 @@ function AdminImportsPage() {
         </div>
         <div className="space-y-2">
           <div className="space-y-1">
-            <div className="text-xs font-medium text-muted-foreground">Bước 1: Chọn file ZIP ảnh</div>
+            <div className="text-xs font-medium text-muted-foreground">
+              Bước 1: Chọn file ZIP ảnh
+            </div>
             <label className="inline-flex">
               <input
                 type="file"
@@ -487,8 +484,7 @@ function AdminImportsPage() {
                 }}
               />
               <span className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full border border-border px-4 text-sm font-medium">
-                <Upload className="h-4 w-4" />{" "}
-                {cccdZipFile ? cccdZipFile.name : "Chọn file ZIP"}
+                <Upload className="h-4 w-4" /> {cccdZipFile ? cccdZipFile.name : "Chọn file ZIP"}
               </span>
             </label>
           </div>
