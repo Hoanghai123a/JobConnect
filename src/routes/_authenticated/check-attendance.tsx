@@ -20,6 +20,7 @@ import {
 import { formatVND, type AttendanceRow, type RateBuckets, type Shift } from "@/lib/salary";
 import { exportToExcel } from "@/lib/excel";
 import { escapePb } from "@/lib/delegations";
+import { accountIdentityKey } from "@/lib/account-identity";
 import { markSeen } from "@/lib/seen";
 import {
   buildPayrollCalendarCells,
@@ -316,7 +317,10 @@ async function readAttendanceExcel(file: File): Promise<ParsedRow[]> {
         ot_hours: parseNumber(pick(row, ["Giờ TC", "TC", "ot_hours", "Giờ tăng ca"])),
       };
     })
-    .filter((row) => (row.uid || (row.employeeCode && row.company)) && (row.date || hasRateValues(row.rates)));
+    .filter(
+      (row) =>
+        (row.uid || (row.employeeCode && row.company)) && (row.date || hasRateValues(row.rates)),
+    );
 }
 
 async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
@@ -375,7 +379,8 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
     })
     .filter(
       (row) =>
-        (row.uid || (row.employeeCode && row.company)) && (row.wageLine || row.allowanceLine || row.deductionLine),
+        (row.uid || (row.employeeCode && row.company)) &&
+        (row.wageLine || row.allowanceLine || row.deductionLine),
     );
 }
 
@@ -511,7 +516,7 @@ function AdminCheckAttendance() {
       const employeeMap = new Map<string, UserRecord>();
       const userIdMap = new Map<string, UserRecord>();
       for (const user of allUsers) {
-        if (user.uid) userIdMap.set(user.uid, user);
+        if (user.uid) userIdMap.set(accountIdentityKey(user.uid), user);
         const employeeKey = employeeCompanyKey(user.employee_code, user.company);
         if (employeeKey) employeeMap.set(employeeKey, user);
       }
@@ -524,7 +529,7 @@ function AdminCheckAttendance() {
 
       for (const row of parsedRows) {
         const user = row.uid
-          ? userIdMap.get(row.uid)
+          ? userIdMap.get(accountIdentityKey(row.uid))
           : employeeMap.get(employeeCompanyKey(row.employeeCode, row.company));
         if (!user) {
           unmatched.add(`${row.uid || row.employeeCode} - ${row.company}`);
@@ -645,7 +650,7 @@ function AdminCheckAttendance() {
       const employeeMap = new Map<string, UserRecord>();
       const userIdMap = new Map<string, UserRecord>();
       for (const user of allUsers) {
-        if (user.uid) userIdMap.set(user.uid, user);
+        if (user.uid) userIdMap.set(accountIdentityKey(user.uid), user);
         const employeeKey = employeeCompanyKey(user.employee_code, user.company);
         if (employeeKey) employeeMap.set(employeeKey, user);
       }
@@ -664,7 +669,7 @@ function AdminCheckAttendance() {
 
       for (const row of parsedRows) {
         const user = row.uid
-          ? userIdMap.get(row.uid)
+          ? userIdMap.get(accountIdentityKey(row.uid))
           : employeeMap.get(employeeCompanyKey(row.employeeCode, row.company));
         if (!user) {
           unmatched.add(`${row.uid || row.employeeCode} - ${row.company}`);
@@ -1088,12 +1093,14 @@ function UserCheckAttendance() {
       const res = await pb.collection("check_attendance_items").getList(1, 100, {
         filter: `user="${escapePb(user.id)}"`,
         sort: "-created",
+        expand: "batch",
       });
       let salaryRes: unknown[] = [];
       try {
         const salaryList = await pb.collection("check_salary_items").getList(1, 100, {
           filter: `user="${escapePb(user.id)}"`,
           sort: "-created",
+          expand: "batch",
         });
         salaryRes = salaryList.items;
       } catch {
@@ -1212,7 +1219,7 @@ function UserCheckAttendance() {
                           : "border-border bg-card text-muted-foreground",
                       )}
                     >
-                      {item.month} · Lần {item.round_no}
+                      {item.month} · {item.expand?.batch?.note || `Lần ${item.round_no}`}
                     </button>
                   ))}
                 </div>
@@ -1223,13 +1230,8 @@ function UserCheckAttendance() {
                       <div className="gradient-accent p-4 text-accent-foreground">
                         <div className="text-xs uppercase opacity-80">Bảng check công</div>
                         <div className="mt-0.5 text-xl font-bold">
-                          {selected.month} · Lần {selected.round_no}
+                          {selected.month} · {selected.expand?.batch?.note || `Lần ${selected.round_no}`}
                         </div>
-                        {selected.expand?.batch?.note && (
-                          <div className="mt-1 text-xs opacity-80">
-                            {selected.expand.batch.note}
-                          </div>
-                        )}
                       </div>
                       <div className="grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
                         {visibleRateCells.map((cell) => (
@@ -1307,7 +1309,7 @@ function SalaryCheckPanel({
                 : "border-border bg-card text-muted-foreground",
             )}
           >
-            {item.month} · Lần {item.round_no}
+            {item.month} · {item.expand?.batch?.note || `Lần ${item.round_no}`}
           </button>
         ))}
       </div>
@@ -1318,11 +1320,8 @@ function SalaryCheckPanel({
             <div className="text-xs uppercase opacity-80">Bảng check lương</div>
             <div className="mt-0.5 text-xl font-bold">{formatVND(selectedTotals?.net || 0)}</div>
             <div className="mt-1 text-xs opacity-80">
-              {selected.month} · Lần {selected.round_no}
+              {selected.month} · {selected.expand?.batch?.note || `Lần ${selected.round_no}`}
             </div>
-            {selected.expand?.batch?.note && (
-              <div className="mt-1 text-xs opacity-80">{selected.expand.batch.note}</div>
-            )}
           </div>
 
           <div className="space-y-4 p-3">
