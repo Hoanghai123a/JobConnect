@@ -113,6 +113,7 @@ type SalaryItemRecord = {
 
 type UserRecord = {
   id: string;
+  uid?: string;
   full_name?: string;
   username?: string;
   phone?: string;
@@ -436,7 +437,7 @@ function AdminCheckAttendance() {
     exportToExcel(`mau_check_cong_${month}`, {
       "Bảng kiểm công": [
         {
-          uid: sampleUser?.id || "user_record_id",
+          uid: sampleUser?.uid || "HL000000",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Số điện thoại": sampleUser?.phone || "0900000000",
@@ -455,7 +456,7 @@ function AdminCheckAttendance() {
           "390%": 0,
         },
         {
-          uid: sampleUser?.id || "user_record_id",
+          uid: sampleUser?.uid || "HL000000",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Số điện thoại": sampleUser?.phone || "0900000000",
@@ -474,7 +475,7 @@ function AdminCheckAttendance() {
           "390%": "",
         },
         {
-          uid: sampleUser?.id || "user_record_id",
+          uid: sampleUser?.uid || "HL000000",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Số điện thoại": sampleUser?.phone || "0900000000",
@@ -510,7 +511,7 @@ function AdminCheckAttendance() {
       const employeeMap = new Map<string, UserRecord>();
       const userIdMap = new Map<string, UserRecord>();
       for (const user of allUsers) {
-        userIdMap.set(user.id, user);
+        if (user.uid) userIdMap.set(user.uid, user);
         const employeeKey = employeeCompanyKey(user.employee_code, user.company);
         if (employeeKey) employeeMap.set(employeeKey, user);
       }
@@ -593,7 +594,7 @@ function AdminCheckAttendance() {
     exportToExcel(`mau_check_luong_${salaryMonth}`, {
       "Bảng kiểm lương": [
         {
-          uid: sampleUser?.id || "user_record_id",
+          uid: sampleUser?.uid || "HL000000",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
@@ -610,7 +611,7 @@ function AdminCheckAttendance() {
           "Tiền khấu trừ": 525000,
         },
         {
-          uid: sampleUser?.id || "user_record_id",
+          uid: sampleUser?.uid || "HL000000",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
@@ -644,7 +645,7 @@ function AdminCheckAttendance() {
       const employeeMap = new Map<string, UserRecord>();
       const userIdMap = new Map<string, UserRecord>();
       for (const user of allUsers) {
-        userIdMap.set(user.id, user);
+        if (user.uid) userIdMap.set(user.uid, user);
         const employeeKey = employeeCompanyKey(user.employee_code, user.company);
         if (employeeKey) employeeMap.set(employeeKey, user);
       }
