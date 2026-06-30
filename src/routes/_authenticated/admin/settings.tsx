@@ -44,6 +44,7 @@ import {
   CalendarDays,
   ChevronDown,
   MapPin,
+  Search,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({
@@ -381,6 +382,35 @@ function FactoriesTab() {
   const [areasOpen, setAreasOpen] = useState(true);
   const [mainHousesOpen, setMainHousesOpen] = useState(true);
   const [managingFactory, setManagingFactory] = useState<Factory | null>(null);
+  const [factorySearch, setFactorySearch] = useState("");
+  const [areaSearch, setAreaSearch] = useState("");
+  const [mainHouseSearch, setMainHouseSearch] = useState("");
+
+  const filteredFactories = items.filter((f) => {
+    if (!factorySearch.trim()) return true;
+    const q = factorySearch.toLowerCase();
+    return (
+      f.name.toLowerCase().includes(q) ||
+      (f.address || "").toLowerCase().includes(q) ||
+      (f.hotline || "").toLowerCase().includes(q)
+    );
+  });
+
+  const filteredAreas = areas.filter((a) => {
+    if (!areaSearch.trim()) return true;
+    const q = areaSearch.toLowerCase();
+    return a.name.toLowerCase().includes(q) || (a.note || "").toLowerCase().includes(q);
+  });
+
+  const filteredMainHouses = mainHouses.filter((h) => {
+    if (!mainHouseSearch.trim()) return true;
+    const q = mainHouseSearch.toLowerCase();
+    return (
+      h.name.toLowerCase().includes(q) ||
+      (h.address || "").toLowerCase().includes(q) ||
+      (h.hotline || "").toLowerCase().includes(q)
+    );
+  });
 
   const loadFactories = async () => {
     setLoading(true);
@@ -643,6 +673,17 @@ function FactoriesTab() {
           </div>
 
           <CollapsibleContent className="mt-3 space-y-3">
+            {items.length > 3 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="rounded-xl pl-9 text-xs"
+                  placeholder="Tìm nhà máy..."
+                  value={factorySearch}
+                  onChange={(e) => setFactorySearch(e.target.value)}
+                />
+              </div>
+            )}
             {loading && (
               <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
             )}
@@ -651,7 +692,12 @@ function FactoriesTab() {
                 Chưa có nhà máy. Bấm nút + để thêm.
               </div>
             )}
-            {items.map((f) => (
+            {!loading && items.length > 0 && filteredFactories.length === 0 && (
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                Không tìm thấy nhà máy phù hợp
+              </div>
+            )}
+            {filteredFactories.map((f) => (
               <div
                 key={f.id}
                 className="list-card border-l-[color:var(--status-info)] flex items-start gap-3"
@@ -804,6 +850,17 @@ function FactoriesTab() {
           </div>
 
           <CollapsibleContent className="mt-3 space-y-3">
+            {areas.length > 3 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="rounded-xl pl-9 text-xs"
+                  placeholder="Tìm khu vực..."
+                  value={areaSearch}
+                  onChange={(e) => setAreaSearch(e.target.value)}
+                />
+              </div>
+            )}
             {areasLoading && (
               <div className="py-6 text-center text-sm text-muted-foreground">
                 Đang tải khu vực...
@@ -814,7 +871,12 @@ function FactoriesTab() {
                 Chưa có khu vực. Bấm nút + để thêm.
               </div>
             )}
-            {areas.map((area) => (
+            {!areasLoading && areas.length > 0 && filteredAreas.length === 0 && (
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                Không tìm thấy khu vực phù hợp
+              </div>
+            )}
+            {filteredAreas.map((area) => (
               <div
                 key={area.id}
                 className="list-card border-l-[color:var(--status-success)] flex items-start gap-3"
@@ -909,6 +971,17 @@ function FactoriesTab() {
           </div>
 
           <CollapsibleContent className="mt-3 space-y-3">
+            {mainHouses.length > 3 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="rounded-xl pl-9 text-xs"
+                  placeholder="Tìm nhà chính..."
+                  value={mainHouseSearch}
+                  onChange={(e) => setMainHouseSearch(e.target.value)}
+                />
+              </div>
+            )}
             {mainHousesLoading && (
               <div className="py-6 text-center text-sm text-muted-foreground">
                 Đang tải nhà chính...
@@ -919,7 +992,12 @@ function FactoriesTab() {
                 Chưa có nhà chính. Bấm nút + để thêm.
               </div>
             )}
-            {mainHouses.map((house) => (
+            {!mainHousesLoading && mainHouses.length > 0 && filteredMainHouses.length === 0 && (
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                Không tìm thấy nhà chính phù hợp
+              </div>
+            )}
+            {filteredMainHouses.map((house) => (
               <div
                 key={house.id}
                 className="list-card border-l-[color:var(--status-warning)] flex items-start gap-3"

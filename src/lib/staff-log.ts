@@ -46,7 +46,7 @@ export async function createStaffActionLog(input: StaffActionLogInput) {
   await pb.collection("staff_action_logs").create({
     actor: input.actor.id,
     actor_role_snapshot: input.actor.role || "user",
-    target_user: input.targetUserId || null,
+    target_user: input.targetUserId || "",
     target_collection: input.targetCollection,
     target_record: input.targetRecord || "",
     action: input.action,
