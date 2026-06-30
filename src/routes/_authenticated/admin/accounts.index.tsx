@@ -1,42 +1,23 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Building2, ClipboardList, ShieldCheck } from "lucide-react";
+import { ClipboardList, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/ui/status-chip";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { pb, type Role, type UserRecord } from "@/lib/pocketbase";
-import { createStaffActionLog } from "@/lib/staff-log";
-import { fetchFactoryManagers } from "@/lib/factories";
+import { pb, type UserRecord } from "@/lib/pocketbase";
 import { escapePb } from "@/lib/delegations";
-
-const ROLE_LABELS: Record<Role, string> = {
-  admin: "Quản trị viên",
-  staff: "Staff",
-  user: "Người dùng",
-};
-
-const ROLE_TONES: Record<Role, "info" | "success" | "neutral"> = {
-  admin: "info",
-  staff: "success",
-  user: "neutral",
-};
 
 function userSearchFilter(search: string) {
   const q = escapePb(search.trim());
-  if (!q) return "";
-  return `(${["full_name", "username", "phone", "employee_code", "company", "role"]
+  const roleFilter = '(role="user" || role="")';
+  if (!q) return roleFilter;
+  const searchFilter = `(${["full_name", "username", "phone", "employee_code", "company"]
     .map((field) => `${field}~"${q}"`)
     .join(" || ")})`;
+  return `${roleFilter} && ${searchFilter}`;
 }
 
 export const Route = createFileRoute("/_authenticated/admin/accounts/")({
@@ -44,31 +25,21 @@ export const Route = createFileRoute("/_authenticated/admin/accounts/")({
 });
 
 function AdminAccountsPage() {
-  const currentUser = pb.authStore.record as UserRecord;
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState<UserRecord[]>([]);
-  const [assignmentCounts, setAssignmentCounts] = useState<Record<string, number>>({});
 
   const load = async () => {
     setLoading(true);
     try {
-      const [userRows, assignmentRows] = await Promise.all([
-        pb
-          .collection("users")
-          .getList<UserRecord>(1, 500, {
-            filter: userSearchFilter(search),
-            sort: "full_name,username",
-          })
-          .then((res) => res.items),
-        fetchFactoryManagers(),
-      ]);
+      const userRows = await pb
+        .collection("users")
+        .getList<UserRecord>(1, 500, {
+          filter: userSearchFilter(search),
+          sort: "full_name,username",
+        })
+        .then((res) => res.items);
       setUsers(userRows);
-      const counts: Record<string, number> = {};
-      for (const row of assignmentRows) {
-        counts[row.staff] = (counts[row.staff] || 0) + 1;
-      }
-      setAssignmentCounts(counts);
     } catch (error: any) {
       toast.error(error?.message || "Không tải được dữ liệu tài khoản");
     } finally {
@@ -83,44 +54,12 @@ function AdminAccountsPage() {
 
   const filteredUsers = users;
 
-  const roleSummary = useMemo(
-    () => ({
-      admin: users.filter((item) => item.role === "admin").length,
-      staff: users.filter((item) => item.role === "staff").length,
-      user: users.filter((item) => (item.role || "user") === "user").length,
-    }),
-    [users],
-  );
-
-  const updateRole = async (targetUser: UserRecord, nextRole: Role) => {
-    if (targetUser.id === currentUser.id && nextRole !== "admin") {
-      toast.warning("Không thể tự hạ quyền tài khoản admin đang đăng nhập");
-      return;
-    }
-
-    try {
-      await pb.collection("users").update(targetUser.id, { role: nextRole });
-      await createStaffActionLog({
-        actor: currentUser,
-        targetUserId: targetUser.id,
-        targetCollection: "users",
-        targetRecord: targetUser.id,
-        action: "update",
-        before: { role: targetUser.role || "user" },
-        after: { role: nextRole },
-        note: "Admin cập nhật vai trò tài khoản",
-      });
-      toast.success("Đã cập nhật vai trò");
-      await load();
-    } catch (error: any) {
-      toast.error(error?.message || "Không cập nhật được vai trò");
-    }
-  };
+  const userCount = useMemo(() => users.length, [users]);
 
   return (
     <PageContainer
-      title="Tài khoản"
-      subtitle="Danh sách 3 role admin, staff, user. Nhật ký và cấp quyền quản lý nhà máy nằm ở hai trang riêng."
+      title="Tài khoản người lao động"
+      subtitle="Quản lý tài khoản NLĐ. Staff & Admin được quản lý ở trang riêng."
     >
       <div className="grid grid-cols-2 gap-2">
         <Link
@@ -138,16 +77,16 @@ function AdminAccountsPage() {
           </span>
         </Link>
         <Link
-          to="/admin/accounts/factories"
+          to="/admin/staff"
           className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-3 py-3 text-left text-sm font-medium shadow-soft"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Building2 className="h-4 w-4" />
+            <ShieldCheck className="h-4 w-4" />
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold">Cấp quyền QLNM</span>
+            <span className="block truncate text-sm font-semibold">Staff & Admin</span>
             <span className="block text-[11px] font-normal text-muted-foreground">
-              Gán nhà máy cho staff
+              Tạo, quản lý tài khoản staff
             </span>
           </span>
         </Link>
@@ -164,12 +103,8 @@ function AdminAccountsPage() {
 
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-sm font-semibold">Tài khoản hệ thống</div>
-          <div className="flex flex-wrap gap-2">
-            <StatusChip tone="info">{roleSummary.admin} admin</StatusChip>
-            <StatusChip tone="success">{roleSummary.staff} staff</StatusChip>
-            <StatusChip tone="neutral">{roleSummary.user} user</StatusChip>
-          </div>
+          <div className="text-sm font-semibold">Người lao động</div>
+          <StatusChip tone="neutral">{userCount} tài khoản</StatusChip>
         </div>
 
         {loading ? (
@@ -184,7 +119,6 @@ function AdminAccountsPage() {
           />
         ) : (
           filteredUsers.map((item) => {
-            const factoryCount = assignmentCounts[item.id] || 0;
             return (
               <Card key={item.id} className="space-y-3 rounded-2xl p-4 shadow-soft">
                 <div className="flex items-start justify-between gap-3">
@@ -197,47 +131,10 @@ function AdminAccountsPage() {
                       {item.phone || "chưa có số điện thoại"}
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1.5">
-                    <StatusChip tone={ROLE_TONES[item.role || "user"]}>
-                      {ROLE_LABELS[item.role || "user"]}
-                    </StatusChip>
-                    {item.role === "staff" && (
-                      <StatusChip tone={factoryCount ? "info" : "neutral"}>
-                        {factoryCount ? `${factoryCount} nhà máy` : "Chưa gán nhà máy"}
-                      </StatusChip>
-                    )}
-                  </div>
+                  <StatusChip tone="neutral">
+                    Người dùng
+                  </StatusChip>
                 </div>
-
-                <Select
-                  value={item.role || "user"}
-                  onValueChange={(value: Role) => updateRole(item, value)}
-                  disabled={item.id === currentUser.id}
-                >
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue placeholder="Chọn vai trò" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">Quản trị viên</SelectItem>
-                    <SelectItem value="staff">Staff</SelectItem>
-                    <SelectItem value="user">Người dùng</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {item.role === "staff" && (
-                  <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                    <span>Xem và thay đổi nhà máy phụ trách ở trang cấp quyền QLNM.</span>
-                    <Link to="/admin/accounts/factories" className="font-medium text-primary">
-                      Mở trang cấp quyền →
-                    </Link>
-                  </div>
-                )}
-
-                {item.id === currentUser.id && (
-                  <div className="text-[11px] text-muted-foreground">
-                    Tài khoản đang đăng nhập được khóa chỉnh role để tránh mất quyền quản trị.
-                  </div>
-                )}
               </Card>
             );
           })

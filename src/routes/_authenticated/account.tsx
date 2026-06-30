@@ -79,6 +79,7 @@ import {
   FileSpreadsheet,
   Building2,
   Plus,
+  Users,
   CalendarRange,
   Pencil,
   CircleX,
@@ -167,19 +168,25 @@ function AccountPage() {
 
         {isAdmin ? (
           <Tabs defaultValue="admin" className="space-y-3">
-            <TabsList className="grid h-10 w-full grid-cols-3 rounded-2xl">
+            <TabsList className="grid h-10 w-full grid-cols-4 rounded-2xl">
               <TabsTrigger value="admin" className="rounded-xl text-xs">
-                Quản trị tài khoản
+                Tài khoản NLĐ
+              </TabsTrigger>
+              <TabsTrigger value="staff" className="rounded-xl text-xs">
+                Staff & Admin
               </TabsTrigger>
               <TabsTrigger value="factories" className="rounded-xl text-xs">
                 QLNM
               </TabsTrigger>
               <TabsTrigger value="profile" className="rounded-xl text-xs">
-                Thông tin của tôi
+                Thông tin
               </TabsTrigger>
             </TabsList>
             <TabsContent value="admin" className="mt-0">
               <AdminUsersPanel />
+            </TabsContent>
+            <TabsContent value="staff" className="mt-0">
+              <StaffPanel />
             </TabsContent>
             <TabsContent value="factories" className="mt-0">
               <FactoryAssignmentsPanel />
@@ -1692,6 +1699,423 @@ function formatDateRange(record: FactoryManagerRecord) {
   const from = record.active_from || "Ngay lập tức";
   const to = record.active_to || "Không giới hạn";
   return `${from} -> ${to}`;
+}
+
+const STAFF_DEFAULT_PASSWORD = "nv123456";
+
+function staffSearchFilter(search: string) {
+  const q = escapePb(search.trim());
+  const roleFilter = '(role="staff" || role="admin")';
+  if (!q) return roleFilter;
+  const searchFilter = `(${["full_name", "username", "phone", "address"]
+    .map((field) => `${field}~"${q}"`)
+    .join(" || ")})`;
+  return `${roleFilter} && ${searchFilter}`;
+}
+
+function StaffPanel() {
+  const { user: currentUser } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
+  const [factories, setFactories] = useState<FactoryRecord[]>([]);
+  const [assignmentCounts, setAssignmentCounts] = useState<Record<string, number>>({});
+  const [createOpen, setCreateOpen] = useState(false);
+  const [importingStaff, setImportingStaff] = useState(false);
+  const [importResult, setImportResult] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [userRows, factoryRows, assignmentRows] = await Promise.all([
+        pb
+          .collection("users")
+          .getList<UserRecord>(1, 500, {
+            filter: staffSearchFilter(search),
+            sort: "full_name,username",
+          })
+          .then((res) => res.items),
+        fetchFactories(),
+        fetchFactoryManagers(),
+      ]);
+      setStaffUsers(userRows);
+      setFactories(factoryRows);
+      const counts: Record<string, number> = {};
+      for (const row of assignmentRows) {
+        if (isFactoryAssignmentActive(row)) {
+          counts[row.staff] = (counts[row.staff] || 0) + 1;
+        }
+      }
+      setAssignmentCounts(counts);
+    } catch (error: any) {
+      toast.error(error?.message || "Không tải được dữ liệu staff");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, [search]);
+
+  const summary = useMemo(
+    () => ({
+      admin: staffUsers.filter((u) => u.role === "admin").length,
+      staff: staffUsers.filter((u) => u.role === "staff").length,
+    }),
+    [staffUsers],
+  );
+
+  const downloadTemplate = () => {
+    exportToExcel("mau_import_staff", {
+      Staff: [
+        {
+          username: "nguyenvana",
+          full_name: "Nguyễn Văn A",
+          phone: "0901234567",
+          date_of_birth: "1990-05-15",
+          address: "Hà Nội",
+          password: "",
+          "Nhà máy 1": "Nhà máy A",
+          "Nhà máy 2": "Nhà máy B",
+          "Nhà máy 3": "",
+        },
+      ],
+    });
+  };
+
+  const importStaff = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setImportingStaff(true);
+    setImportResult("");
+    try {
+      const factoryRows = await fetchFactories();
+      const factoryByName = new Map(factoryRows.map((f) => [f.name.toLowerCase(), f]));
+
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+
+      let created = 0;
+      let failed = 0;
+      const failedRows: Array<Record<string, unknown>> = [];
+
+      const pickVal = (row: Record<string, unknown>, keys: string[]) => {
+        for (const key of keys) {
+          const value = row[key];
+          if (value === undefined || value === null) continue;
+          const text = String(value).trim();
+          if (text) return text;
+        }
+        return "";
+      };
+
+      for (const [index, row] of rows.entries()) {
+        const rowNum = index + 2;
+        const username = normalizeAccountUsername(
+          pickVal(row, ["username", "Tên đăng nhập"]),
+        );
+        const fullName = pickVal(row, ["full_name", "Họ tên", "Họ và tên"]);
+        const phone = pickVal(row, ["phone", "Số điện thoại", "SĐT"]);
+        const dob = pickVal(row, ["date_of_birth", "Ngày sinh"]);
+        const address = pickVal(row, ["address", "Địa chỉ"]);
+        const password = pickVal(row, ["password", "Mật khẩu"]) || STAFF_DEFAULT_PASSWORD;
+
+        if (!username) {
+          failedRows.push({ Dòng: rowNum, "Lý do lỗi": "Thiếu username", ...row });
+          failed++;
+          continue;
+        }
+        if (!/^[a-z0-9_.]{4,30}$/.test(username)) {
+          failedRows.push({ Dòng: rowNum, "Lý do lỗi": "Username không hợp lệ (4-30 ký tự, chỉ chữ/số/._)", ...row });
+          failed++;
+          continue;
+        }
+        if (!fullName) {
+          failedRows.push({ Dòng: rowNum, "Lý do lỗi": "Thiếu họ tên", ...row });
+          failed++;
+          continue;
+        }
+
+        const existing = await findUserByUsernameInsensitive(username);
+        if (existing) {
+          failedRows.push({ Dòng: rowNum, "Lý do lỗi": `Username "${username}" đã tồn tại`, ...row });
+          failed++;
+          continue;
+        }
+
+        try {
+          const uid = await generateUid();
+          const newUser = await pb.collection("users").create({
+            username,
+            uid,
+            full_name: fullName,
+            phone: phone || undefined,
+            date_of_birth: dob || undefined,
+            address: address || undefined,
+            password,
+            passwordConfirm: password,
+            role: "staff",
+            approvalStatus: "approved",
+            approved: "true",
+            status: "active",
+            must_change_password: true,
+            emailVisibility: false,
+          });
+
+          const factoryCols = Object.keys(row).filter(
+            (k) => /^nhà máy/i.test(k) || /^Nhà máy/i.test(k) || /^factory/i.test(k),
+          );
+          for (const col of factoryCols) {
+            const factoryName = String(row[col] || "").trim();
+            if (!factoryName) continue;
+            const factory = factoryByName.get(factoryName.toLowerCase());
+            if (factory) {
+              await pb.collection("factory_managers").create({
+                staff: newUser.id,
+                factory: factory.id,
+                status: "active",
+              });
+            }
+          }
+
+          await createStaffActionLog({
+            actor: currentUser,
+            targetUserId: newUser.id,
+            targetCollection: "users",
+            targetRecord: newUser.id,
+            action: "create",
+            after: { username, full_name: fullName, role: "staff", uid },
+            note: "Admin import tạo tài khoản staff từ Excel",
+          });
+          created++;
+        } catch (error: any) {
+          failedRows.push({ Dòng: rowNum, "Lý do lỗi": error?.message || "Lỗi tạo tài khoản", ...row });
+          failed++;
+        }
+      }
+
+      const resultText = `Tạo staff: thành công ${created}, lỗi ${failed}`;
+      setImportResult(resultText);
+      toast.success(resultText);
+      if (failedRows.length) {
+        exportToExcel(`staff_import_loi_${Date.now()}`, { "Dòng lỗi": failedRows });
+        toast.warning("Đã xuất file các dòng lỗi");
+      }
+      await load();
+    } catch (error: any) {
+      toast.error(error?.message || "Lỗi đọc file import staff");
+    } finally {
+      setImportingStaff(false);
+    }
+  };
+
+  const submitCreateStaff = async (form: { username: string; full_name: string; phone: string; date_of_birth: string; address: string; password: string }) => {
+    const username = normalizeAccountUsername(form.username);
+    if (!username) { toast.error("Nhập tên đăng nhập"); return false; }
+    if (!/^[a-z0-9_.]{4,30}$/.test(username)) { toast.error("Tên đăng nhập 4-30 ký tự, chỉ chữ/số/._"); return false; }
+    if (!form.full_name.trim()) { toast.error("Nhập họ và tên"); return false; }
+
+    const existing = await findUserByUsernameInsensitive(username);
+    if (existing) { toast.error("Tên đăng nhập đã tồn tại"); return false; }
+
+    const password = form.password.trim() || STAFF_DEFAULT_PASSWORD;
+    const uid = await generateUid();
+
+    const newUser = await pb.collection("users").create({
+      username, uid,
+      full_name: form.full_name.trim(),
+      phone: form.phone.trim() || undefined,
+      date_of_birth: form.date_of_birth || undefined,
+      address: form.address.trim() || undefined,
+      password, passwordConfirm: password,
+      role: "staff", approvalStatus: "approved", approved: "true", status: "active",
+      must_change_password: true, emailVisibility: false,
+    });
+
+    await createStaffActionLog({
+      actor: currentUser,
+      targetUserId: newUser.id, targetCollection: "users", targetRecord: newUser.id,
+      action: "create",
+      after: { username, full_name: form.full_name.trim(), role: "staff", uid },
+      note: "Admin tạo tài khoản staff trực tiếp",
+    });
+
+    toast.success(`Đã tạo staff "${form.full_name.trim()}" (mật khẩu: ${password})`);
+    await load();
+    return true;
+  };
+
+  return (
+    <Card className="space-y-4 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-2">
+          <StatusChip tone="info">{summary.admin} admin</StatusChip>
+          <StatusChip tone="success">{summary.staff} staff</StatusChip>
+        </div>
+        <Button size="sm" className="rounded-full" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4" /> Tạo staff
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" className="rounded-full" onClick={downloadTemplate}>
+          <FileSpreadsheet className="h-4 w-4" /> Tải file mẫu
+        </Button>
+        <label className="inline-flex">
+          <input type="file" accept=".xlsx,.xls" className="hidden" disabled={importingStaff} onChange={importStaff} />
+          <span className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-border px-3 text-xs font-medium">
+            <Upload className="h-3.5 w-3.5" /> {importingStaff ? "Đang import..." : "Import Excel"}
+          </span>
+        </label>
+      </div>
+
+      {importResult && (
+        <div className="rounded-xl bg-primary/5 p-3 text-sm text-primary">{importResult}</div>
+      )}
+
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Tìm staff theo tên, username, SĐT..."
+          className="rounded-full pl-9"
+        />
+      </div>
+
+      {loading ? (
+        <div className="rounded-2xl p-4 text-sm text-muted-foreground">Đang tải...</div>
+      ) : staffUsers.length === 0 ? (
+        <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+          <Users className="mx-auto mb-2 h-8 w-8 opacity-40" />
+          Chưa có staff. Tạo mới hoặc import từ Excel.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {staffUsers.map((staff) => {
+            const factoryCount = assignmentCounts[staff.id] || 0;
+            return (
+              <div key={staff.id} className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 p-3">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">
+                    {staff.full_name || staff.username || "Chưa có tên"}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    @{staff.username || "—"} · {staff.phone || "chưa có SĐT"}
+                  </div>
+                  {(staff.date_of_birth || staff.address) && (
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      {staff.date_of_birth && `Sinh: ${staff.date_of_birth}`}
+                      {staff.date_of_birth && staff.address && " · "}
+                      {staff.address && `ĐC: ${staff.address}`}
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <StatusChip tone={staff.role === "admin" ? "info" : "success"}>
+                    {staff.role === "admin" ? "Admin" : "Staff"}
+                  </StatusChip>
+                  <StatusChip tone={factoryCount ? "info" : "neutral"}>
+                    {factoryCount ? `${factoryCount} NM` : "Chưa gán"}
+                  </StatusChip>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <CreateStaffDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={submitCreateStaff}
+      />
+    </Card>
+  );
+}
+
+function CreateStaffDialog({
+  open,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (form: { username: string; full_name: string; phone: string; date_of_birth: string; address: string; password: string }) => Promise<boolean>;
+}) {
+  const [form, setForm] = useState({ username: "", full_name: "", phone: "", date_of_birth: "", address: "", password: "" });
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) setForm({ username: "", full_name: "", phone: "", date_of_birth: "", address: "", password: "" });
+  }, [open]);
+
+  const set = (k: keyof typeof form, v: string) => setForm((s) => ({ ...s, [k]: v }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const ok = await onSubmit(form);
+      if (ok) onClose();
+    } catch (error: any) {
+      toast.error(error?.message || "Lỗi tạo tài khoản staff");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="rounded-2xl">
+        <DialogHeader>
+          <DialogTitle>Tạo staff mới</DialogTitle>
+          <DialogDescription>
+            Mật khẩu mặc định &quot;{STAFF_DEFAULT_PASSWORD}&quot; (yêu cầu đổi khi đăng nhập).
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Tên đăng nhập <span className="text-destructive">*</span></Label>
+            <Input value={form.username} onChange={(e) => set("username", e.target.value)} placeholder="VD: nguyenvana" className="rounded-xl" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Họ và tên <span className="text-destructive">*</span></Label>
+            <Input value={form.full_name} onChange={(e) => set("full_name", e.target.value)} placeholder="VD: Nguyễn Văn A" className="rounded-xl" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Số điện thoại</Label>
+              <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="Tùy chọn" className="rounded-xl" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Ngày sinh</Label>
+              <Input type="date" value={form.date_of_birth} onChange={(e) => set("date_of_birth", e.target.value)} className="rounded-xl" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Địa chỉ</Label>
+            <Input value={form.address} onChange={(e) => set("address", e.target.value)} placeholder="Tùy chọn" className="rounded-xl" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Mật khẩu</Label>
+            <Input value={form.password} onChange={(e) => set("password", e.target.value)} placeholder={`Để trống = "${STAFF_DEFAULT_PASSWORD}"`} className="rounded-xl" />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">Đóng</Button>
+            <Button type="submit" disabled={submitting} className="rounded-xl">
+              <Plus className="h-4 w-4" /> {submitting ? "Đang tạo..." : "Tạo staff"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function FactoryAssignmentsPanel() {

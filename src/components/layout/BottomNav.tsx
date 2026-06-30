@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
+  Banknote,
   BriefcaseBusiness,
   ChevronLeft,
   Download,
@@ -29,6 +30,7 @@ export function BottomNav() {
       ? [
           { to: "/staff", label: "Staff", icon: BriefcaseBusiness },
           { to: "/staff/workers", label: "Lao động", icon: Users },
+          { to: "/advances", label: "Ứng lương", icon: Banknote },
           { to: "/staff/export", label: "Xuất file", icon: Download },
           { to: "/account", label: "Tài khoản", icon: User },
         ]
@@ -55,7 +57,7 @@ export function BottomNav() {
         <ul
           className={cn(
             "gap-2 px-3 pb-2 pt-2",
-            items.length === 4 ? "grid grid-cols-4" : "grid grid-cols-3",
+            items.length === 5 ? "grid grid-cols-5" : items.length === 4 ? "grid grid-cols-4" : "grid grid-cols-3",
           )}
         >
           {items.map((item) => {

@@ -338,18 +338,8 @@ function AdminImportsPage() {
 
         try {
           if (sameHistory) {
-            const updatedHistory = await updateEmploymentHistory(sameHistory.id, payload);
+            await updateEmploymentHistory(sameHistory.id, payload);
             updated++;
-            await createStaffActionLog({
-              actor: currentUser,
-              targetUserId: user.id,
-              targetCollection: "employment_histories",
-              targetRecord: sameHistory.id,
-              action: "update",
-              before: sameHistory,
-              after: updatedHistory,
-              note: "Quản trị viên nhập Excel cập nhật lịch sử đi làm",
-            });
           } else {
             nextHistoryUidSeq++;
             const createdHistory = await createEmploymentHistory(payload, {
@@ -357,15 +347,6 @@ function AdminImportsPage() {
             });
             created++;
             existingHistories.push(createdHistory);
-            await createStaffActionLog({
-              actor: currentUser,
-              targetUserId: user.id,
-              targetCollection: "employment_histories",
-              targetRecord: createdHistory.id,
-              action: "create",
-              after: createdHistory,
-              note: "Quản trị viên nhập Excel tạo lịch sử đi làm",
-            });
           }
           touchedUsers.add(user.id);
         } catch (error: unknown) {

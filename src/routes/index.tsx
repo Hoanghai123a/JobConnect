@@ -21,6 +21,7 @@ import {
   MessagesSquare,
   BusFront,
   Bell,
+  ShieldCheck,
   Sprout,
   History,
   Users,
@@ -322,6 +323,12 @@ function DashboardPage() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <FeatureTile
+                to="/admin/staff"
+                label="Quản lý staff"
+                description="Tạo, import tài khoản staff"
+                icon={ShieldCheck}
+              />
               <FeatureTile
                 to="/admin/workforce"
                 label="Nhân sự đi làm"
