@@ -548,13 +548,7 @@ export function AdvancesPage() {
             </DialogHeader>
             <form onSubmit={async (e) => { const ok = await submit(e); if (ok) setShowProfile(false); }} className="min-w-0 space-y-3">
               <div className="min-w-0 space-y-3">
-                <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
-                  <div className="text-xs font-semibold text-muted-foreground">Thông tin người báo ứng</div>
-                  <ReadOnlyField label="Mã NV" value={selectedAdvanceUser?.employee_code} />
-                  <ReadOnlyField label="Họ và tên" value={selectedAdvanceUser?.full_name} />
-                  <ReadOnlyField label="Nhà máy đang làm" value={selectedAdvanceUser?.company} />
-                  <ReadOnlyField label="Số điện thoại liên hệ" value={selectedAdvanceUser?.phone} />
-                </div>
+                <UserProfileCollapsible user={selectedAdvanceUser} />
 
                 <div className="grid grid-cols-2 gap-2">
                   <StatCard
@@ -1509,4 +1503,28 @@ function ReadOnlyField({ label, value }: { label: string; value?: string | null 
 
 function formatMoney(value: number) {
   return Number(value || 0).toLocaleString("vi-VN");
+}
+
+function UserProfileCollapsible({ user }: { user: UserRecord | null }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl border bg-muted/30">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-3 py-2.5 text-sm font-medium"
+      >
+        <span>Thông tin người báo ứng</span>
+        <span className="text-xs text-muted-foreground">{open ? "Thu gọn" : "Xem"}</span>
+      </button>
+      {open && (
+        <div className="space-y-2 border-t px-3 pb-3 pt-2">
+          <ReadOnlyField label="Mã NV" value={user?.employee_code} />
+          <ReadOnlyField label="Họ và tên" value={user?.full_name} />
+          <ReadOnlyField label="Nhà máy đang làm" value={user?.company} />
+          <ReadOnlyField label="Số điện thoại liên hệ" value={user?.phone} />
+        </div>
+      )}
+    </div>
+  );
 }
