@@ -460,6 +460,13 @@ function FactoriesTab() {
       toast.error("Tên nhà máy bắt buộc");
       return;
     }
+    const duplicate = items.find(
+      (f) => f.name.toLowerCase() === editing.name!.trim().toLowerCase() && f.id !== editing.id,
+    );
+    if (duplicate) {
+      toast.error(`Nhà máy "${duplicate.name}" đã tồn tại`);
+      return;
+    }
     try {
       const payload = {
         name: editing.name,
@@ -586,6 +593,13 @@ function FactoriesTab() {
     const name = editingMainHouse?.name?.trim();
     if (!name) {
       toast.error("Tên nhà chính bắt buộc");
+      return;
+    }
+    const duplicate = mainHouses.find(
+      (h) => h.name.toLowerCase() === name.toLowerCase() && h.id !== editingMainHouse?.id,
+    );
+    if (duplicate) {
+      toast.error(`Nhà chính "${duplicate.name}" đã tồn tại`);
       return;
     }
     try {
