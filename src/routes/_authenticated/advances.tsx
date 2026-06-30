@@ -541,14 +541,14 @@ export function AdvancesPage() {
         </Button>
 
         <Dialog open={showProfile} onOpenChange={setShowProfile}>
-          <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-[26rem] overflow-y-auto rounded-2xl">
+          <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-[26rem] overflow-y-auto rounded-2xl p-4">
             <DialogHeader>
               <DialogTitle>Báo ứng mới</DialogTitle>
               <DialogDescription>Nhập thông tin và gửi yêu cầu ứng lương.</DialogDescription>
             </DialogHeader>
-            <form onSubmit={async (e) => { const ok = await submit(e); if (ok) setShowProfile(false); }} className="space-y-3">
-              <div className="space-y-3">
-                <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
+            <form onSubmit={async (e) => { const ok = await submit(e); if (ok) setShowProfile(false); }} className="min-w-0 space-y-3">
+              <div className="min-w-0 space-y-3">
+                <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
                   <div className="text-xs font-semibold text-muted-foreground">Thông tin người báo ứng</div>
                   <ReadOnlyField label="Mã NV" value={selectedAdvanceUser?.employee_code} />
                   <ReadOnlyField label="Họ và tên" value={selectedAdvanceUser?.full_name} />
@@ -570,14 +570,14 @@ export function AdvancesPage() {
                     tone="warning"
                   />
                 </div>
-                <div className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2 text-xs text-muted-foreground">
                   Còn lại:{" "}
                   <span className="font-semibold text-foreground">
                     {limit > 0 ? formatMoney(available) : "—"}
                   </span>
                 </div>
 
-                <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
+                <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
                   <div className="text-xs font-semibold text-muted-foreground">Tài khoản nhận tiền</div>
                   <div className="space-y-1">
                     <Label>Ngân hàng</Label>
@@ -598,7 +598,7 @@ export function AdvancesPage() {
                     </Select>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
+                    <div className="min-w-0 space-y-1">
                       <Label>Số TK</Label>
                       <Input
                         value={bankForm.bank_account_number}
@@ -611,7 +611,7 @@ export function AdvancesPage() {
                         }
                       />
                     </div>
-                    <div className="space-y-1">
+                    <div className="min-w-0 space-y-1">
                       <Label>Tên TK</Label>
                       <Input
                         value={bankForm.bank_account_name}
@@ -634,7 +634,7 @@ export function AdvancesPage() {
                 </div>
                 <div className="space-y-1">
                   <Label>Lý do ứng</Label>
-                  <Textarea rows={4} value={reason} onChange={(e) => setReason(e.target.value)} />
+                  <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
                 </div>
                 <Button type="submit" className="w-full" disabled={sending}>
                   <Send className="h-4 w-4" /> {sending ? "Đang gửi…" : "Gửi Ứng lương"}
