@@ -1088,14 +1088,12 @@ function UserCheckAttendance() {
       const res = await pb.collection("check_attendance_items").getList(1, 100, {
         filter: `user="${escapePb(user.id)}"`,
         sort: "-created",
-        expand: "batch",
       });
       let salaryRes: unknown[] = [];
       try {
         const salaryList = await pb.collection("check_salary_items").getList(1, 100, {
           filter: `user="${escapePb(user.id)}"`,
           sort: "-created",
-          expand: "batch",
         });
         salaryRes = salaryList.items;
       } catch {
