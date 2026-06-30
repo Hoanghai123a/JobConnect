@@ -115,6 +115,8 @@ function buildAdvanceFilter(input: {
   dateTo?: string;
   search?: string;
 }) {
+  if (!input.isAdmin && !input.userId) return 'id=""';
+
   const searchFilter = containsAny(
     [
       "full_name",
@@ -238,7 +240,7 @@ export function AdvancesPage() {
         isAdmin,
         isStaff,
         userId: user?.id,
-        tab,
+        tab: (isAdmin || isStaff) ? tab : undefined,
         dateFrom,
         dateTo,
         search,
@@ -257,8 +259,8 @@ export function AdvancesPage() {
         );
         markSeen("advances", user?.id, latestResolved || Date.now());
       }
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi tải Ứng lương");
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi tải Ứng lương");
     } finally {
       setLoading(false);
     }
@@ -386,8 +388,8 @@ export function AdvancesPage() {
       setAmountText("");
       setReason("");
       load();
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi gửi Ứng lương");
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi gửi Ứng lương");
     } finally {
       setSending(false);
     }
@@ -425,8 +427,8 @@ export function AdvancesPage() {
       toast.success(status === "accepted" ? "Đã duyệt" : "Đã từ chối");
       setSelectedIds(new Set());
       load();
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi xử lý hàng loạt");
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi xử lý hàng loạt");
     }
   };
 
@@ -464,8 +466,8 @@ export function AdvancesPage() {
       );
       setSelectedIds(new Set());
       load();
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi xử lý hàng loạt");
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi xử lý hàng loạt");
     }
   };
 
@@ -496,8 +498,8 @@ export function AdvancesPage() {
         recoveryStatus === "recovered" ? "Đã đánh dấu thu hồi" : "Đã đánh dấu không thể thu hồi",
       );
       load();
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi");
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi");
     }
   };
 
@@ -729,8 +731,8 @@ export function AdvancesPage() {
         });
         toast.success(newStatus === "recruiter_approved" ? "Đã chấp nhận" : "Đã từ chối");
         load();
-      } catch (error: any) {
-        toast.error(error?.message || "Lỗi xử lý");
+      } catch (error: unknown) {
+        toast.error((error as any)?.message || "Lỗi xử lý");
       }
     };
 
