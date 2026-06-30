@@ -340,28 +340,28 @@ export function AdvancesPage() {
   ).length;
   const selectedActionableCount = selectedPendingCount + selectedRecoverableCount;
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent): Promise<boolean> => {
     e.preventDefault();
     const amount = parseMoneyInput(amountText);
     if (!amount) {
       toast.error("Số tiền xin ứng không được để trống");
-      return;
+      return false;
     }
     if (!reason.trim()) {
       toast.error("Lý do ứng không được để trống");
-      return;
+      return false;
     }
     if (!selectedAdvanceUser?.id) {
       toast.error("Chọn người báo ứng");
-      return;
+      return false;
     }
     if (limit <= 0) {
       toast.error("Admin chưa cài hạn mức Ứng lương");
-      return;
+      return false;
     }
     if (outstanding + amount > limit) {
       toast.error("Vượt hạn mức Ứng lương đang cài đặt");
-      return;
+      return false;
     }
 
     setSending(true);
@@ -388,8 +388,10 @@ export function AdvancesPage() {
       setAmountText("");
       setReason("");
       load();
+      return true;
     } catch (error: unknown) {
       toast.error((error as any)?.message || "Lỗi gửi Ứng lương");
+      return false;
     } finally {
       setSending(false);
     }
@@ -544,7 +546,7 @@ export function AdvancesPage() {
               <DialogTitle>Báo ứng mới</DialogTitle>
               <DialogDescription>Nhập thông tin và gửi yêu cầu ứng lương.</DialogDescription>
             </DialogHeader>
-            <form onSubmit={(e) => { submit(e).then(() => setShowProfile(false)); }} className="space-y-3">
+            <form onSubmit={async (e) => { const ok = await submit(e); if (ok) setShowProfile(false); }} className="space-y-3">
               <div className="space-y-3">
                 <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
                   <div className="text-xs font-semibold text-muted-foreground">Thông tin người báo ứng</div>
