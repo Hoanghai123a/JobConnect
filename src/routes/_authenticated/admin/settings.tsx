@@ -351,6 +351,7 @@ interface Factory {
   hotline?: string;
   note?: string;
   attendance_cutoff_day?: number;
+  status?: string;
 }
 
 interface RecruitmentArea {
@@ -466,6 +467,7 @@ function FactoriesTab() {
         hotline: editing.hotline || "",
         note: editing.note || "",
         attendance_cutoff_day: Number(editing.attendance_cutoff_day) || 31,
+        status: editing.status || "active",
       };
       if (editing.id) {
         const before = items.find((it) => it.id === editing.id);
