@@ -642,7 +642,7 @@ function AdminUsersPanel() {
   const downloadStaffTemplate = () => {
     const sample = [
       { "Tên đăng nhập": "nguyenvana", "Nhà máy": "Nhà máy A" },
-      { "Tên đăng nhập": "tranthib", "Nhà máy": "Nhà máy B" },
+      { "Tên đăng nhập": "tranthib", "Nhà máy": "" },
     ];
     exportToExcel("mau_chuyen_staff", { "Chuyển Staff": sample });
   };
@@ -663,22 +663,27 @@ function AdminUsersPanel() {
 
       let ok = 0;
       let fail = 0;
+      let assigned = 0;
       const errors: string[] = [];
 
       for (const r of rows) {
-        const username = String(r["Tên đăng nhập"] || r["username"] || r["Mã tài khoản"] || r["uid"] || "").trim().toLowerCase();
+        const username = String(
+          r["Tên đăng nhập"] || r["username"] || r["Mã tài khoản"] || r["uid"] || "",
+        )
+          .trim()
+          .toLowerCase();
         const factoryName = String(r["Nhà máy"] || r["factory"] || "").trim();
 
-        if (!username || !factoryName) {
+        if (!username) {
           fail++;
-          errors.push((username || "???") + ": thiếu tên đăng nhập hoặc nhà máy");
+          errors.push("???: thiếu tên đăng nhập");
           continue;
         }
 
-        const factoryId = factoryMap.get(factoryName);
-        if (!factoryId) {
+        const factoryId = factoryName ? factoryMap.get(factoryName) : null;
+        if (factoryName && !factoryId) {
           fail++;
-          errors.push(username + ": không tìm thấy nhà máy \"" + factoryName + "\"");
+          errors.push(username + ': không tìm thấy nhà máy "' + factoryName + '"');
           continue;
         }
 
@@ -694,22 +699,27 @@ function AdminUsersPanel() {
           const user = userRes.items[0];
 
           await pb.collection("users").update(user.id, { role: "staff" });
-          await pb.collection("factory_managers").create({
-            staff: user.id,
-            factory: factoryId,
-            status: "active",
-            active_from: null,
-            active_to: null,
-            note: "Gán từ Excel bởi admin",
-          });
+          if (factoryId) {
+            await pb.collection("factory_managers").create({
+              staff: user.id,
+              factory: factoryId,
+              status: "active",
+              active_from: null,
+              active_to: null,
+              note: "Gán từ Excel bởi admin",
+            });
+            assigned++;
+          }
           await createStaffActionLog({
             actor: me as UserRecord,
             targetUserId: user.id,
             targetCollection: "users",
             targetRecord: user.id,
             action: "update",
-            after: { role: "staff", factory: factoryId },
-            note: "Admin chuyển sang staff và gán nhà máy (import Excel)",
+            after: { role: "staff", ...(factoryId ? { factory: factoryId } : {}) },
+            note: factoryId
+              ? "Admin chuyển sang staff và gán nhà máy (import Excel)"
+              : "Admin chuyển sang staff không gán nhà máy (import Excel)",
           });
           ok++;
         } catch (err: any) {
@@ -718,7 +728,13 @@ function AdminUsersPanel() {
         }
       }
 
-      toast.success("Đã chuyển " + ok + " tài khoản sang Staff" + (fail ? ", " + fail + " lỗi" : ""));
+      toast.success(
+        "Đã chuyển " +
+          ok +
+          " tài khoản sang Staff" +
+          (assigned ? ", gán " + assigned + " nhà máy" : "") +
+          (fail ? ", " + fail + " lỗi" : ""),
+      );
       if (errors.length) console.warn("Import staff errors:", errors);
       load();
     } catch (err: any) {
