@@ -30,20 +30,18 @@ export interface FactoryManagerRecord {
 }
 
 export async function fetchFactories() {
-  const res = await pb.collection("factories").getList(1, 300, {
+  return (await pb.collection("factories").getFullList({
     sort: "name",
-  });
-  return res.items as unknown as FactoryRecord[];
+  })) as unknown as FactoryRecord[];
 }
 
 export async function fetchFactoryManagers(staffId?: string) {
   const filter = staffId ? `staff="${escapePb(staffId)}"` : "";
-  const res = await pb.collection("factory_managers").getList(1, 500, {
+  return (await pb.collection("factory_managers").getFullList({
     filter,
     sort: "-created",
     expand: "factory",
-  });
-  return res.items as unknown as FactoryManagerRecord[];
+  })) as unknown as FactoryManagerRecord[];
 }
 
 export function isFactoryAssignmentActive(

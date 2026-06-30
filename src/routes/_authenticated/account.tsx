@@ -22,6 +22,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -69,6 +77,7 @@ import {
   CircleX,
   ImagePlus,
   IdCard,
+  MoreHorizontal,
   Trash,
 } from "lucide-react";
 
@@ -505,6 +514,7 @@ function AdminUsersPanel() {
   const [roleTarget, setRoleTarget] = useState<any>(null);
   const [roleValue, setRoleValue] = useState<Role>("user");
   const [createOpen, setCreateOpen] = useState(false);
+  const [actionSheetOpen, setActionSheetOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [requireApproval, setRequireApproval] = useState(true);
   const [settingsId, setSettingsId] = useState<string | null>(null);
@@ -658,8 +668,8 @@ function AdminUsersPanel() {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<any>(ws, { defval: "" });
 
-      const factories = await pb.collection("factories").getList(1, 300, { sort: "name" });
-      const factoryMap = new Map(factories.items.map((f: any) => [f.name, f.id]));
+      const factories = await pb.collection("factories").getFullList({ sort: "name" });
+      const factoryMap = new Map(factories.map((f: any) => [f.name, f.id]));
 
       let ok = 0;
       let fail = 0;
@@ -1074,49 +1084,26 @@ function AdminUsersPanel() {
         <Switch checked={requireApproval} onCheckedChange={requestToggleApprovalRequirement} />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Quản lý tài khoản ({users.length})
-        </h2>
-        <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Quản lý tài khoản ({users.length})
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Tạo nhanh bên ngoài, các thao tác nhập/xuất/Staff nằm trong bảng thao tác.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
           <Button size="sm" onClick={() => setCreateOpen(true)} className="rounded-full">
             <UserPlus className="h-3.5 w-3.5" /> Tạo
           </Button>
-          <label className="inline-flex">
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              className="hidden"
-              onChange={onImportFile}
-              disabled={importing}
-            />
-            <span className="inline-flex h-9 cursor-pointer items-center gap-1 rounded-full border border-input bg-background px-3 text-xs font-medium hover:bg-accent">
-              <Upload className="h-3.5 w-3.5" /> {importing ? "Đang nhập..." : "Nhập Excel"}
-            </span>
-          </label>
-          <Button size="sm" variant="outline" onClick={downloadTemplate} className="rounded-full">
-            <FileSpreadsheet className="h-3.5 w-3.5" /> Mẫu
-          </Button>
-          <Button size="sm" variant="outline" onClick={exportExcel} className="rounded-full">
-            <FileDown className="h-3.5 w-3.5" /> Xuất DS
-          </Button>
-          <Button size="sm" variant="outline" onClick={exportAll} className="rounded-full">
-            <FileDown className="h-3.5 w-3.5" /> Xuất tất cả
-          </Button>
-          <label className="inline-flex">
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              className="hidden"
-              onChange={onImportStaff}
-              disabled={bulkStaffProcessing}
-            />
-            <span className="inline-flex h-9 cursor-pointer items-center gap-1 rounded-full border border-input bg-background px-3 text-xs font-medium hover:bg-accent">
-              <Building2 className="h-3.5 w-3.5" /> {bulkStaffProcessing ? "Đang xử lý..." : "Nhập Staff"}
-            </span>
-          </label>
-          <Button size="sm" variant="outline" onClick={downloadStaffTemplate} className="rounded-full">
-            <FileSpreadsheet className="h-3.5 w-3.5" /> Mẫu Staff
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setActionSheetOpen(true)}
+            className="rounded-full"
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" /> Thao tác
           </Button>
         </div>
       </div>
@@ -1132,24 +1119,212 @@ function AdminUsersPanel() {
       </div>
 
       {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-primary/10 p-2">
-          <span className="text-xs font-medium text-primary">{selected.size} đã chọn</span>
-          <div className="ml-auto flex flex-wrap gap-1.5">
-            <Button size="sm" variant="outline" onClick={() => setGuideOpen(true)}>
-              <Send className="h-3.5 w-3.5" /> Gửi HD
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => bulkDisable(true)}>
-              <Ban className="h-3.5 w-3.5" /> Vô hiệu
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => bulkDisable(false)}>
-              <CheckCircle2 className="h-3.5 w-3.5" /> Kích hoạt
-            </Button>
-            <Button size="sm" variant="destructive" onClick={bulkDelete}>
-              <Trash2 className="h-3.5 w-3.5" /> Xoá
-            </Button>
-          </div>
+        <div className="flex items-center gap-2 rounded-xl bg-primary/10 p-2">
+          <span className="min-w-0 flex-1 text-xs font-medium text-primary">
+            {selected.size} đã chọn
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setActionSheetOpen(true)}
+            className="rounded-full bg-background"
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" /> Hàng loạt
+          </Button>
         </div>
       )}
+
+      <Sheet open={actionSheetOpen} onOpenChange={setActionSheetOpen}>
+        <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto rounded-t-3xl p-4">
+          <SheetHeader className="pr-8 text-left">
+            <SheetTitle>Thao tác quản trị</SheetTitle>
+            <SheetDescription>
+              Gom các thao tác tạo, nhập, xuất, staff và xử lý hàng loạt cho gọn trên mobile.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-4 space-y-5">
+            <section className="space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Tạo
+              </div>
+              <Button
+                onClick={() => {
+                  setActionSheetOpen(false);
+                  setCreateOpen(true);
+                }}
+                className="w-full justify-start rounded-2xl"
+              >
+                <UserPlus className="h-4 w-4" /> Tạo tài khoản mới
+              </Button>
+            </section>
+
+            <Separator />
+
+            <section className="space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Nhập
+              </div>
+              <label
+                className={
+                  "flex h-11 cursor-pointer items-center gap-2 rounded-2xl border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent " +
+                  (importing ? "pointer-events-none opacity-50" : "")
+                }
+              >
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => {
+                    setActionSheetOpen(false);
+                    onImportFile(e);
+                  }}
+                  disabled={importing}
+                />
+                <Upload className="h-4 w-4" /> {importing ? "Đang nhập..." : "Nhập Excel tài khoản"}
+              </label>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setActionSheetOpen(false);
+                  downloadTemplate();
+                }}
+                className="w-full justify-start rounded-2xl"
+              >
+                <FileSpreadsheet className="h-4 w-4" /> Tải mẫu nhập tài khoản
+              </Button>
+            </section>
+
+            <Separator />
+
+            <section className="space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Xuất
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setActionSheetOpen(false);
+                  exportExcel();
+                }}
+                className="w-full justify-start rounded-2xl"
+              >
+                <FileDown className="h-4 w-4" /> Xuất danh sách đang lọc
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setActionSheetOpen(false);
+                  exportAll();
+                }}
+                className="w-full justify-start rounded-2xl"
+              >
+                <FileDown className="h-4 w-4" /> Xuất tất cả tài khoản
+              </Button>
+            </section>
+
+            <Separator />
+
+            <section className="space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Staff
+              </div>
+              <label
+                className={
+                  "flex h-11 cursor-pointer items-center gap-2 rounded-2xl border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent " +
+                  (bulkStaffProcessing ? "pointer-events-none opacity-50" : "")
+                }
+              >
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => {
+                    setActionSheetOpen(false);
+                    onImportStaff(e);
+                  }}
+                  disabled={bulkStaffProcessing}
+                />
+                <Building2 className="h-4 w-4" />{" "}
+                {bulkStaffProcessing ? "Đang xử lý..." : "Nhập danh sách Staff"}
+              </label>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setActionSheetOpen(false);
+                  downloadStaffTemplate();
+                }}
+                className="w-full justify-start rounded-2xl"
+              >
+                <FileSpreadsheet className="h-4 w-4" /> Tải mẫu chuyển Staff
+              </Button>
+            </section>
+
+            <Separator />
+
+            <section className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Hàng loạt
+                </div>
+                <span className="text-xs text-muted-foreground">{selected.size} đã chọn</span>
+              </div>
+              {selected.size === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+                  Chọn tài khoản trong danh sách để mở thao tác hàng loạt.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setActionSheetOpen(false);
+                      setGuideOpen(true);
+                    }}
+                    className="justify-start rounded-2xl"
+                  >
+                    <Send className="h-3.5 w-3.5" /> Gửi HD
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setActionSheetOpen(false);
+                      bulkDisable(false);
+                    }}
+                    className="justify-start rounded-2xl"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Kích hoạt
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setActionSheetOpen(false);
+                      bulkDisable(true);
+                    }}
+                    className="justify-start rounded-2xl"
+                  >
+                    <Ban className="h-3.5 w-3.5" /> Vô hiệu
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => {
+                      setActionSheetOpen(false);
+                      bulkDelete();
+                    }}
+                    className="justify-start rounded-2xl"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Xoá
+                  </Button>
+                </div>
+              )}
+            </section>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {filtered.length > 0 && (
         <label className="flex items-center gap-2 px-1 text-xs text-muted-foreground">

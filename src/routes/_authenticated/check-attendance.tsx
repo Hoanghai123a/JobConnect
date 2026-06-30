@@ -123,12 +123,14 @@ type UserRecord = {
 type CheckAttendanceRow = AttendanceRow;
 
 type ParsedRow = CheckAttendanceRow & {
+  uid: string;
   employeeCode: string;
   company: string;
   rates: RateBuckets;
 };
 
 type ParsedSalaryRow = {
+  uid: string;
   employeeCode: string;
   company: string;
   personal: SalaryPersonalInfo;
@@ -288,6 +290,7 @@ async function readAttendanceExcel(file: File): Promise<ParsedRow[]> {
 
   return rawRows
     .map((row) => {
+      const uid = String(pick(row, ["uid", "UID", "userId", "user_id"])).trim();
       const employeeCode = String(
         pick(row, ["Mã nhân viên", "Mã NV", "Ma NV", "employee_code"]),
       ).trim();
@@ -301,6 +304,7 @@ async function readAttendanceExcel(file: File): Promise<ParsedRow[]> {
         r390: parseNumber(pick(row, ["390%", "390", "r390"])),
       };
       return {
+        uid,
         employeeCode,
         company: String(pick(row, ["Nhà máy", "Công ty", "company", "factory"])).trim(),
         rates,
@@ -311,7 +315,7 @@ async function readAttendanceExcel(file: File): Promise<ParsedRow[]> {
         ot_hours: parseNumber(pick(row, ["Giờ TC", "TC", "ot_hours", "Giờ tăng ca"])),
       };
     })
-    .filter((row) => row.employeeCode && row.company && (row.date || hasRateValues(row.rates)));
+    .filter((row) => (row.uid || (row.employeeCode && row.company)) && (row.date || hasRateValues(row.rates)));
 }
 
 async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
@@ -323,6 +327,7 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
 
   return rawRows
     .map((row) => {
+      const uid = String(pick(row, ["uid", "UID", "userId", "user_id"])).trim();
       const employeeCode = String(
         pick(row, ["Mã nhân viên", "Mã NV", "Ma NV", "employee_code"]),
       ).trim();
@@ -349,6 +354,7 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
         ),
       };
       return {
+        uid,
         employeeCode,
         company,
         personal: {
@@ -368,7 +374,7 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
     })
     .filter(
       (row) =>
-        row.employeeCode && row.company && (row.wageLine || row.allowanceLine || row.deductionLine),
+        (row.uid || (row.employeeCode && row.company)) && (row.wageLine || row.allowanceLine || row.deductionLine),
     );
 }
 
@@ -430,6 +436,7 @@ function AdminCheckAttendance() {
     exportToExcel(`mau_check_cong_${month}`, {
       "Bảng kiểm công": [
         {
+          uid: sampleUser?.id || "user_record_id",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Số điện thoại": sampleUser?.phone || "0900000000",
@@ -448,6 +455,7 @@ function AdminCheckAttendance() {
           "390%": 0,
         },
         {
+          uid: sampleUser?.id || "user_record_id",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Số điện thoại": sampleUser?.phone || "0900000000",
@@ -466,6 +474,7 @@ function AdminCheckAttendance() {
           "390%": "",
         },
         {
+          uid: sampleUser?.id || "user_record_id",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Số điện thoại": sampleUser?.phone || "0900000000",
@@ -497,8 +506,11 @@ function AdminCheckAttendance() {
         return;
       }
 
+      const allUsers = await pb.collection("users").getFullList<UserRecord>({ sort: "full_name" });
       const employeeMap = new Map<string, UserRecord>();
-      for (const user of users) {
+      const userIdMap = new Map<string, UserRecord>();
+      for (const user of allUsers) {
+        userIdMap.set(user.id, user);
         const employeeKey = employeeCompanyKey(user.employee_code, user.company);
         if (employeeKey) employeeMap.set(employeeKey, user);
       }
@@ -510,9 +522,11 @@ function AdminCheckAttendance() {
       const unmatched = new Set<string>();
 
       for (const row of parsedRows) {
-        const user = employeeMap.get(employeeCompanyKey(row.employeeCode, row.company));
+        const user = row.uid
+          ? userIdMap.get(row.uid)
+          : employeeMap.get(employeeCompanyKey(row.employeeCode, row.company));
         if (!user) {
-          unmatched.add(`${row.employeeCode} - ${row.company}`);
+          unmatched.add(`${row.uid || row.employeeCode} - ${row.company}`);
           continue;
         }
         const current = grouped.get(user.id) || { user, rows: [], summary: EMPTY_CHECK_BUCKETS() };
@@ -579,6 +593,7 @@ function AdminCheckAttendance() {
     exportToExcel(`mau_check_luong_${salaryMonth}`, {
       "Bảng kiểm lương": [
         {
+          uid: sampleUser?.id || "user_record_id",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
@@ -595,6 +610,7 @@ function AdminCheckAttendance() {
           "Tiền khấu trừ": 525000,
         },
         {
+          uid: sampleUser?.id || "user_record_id",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
@@ -624,8 +640,11 @@ function AdminCheckAttendance() {
         return;
       }
 
+      const allUsers = await pb.collection("users").getFullList<UserRecord>({ sort: "full_name" });
       const employeeMap = new Map<string, UserRecord>();
-      for (const user of users) {
+      const userIdMap = new Map<string, UserRecord>();
+      for (const user of allUsers) {
+        userIdMap.set(user.id, user);
         const employeeKey = employeeCompanyKey(user.employee_code, user.company);
         if (employeeKey) employeeMap.set(employeeKey, user);
       }
@@ -643,9 +662,11 @@ function AdminCheckAttendance() {
       const unmatched = new Set<string>();
 
       for (const row of parsedRows) {
-        const user = employeeMap.get(employeeCompanyKey(row.employeeCode, row.company));
+        const user = row.uid
+          ? userIdMap.get(row.uid)
+          : employeeMap.get(employeeCompanyKey(row.employeeCode, row.company));
         if (!user) {
-          unmatched.add(`${row.employeeCode} - ${row.company}`);
+          unmatched.add(`${row.uid || row.employeeCode} - ${row.company}`);
           continue;
         }
         const current =

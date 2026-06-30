@@ -155,8 +155,7 @@ function WorkforcePage() {
         fetchEmploymentHistories(),
         pb
           .collection("users")
-          .getList<UserRecord>(1, 1000, { sort: "full_name,username" })
-          .then((res) => res.items),
+          .getFullList<UserRecord>({ sort: "full_name,username" }),
         fetchFactories(),
         fetchMainHouses().catch(() => [] as MainHouseRecord[]),
       ]);

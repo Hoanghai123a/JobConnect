@@ -11,8 +11,7 @@ export interface MainHouseRecord {
 }
 
 export async function fetchMainHouses() {
-  const res = await pb.collection("main_houses").getList(1, 300, {
+  return (await pb.collection("main_houses").getFullList({
     sort: "name",
-  });
-  return res.items as unknown as MainHouseRecord[];
+  })) as unknown as MainHouseRecord[];
 }

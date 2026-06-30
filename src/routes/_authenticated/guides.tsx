@@ -224,8 +224,8 @@ function GuidesPage() {
       /* optional */
     }
     try {
-      const u = await pb.collection("users").getList(1, 500, { sort: "-created" });
-      const workerUsers = (u.items as any[])
+      const u = await pb.collection("users").getFullList({ sort: "-created" });
+      const workerUsers = (u as any[])
         .filter((item) => item.role !== "admin")
         .sort((a, b) =>
           String(a.full_name || a.username || a.phone || "").localeCompare(

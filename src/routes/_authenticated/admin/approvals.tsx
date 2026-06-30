@@ -114,8 +114,7 @@ function ApprovalsPage() {
   };
 
   const exportUsers = async () => {
-    const allRes = await pb.collection("users").getList(1, 1000, { sort: "-created" });
-    const all = allRes.items;
+    const all = await pb.collection("users").getFullList({ sort: "-created" });
     const rows = all.map((u: any) => ({
       "Họ tên": u.full_name,
       "Số điện thoại": u.phone,
