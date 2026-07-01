@@ -283,7 +283,7 @@ function AdminAttendance() {
           <DialogHeader>
             <DialogTitle>{detailUser?.full_name || detailUser?.username}</DialogTitle>
             <DialogDescription className="sr-only">
-              Chi tiết chấm công và lương tẩm tính của nhân sự trong tháng đã chọn.
+              Chi tiết chấm công và lương tạm tính của nhân sự trong tháng đã chọn.
             </DialogDescription>
           </DialogHeader>
           {detailUser && (

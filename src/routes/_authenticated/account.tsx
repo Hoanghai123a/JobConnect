@@ -827,6 +827,7 @@ function AdminUsersPanel() {
     try {
       await pb.collection("users").delete(u.id);
       toast.success("Đã xoá");
+      load();
     } catch (e: any) {
       toast.error(e?.message || "Lỗi");
     }

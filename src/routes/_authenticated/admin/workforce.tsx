@@ -1684,6 +1684,7 @@ function CccdExportDialog({
           const url = fileUrl(u, u.cccd_front);
           try {
             const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const blob = await res.blob();
             zip.file(`${name}_mat_truoc.jpg`, blob);
             count++;
@@ -1695,6 +1696,7 @@ function CccdExportDialog({
           const url = fileUrl(u, u.cccd_back);
           try {
             const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const blob = await res.blob();
             zip.file(`${name}_mat_sau.jpg`, blob);
             count++;
