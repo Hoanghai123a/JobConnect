@@ -14,7 +14,7 @@ export const Route = createFileRoute("/_authenticated/force-change-password")({
 });
 
 function ForceChangePasswordPage() {
-  const { user, refresh } = useAuth();
+  const { user, login } = useAuth();
   const nav = useNavigate();
   const [newPwd, setNewPwd] = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
@@ -46,7 +46,7 @@ function ForceChangePasswordPage() {
         passwordConfirm: confirmPwd,
         must_change_password: false,
       });
-      await refresh();
+      await login(user.username || "", newPwd);
       toast.success("Đổi mật khẩu thành công");
       const role = user.role;
       if (role === "admin") nav({ to: "/" });

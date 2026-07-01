@@ -729,7 +729,7 @@ function FactoriesTab() {
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="mt-0.5 block text-[11px] text-muted-foreground hover:text-primary hover:underline"
+                      className="mt-0.5 block truncate text-[11px] text-muted-foreground hover:text-primary hover:underline"
                     >
                       📍 {f.address}
                     </a>
