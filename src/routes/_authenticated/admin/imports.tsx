@@ -182,6 +182,7 @@ function AdminImportsPage() {
           "Mã nhân viên": "NM001",
           "Họ tên tại nhà máy": "Nguyễn Văn A",
           "CCCD tại nhà máy": "012345678901",
+          "Mã số thuế": "0123456789",
           "Người tuyển": "staff01",
           "Ngày vào làm": "2026-05-01",
           "Ngày nghỉ": "",
@@ -250,6 +251,7 @@ function AdminImportsPage() {
           "Ngày vào làm": row["Ngày vào làm"] ?? row["join_date"] ?? row["Ngày vào"] ?? "",
           "Họ tên tại nhà máy": pickValue(row, ["worker_name_snapshot", "Họ tên tại nhà máy"]),
           "CCCD tại nhà máy": pickValue(row, ["worker_cccd_snapshot", "CCCD tại nhà máy"]),
+          "Mã số thuế": pickValue(row, ["worker_tax_code_snapshot", "Mã số thuế", "MST"]),
           "Ghi chú": pickValue(row, ["note", "Ghi chú"]),
         });
       };
@@ -264,6 +266,7 @@ function AdminImportsPage() {
         const employeeCode = pickValue(row, ["employee_code", "Mã nhân viên", "Mã NV"]);
         const workerName = pickValue(row, ["worker_name_snapshot", "Họ tên tại nhà máy"]);
         const workerCccd = pickValue(row, ["worker_cccd_snapshot", "CCCD tại nhà máy"]);
+        const workerTaxCode = pickValue(row, ["worker_tax_code_snapshot", "Mã số thuế", "MST"]);
         const recruiterUsername = pickValue(row, ["recruiter_username", "Người tuyển"]);
         const joinDate = normalizeExcelDate(
           row["Ngày vào làm"] ?? row["join_date"] ?? row["Ngày vào"],
@@ -329,6 +332,7 @@ function AdminImportsPage() {
           employee_code: employeeCode,
           worker_name_snapshot: workerName,
           worker_cccd_snapshot: workerCccd,
+          worker_tax_code_snapshot: workerTaxCode,
           recruiter_staff: recruiter?.id || "",
           join_date: joinDate,
           leave_date: leaveDate || undefined,

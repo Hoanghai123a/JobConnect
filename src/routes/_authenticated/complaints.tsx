@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { exportToExcel } from "@/lib/excel";
+import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { escapePb } from "@/lib/delegations";
 import { toast } from "sonner";
 import {
@@ -187,8 +187,8 @@ function ComplaintsPage() {
       "Nội dung": i.content,
       "Trạng thái": STATUS_META[(i.status || "pending") as Status].label,
       "Ghi chú admin": i.admin_note || "",
-      "Thời gian gửi": i.created,
-      "Thời gian xử lý": i.resolved_at || "",
+      "Thời gian gửi": formatDateOnly(i.created),
+      "Thời gian xử lý": formatDateOnly(i.resolved_at),
     }));
     exportToExcel(`khieu_nai_${Date.now()}`, { "Khiếu nại": rows });
   };

@@ -215,6 +215,9 @@ function UserProfileForm() {
   const [cccdBackPreview, setCccdBackPreview] = useState<string>("");
   const [removeFront, setRemoveFront] = useState(false);
   const [removeBack, setRemoveBack] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string>("");
+  const [removeAvatar, setRemoveAvatar] = useState(false);
   const search = Route.useSearch();
   const showIncomplete = !!search.incomplete;
 
@@ -247,7 +250,10 @@ function UserProfileForm() {
     setCccdBackPreview(user?.cccd_back ? fileUrl(user, user.cccd_back) : "");
     setRemoveFront(false);
     setRemoveBack(false);
-  }, [user?.id, user?.cccd_front, user?.cccd_back]);
+    setAvatarFile(null);
+    setAvatarPreview(user?.avatar ? fileUrl(user, user.avatar) : "");
+    setRemoveAvatar(false);
+  }, [user?.id, user?.cccd_front, user?.cccd_back, user?.avatar]);
 
   const pickCccd = (side: "front" | "back") => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -299,8 +305,9 @@ function UserProfileForm() {
         for (const [k] of NUM_FIELDS) payload[k] = Number(payload[k]) || 0;
       }
 
-      const hasFileChange = cccdFrontFile || cccdBackFile || removeFront || removeBack;
-      if (hasFileChange && !isAdmin) {
+      const hasFileChange =
+        cccdFrontFile || cccdBackFile || removeFront || removeBack || avatarFile || removeAvatar;
+      if (hasFileChange) {
         const fd = new FormData();
         for (const [k, v] of Object.entries(payload)) {
           fd.append(k, (v as any) ?? "");
@@ -309,12 +316,15 @@ function UserProfileForm() {
         else if (removeFront) fd.append("cccd_front", "");
         if (cccdBackFile) fd.append("cccd_back", cccdBackFile);
         else if (removeBack) fd.append("cccd_back", "");
+        if (avatarFile) fd.append("avatar", avatarFile);
+        else if (removeAvatar) fd.append("avatar", "");
         await pb.collection("users").update(user.id, fd);
       } else {
         await pb.collection("users").update(user.id, payload);
       }
       setCccdFrontFile(null);
       setCccdBackFile(null);
+      setAvatarFile(null);
       setRemoveFront(false);
       setRemoveBack(false);
       await refresh();
@@ -334,6 +344,61 @@ function UserProfileForm() {
         </Card>
       )}
       <Section title={isAdmin ? "Thông tin admin" : "Thông tin chung"}>
+        <div className="flex flex-col items-center gap-2">
+          <div className="relative h-20 w-20">
+            {avatarPreview ? (
+              <>
+                <img
+                  src={avatarPreview}
+                  alt="Ảnh đại diện"
+                  className="h-20 w-20 rounded-full object-cover border border-border"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAvatarFile(null);
+                    setAvatarPreview("");
+                    setRemoveAvatar(true);
+                  }}
+                  className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-white"
+                >
+                  <Trash className="h-3 w-3" />
+                </button>
+              </>
+            ) : (
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted border border-dashed border-border">
+                <User2 className="h-8 w-8 text-muted-foreground" />
+              </div>
+            )}
+          </div>
+          <label className="cursor-pointer text-xs font-medium text-primary">
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (!file.type.startsWith("image/")) {
+                  toast.error("Vui lòng chọn ảnh");
+                  return;
+                }
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const url = reader.result as string;
+                  setAvatarPreview(url);
+                  setAvatarFile(dataUrlToFile(url, file.name || "avatar.jpg"));
+                  setRemoveAvatar(false);
+                };
+                reader.readAsDataURL(file);
+                e.target.value = "";
+              }}
+            />
+            <span className="flex items-center gap-1">
+              <ImagePlus className="h-3 w-3" /> Đổi ảnh đại diện
+            </span>
+          </label>
+        </div>
         <div className="space-y-1">
           <Label className="text-xs">Tên đăng nhập</Label>
           <div className="rounded-md bg-muted px-3 py-2 text-sm">@{user?.username}</div>
@@ -676,7 +741,7 @@ function AdminUsersPanel() {
       const rows = XLSX.utils.sheet_to_json<any>(ws, { defval: "" });
 
       const factories = await pb.collection("factories").getFullList({ sort: "name" });
-      const factoryMap = new Map(factories.map((f: any) => [f.name, f.id]));
+      const factoryMap = new Map(factories.map((f: any) => [f.name.toLowerCase(), f.id]));
       const allUsers = await pb.collection("users").getFullList<UserRecord>({
         fields: "id,username,uid,role",
       });
@@ -700,7 +765,7 @@ function AdminUsersPanel() {
           continue;
         }
 
-        const factoryId = factoryName ? factoryMap.get(factoryName) : null;
+        const factoryId = factoryName ? factoryMap.get(factoryName.toLowerCase()) : null;
         if (factoryName && !factoryId) {
           fail++;
           errors.push(username + ': không tìm thấy nhà máy "' + factoryName + '"');
@@ -1002,7 +1067,7 @@ function AdminUsersPanel() {
       const rows = XLSX.utils.sheet_to_json<any>(ws, { defval: "" });
       let ok = 0;
       let fail = 0;
-      const errors: string[] = [];
+      const failedRows: Array<Record<string, unknown>> = [];
       const existingUsers = await pb.collection("users").getFullList<UserRecord>({
         fields: "id,username,uid",
       });
@@ -1012,7 +1077,8 @@ function AdminUsersPanel() {
       const existingUidKeys = new Set(
         existingUsers.map((user) => accountIdentityKey(user.uid)).filter(Boolean),
       );
-      for (const r of rows) {
+      for (const [index, r] of rows.entries()) {
+        const rowNum = index + 2;
         const full_name = String(r["Họ tên"] || r["full_name"] || "").trim();
         const phone = String(r["Số điện thoại"] || r["phone"] || "").trim();
         const username = String(r["Tên đăng nhập"] || r["username"] || "").trim();
@@ -1032,22 +1098,23 @@ function AdminUsersPanel() {
         ).trim();
         if (!full_name || !phone || !normalizedUsername || !password) {
           fail++;
+          failedRows.push({ Dòng: rowNum, "Lý do lỗi": "Thiếu thông tin bắt buộc (họ tên/SĐT/username/mật khẩu)", ...r });
           continue;
         }
         if (existingUsernameKeys.has(normalizedUsername)) {
           fail++;
-          errors.push(normalizedUsername + ": tên đăng nhập đã tồn tại");
+          failedRows.push({ Dòng: rowNum, "Lý do lỗi": "Tên đăng nhập đã tồn tại", ...r });
           continue;
         }
         const manualUidKey = accountIdentityKey(manualUid);
         if (manualUidKey && existingUidKeys.has(manualUidKey)) {
           fail++;
-          errors.push(manualUid + ": mã tài khoản đã tồn tại");
+          failedRows.push({ Dòng: rowNum, "Lý do lỗi": "Mã tài khoản đã tồn tại", ...r });
           continue;
         }
         if (password.length < 8) {
           fail++;
-          errors.push(username + ": mật khẩu < 8 ký tự");
+          failedRows.push({ Dòng: rowNum, "Lý do lỗi": "Mật khẩu < 8 ký tự", ...r });
           continue;
         }
         try {
@@ -1076,11 +1143,14 @@ function AdminUsersPanel() {
           ok++;
         } catch (err: any) {
           fail++;
-          errors.push(username + ": " + (err?.response?.message || err?.message || "lỗi"));
+          failedRows.push({ Dòng: rowNum, "Lý do lỗi": err?.response?.message || err?.message || "Lỗi tạo tài khoản", ...r });
         }
       }
       toast.success("Đã nhập " + ok + " tài khoản" + (fail ? ", " + fail + " lỗi" : ""));
-      if (errors.length) console.warn("Import errors:", errors);
+      if (failedRows.length) {
+        exportToExcel(`import_tai_khoan_loi_${Date.now()}`, { "Dòng lỗi": failedRows });
+        toast.warning("Đã xuất file các dòng lỗi");
+      }
       load();
     } catch (err: any) {
       toast.error(err?.message || "File không hợp lệ");

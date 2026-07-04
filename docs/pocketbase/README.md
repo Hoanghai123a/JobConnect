@@ -23,6 +23,7 @@ Collection `users` đã có sẵn. Chỉ cần đảm bảo field `role` chấp 
   - `listRule` / `viewRule`: admin, staff, hoặc chính user.
   - `createRule`: chỉ admin hoặc staff. User thường không được tự tạo lịch sử đi làm mới.
   - `updateRule`: admin, staff, hoặc chính user. App chỉ mở luồng user tự báo nghỉ; các quyền chi tiết hơn được kiểm tra ở frontend.
+  - Field lịch sử đi làm cần có `worker_tax_code_snapshot` để lưu mã số thuế theo từng nhà máy/lịch sử, không lấy cứng từ hồ sơ user.
   - Giữ index `idx_emphist_one_active` để mỗi user chỉ có một bản ghi `working`.
 - `advances`, `check_attendance_items`, `check_salary_items`
   - Cần cho staff đọc/tạo theo luồng app đang dùng.

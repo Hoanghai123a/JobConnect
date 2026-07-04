@@ -10,7 +10,7 @@ import { StatusChip, toneBorder } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { exportToExcel } from "@/lib/excel";
+import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { toast } from "sonner";
 import { Check, FileDown, X, Users, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -126,7 +126,7 @@ function ApprovalsPage() {
       "Ngân hàng": u.bank_name,
       "Số tài khoản": u.bank_account_number,
       "Tên chủ tài khoản": u.bank_account_name,
-      "Tạo lúc": u.created,
+      "Tạo lúc": formatDateOnly(u.created),
     }));
     exportToExcel(`danh_sach_user_${Date.now()}`, { "Tài khoản chờ duyệt": rows });
   };

@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { exportToExcel } from "@/lib/excel";
+import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { escapePb } from "@/lib/delegations";
 import { markSeen } from "@/lib/seen";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
@@ -520,7 +520,7 @@ export function AdvancesPage() {
       "Họ tên": row.full_name,
       "Mã nhân viên": row.employee_code,
       "Nhà máy": row.company,
-      "Ngày vào làm": row.join_date || "",
+      "Ngày vào làm": formatDateOnly(row.join_date),
       "Số điện thoại": row.phone,
       "Người báo ứng": getAdvanceRequesterName(row),
       "Mã nhân viên người báo": getAdvanceRequesterField(row, "employee_code"),
@@ -536,9 +536,9 @@ export function AdvancesPage() {
       "Ghi chú admin": row.admin_note || "",
       "Ghi chú người tuyển": row.recruiter_note || "",
       "Ghi chú thu hồi": row.recovery_note || "",
-      "Ngày gửi": row.created,
-      "Ngày duyệt": row.resolved_at || "",
-      "Ngày thu hồi": row.recovered_at || "",
+      "Ngày gửi": formatDateOnly(row.created),
+      "Ngày duyệt": formatDateOnly(row.resolved_at),
+      "Ngày thu hồi": formatDateOnly(row.recovered_at),
     }));
     exportToExcel(`ung_luong_${Date.now()}`, { "Ứng lương": rows });
   };

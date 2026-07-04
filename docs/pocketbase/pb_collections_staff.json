@@ -368,6 +368,20 @@
         "type": "text"
       },
       {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text_emphist_tax_code",
+        "max": 0,
+        "min": 0,
+        "name": "worker_tax_code_snapshot",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
         "cascadeDelete": false,
         "collectionId": "_pb_users_auth_",
         "hidden": false,

@@ -789,6 +789,7 @@ function WorkerList({
         latest?.employee_code,
         latest?.worker_name_snapshot,
         latest?.worker_cccd_snapshot,
+        latest?.worker_tax_code_snapshot,
         factoryById.get(latest?.factory || "")?.name,
         latest?.expand?.factory?.name,
       ]
@@ -806,7 +807,7 @@ function WorkerList({
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm tên, mã NV, CCCD, SĐT, nhà máy..."
+          placeholder="Tìm tên, mã NV, CCCD, mã số thuế, SĐT, nhà máy..."
           className="rounded-full pl-9"
         />
       </div>
@@ -857,6 +858,7 @@ function WorkerList({
                   )}
                   Mã NV: {latest?.employee_code || user.employee_code || "—"} · CCCD:{" "}
                   {maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
+                  {latest?.worker_tax_code_snapshot && ` · MST: ${latest.worker_tax_code_snapshot}`}
                 </div>
                 <div className="mt-0.5 text-[11px] text-muted-foreground">
                   {factoryName || "Chưa có nhà máy"} · Vào {formatDate(latest?.join_date)}
@@ -900,6 +902,7 @@ function AdminWorkerDrawer({
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
+    worker_tax_code_snapshot: "",
     recruiter_staff: "",
     main_house: "",
     join_date: "",
@@ -920,6 +923,7 @@ function AdminWorkerDrawer({
       employee_code: h.employee_code || "",
       worker_name_snapshot: h.worker_name_snapshot || "",
       worker_cccd_snapshot: h.worker_cccd_snapshot || "",
+      worker_tax_code_snapshot: h.worker_tax_code_snapshot || "",
       recruiter_staff: h.recruiter_staff || "",
       main_house: h.main_house || "",
       join_date: h.join_date?.slice(0, 10) || "",
@@ -938,6 +942,7 @@ function AdminWorkerDrawer({
         employee_code: form.employee_code.trim(),
         worker_name_snapshot: form.worker_name_snapshot.trim(),
         worker_cccd_snapshot: form.worker_cccd_snapshot.trim(),
+        worker_tax_code_snapshot: form.worker_tax_code_snapshot.trim(),
         recruiter_staff: form.recruiter_staff || undefined,
         main_house: form.main_house || undefined,
         join_date: form.join_date || undefined,
@@ -1043,6 +1048,9 @@ function AdminWorkerDrawer({
                         {h.worker_name_snapshot} · {maskCccd(h.worker_cccd_snapshot)} · Mã:{" "}
                         {h.employee_code || "—"}
                       </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Mã số thuế: {h.worker_tax_code_snapshot || "—"}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <StatusChip tone={h.status === "working" ? "success" : "neutral"}>
@@ -1109,6 +1117,20 @@ function AdminWorkerDrawer({
                             onChange={(e) =>
                               setForm((f) => ({ ...f, employee_code: e.target.value }))
                             }
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px]">Mã số thuế</Label>
+                          <Input
+                            value={form.worker_tax_code_snapshot}
+                            onChange={(e) =>
+                              setForm((f) => ({
+                                ...f,
+                                worker_tax_code_snapshot: e.target.value.replace(/[^\d]/g, ""),
+                              }))
+                            }
+                            inputMode="numeric"
                             className="h-8 text-xs"
                           />
                         </div>
@@ -1263,6 +1285,7 @@ function RegisterDialog({
   const [employeeCode, setEmployeeCode] = useState("");
   const [workerName, setWorkerName] = useState("");
   const [workerCccd, setWorkerCccd] = useState("");
+  const [workerTaxCode, setWorkerTaxCode] = useState("");
   const [joinDate, setJoinDate] = useState(todayIso());
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -1275,6 +1298,7 @@ function RegisterDialog({
     setEmployeeCode("");
     setWorkerName("");
     setWorkerCccd("");
+    setWorkerTaxCode("");
     setJoinDate(todayIso());
     setNote("");
   };
@@ -1313,6 +1337,7 @@ function RegisterDialog({
         worker_name_snapshot:
           workerName.trim() || selectedUser.full_name || selectedUser.username || "",
         worker_cccd_snapshot: workerCccd.trim() || selectedUser.cccd || "",
+        worker_tax_code_snapshot: workerTaxCode.trim(),
         recruiter_staff: recruiterId,
         join_date: joinDate,
         status: "working",
@@ -1399,6 +1424,16 @@ function RegisterDialog({
                 placeholder="CCCD ghi nhận"
               />
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">Mã số thuế</Label>
+            <Input
+              value={workerTaxCode}
+              onChange={(e) => setWorkerTaxCode(e.target.value.replace(/[^\d]/g, ""))}
+              inputMode="numeric"
+              placeholder="Mã số thuế theo lịch sử đi làm"
+            />
           </div>
 
           <div className="space-y-1">

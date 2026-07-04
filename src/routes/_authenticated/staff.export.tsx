@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { exportToExcel } from "@/lib/excel";
+import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { fetchFactories } from "@/lib/factories";
 import { fetchStaffWorkspace } from "@/lib/staff-permissions";
 import { useAuth } from "@/lib/auth";
@@ -94,14 +94,15 @@ function StaffExportPage() {
       "Mã nhân viên": history.employee_code || "",
       "Họ tên tại nhà máy": history.worker_name_snapshot,
       CCCD: history.worker_cccd_snapshot,
+      "Mã số thuế": history.worker_tax_code_snapshot || "",
       "Người tuyển":
         history.expand?.recruiter_staff?.full_name ||
         history.expand?.recruiter_staff?.username ||
         "",
       "Nhà máy": history.expand?.factory?.name || "",
       "Nhà chính": history.expand?.main_house?.name || "",
-      "Ngày vào": history.join_date || "",
-      "Ngày nghỉ": history.leave_date || "",
+      "Ngày vào": formatDateOnly(history.join_date),
+      "Ngày nghỉ": formatDateOnly(history.leave_date),
       "Trạng thái": history.status === "working" ? "Đang làm" : "Đã nghỉ",
       "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
       "Tài khoản gốc": history.expand?.user?.full_name || history.expand?.user?.username || "",
@@ -114,28 +115,28 @@ function StaffExportPage() {
       const u = history.expand?.user;
       return {
         STT: index + 1,
+        ID: u?.uid || "",
         "Mã lịch sử": history.uid || "",
-        "Mã tài khoản (UID)": u?.uid || "",
-        "Tên đăng nhập": u?.username || "",
         "Họ tên gốc": u?.full_name || "",
         "CCCD gốc": u?.cccd || "",
-        "Địa chỉ email": u?.email || "",
         "Số điện thoại": u?.phone || "",
+        "Tên đăng nhập": u?.username || "",
         "Vai trò": u?.role || "",
         "Trạng thái tài khoản": u?.status || "",
         "Mã nhân viên": history.employee_code || "",
-        "Họ tên tại nhà máy": history.worker_name_snapshot,
-        "CCCD tại nhà máy": history.worker_cccd_snapshot,
         "Nhà máy": history.expand?.factory?.name || "",
         "Nhà chính": history.expand?.main_house?.name || "",
+        "Ngày vào": formatDateOnly(history.join_date),
+        "Ngày nghỉ": formatDateOnly(history.leave_date),
         "Người tuyển":
           history.expand?.recruiter_staff?.full_name ||
           history.expand?.recruiter_staff?.username ||
           "",
-        "Ngày vào": history.join_date || "",
-        "Ngày nghỉ": history.leave_date || "",
-        "Trạng thái lịch sử": history.status === "working" ? "Đang làm" : "Đã nghỉ",
         "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
+        "Họ tên tại nhà máy": history.worker_name_snapshot,
+        "CCCD tại nhà máy": history.worker_cccd_snapshot,
+        "Mã số thuế": history.worker_tax_code_snapshot || "",
+        "Trạng thái lịch sử": history.status === "working" ? "Đang làm" : "Đã nghỉ",
         "Ghi chú": history.note || "",
         "Ngân hàng": u?.bank_name || "",
         "Số tài khoản": u?.bank_account_number || "",
@@ -144,8 +145,6 @@ function StaffExportPage() {
         "Chuyên cần": u?.chuyen_can ?? "",
         "Đời sống": u?.doi_song ?? "",
         "Thâm niên": u?.tham_nien ?? "",
-        "Giờ hành chính mặc định": u?.default_hc_hours ?? "",
-        "Giờ tăng ca mặc định": u?.default_ot_hours ?? "",
       };
     });
   }, [filteredHistories]);
@@ -215,7 +214,7 @@ function StaffExportPage() {
           </Button>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Bản đầy đủ kèm thông tin cá nhân (UID, email, vai trò, CCCD gốc), tài khoản ngân hàng và
+          Bản đầy đủ kèm thông tin cá nhân (ID, vai trò, CCCD gốc), tài khoản ngân hàng và
           các tham số lương.
         </p>
       </div>

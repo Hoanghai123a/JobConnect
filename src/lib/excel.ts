@@ -1,5 +1,10 @@
 import * as XLSX from "xlsx";
 
+export function formatDateOnly(value: string | undefined | null): string {
+  if (!value) return "";
+  return value.replace(/[T ]\d{2}:\d{2}.*$/, "");
+}
+
 export function exportToExcel(filename: string, sheets: Record<string, any[]>) {
   const wb = XLSX.utils.book_new();
   for (const [name, rows] of Object.entries(sheets)) {

@@ -3,6 +3,7 @@
 export interface Plot {
   flowerId: string | null;
   plantedAt: number | null; // epoch ms
+  stolenAmount?: number; // xu bị chộm, trừ vào reward khi thu hoạch
 }
 
 export interface PetState {
@@ -15,8 +16,9 @@ export interface PetState {
 export interface GardenState {
   coins: number;
   plots: Plot[];
+  unlockedPlots: number; // số ô đất đang mở (6 → tối đa 16)
   pet: PetState;
-  ownedPets: string[]; // các loài đã mở khóa
+  ownedPets: string[];
   roamingEnabled: boolean;
   totalHarvested: number;
 }
@@ -44,16 +46,22 @@ export interface Pet {
   facesRight?: boolean;
 }
 
-export const PLOT_COUNT = 6;
+export const PLOT_COUNT = 6;   // ô ban đầu
+export const PLOT_MAX = 16;    // tối đa 16 ô (mở thêm 10)
+
+/** Chi phí mở khóa từng ô bổ sung (slot 7 → 16). Index 0 = ô thứ 7. */
+export const PLOT_UNLOCK_COSTS = [20, 35, 55, 80, 110, 150, 200, 260, 330, 420];
 const HUNGER_FULL_MS = 8 * 60 * 60 * 1000; // 8h thì đói hẳn
 const HAPPY_FULL_MS = 12 * 60 * 60 * 1000; // 12h thì buồn hẳn
 
 export const FLOWERS: Flower[] = [
-  { id: "sunflower", name: "Hướng dương", emoji: "🌻", sproutEmoji: "🌱", seedCost: 5, reward: 12, growMinutes: 240 },
-  { id: "tulip", name: "Tulip", emoji: "🌷", sproutEmoji: "🌱", seedCost: 8, reward: 18, growMinutes: 360 },
-  { id: "rose", name: "Hoa hồng", emoji: "🌹", sproutEmoji: "🌱", seedCost: 12, reward: 28, growMinutes: 480 },
-  { id: "hibiscus", name: "Dâm bụt", emoji: "🌺", sproutEmoji: "🌱", seedCost: 6, reward: 14, growMinutes: 300 },
-  { id: "blossom", name: "Hoa anh đào", emoji: "🌸", sproutEmoji: "🌱", seedCost: 10, reward: 22, growMinutes: 420 },
+  { id: "sunflower",  name: "Hướng dương", emoji: "🌻", sproutEmoji: "🌱", seedCost: 10, reward: 22,  growMinutes: 240 }, // 4h  +120%
+  { id: "hibiscus",   name: "Dâm bụt",     emoji: "🌺", sproutEmoji: "🌱", seedCost: 12, reward: 31,  growMinutes: 300 }, // 5h  +158%
+  { id: "tulip",      name: "Tulip",        emoji: "🌷", sproutEmoji: "🌱", seedCost: 15, reward: 43,  growMinutes: 360 }, // 6h  +187%
+  { id: "blossom",    name: "Hoa anh đào",  emoji: "🌸", sproutEmoji: "🌱", seedCost: 18, reward: 57,  growMinutes: 420 }, // 7h  +217%
+  { id: "rose",       name: "Hoa hồng",     emoji: "🌹", sproutEmoji: "🌱", seedCost: 22, reward: 77,  growMinutes: 480 }, // 8h  +250%
+  { id: "orchid",     name: "Lan",          emoji: "🌼", sproutEmoji: "🌱", seedCost: 30, reward: 135, growMinutes: 600 }, // 10h +350%
+  { id: "lotus",      name: "Cỏ 4 lá",     emoji: "🍀", sproutEmoji: "🌱", seedCost: 40, reward: 232, growMinutes: 720 }, // 12h +480%
 ];
 
 export const PETS: Pet[] = [
@@ -84,11 +92,19 @@ function defaultState(): GardenState {
   return {
     coins: 30,
     plots: Array.from({ length: PLOT_COUNT }, () => ({ flowerId: null, plantedAt: null })),
+    unlockedPlots: PLOT_COUNT,
     pet: { id: "cat", name: "Miu", lastFedAt: Date.now(), lastPlayedAt: Date.now() },
     ownedPets: ["cat"],
     roamingEnabled: true,
     totalHarvested: 0,
   };
+}
+
+/** Chi phí mở ô tiếp theo (dựa trên số ô hiện tại). */
+export function plotUnlockCost(currentCount: number): number | null {
+  const idx = currentCount - PLOT_COUNT;
+  if (idx < 0 || idx >= PLOT_UNLOCK_COSTS.length) return null;
+  return PLOT_UNLOCK_COSTS[idx];
 }
 
 function normalizePastTimestamp(value: unknown, fallback: number, now = Date.now()): number {
@@ -104,17 +120,22 @@ export function loadGarden(userId?: string): GardenState {
     if (!raw) return defaultState();
     const parsed = JSON.parse(raw) as Partial<GardenState>;
     const base = defaultState();
+    const unlocked = Math.max(
+      PLOT_COUNT,
+      Math.min(PLOT_MAX, Number(parsed.unlockedPlots) || PLOT_COUNT),
+    );
     const plots = Array.isArray(parsed.plots)
-      ? parsed.plots.slice(0, PLOT_COUNT).map((p) => ({
+      ? parsed.plots.slice(0, unlocked).map((p) => ({
           flowerId: p?.flowerId ?? null,
           plantedAt: typeof p?.plantedAt === "number" ? p.plantedAt : null,
         }))
       : base.plots;
-    while (plots.length < PLOT_COUNT) plots.push({ flowerId: null, plantedAt: null });
+    while (plots.length < unlocked) plots.push({ flowerId: null, plantedAt: null });
     const next = {
       ...base,
       ...parsed,
       plots,
+      unlockedPlots: unlocked,
       pet: {
         ...base.pet,
         ...parsed.pet,

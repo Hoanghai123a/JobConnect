@@ -15,6 +15,7 @@ export interface EmploymentHistoryRecord {
   employee_code?: string;
   worker_name_snapshot: string;
   worker_cccd_snapshot: string;
+  worker_tax_code_snapshot?: string;
   recruiter_staff?: string;
   join_date: string;
   leave_date?: string;
@@ -37,6 +38,7 @@ export interface EmploymentDraft {
   employee_code?: string;
   worker_name_snapshot: string;
   worker_cccd_snapshot: string;
+  worker_tax_code_snapshot?: string;
   recruiter_staff?: string;
   join_date: string;
   leave_date?: string;

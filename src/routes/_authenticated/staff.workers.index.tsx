@@ -4,6 +4,7 @@ import {
   CalendarRange,
   ChevronRight,
   Clock3,
+  Hash,
   Landmark,
   Plus,
   Search,
@@ -140,6 +141,7 @@ function StaffWorkersPage() {
         latest?.employee_code,
         latest?.worker_name_snapshot,
         latest?.worker_cccd_snapshot,
+        latest?.worker_tax_code_snapshot,
         latest?.expand?.factory?.name,
       ]
         .filter(Boolean)
@@ -226,6 +228,7 @@ function StaffWorkersPage() {
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     Mã NV: {latest?.employee_code || worker.user.employee_code || "Chưa có"} · CCCD:{" "}
                     {maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)}
+                    {latest?.worker_tax_code_snapshot && ` · MST: ${latest.worker_tax_code_snapshot}`}
                   </div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {latest?.expand?.factory?.name || "Chưa có nhà máy"} · Người tuyển:{" "}
@@ -282,7 +285,7 @@ function StaffWorkersPage() {
   );
 }
 
-type DrawerView = "summary" | "leave" | "join" | "advance" | "bank" | "payroll";
+type DrawerView = "summary" | "leave" | "join" | "advance" | "bank" | "payroll" | "employee_code";
 
 function WorkerQuickDrawer({
   worker,
@@ -315,6 +318,7 @@ function WorkerQuickDrawer({
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
+    worker_tax_code_snapshot: "",
     recruiter_staff: "",
     join_date: todayDate(),
     note: "",
@@ -327,6 +331,7 @@ function WorkerQuickDrawer({
     bank_account_number: "",
     bank_account_name: "",
   });
+  const [employeeCodeForm, setEmployeeCodeForm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [payrollLoading, setPayrollLoading] = useState(false);
   const [attendanceItems, setAttendanceItems] = useState<
@@ -356,6 +361,7 @@ function WorkerQuickDrawer({
       employee_code: latest?.employee_code || worker.user.employee_code || "",
       worker_name_snapshot: latest?.worker_name_snapshot || worker.user.full_name || "",
       worker_cccd_snapshot: latest?.worker_cccd_snapshot || worker.user.cccd || "",
+      worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
       recruiter_staff: viewer?.id || "",
       join_date: todayDate(),
       note: "",
@@ -365,6 +371,9 @@ function WorkerQuickDrawer({
       bank_account_number: worker.user.bank_account_number || "",
       bank_account_name: worker.user.bank_account_name || "",
     });
+    setEmployeeCodeForm(
+      latest?.employee_code || worker.user.employee_code || "",
+    );
   }, [worker, viewer?.id]);
 
   useEffect(() => {
@@ -482,6 +491,7 @@ function WorkerQuickDrawer({
           worker.user.username ||
           "",
         worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim() || worker.user.cccd || "",
+        worker_tax_code_snapshot: joinForm.worker_tax_code_snapshot.trim(),
         recruiter_staff: joinForm.recruiter_staff,
         join_date: joinForm.join_date,
         status: "working",
@@ -600,6 +610,37 @@ function WorkerQuickDrawer({
     }
   };
 
+  const submitEmployeeCode = async () => {
+    if (!worker || !viewer?.id) return;
+    const code = employeeCodeForm.trim();
+    if (!code) {
+      toast.warning("Nhập mã nhân viên");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await pb.collection("users").update(worker.user.id, { employee_code: code });
+      if (latest) {
+        await updateEmploymentHistory(latest.id, { employee_code: code });
+      }
+      await createStaffActionLog({
+        actor: viewer,
+        targetUserId: worker.user.id,
+        targetCollection: "employment_histories",
+        targetRecord: latest?.id || worker.user.id,
+        action: "update",
+        note: `Cập nhật mã NV: ${code}`,
+      });
+      toast.success("Đã cập nhật mã nhân viên");
+      onClose();
+      onDataChanged();
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi cập nhật mã NV");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <Drawer open={open} onOpenChange={(v) => !v && onClose()}>
       <DrawerContent className="max-h-[90dvh]">
@@ -624,6 +665,10 @@ function WorkerQuickDrawer({
                 <InfoCell
                   label="CCCD (NM)"
                   value={maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)}
+                />
+                <InfoCell
+                  label="Mã số thuế"
+                  value={latest?.worker_tax_code_snapshot || "—"}
                 />
                 <InfoCell
                   label="Mã NV"
@@ -672,6 +717,13 @@ function WorkerQuickDrawer({
                     icon={Landmark}
                     label="Cập nhật ngân hàng"
                     onClick={() => setView("bank")}
+                  />
+                )}
+                {(worker.canReportLeave || worker.canReportJoin || worker.canReportAdvance) && (
+                  <ActionButton
+                    icon={Hash}
+                    label="Cập nhật mã NV"
+                    onClick={() => setView("employee_code")}
                   />
                 )}
               </div>
@@ -798,6 +850,19 @@ function WorkerQuickDrawer({
                   />
                 </div>
               </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Mã số thuế</Label>
+                <Input
+                  value={joinForm.worker_tax_code_snapshot}
+                  onChange={(e) =>
+                    setJoinForm((f) => ({
+                      ...f,
+                      worker_tax_code_snapshot: e.target.value.replace(/[^\d]/g, ""),
+                    }))
+                  }
+                  inputMode="numeric"
+                />
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Mã NV</Label>
@@ -911,6 +976,34 @@ function WorkerQuickDrawer({
                 </Button>
                 <Button onClick={submitBank} disabled={submitting} className="flex-1">
                   {submitting ? "Đang lưu..." : "Lưu ngân hàng"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {view === "employee_code" && (
+            <div className="space-y-3">
+              <div className="text-sm font-semibold">Cập nhật mã nhân viên</div>
+              <div className="space-y-1">
+                <Label className="text-xs">Mã NV hiện tại</Label>
+                <div className="rounded-xl bg-muted/35 px-3 py-2 text-sm">
+                  {worker?.latestHistory?.employee_code || worker?.user.employee_code || "Chưa có"}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Mã NV mới</Label>
+                <Input
+                  value={employeeCodeForm}
+                  onChange={(e) => setEmployeeCodeForm(e.target.value)}
+                  placeholder="Nhập mã nhân viên"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setView("summary")} className="flex-1">
+                  Quay lại
+                </Button>
+                <Button onClick={submitEmployeeCode} disabled={submitting} className="flex-1">
+                  {submitting ? "Đang lưu..." : "Lưu mã NV"}
                 </Button>
               </div>
             </div>

@@ -192,6 +192,9 @@ export function UserWorkHistoryPanel() {
                     {maskCccd(history.worker_cccd_snapshot)}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
+                    Mã số thuế: {history.worker_tax_code_snapshot || "Chưa có"}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
                     Nhà chính: {history.expand?.main_house?.name || "Chưa gán"}
                   </div>
                 </div>

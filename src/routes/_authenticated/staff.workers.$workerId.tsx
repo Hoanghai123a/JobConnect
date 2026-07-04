@@ -45,7 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
-import { exportToExcel } from "@/lib/excel";
+import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import {
   createEmploymentHistory,
   fetchEmploymentHistories,
@@ -139,6 +139,7 @@ function StaffWorkerDetailPage() {
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
+    worker_tax_code_snapshot: "",
     recruiter_staff: "",
     join_date: todayDate(),
     note: "",
@@ -152,6 +153,7 @@ function StaffWorkerDetailPage() {
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
+    worker_tax_code_snapshot: "",
     recruiter_staff: "",
     main_house: "",
     join_date: "",
@@ -239,6 +241,7 @@ function StaffWorkerDetailPage() {
             employee_code: latest?.employee_code || userRecord?.employee_code || "",
             worker_name_snapshot: latest?.worker_name_snapshot || userRecord?.full_name || "",
             worker_cccd_snapshot: latest?.worker_cccd_snapshot || userRecord?.cccd || "",
+            worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
             recruiter_staff: latest?.recruiter_staff || viewer.id,
             main_house: latest?.main_house || "",
           }));
@@ -345,12 +348,13 @@ function StaffWorkerDetailPage() {
         "Mã nhân viên": history.employee_code || "",
         "Họ tên tại nhà máy": history.worker_name_snapshot,
         CCCD: history.worker_cccd_snapshot,
+        "Mã số thuế": history.worker_tax_code_snapshot || "",
         "Người tuyển":
           history.expand?.recruiter_staff?.full_name ||
           history.expand?.recruiter_staff?.username ||
           "",
-        "Ngày vào": history.join_date || "",
-        "Ngày nghỉ": history.leave_date || "",
+        "Ngày vào": formatDateOnly(history.join_date),
+        "Ngày nghỉ": formatDateOnly(history.leave_date),
         "Trạng thái": history.status === "working" ? "Đang làm" : "Đã nghỉ",
         "Ghi chú": history.note || "",
       })),
@@ -497,6 +501,7 @@ function StaffWorkerDetailPage() {
       worker_name_snapshot:
         joinForm.worker_name_snapshot.trim() || workerUser.full_name || workerUser.username || "",
       worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim() || workerUser.cccd || "",
+      worker_tax_code_snapshot: joinForm.worker_tax_code_snapshot.trim(),
       recruiter_staff: joinForm.recruiter_staff,
       join_date: joinForm.join_date,
       status: "working",
@@ -555,6 +560,7 @@ function StaffWorkerDetailPage() {
       employee_code: history.employee_code || "",
       worker_name_snapshot: history.worker_name_snapshot || "",
       worker_cccd_snapshot: history.worker_cccd_snapshot || "",
+      worker_tax_code_snapshot: history.worker_tax_code_snapshot || "",
       recruiter_staff: history.recruiter_staff || "",
       main_house: history.main_house || "",
       join_date: history.join_date?.slice(0, 10) || "",
@@ -571,6 +577,7 @@ function StaffWorkerDetailPage() {
       employee_code: historyForm.employee_code.trim(),
       worker_name_snapshot: historyForm.worker_name_snapshot.trim(),
       worker_cccd_snapshot: historyForm.worker_cccd_snapshot.trim(),
+      worker_tax_code_snapshot: historyForm.worker_tax_code_snapshot.trim(),
       recruiter_staff: historyForm.recruiter_staff || undefined,
       main_house: historyForm.main_house || undefined,
       join_date: historyForm.join_date,
@@ -657,6 +664,10 @@ function StaffWorkerDetailPage() {
             value={latestHistory?.expand?.factory?.name || "Chưa có"}
           />
           <InfoCell label="Mã NV gần nhất" value={latestHistory?.employee_code || "Chưa có"} />
+          <InfoCell
+            label="Mã số thuế gần nhất"
+            value={latestHistory?.worker_tax_code_snapshot || "Chưa có"}
+          />
           <InfoCell
             label="Người tuyển gần nhất"
             value={
@@ -761,6 +772,9 @@ function StaffWorkerDetailPage() {
                   </div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {history.worker_name_snapshot} · CCCD: {maskCccd(history.worker_cccd_snapshot)}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    Mã số thuế: {history.worker_tax_code_snapshot || "Chưa có"}
                   </div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     Mã NV: {history.employee_code || "Chưa có"} · Người tuyển:{" "}
@@ -1030,6 +1044,19 @@ function StaffWorkerDetailPage() {
                 className="rounded-xl"
               />
             </FormField>
+            <FormField label="Mã số thuế">
+              <Input
+                value={joinForm.worker_tax_code_snapshot}
+                onChange={(event) =>
+                  setJoinForm((current) => ({
+                    ...current,
+                    worker_tax_code_snapshot: event.target.value.replace(/[^\d]/g, ""),
+                  }))
+                }
+                inputMode="numeric"
+                className="rounded-xl"
+              />
+            </FormField>
             <FormField label="Ngày vào">
               <Input
                 type="date"
@@ -1181,6 +1208,19 @@ function StaffWorkerDetailPage() {
                     worker_cccd_snapshot: event.target.value,
                   }))
                 }
+                className="rounded-xl"
+              />
+            </FormField>
+            <FormField label="Mã số thuế">
+              <Input
+                value={historyForm.worker_tax_code_snapshot}
+                onChange={(event) =>
+                  setHistoryForm((current) => ({
+                    ...current,
+                    worker_tax_code_snapshot: event.target.value.replace(/[^\d]/g, ""),
+                  }))
+                }
+                inputMode="numeric"
                 className="rounded-xl"
               />
             </FormField>

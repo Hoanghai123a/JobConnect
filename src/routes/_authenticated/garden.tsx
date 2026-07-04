@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -24,9 +24,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import {
   FLOWERS,
   PETS,
-  PLOT_COUNT,
+  PLOT_MAX,
   flowerById,
   petById,
+  plotUnlockCost,
   loadGarden,
   saveGarden,
   growthProgress,
@@ -57,19 +58,30 @@ import {
   updateExchangeTier,
   deleteExchangeTier,
   resetReserveBalance,
+  fetchGardenByUsername,
+  fetchGardenVisitSaves,
+  saveGardenVisit,
+  deleteGardenVisitSave,
+  stealCoins,
   type GardenFood,
   type GardenExchangeTier,
   type GardenBalance,
   type GardenExchangeRequest,
+  type GardenVisitSave,
 } from "@/lib/garden-server";
-import { Coins, Sparkles, Drumstick, Hand, Store, Leaf, ArrowRightLeft, Settings2, Check, X, Plus, Trash2, Wallet, Pencil } from "lucide-react";
+import { Coins, Sparkles, Drumstick, Hand, Store, Leaf, ArrowRightLeft, Settings2, Check, X, Plus, Trash2, Wallet, Pencil, DoorOpen } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/garden")({
   component: GardenPage,
 });
 
 type MainTab = "garden" | "food" | "exchange" | "admin";
+type GardenOwner = { id?: string; full_name?: string; username?: string };
+type VisitedGarden = GardenBalance & { expand?: { user?: GardenOwner } };
 
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 function GardenPage() {
   const { user, isAdmin } = useAuth();
   const isStaff = user?.role === "staff";
@@ -83,7 +95,19 @@ function GardenPage() {
   const [feedOpen, setFeedOpen] = useState(false);
   const [exchangeOpen, setExchangeOpen] = useState(false);
   const [playHearts, setPlayHearts] = useState(false);
+  const [harvestAnim, setHarvestAnim] = useState<{ emoji: string; plotIndex: number; key: number } | null>(null);
+  const [stealAnim, setStealAnim] = useState<{ emoji: string; plotIndex: number; key: number } | null>(null);
+  const [renamingPet, setRenamingPet] = useState(false);
+  const [petNameInput, setPetNameInput] = useState("");
   const [mainTab, setMainTab] = useState<MainTab>("garden");
+  const [visitOpen, setVisitOpen] = useState(false);
+  const [visitUsername, setVisitUsername] = useState("");
+  const [visitSaves, setVisitSaves] = useState<GardenVisitSave[]>([]);
+  const [visitedGarden, setVisitedGarden] = useState<VisitedGarden | null>(null);
+  const [gardenDetailOpen, setGardenDetailOpen] = useState(false);
+  const [visiting, setVisiting] = useState(false);
+  const [stealing, setStealing] = useState(false);
+  const [curtainPhase, setCurtainPhase] = useState<"idle" | "close" | "open">("idle");
 
   const loadServerData = useCallback(async () => {
     if (!user?.id) return;
@@ -96,20 +120,69 @@ function GardenPage() {
       setBalance(bal);
       setFoods(foodList.filter((f) => f.active));
       setTiers(tierList.filter((t) => t.active));
-    } catch {}
+
+      // Sync stolenAmount từ server vào local state
+      if (bal && Array.isArray(bal.plots)) {
+        setState((prev) => {
+          if (!prev) return prev;
+          const serverPlots = bal.plots as { flowerId: string | null; plantedAt: number | null; stolenAmount?: number }[];
+          let changed = false;
+          const merged = prev.plots.map((lp, i) => {
+            const sp = serverPlots[i];
+            if (sp?.stolenAmount && lp.flowerId === sp.flowerId && !lp.stolenAmount) {
+              changed = true;
+              return { ...lp, stolenAmount: sp.stolenAmount };
+            }
+            return lp;
+          });
+          if (changed) {
+            const next = { ...prev, plots: merged };
+            saveGarden(user.id, next);
+            return next;
+          }
+          return prev;
+        });
+      }
+    } catch {
+      setBalance(null);
+      setFoods([]);
+      setTiers([]);
+    }
+  }, [user?.id]);
+
+  const loadVisitSaves = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const saved = await fetchGardenVisitSaves(user.id);
+      setVisitSaves(saved);
+    } catch {
+      setVisitSaves([]);
+    }
   }, [user?.id]);
 
   useEffect(() => {
     if (user?.id) {
       setState(loadGarden(user.id));
       loadServerData();
+      loadVisitSaves();
     }
-  }, [user?.id, loadServerData]);
+  }, [user?.id, loadServerData, loadVisitSaves]);
 
   useEffect(() => {
     const t = window.setInterval(() => setTick((n) => n + 1), 30000);
     return () => window.clearInterval(t);
   }, []);
+
+  // Thông báo bị chộm khi mở vườn
+  useEffect(() => {
+    if (!balance?.lastStolenAt || !user?.id) return;
+    const seenKey = `garden:lastStolenSeen:${user.id}`;
+    const lastSeen = Number(localStorage.getItem(seenKey) ?? 0);
+    if (balance.lastStolenAt > lastSeen) {
+      toast.warning("Vườn của bạn vừa bị ăn chộm! 🌿");
+      localStorage.setItem(seenKey, String(balance.lastStolenAt));
+    }
+  }, [balance?.lastStolenAt, user?.id]);
 
   const coins = balance?.coins ?? state?.coins ?? 0;
 
@@ -131,7 +204,17 @@ function GardenPage() {
     [balance],
   );
 
-  const now = useMemo(() => Date.now(), [tick, state]);
+  const syncGardenState = useCallback(
+    async (newCoins: number, newPlots: { flowerId: string | null; plantedAt: number | null }[]) => {
+      if (balance) {
+        const updated = await updateBalance(balance.id, { coins: newCoins, plots: newPlots });
+        setBalance(updated);
+      }
+    },
+    [balance],
+  );
+
+  const now = Date.now();
 
   if (!state) {
     return (
@@ -145,6 +228,7 @@ function GardenPage() {
   const mood = petMood(state.pet, now);
   const hungerPct = Math.round(hunger(state.pet, now) * 100);
   const happyPct = Math.round(happiness(state.pet, now) * 100);
+  const petFoods = foods.filter((f) => !f.petType || f.petType === "all" || f.petType === state.pet.id);
 
   const plantSeed = (plotIndex: number, flower: Flower) => {
     if (!isAdmin && coins < flower.seedCost) {
@@ -155,7 +239,7 @@ function GardenPage() {
     plots[plotIndex] = { flowerId: flower.id, plantedAt: Date.now() };
     const newCoins = isAdmin ? coins : coins - flower.seedCost;
     commit({ ...state, coins: newCoins, plots });
-    if (!isAdmin) syncCoins(newCoins);
+    if (!isAdmin) syncGardenState(newCoins, plots);
     setSeedPickerFor(null);
     toast.success(`Đã trồng ${flower.name}`);
   };
@@ -165,16 +249,15 @@ function GardenPage() {
     const flower = flowerById(plot.flowerId);
     if (!flower || !isReady(plot, now)) return;
     const plots = state.plots.slice();
+    const stolenAmount = plot.stolenAmount ?? 0;
+    const actualReward = Math.max(0, flower.reward - stolenAmount);
     plots[plotIndex] = { flowerId: null, plantedAt: null };
-    const newCoins = coins + flower.reward;
-    commit({
-      ...state,
-      coins: newCoins,
-      plots,
-      totalHarvested: state.totalHarvested + 1,
-    });
-    syncCoins(newCoins);
-    toast.success(`Thu hoạch ${flower.name} +${flower.reward} xu`);
+    const newCoins = coins + actualReward;
+    commit({ ...state, coins: newCoins, plots, totalHarvested: state.totalHarvested + 1 });
+    syncGardenState(newCoins, plots);
+    setHarvestAnim({ emoji: flower.emoji, plotIndex, key: Date.now() });
+    setTimeout(() => setHarvestAnim(null), 1200);
+    toast.success(`Thu hoạch ${flower.name} +${actualReward} xu${stolenAmount > 0 ? ` (bị chộm ${stolenAmount})` : ""}`);
   };
 
   const feedPet = () => {
@@ -205,6 +288,19 @@ function GardenPage() {
     setTimeout(() => setPlayHearts(false), 1500);
   };
 
+  const unlockPlot = () => {
+    const nextCount = state.unlockedPlots + 1;
+    if (nextCount > PLOT_MAX) return;
+    const cost = plotUnlockCost(state.unlockedPlots);
+    if (cost === null) return;
+    if (!isAdmin && coins < cost) { toast.error("Không đủ xu để mở ô đất"); return; }
+    const newCoins = isAdmin ? coins : coins - cost;
+    const newPlots = [...state.plots, { flowerId: null, plantedAt: null }];
+    commit({ ...state, coins: newCoins, plots: newPlots, unlockedPlots: nextCount });
+    if (!isAdmin) syncCoins(newCoins);
+    toast.success(`Đã mở ô đất thứ ${nextCount}!`);
+  };
+
   const buyPet = (petId: string, cost: number) => {
     if (state.ownedPets.includes(petId)) {
       commit({ ...state, pet: { ...state.pet, id: petId } });
@@ -224,6 +320,74 @@ function GardenPage() {
     });
     if (!isAdmin) syncCoins(newCoins);
     toast.success("Mở khóa thú cưng mới!");
+  };
+
+  // ---- Visit / Steal ----
+
+  const visitGarden = async (username: string) => {
+    if (!username.trim()) return;
+    // Nếu đã có vườn → curtain close → fetch → curtain open
+    if (visitedGarden) {
+      setCurtainPhase("close");
+      await new Promise((r) => setTimeout(r, 350));
+      setVisitedGarden(null);
+    }
+    setVisiting(true);
+    try {
+      const garden = await fetchGardenByUsername(username.trim());
+      if (!garden) { toast.error("Không tìm thấy vườn"); setCurtainPhase("idle"); return; }
+      if (garden.user === user?.id) { toast.error("Đây là vườn của bạn!"); setCurtainPhase("idle"); return; }
+      setVisitedGarden(garden);
+      setGardenDetailOpen(true);
+      if (user?.id) {
+        try {
+          await saveGardenVisit(user.id, garden);
+          await loadVisitSaves();
+        } catch {
+          toast.warning("Chưa lưu được vườn này vào danh sách đã lưu");
+        }
+      }
+      setCurtainPhase("open");
+      setTimeout(() => setCurtainPhase("idle"), 400);
+    } catch { toast.error("Không thể tải vườn"); setCurtainPhase("idle"); }
+    finally { setVisiting(false); }
+  };
+
+  const removeVisitSave = async (saveId: string) => {
+    try {
+      await deleteGardenVisitSave(saveId);
+      setVisitSaves((items) => items.filter((item) => item.id !== saveId));
+      toast.success("Đã xoá khỏi danh sách đã lưu");
+    } catch {
+      toast.error("Không thể xoá mục đã lưu");
+    }
+  };
+
+  const stealFrom = async (victim: VisitedGarden, plotIndex: number, flowerReward: number, flowerEmoji?: string) => {
+    if (!balance) return;
+    setStealing(true);
+    try {
+      const { newAttackerCoins, stolen } = await stealCoins({
+        attackerBalanceId: balance.id,
+        attackerCurrentCoins: coins,
+        victimBalanceId: victim.id,
+        plotIndex,
+        flowerReward,
+      });
+      setBalance({ ...balance, coins: newAttackerCoins });
+      if (flowerEmoji) {
+        setStealAnim({ emoji: flowerEmoji, plotIndex, key: Date.now() });
+        setTimeout(() => setStealAnim(null), 1200);
+      }
+      const refreshed = await fetchGardenByUsername(visitUsername.trim());
+      if (refreshed) setVisitedGarden(refreshed);
+      const victimName = victim.expand?.user?.full_name || victim.expand?.user?.username || "người dùng này";
+      toast.success(`Chộm thành công! +${stolen} xu từ vườn của ${victimName} 🌿`);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Chộm thất bại"));
+    } finally {
+      setStealing(false);
+    }
   };
 
   return (
@@ -288,7 +452,47 @@ function GardenPage() {
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <div className="text-lg font-semibold">{state.pet.name}</div>
+                {renamingPet ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const trimmed = petNameInput.trim();
+                      if (trimmed) {
+                        const newPet = { ...state.pet, name: trimmed };
+                        commit({ ...state, pet: newPet });
+                        if (balance?.id) updateBalance(balance.id, { pet: newPet }).catch(() => {});
+                      }
+                      setRenamingPet(false);
+                    }}
+                    className="flex items-center gap-1"
+                  >
+                    <input
+                      autoFocus
+                      value={petNameInput}
+                      onChange={(e) => setPetNameInput(e.target.value)}
+                      maxLength={20}
+                      className="w-28 rounded-lg bg-white/30 px-2 py-0.5 text-sm font-semibold text-white placeholder-white/60 outline-none ring-2 ring-white/60"
+                      onBlur={() => {
+                        const trimmed = petNameInput.trim();
+                        if (trimmed) {
+                          const newPet = { ...state.pet, name: trimmed };
+                          commit({ ...state, pet: newPet });
+                          if (balance?.id) updateBalance(balance.id, { pet: newPet }).catch(() => {});
+                        }
+                        setRenamingPet(false);
+                      }}
+                    />
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setPetNameInput(state.pet.name); setRenamingPet(true); }}
+                    className="flex items-center gap-1 text-lg font-semibold hover:underline"
+                  >
+                    {state.pet.name}
+                    <Pencil className="h-3.5 w-3.5 opacity-60" />
+                  </button>
+                )}
                 <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] uppercase tracking-wide backdrop-blur">
                   {pet.name}
                 </span>
@@ -335,17 +539,17 @@ function GardenPage() {
         {/* Khu vườn */}
         <section className="rounded-3xl bg-card p-4 shadow-soft">
           <div className="mb-3 flex items-center justify-between">
-            <div className="text-sm font-semibold tracking-tight">Luống hoa</div>
-            <div className="text-[11px] text-muted-foreground">
-              Đã thu hoạch: {state.totalHarvested}
+            <div>
+              <div className="text-sm font-semibold tracking-tight">Luống hoa</div>
+              <div className="text-[11px] text-muted-foreground">{state.unlockedPlots} ô · Thu hoạch: {state.totalHarvested}</div>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            {Array.from({ length: PLOT_COUNT }).map((_, i) => {
+          <div className="grid grid-cols-4 gap-1.5">
+            {Array.from({ length: state.unlockedPlots }).map((_, i) => {
               const plot = state.plots[i];
-              const flower = flowerById(plot.flowerId);
-              const ready = isReady(plot, now);
-              const progress = growthProgress(plot, now);
+              const flower = flowerById(plot?.flowerId ?? null);
+              const ready = isReady(plot ?? { flowerId: null, plantedAt: null }, now);
+              const progress = growthProgress(plot ?? { flowerId: null, plantedAt: null }, now);
               return (
                 <button
                   key={i}
@@ -354,7 +558,7 @@ function GardenPage() {
                     else if (ready) harvest(i);
                   }}
                   className={cn(
-                    "relative flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed text-center transition active:scale-95",
+                    "relative flex aspect-square flex-col items-center justify-center gap-0 rounded-lg border border-dashed text-center transition active:scale-95",
                     flower
                       ? ready
                         ? "border-amber-400 bg-amber-50"
@@ -362,31 +566,42 @@ function GardenPage() {
                       : "border-border bg-muted/40",
                   )}
                 >
+                  {harvestAnim?.plotIndex === i && (
+                    <span
+                      key={harvestAnim.key}
+                      className="pointer-events-none absolute left-1/2 -top-2 -translate-x-1/2 text-xl animate-float-up"
+                    >
+                      {harvestAnim.emoji}
+                    </span>
+                  )}
                   {!flower ? (
-                    <span className="text-2xl text-muted-foreground/50">+</span>
+                    <span className="text-lg text-muted-foreground/50">+</span>
                   ) : (
                     <>
-                      <span className={cn("text-2xl", ready && "animate-bounce")}>
-                        {ready ? flower.emoji : flower.sproutEmoji}
+                      <span
+                        className={cn("text-base leading-none inline-block", ready && "animate-bounce")}
+                        style={{ transform: `scale(${ready ? 1 : (0.35 + progress * 0.65).toFixed(2)})`, transformOrigin: "center bottom", transition: "transform 0.4s ease" }}
+                      >
+                        {flower.emoji}
                       </span>
-                      <span className="text-[9px] font-medium text-foreground/70">
+                      <span className="text-[9px] font-medium text-foreground/80 leading-tight truncate w-full text-center px-0.5">
                         {flower.name}
                       </span>
                       {ready ? (
-                        <span className="text-[10px] font-semibold text-amber-600">
+                        <span className="text-[9px] font-semibold text-amber-600 leading-tight">
                           Thu hoạch
                         </span>
                       ) : (
                         <>
-                          <div className="h-1 w-10 overflow-hidden rounded-full bg-emerald-200">
+                          <div className="h-1 w-7 overflow-hidden rounded-full bg-emerald-200">
                             <div
                               className="h-full bg-emerald-500 transition-all"
                               style={{ width: `${Math.round(progress * 100)}%` }}
                             />
                           </div>
-                          <span className="text-[9px] text-muted-foreground">
+                          <span className="text-[9px] text-muted-foreground leading-tight">
                             {readyInMinutes(plot, now) >= 60
-                              ? `${Math.floor(readyInMinutes(plot, now) / 60)}h ${readyInMinutes(plot, now) % 60}p`
+                              ? `${Math.floor(readyInMinutes(plot, now) / 60)}h${readyInMinutes(plot, now) % 60}p`
                               : `${readyInMinutes(plot, now)}p`}
                           </span>
                         </>
@@ -396,6 +611,27 @@ function GardenPage() {
                 </button>
               );
             })}
+
+            {/* Nút mở ô tiếp theo */}
+            {state.unlockedPlots < PLOT_MAX && (() => {
+              const cost = plotUnlockCost(state.unlockedPlots);
+              const canAfford = isAdmin || coins >= (cost ?? Infinity);
+              return (
+                <button
+                  onClick={unlockPlot}
+                  className={cn(
+                    "flex aspect-square flex-col items-center justify-center gap-px rounded-lg border border-dashed text-center transition active:scale-95",
+                    canAfford ? "border-primary/40 bg-primary/5 hover:bg-primary/10" : "border-border bg-muted/20 opacity-60",
+                  )}
+                >
+                  <span className="text-sm text-primary leading-none">🔒</span>
+                  <span className="text-[8px] font-semibold text-primary leading-none">Mở ô</span>
+                  <span className="flex items-center gap-0.5 text-[8px] font-medium text-amber-700 leading-none">
+                    <Coins className="h-2 w-2 shrink-0" />{cost}
+                  </span>
+                </button>
+              );
+            })()}
           </div>
           <p className="mt-3 text-center text-[11px] text-muted-foreground">
             Chạm ô trống để trồng hoa · chạm hoa đã nở để thu hoạch lấy xu
@@ -404,7 +640,7 @@ function GardenPage() {
           </TabsContent>
 
           <TabsContent value="food" className="mt-0 space-y-3">
-            <FoodShopTab foods={foods} coins={coins} petName={state.pet.name} onBuy={buyFood} isAdmin={isAdmin} />
+            <FoodShopTab foods={petFoods} coins={coins} petName={state.pet.name} onBuy={buyFood} isAdmin={isAdmin} />
           </TabsContent>
 
           {!isStaff && (
@@ -471,12 +707,12 @@ function GardenPage() {
             <DialogDescription>Chọn thức ăn để tăng độ no cho thú cưng.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            {foods.length === 0 ? (
+            {petFoods.length === 0 ? (
               <div className="rounded-xl border bg-muted/40 p-4 text-center text-xs text-muted-foreground">
-                Admin chưa thiết lập thức ăn nào.
+                Chưa có thức ăn nào phù hợp cho {state.pet.name}.
               </div>
             ) : (
-              foods.map((f) => {
+              petFoods.map((f) => {
                 const affordable = isAdmin || coins >= f.price;
                 return (
                   <button
@@ -574,6 +810,272 @@ function GardenPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* FAB — Ghé vườn hàng xóm */}
+      <button
+        type="button"
+        onClick={() => setVisitOpen(true)}
+        className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-3 z-20 flex items-center gap-1.5 rounded-full bg-card shadow-soft border border-border/60 px-3 py-2 transition active:scale-95"
+        aria-label="Ghé vườn hàng xóm"
+      >
+        <DoorOpen className="h-4 w-4 text-primary shrink-0" />
+        <span className="text-[11px] font-medium text-primary">Ghé thăm</span>
+      </button>
+
+      {/* Dialog ghé vườn hàng xóm */}
+      <Dialog open={visitOpen} onOpenChange={(o) => { setVisitOpen(o); if (!o) { setVisitedGarden(null); setGardenDetailOpen(false); } }}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DoorOpen className="h-5 w-5 text-primary" /> Ghé vườn hàng xóm
+            </DialogTitle>
+            <DialogDescription>Nhập username để ghé thăm vườn. Hoa đã chín mới có thể ăn chộm.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Nhập username..."
+                value={visitUsername}
+                onChange={(e) => setVisitUsername(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && visitGarden(visitUsername)}
+                className="flex-1"
+              />
+              <Button onClick={() => visitGarden(visitUsername)} disabled={visiting || !visitUsername.trim()}>
+                {visiting ? "..." : "Vào"}
+              </Button>
+            </div>
+
+            <div className="rounded-2xl border bg-card p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="text-xs font-semibold">Đã lưu</div>
+                <div className="text-[10px] text-muted-foreground">{visitSaves.length} vườn</div>
+              </div>
+              {visitSaves.length === 0 ? (
+                <div className="text-xs text-muted-foreground">
+                  Chưa có vườn đã lưu. Ghé thăm thành công sẽ tự lưu vào danh sách này.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {visitSaves.map((item) => {
+                    const label =
+                      item.target_name ||
+                      item.expand?.target_user?.full_name ||
+                      item.target_username ||
+                      item.expand?.target_user?.username ||
+                      "Vườn đã lưu";
+                    const username = item.target_username || item.expand?.target_user?.username || "";
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-2 py-2"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVisitUsername(username);
+                            visitGarden(username);
+                          }}
+                          disabled={!username || visiting}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <div className="truncate text-sm font-medium">{label}</div>
+                          <div className="truncate text-[11px] text-muted-foreground">@{username || "chưa có username"}</div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeVisitSave(item.id)}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive active:scale-95"
+                          aria-label="Xoá khỏi danh sách đã lưu"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={gardenDetailOpen && Boolean(visitedGarden)} onOpenChange={setGardenDetailOpen}>
+        <DialogContent className="max-h-[86vh] overflow-y-auto rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DoorOpen className="h-5 w-5 text-primary" /> Vườn của{" "}
+              {visitedGarden?.expand?.user?.full_name || visitedGarden?.expand?.user?.username || "người dùng"}
+            </DialogTitle>
+            <DialogDescription>Xem ô đất, tình trạng hoa và thời gian thu hoạch.</DialogDescription>
+          </DialogHeader>
+          {visitedGarden && (
+            <GardenVisitPreview
+              garden={visitedGarden}
+              curtainPhase={curtainPhase}
+              stealing={stealing}
+              stealAnim={stealAnim}
+              onSteal={stealFrom}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+    </div>
+  );
+}
+
+function GardenVisitPreview({
+  garden,
+  curtainPhase,
+  stealing,
+  stealAnim,
+  onSteal,
+}: {
+  garden: VisitedGarden;
+  curtainPhase: "idle" | "close" | "open";
+  stealing: boolean;
+  stealAnim: { emoji: string; plotIndex: number; key: number } | null;
+  onSteal: (victim: VisitedGarden, plotIndex: number, flowerReward: number, flowerEmoji?: string) => void;
+}) {
+  const now = Date.now();
+  const victimCoins = garden.coins ?? 0;
+  const serverPlots: { flowerId: string | null; plantedAt: number | null }[] = Array.isArray(garden.plots)
+    ? (garden.plots as { flowerId: string | null; plantedAt: number | null }[])
+    : [];
+  const readyPlots = serverPlots
+    .map((plot, index) => ({ plot, index }))
+    .filter(({ plot }) => {
+      if (!plot?.flowerId || !plot?.plantedAt) return false;
+      const flower = flowerById(plot.flowerId);
+      if (!flower) return false;
+      return now - plot.plantedAt >= flower.growMinutes * 60 * 1000;
+    });
+
+  const plantedCount = serverPlots.filter((p) => p.flowerId).length;
+  const plotCount = serverPlots.length || 6;
+
+  return (
+    <div
+      className={cn(
+        "space-y-3",
+        curtainPhase === "close" && "animate-curtain-close",
+        curtainPhase === "open" && "animate-curtain-open",
+      )}
+    >
+      <section className="rounded-3xl bg-card p-4 shadow-soft">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold tracking-tight">Luống hoa</div>
+            <div className="text-[11px] text-muted-foreground">
+              {plotCount} ô · {plantedCount} đang trồng · {victimCoins} xu
+            </div>
+          </div>
+          <span
+            className={cn(
+              "shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold",
+              readyPlots.length > 0
+                ? "bg-amber-100 text-amber-700"
+                : "bg-muted text-muted-foreground",
+            )}
+          >
+            {readyPlots.length > 0 ? "Có hoa chín" : "Chưa chín"}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-4 gap-1.5">
+          {Array.from({ length: plotCount }).map((_, idx) => {
+            const plot = serverPlots[idx];
+            const flower = flowerById(plot?.flowerId ?? null);
+            if (!flower) {
+              return (
+                <div
+                  key={idx}
+                  className="flex aspect-square items-center justify-center rounded-lg border border-dashed border-border bg-muted/40 text-lg text-muted-foreground/50"
+                >
+                  +
+                </div>
+              );
+            }
+            const elapsed = plot.plantedAt ? now - plot.plantedAt : 0;
+            const total = flower.growMinutes * 60 * 1000;
+            const progress = Math.max(0, Math.min(1, elapsed / total));
+            const ready = progress >= 1;
+            const alreadyStolen = !!(plot as { stolenAmount?: number }).stolenAmount;
+            const canSteal = ready && !stealing && !alreadyStolen;
+            const remainMinutes = Math.max(0, Math.ceil((total - elapsed) / 60000));
+            return (
+              <button
+                key={idx}
+                disabled={!canSteal}
+                onClick={() => canSteal && onSteal(garden, idx, flower.reward, flower.emoji)}
+                className={cn(
+                  "relative flex aspect-square flex-col items-center justify-center gap-0 rounded-lg border border-dashed text-center transition active:scale-95",
+                  ready
+                    ? canSteal
+                      ? "border-amber-400 bg-amber-50 hover:bg-amber-100"
+                      : "border-amber-400 bg-amber-50 opacity-60"
+                    : "border-emerald-200 bg-emerald-50",
+                )}
+              >
+                {stealAnim?.plotIndex === idx && (
+                  <span
+                    key={stealAnim.key}
+                    className="pointer-events-none absolute left-1/2 -top-2 -translate-x-1/2 text-xl animate-float-up"
+                  >
+                    {stealAnim.emoji}
+                  </span>
+                )}
+                <span
+                  className={cn("inline-block text-base leading-none", ready && "animate-bounce")}
+                  style={{
+                    transform: `scale(${ready ? 1 : (0.35 + progress * 0.65).toFixed(2)})`,
+                    transformOrigin: "center bottom",
+                    transition: "transform 0.4s ease",
+                  }}
+                >
+                  {flower.emoji}
+                </span>
+                <span className="w-full truncate px-0.5 text-center text-[9px] font-medium leading-tight text-foreground/80">
+                  {flower.name}
+                </span>
+                {ready ? (
+                  <span className={cn("text-[9px] font-semibold leading-tight", alreadyStolen ? "text-muted-foreground" : "text-amber-600")}>
+                    {alreadyStolen ? "Đã chộm" : "Chộm"}
+                  </span>
+                ) : (
+                  <>
+                    <div className="h-1 w-7 overflow-hidden rounded-full bg-emerald-200">
+                      <div
+                        className="h-full bg-emerald-500 transition-all"
+                        style={{ width: `${Math.round(progress * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-[9px] leading-tight text-muted-foreground">
+                      {remainMinutes >= 60
+                        ? `${Math.floor(remainMinutes / 60)}h${remainMinutes % 60}p`
+                        : `${remainMinutes}p`}
+                    </span>
+                  </>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {serverPlots.length === 0 && (
+          <p className="mt-3 text-center text-[11px] text-muted-foreground">
+            Vườn này chưa trồng gì cả
+          </p>
+        )}
+
+        {readyPlots.length > 0 && (
+          <p className="mt-3 text-center text-[11px] text-muted-foreground">
+            Chạm hoa đã chín để chộm
+          </p>
+        )}
+      </section>
     </div>
   );
 }
@@ -665,7 +1167,7 @@ function ExchangeTab({ user, balance, tiers, onSuccess }: { user: { id: string; 
       onSuccess();
       const updated = await fetchExchangeRequests(user.id);
       setRequests(updated);
-    } catch (e: any) { toast.error(e?.message || "Lỗi gửi yêu cầu"); } finally { setSubmitting(false); }
+    } catch (e: unknown) { toast.error(errorMessage(e, "Lỗi gửi yêu cầu")); } finally { setSubmitting(false); }
   };
 
   return (
@@ -782,7 +1284,7 @@ function AdminRequests({ onDataChanged }: { onDataChanged: () => void }) {
       const updated = await fetchExchangeRequests();
       setRequests(updated);
       onDataChanged();
-    } catch (e: any) { toast.error(e?.message || "Lỗi duyệt"); }
+    } catch (e: unknown) { toast.error(errorMessage(e, "Lỗi duyệt")); }
   };
 
   const handleReject = async (id: string) => {
@@ -794,7 +1296,7 @@ function AdminRequests({ onDataChanged }: { onDataChanged: () => void }) {
       const updated = await fetchExchangeRequests();
       setRequests(updated);
       onDataChanged();
-    } catch (e: any) { toast.error(e?.message || "Lỗi huỷ"); }
+    } catch (e: unknown) { toast.error(errorMessage(e, "Lỗi huỷ")); }
   };
 
   const pending = requests.filter((r) => r.status === "pending");
@@ -852,9 +1354,9 @@ function AdminRequests({ onDataChanged }: { onDataChanged: () => void }) {
 
 function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
   const [foods, setFoods] = useState<GardenFood[]>([]);
-  const [form, setForm] = useState({ name: "", emoji: "🍖", price: "10", fullness: "30" });
+  const [form, setForm] = useState({ name: "", emoji: "🍖", price: "10", fullness: "30", petType: "all" });
   const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", emoji: "", price: "", fullness: "" });
+  const [editForm, setEditForm] = useState({ name: "", emoji: "", price: "", fullness: "", petType: "all" });
 
   useEffect(() => { fetchFoods().then(setFoods).catch(() => {}); }, []);
 
@@ -865,9 +1367,10 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
       emoji: form.emoji,
       price: Math.max(0, Number(form.price) || 10),
       fullness: normalizeFullness(form.fullness) || 30,
+      petType: form.petType,
       active: true,
     });
-    setForm({ name: "", emoji: "🍖", price: "10", fullness: "30" });
+    setForm({ name: "", emoji: "🍖", price: "10", fullness: "30", petType: "all" });
     const updated = await fetchFoods();
     setFoods(updated);
     onDataChanged();
@@ -876,7 +1379,7 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
 
   const startEdit = (f: GardenFood) => {
     setEditId(f.id);
-    setEditForm({ name: f.name, emoji: f.emoji || "🍖", price: String(f.price), fullness: String(f.fullness) });
+    setEditForm({ name: f.name, emoji: f.emoji || "🍖", price: String(f.price), fullness: String(f.fullness), petType: f.petType || "all" });
   };
 
   const saveEdit = async () => {
@@ -886,6 +1389,7 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
       emoji: editForm.emoji,
       price: Math.max(0, Number(editForm.price) || 10),
       fullness: normalizeFullness(editForm.fullness) || 30,
+      petType: editForm.petType,
     });
     setEditId(null);
     const updated = await fetchFoods();
@@ -901,6 +1405,17 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
     toast.success("Đã xoá");
   };
 
+  const petLabel = (pt?: string) =>
+    !pt || pt === "all" ? "Tất cả" : PETS.find((p) => p.id === pt)?.name ?? pt;
+
+  const PetSelect = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+    <select value={value} onChange={(e) => onChange(e.target.value)}
+      className="col-span-2 h-8 rounded-md border border-input bg-background px-2 text-xs">
+      <option value="all">Tất cả loài thú</option>
+      {PETS.map((p) => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+    </select>
+  );
+
   return (
     <div className="space-y-3">
       <Card className="space-y-2 p-3">
@@ -910,6 +1425,7 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
           <Input value={form.emoji} onChange={(e) => setForm((f) => ({ ...f, emoji: e.target.value }))} placeholder="Emoji" className="h-8 text-xs" />
           <Input value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="Giá (xu)" className="h-8 text-xs" type="number" />
           <Input value={form.fullness} onChange={(e) => setForm((f) => ({ ...f, fullness: e.target.value }))} placeholder="No bụng (%)" className="h-8 text-xs" type="number" min={1} max={100} step={1} />
+          <PetSelect value={form.petType} onChange={(v) => setForm((f) => ({ ...f, petType: v }))} />
         </div>
         <Button size="sm" onClick={add}><Plus className="h-3 w-3" /> Thêm</Button>
       </Card>
@@ -922,6 +1438,7 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
                 <Input value={editForm.emoji} onChange={(e) => setEditForm((ef) => ({ ...ef, emoji: e.target.value }))} placeholder="Emoji" className="h-8 text-xs" />
                 <Input value={editForm.price} onChange={(e) => setEditForm((ef) => ({ ...ef, price: e.target.value }))} placeholder="Giá (xu)" className="h-8 text-xs" type="number" />
                 <Input value={editForm.fullness} onChange={(e) => setEditForm((ef) => ({ ...ef, fullness: e.target.value }))} placeholder="No bụng (%)" className="h-8 text-xs" type="number" min={1} max={100} step={1} />
+                <PetSelect value={editForm.petType} onChange={(v) => setEditForm((ef) => ({ ...ef, petType: v }))} />
               </div>
               <div className="flex gap-2">
                 <Button size="sm" onClick={saveEdit}>Lưu</Button>
@@ -933,7 +1450,10 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
               <div className="flex items-center gap-2">
                 <span className="text-xl">{f.emoji}</span>
                 <div>
-                  <div className="text-sm font-medium">{f.name}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-medium">{f.name}</span>
+                    <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{petLabel(f.petType)}</span>
+                  </div>
                   <div className="text-[11px] text-muted-foreground">{f.price} xu · no {f.fullness}%</div>
                 </div>
               </div>

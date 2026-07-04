@@ -41,7 +41,7 @@ export function InstallFloatingBanner() {
         return;
       }
 
-      setHidden(true);
+      setHidden(!installPrompt);
       setReady(true);
     };
 
@@ -69,7 +69,7 @@ export function InstallFloatingBanner() {
     if (!installPrompt) {
       toast.info("Chưa thể mở hộp cài đặt", {
         description:
-          "Vui lòng mở bằng Chrome trên Android, hoặc thử tải lại trang rồi bấm Cài đặt.",
+          "Vui lòng mở bằng Chrome hoặc Edge, sau đó tải lại trang rồi bấm Cài đặt.",
       });
       return;
     }
@@ -102,12 +102,18 @@ export function InstallFloatingBanner() {
 
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold leading-tight text-foreground">
-              {isIos ? "Hướng dẫn cài app" : "Cài app ra màn hình chính"}
+              {isIos
+                ? "Hướng dẫn cài app"
+                : isAndroid
+                  ? "Cài app ra màn hình chính"
+                  : "Cài ứng dụng trên máy tính"}
             </p>
             <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
               {isIos
                 ? "Xem 5 bước thêm app vào màn hình chính trên iPhone/iPad."
-                : "Nhấn Cài đặt để thêm ứng dụng vào màn hình chính."}
+                : isAndroid
+                  ? "Nhấn Cài đặt để thêm ứng dụng vào màn hình chính."
+                  : "Mở nhanh như app, không cần trình duyệt."}
             </p>
           </div>
 
@@ -120,15 +126,13 @@ export function InstallFloatingBanner() {
               Hướng dẫn
             </button>
           ) : (
-            isAndroid && (
-              <button
-                type="button"
-                onClick={install}
-                className="shrink-0 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground active:scale-95"
-              >
-                Cài đặt
-              </button>
-            )
+            <button
+              type="button"
+              onClick={install}
+              className="shrink-0 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground active:scale-95"
+            >
+              Cài đặt
+            </button>
           )}
         </div>
       </div>

@@ -7,8 +7,10 @@ export interface GardenFood {
   name: string;
   emoji: string;
   price: number;
-  fullness: number; // 1-100, maps to % of 8h hunger bar restored
+  fullness: number;
   active: boolean;
+  /** Pet id cụ thể (cat/dog/...) hoặc "all" (mặc định, dùng cho mọi pet) */
+  petType?: string;
   created?: string;
 }
 
@@ -27,11 +29,13 @@ export interface GardenBalance {
   user: string;
   coins: number;
   reserve_balance: number;
-  plots?: any[];
-  pet?: any;
+  plots?: unknown[];
+  pet?: unknown;
   ownedPets?: string[];
   roamingEnabled?: boolean;
   totalHarvested?: number;
+  lastStolenAt?: number;   // epoch ms — lần cuối bị chộm
+  stolenCount?: number;    // số lần bị chộm trong chu kỳ hiện tại (max 2)
   created?: string;
   updated?: string;
 }
@@ -52,6 +56,19 @@ export interface GardenExchangeRequest {
   created?: string;
   expand?: {
     user?: UserRecord;
+  };
+}
+
+export interface GardenVisitSave {
+  id: string;
+  owner: string;
+  target_user: string;
+  target_username: string;
+  target_name?: string;
+  last_visited_at?: string;
+  created?: string;
+  expand?: {
+    target_user?: UserRecord;
   };
 }
 
@@ -111,7 +128,9 @@ export async function fetchBalance(userId: string): Promise<GardenBalance> {
       filter: `user="${userId}"`,
     });
     if (list.items[0]) return list.items[0] as unknown as GardenBalance;
-  } catch {}
+  } catch {
+    // Vẫn cho phép ghé thăm bằng cách tìm user và dựng vườn trống bên dưới.
+  }
   const created = await pb.collection("garden_balances").create({
     user: userId,
     coins: STARTING_COINS,
@@ -204,4 +223,140 @@ export async function rejectExchangeRequest(requestId: string, adminNote: string
 
 export async function resetReserveBalance(balanceId: string) {
   return updateBalance(balanceId, { reserve_balance: 0 });
+}
+
+// ---- Visit saves ----
+
+export async function fetchGardenVisitSaves(ownerId: string): Promise<GardenVisitSave[]> {
+  const res = await pb.collection("garden_visit_saves").getList(1, 50, {
+    filter: `owner="${ownerId}"`,
+    sort: "-last_visited_at,-created",
+    expand: "target_user",
+  });
+  return res.items as unknown as GardenVisitSave[];
+}
+
+export async function saveGardenVisit(
+  ownerId: string,
+  garden: GardenBalance & { expand?: { user?: UserRecord } },
+): Promise<GardenVisitSave> {
+  const targetUser = garden.expand?.user;
+  const targetUsername = targetUser?.username || "";
+  const targetName = targetUser?.full_name || targetUsername;
+  const nowIso = new Date().toISOString();
+
+  const existing = await pb.collection("garden_visit_saves").getList(1, 1, {
+    filter: `owner="${ownerId}" && target_user="${garden.user}"`,
+  });
+
+  const data = {
+    owner: ownerId,
+    target_user: garden.user,
+    target_username: targetUsername,
+    target_name: targetName,
+    last_visited_at: nowIso,
+  };
+
+  if (existing.items[0]) {
+    return (await pb
+      .collection("garden_visit_saves")
+      .update(existing.items[0].id, data)) as unknown as GardenVisitSave;
+  }
+
+  return (await pb.collection("garden_visit_saves").create(data)) as unknown as GardenVisitSave;
+}
+
+export async function deleteGardenVisitSave(id: string) {
+  await pb.collection("garden_visit_saves").delete(id);
+}
+
+// ---- Steal (ăn chộm) ----
+
+const STEAL_PROTECT_MS = 30 * 60 * 1000; // 30 phút bảo vệ sau mỗi lần bị chộm
+const STEAL_MAX_COUNT = 2;                // tối đa 2 lần bị chộm / chu kỳ
+
+export function isGardenProtected(balance: GardenBalance, now = Date.now()): boolean {
+  if (!balance.lastStolenAt) return false;
+  return now - balance.lastStolenAt < STEAL_PROTECT_MS;
+}
+
+export function gardenProtectRemainingMs(balance: GardenBalance, now = Date.now()): number {
+  if (!balance.lastStolenAt) return 0;
+  return Math.max(0, STEAL_PROTECT_MS - (now - balance.lastStolenAt));
+}
+
+export async function fetchGardenByUsername(
+  username: string,
+): Promise<(GardenBalance & { expand?: { user?: UserRecord } }) | null> {
+  const safeUsername = username.trim().replace(/"/g, '\\"');
+  if (!safeUsername) return null;
+
+  try {
+    const res = await pb.collection("garden_balances").getList(1, 1, {
+      filter: `user.username = "${safeUsername}"`,
+      expand: "user",
+    });
+    if (res.items[0]) return res.items[0] as unknown as GardenBalance & { expand?: { user?: UserRecord } };
+  } catch {
+    // Không tìm được user hoặc không có quyền đọc user thì xem như không có vườn để ghé.
+  }
+
+  try {
+    const res = await pb.collection("users").getList(1, 1, {
+      filter: `username = "${safeUsername}"`,
+    });
+    const owner = res.items[0] as unknown as UserRecord | undefined;
+    if (!owner) return null;
+
+    return {
+      id: "",
+      user: owner.id,
+      coins: 0,
+      reserve_balance: 0,
+      plots: [],
+      pet: null,
+      ownedPets: [],
+      roamingEnabled: true,
+      totalHarvested: 0,
+      stolenCount: 0,
+      expand: { user: owner },
+    };
+  } catch {
+    // Không tìm được user hoặc không có quyền đọc user thì xem như không có vườn để ghé.
+  }
+
+  return null;
+}
+
+export async function stealCoins(params: {
+  attackerBalanceId: string;
+  attackerCurrentCoins: number;
+  victimBalanceId: string;
+  plotIndex: number;
+  flowerReward: number;
+}): Promise<{ newAttackerCoins: number; stolen: number }> {
+  if (!params.victimBalanceId) throw new Error("Vườn này chưa có dữ liệu để chộm");
+  if (params.attackerBalanceId === params.victimBalanceId) throw new Error("Không thể chộm vườn của chính mình");
+
+  const victim = (await pb
+    .collection("garden_balances")
+    .getOne(params.victimBalanceId)) as unknown as GardenBalance;
+
+  const plots: { flowerId: string | null; plantedAt: number | null; stolenAmount?: number }[] = Array.isArray(victim.plots)
+    ? (victim.plots as { flowerId: string | null; plantedAt: number | null; stolenAmount?: number }[])
+    : [];
+
+  const plot = plots[params.plotIndex];
+  if (!plot || !plot.flowerId) throw new Error("Ô này không có hoa để chộm");
+  if (plot.stolenAmount) throw new Error("Ô này đã bị chộm rồi");
+
+  const stolen = Math.ceil(params.flowerReward * 0.1);
+  plots[params.plotIndex] = { ...plot, stolenAmount: stolen };
+
+  await updateBalance(victim.id, { plots });
+
+  const newAttackerCoins = params.attackerCurrentCoins + stolen;
+  await updateBalance(params.attackerBalanceId, { coins: newAttackerCoins });
+
+  return { newAttackerCoins, stolen };
 }
