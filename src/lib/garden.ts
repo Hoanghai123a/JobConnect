@@ -40,6 +40,8 @@ export interface Pet {
   cost: number;
   /** Sprite sheet chứa 4 frame ngang. Đặt trong public/pets/ */
   sprite?: string;
+  /** Ảnh khi đói (no bụng = 0%). Đặt trong public/pets/ */
+  sleepSprite?: string;
   /** Kích thước 1 frame (px). Default 40. */
   frameSize?: number;
   /** `true` = sprite vẽ thú quay phải. */
@@ -65,12 +67,12 @@ export const FLOWERS: Flower[] = [
 ];
 
 export const PETS: Pet[] = [
-  { id: "cat", name: "Mèo", emoji: "🐈", cost: 0, sprite: "/pets/cat-sprite.png", frameSize: 40, facesRight: true },
-  { id: "dog", name: "Cún", emoji: "🐕", cost: 60, sprite: "/pets/dog-sprite.png", frameSize: 40, facesRight: true },
-  { id: "rabbit", name: "Thỏ", emoji: "🐇", cost: 80, sprite: "/pets/rabbit-sprite.png", frameSize: 40, facesRight: true },
-  { id: "chick", name: "Gà con", emoji: "🐤", cost: 50, sprite: "/pets/chick-sprite.png", frameSize: 40, facesRight: true },
-  { id: "turtle", name: "Rùa", emoji: "🐢", cost: 150, sprite: "/pets/turtle-sprite.png", frameSize: 40, facesRight: true },
-  { id: "hedgehog", name: "Nhím", emoji: "🦔", cost: 120, sprite: "/pets/hedgehog-sprite.png", frameSize: 40, facesRight: true },
+  { id: "cat", name: "Mèo", emoji: "🐈", cost: 0, sprite: "/pets/cat-sprite.png", sleepSprite: "/pets/cat-sleep.png", frameSize: 40, facesRight: true },
+  { id: "dog", name: "Cún", emoji: "🐕", cost: 60, sprite: "/pets/dog-sprite.png", sleepSprite: "/pets/dog-sleep.png", frameSize: 40, facesRight: true },
+  { id: "rabbit", name: "Thỏ", emoji: "🐇", cost: 80, sprite: "/pets/rabbit-sprite.png", sleepSprite: "/pets/rabbit-sleep.png", frameSize: 40, facesRight: true },
+  { id: "chick", name: "Gà con", emoji: "🐤", cost: 50, sprite: "/pets/chick-sprite.png", sleepSprite: "/pets/chick-sleep.png", frameSize: 40, facesRight: true },
+  { id: "turtle", name: "Rùa", emoji: "🐢", cost: 150, sprite: "/pets/turtle-sprite.png", sleepSprite: "/pets/turtle-sleep.png", frameSize: 40, facesRight: true },
+  { id: "hedgehog", name: "Nhím", emoji: "🦔", cost: 120, sprite: "/pets/hedgehog-sprite.png", sleepSprite: "/pets/hedgehog-sleep.png", frameSize: 40, facesRight: true },
 ];
 
 export function flowerById(id: string | null): Flower | undefined {
@@ -229,6 +231,18 @@ export function hunger(pet: PetState, now = Date.now()): number {
 export function happiness(pet: PetState, now = Date.now()): number {
   const lastPlayedAt = normalizePastTimestamp(pet.lastPlayedAt, now, now);
   return Math.max(0, Math.min(1, 1 - (now - lastPlayedAt) / HAPPY_FULL_MS));
+}
+
+/**
+ * Apply a random 10-30% happiness boost.
+ * Returns updated PetState with adjusted lastPlayedAt.
+ */
+export function applyPlay(pet: PetState, now = Date.now()): { pet: PetState; addedPct: number } {
+  const current = happiness(pet, now);
+  const addedPct = Math.floor(Math.random() * 21) + 10; // 10..30
+  const next = Math.min(1, current + addedPct / 100);
+  const newLastPlayedAt = Math.round(now - (1 - next) * HAPPY_FULL_MS);
+  return { pet: { ...pet, lastPlayedAt: newLastPlayedAt }, addedPct };
 }
 
 export function petMood(pet: PetState, now = Date.now()): "great" | "ok" | "sad" {

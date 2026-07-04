@@ -99,8 +99,12 @@ export interface SalaryInputs {
   periodStart?: string; // yyyy-mm-dd
 }
 
+function localDateKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function hasFullWeekdayAttendance(rows: AttendanceRow[], periodStart: string): boolean {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateKey(new Date());
   const endDate = today < periodStart ? periodStart : today;
   const attendedDates = new Set(rows.map((r) => r.date));
   const [sy, sm, sd] = periodStart.split("-").map(Number);
@@ -110,7 +114,7 @@ function hasFullWeekdayAttendance(rows: AttendanceRow[], periodStart: string): b
   while (cursor <= end) {
     const dow = cursor.getDay();
     if (dow !== 0) {
-      const key = cursor.toISOString().slice(0, 10);
+      const key = localDateKey(cursor);
       if (!attendedDates.has(key)) return false;
     }
     cursor.setDate(cursor.getDate() + 1);

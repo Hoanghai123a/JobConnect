@@ -117,6 +117,7 @@ function ApprovalsPage() {
     const all = await pb.collection("users").getFullList({ sort: "-created" });
     const rows = all.map((u: any) => ({
       "Họ tên": u.full_name,
+      "Mã tài khoản (UID)": u.uid || "",
       "Số điện thoại": u.phone,
       "Địa chỉ email": u.email,
       "Vai trò": u.role,

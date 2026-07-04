@@ -115,7 +115,7 @@ function StaffExportPage() {
       const u = history.expand?.user;
       return {
         STT: index + 1,
-        ID: u?.uid || "",
+        "Mã tài khoản (UID)": u?.uid || "",
         "Mã lịch sử": history.uid || "",
         "Họ tên gốc": u?.full_name || "",
         "CCCD gốc": u?.cccd || "",
@@ -214,7 +214,7 @@ function StaffExportPage() {
           </Button>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Bản đầy đủ kèm thông tin cá nhân (ID, vai trò, CCCD gốc), tài khoản ngân hàng và
+          Bản đầy đủ kèm thông tin cá nhân (mã tài khoản UID, vai trò, CCCD gốc), tài khoản ngân hàng và
           các tham số lương.
         </p>
       </div>

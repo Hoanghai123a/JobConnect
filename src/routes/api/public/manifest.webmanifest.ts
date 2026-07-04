@@ -27,14 +27,16 @@ export const Route = createFileRoute("/api/public/manifest/webmanifest")({
             orientation: "portrait-primary",
             icons: [
               {
-                src: iconSrc,
-                sizes: "192x192",
-                purpose: "any maskable",
+                src: "/pwa-icon.svg",
+                sizes: "any",
+                type: "image/svg+xml",
+                purpose: "any",
               },
               {
-                src: iconSrc,
-                sizes: "512x512",
-                purpose: "any maskable",
+                src: "/pwa-icon.svg",
+                sizes: "any",
+                type: "image/svg+xml",
+                purpose: "maskable",
               },
             ],
           },

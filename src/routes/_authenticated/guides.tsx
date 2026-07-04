@@ -244,16 +244,15 @@ function GuidesPage() {
     loadAdminRefs(); /* eslint-disable-next-line */
   }, [isAdmin]);
 
+  const [desktopGuideOpen, setDesktopGuideOpen] = useState(false);
+
   const installApp = async () => {
-    if (!installPrompt) {
-      toast.info("Chưa thể mở hộp cài đặt", {
-        description:
-          "Vui lòng mở bằng Chrome trên Android, hoặc thử tải lại trang rồi bấm Cài đặt.",
-      });
+    if (installPrompt) {
+      const outcome = await installPwaApp();
+      if (outcome === "accepted") toast.success("Đã cài app thành công");
       return;
     }
-    const outcome = await installPwaApp();
-    if (outcome === "accepted") toast.success("Đã gửi yêu cầu cài app");
+    setDesktopGuideOpen(true);
   };
 
   const openNew = () => {
@@ -356,34 +355,32 @@ function GuidesPage() {
         )
       }
     >
-      {(isIos || isAndroid) && (
-        <div className="mb-3 rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
-          <button
-            type="button"
-            onClick={() => (isIos ? setInstallGuideOpen(true) : void installApp())}
-            className="flex w-full items-center gap-2 text-left"
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
-              {isIos ? (
-                <Smartphone className="h-4.5 w-4.5" />
-              ) : (
-                <Download className="h-4.5 w-4.5" />
-              )}
+      <div className="mb-3 rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
+        <button
+          type="button"
+          onClick={() => (isIos ? setInstallGuideOpen(true) : void installApp())}
+          className="flex w-full items-center gap-2 text-left"
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
+            {isIos ? (
+              <Smartphone className="h-4.5 w-4.5" />
+            ) : (
+              <Download className="h-4.5 w-4.5" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold text-foreground">Cài ứng dụng</div>
+            <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+              {isIos
+                ? "Bấm Hướng dẫn để xem từng bước bằng ảnh."
+                : "Bấm Cài đặt để cài app trực tiếp vào thiết bị."}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-foreground">Cài app ra màn hình chính</div>
-              <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                {isIos
-                  ? "Bấm Hướng dẫn để xem từng bước bằng ảnh."
-                  : "Bấm Cài đặt để thêm app vào màn hình chính."}
-              </div>
-            </div>
-            <span className="shrink-0 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
-              {isIos ? "Hướng dẫn" : "Cài đặt"}
-            </span>
-          </button>
-        </div>
-      )}
+          </div>
+          <span className="shrink-0 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
+            {isIos ? "Hướng dẫn" : "Cài đặt"}
+          </span>
+        </button>
+      </div>
 
       <FilterBar search={search} onSearchChange={setSearch} placeholder="Tìm hướng dẫn…" />
 
@@ -459,6 +456,46 @@ function GuidesPage() {
       )}
 
       <IosInstallGuideDialog open={installGuideOpen} onOpenChange={setInstallGuideOpen} />
+
+      <Dialog open={desktopGuideOpen} onOpenChange={setDesktopGuideOpen}>
+        <DialogContent className="max-h-[88dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Cài ứng dụng trên máy tính</DialogTitle>
+            <DialogDescription>
+              Làm theo hướng dẫn bên dưới để cài app vào máy tính.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                  1
+                </span>
+                <span className="font-medium">Mở trang này bằng trình duyệt Chrome hoặc Edge</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                  2
+                </span>
+                <span className="font-medium">Nhấn vào biểu tượng cài đặt trên thanh địa chỉ</span>
+              </div>
+              <p className="ml-8 text-xs text-muted-foreground">
+                Biểu tượng hình màn hình có mũi tên (⊞) nằm ở góc phải thanh địa chỉ.
+                Hoặc bấm dấu 3 chấm (⋮) → "Cài đặt ứng dụng..." / "Install app..."
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                  3
+                </span>
+                <span className="font-medium">Bấm "Cài đặt" trong hộp thoại xuất hiện</span>
+              </div>
+            </div>
+            <div className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
+              Sau khi cài, app sẽ mở như một ứng dụng riêng trên máy tính — không cần mở trình duyệt.
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Reader */}
       <Dialog open={!!reading} onOpenChange={(o) => !o && setReading(null)}>

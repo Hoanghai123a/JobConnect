@@ -44,7 +44,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { VN_BANKS, resolveBankName } from "@/lib/vn-banks";
-import { exportToExcel } from "@/lib/excel";
+import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { normalizeDate } from "@/lib/date-utils";
 import { escapePb } from "@/lib/delegations";
 import { isUserApproved } from "@/lib/user-approval";
@@ -660,16 +660,16 @@ function AdminUsersPanel() {
     "Số điện thoại": u.phone || "",
     "Giới tính": u.gender || "",
     CCCD: u.cccd || "",
-    "Ngày sinh": u.date_of_birth ? new Date(u.date_of_birth).toLocaleDateString("vi-VN") : "",
+    "Ngày sinh": formatDateOnly(u.date_of_birth),
     "Địa chỉ": u.address || "",
-    "Mã tài khoản": u.uid || "",
+    "Mã tài khoản (UID)": u.uid || "",
     "Mã nhân viên": u.employee_code || "",
     "Nhà máy": u.company || "",
     "Ngân hàng": u.bank_name || "",
     "Số tài khoản": u.bank_account_number || "",
     "Tên tài khoản": u.bank_account_name || "",
     "Vai trò": ROLE_LABELS[(u.role || "user") as Role],
-    "Ngày tạo": new Date(u.created).toLocaleDateString("vi-VN"),
+    "Ngày tạo": formatDateOnly(u.created),
     "Trạng thái": isUserApproved(u) ? "Hoạt động" : "Vô hiệu hoá",
   });
 
@@ -723,8 +723,8 @@ function AdminUsersPanel() {
 
   const downloadStaffTemplate = () => {
     const sample = [
-      { "Tên đăng nhập": "nguyenvana", "Nhà máy": "Nhà máy A" },
-      { "Tên đăng nhập": "tranthib", "Nhà máy": "" },
+      { "Tên đăng nhập hoặc mã tài khoản (UID)": "nguyenvana", "Nhà máy": "Nhà máy A" },
+      { "Tên đăng nhập hoặc mã tài khoản (UID)": "HL000002", "Nhà máy": "" },
     ];
     exportToExcel("mau_chuyen_staff", { "Chuyển Staff": sample });
   };
@@ -750,33 +750,52 @@ function AdminUsersPanel() {
       let ok = 0;
       let fail = 0;
       let assigned = 0;
-      const errors: string[] = [];
+      const failedRows: Array<Record<string, unknown>> = [];
 
-      for (const r of rows) {
+      const addFailedStaffRow = (r: Record<string, unknown>, rowNumber: number, reason: string) => {
+        fail++;
+        failedRows.push({
+          Dòng: rowNumber,
+          "Lý do lỗi": reason,
+          "Tên đăng nhập hoặc mã tài khoản (UID)":
+            r["Tên đăng nhập hoặc mã tài khoản (UID)"] ||
+            r["Tên đăng nhập"] ||
+            r["username"] ||
+            r["Mã tài khoản"] ||
+            r["uid"] ||
+            "",
+          "Nhà máy": r["Nhà máy"] || r["factory"] || "",
+        });
+      };
+
+      for (const [index, r] of rows.entries()) {
+        const rowNumber = index + 2;
         const username = String(
-          r["Tên đăng nhập"] || r["username"] || r["Mã tài khoản"] || r["uid"] || "",
+          r["Tên đăng nhập hoặc mã tài khoản (UID)"] ||
+            r["Tên đăng nhập"] ||
+            r["username"] ||
+            r["Mã tài khoản"] ||
+            r["uid"] ||
+            "",
         ).trim();
         const identityKey = accountIdentityKey(username);
         const factoryName = String(r["Nhà máy"] || r["factory"] || "").trim();
 
         if (!identityKey) {
-          fail++;
-          errors.push("???: thiếu tên đăng nhập");
+          addFailedStaffRow(r, rowNumber, "Thiếu tên đăng nhập hoặc mã tài khoản");
           continue;
         }
 
         const factoryId = factoryName ? factoryMap.get(factoryName.toLowerCase()) : null;
         if (factoryName && !factoryId) {
-          fail++;
-          errors.push(username + ': không tìm thấy nhà máy "' + factoryName + '"');
+          addFailedStaffRow(r, rowNumber, 'Không tìm thấy nhà máy "' + factoryName + '"');
           continue;
         }
 
         try {
           const user = userByUsername.get(identityKey) || userByUid.get(identityKey);
           if (!user) {
-            fail++;
-            errors.push(username + ": không tìm thấy tài khoản");
+            addFailedStaffRow(r, rowNumber, "Không tìm thấy tài khoản");
             continue;
           }
           await pb.collection("users").update(user.id, { role: "staff" });
@@ -804,8 +823,7 @@ function AdminUsersPanel() {
           });
           ok++;
         } catch (err: any) {
-          fail++;
-          errors.push(username + ": " + (err?.message || "lỗi"));
+          addFailedStaffRow(r, rowNumber, err?.message || "Lỗi chuyển Staff");
         }
       }
 
@@ -816,7 +834,12 @@ function AdminUsersPanel() {
           (assigned ? ", gán " + assigned + " nhà máy" : "") +
           (fail ? ", " + fail + " lỗi" : ""),
       );
-      if (errors.length) console.warn("Import staff errors:", errors);
+      if (failedRows.length) {
+        exportToExcel(`chuyen_staff_loi_${Date.now()}`, {
+          "Dòng lỗi": failedRows,
+        });
+        toast.warning("Đã xuất file các dòng chuyển Staff bị lỗi");
+      }
       load();
     } catch (err: any) {
       toast.error(err?.message || "File không hợp lệ");
@@ -1028,10 +1051,10 @@ function AdminUsersPanel() {
         "Số điện thoại": "0900000001",
         "Tên đăng nhập": "nguyenvana",
         "Mật khẩu": "12345678",
-        "Mã tài khoản": "",
+        "Mã tài khoản (UID)": "",
         "Giới tính": "Nam",
         CCCD: "001099012345",
-        "Ngày sinh": "1990-01-15",
+        "Ngày sinh": "15/01/1990",
         "Địa chỉ": "123 Đường ABC, Quận 1, TP.HCM",
         "Ngân hàng": "VCB",
         "Số tài khoản": "1234567890",
@@ -1042,7 +1065,7 @@ function AdminUsersPanel() {
         "Số điện thoại": "0900000002",
         "Tên đăng nhập": "tranthib",
         "Mật khẩu": "12345678",
-        "Mã tài khoản": "",
+        "Mã tài khoản (UID)": "",
         "Giới tính": "Nữ",
         CCCD: "001099067890",
         "Ngày sinh": "20/03/1995",
@@ -1084,7 +1107,9 @@ function AdminUsersPanel() {
         const username = String(r["Tên đăng nhập"] || r["username"] || "").trim();
         const normalizedUsername = normalizeAccountUsername(username);
         const password = String(r["Mật khẩu"] || r["password"] || "").trim();
-        const manualUid = String(r["Mã tài khoản"] || r["Mã TK"] || r["uid"] || "").trim();
+        const manualUid = String(
+          r["Mã tài khoản (UID)"] || r["Mã tài khoản"] || r["Mã TK"] || r["uid"] || "",
+        ).trim();
         const gender = String(r["Giới tính"] || r["gender"] || "").trim();
         const cccd = String(r["CCCD"] || r["cccd"] || "").trim();
         const date_of_birth = normalizeDate(r["Ngày sinh"] ?? r["date_of_birth"] ?? "");
@@ -1839,14 +1864,14 @@ function StaffPanel() {
 
   const downloadTemplate = () => {
     exportToExcel("mau_import_staff", {
-      Staff: [
+      "Tài khoản Staff": [
         {
-          username: "nguyenvana",
-          full_name: "Nguyễn Văn A",
-          phone: "0901234567",
-          date_of_birth: "1990-05-15",
-          address: "Hà Nội",
-          password: "",
+          "Tên đăng nhập": "nguyenvana",
+          "Họ tên": "Nguyễn Văn A",
+          "Số điện thoại": "0901234567",
+          "Ngày sinh": "15/05/1990",
+          "Địa chỉ": "Hà Nội",
+          "Mật khẩu": "",
           "Nhà máy 1": "Nhà máy A",
           "Nhà máy 2": "Nhà máy B",
           "Nhà máy 3": "",
@@ -1892,7 +1917,7 @@ function StaffPanel() {
         );
         const fullName = pickVal(row, ["full_name", "Họ tên", "Họ và tên"]);
         const phone = pickVal(row, ["phone", "Số điện thoại", "SĐT"]);
-        const dob = pickVal(row, ["date_of_birth", "Ngày sinh"]);
+        const dob = normalizeDate(pickVal(row, ["date_of_birth", "Ngày sinh"]));
         const address = pickVal(row, ["address", "Địa chỉ"]);
         const password = pickVal(row, ["password", "Mật khẩu"]) || STAFF_DEFAULT_PASSWORD;
 

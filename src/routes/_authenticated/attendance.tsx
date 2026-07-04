@@ -27,7 +27,7 @@ import {
   getPayrollPeriod,
   type PayrollPeriod,
 } from "@/lib/payroll-cycle";
-import { exportToExcel } from "@/lib/excel";
+import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -165,7 +165,7 @@ function AdminAttendance() {
         "Họ tên": u.full_name || "",
         "Số điện thoại": u.phone || "",
         "Nhà máy": u.company || "",
-        Ngày: r.date,
+        Ngày: formatDateOnly(r.date),
         Ca: r.shift === "day" ? "Ngày" : "Đêm",
         Lễ: r.is_holiday ? "x" : "",
         "Giờ hành chính": r.hc_hours,

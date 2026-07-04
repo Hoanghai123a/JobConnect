@@ -292,7 +292,7 @@ async function readAttendanceExcel(file: File): Promise<ParsedRow[]> {
 
   return rawRows
     .map((row) => {
-      const uid = String(pick(row, ["uid", "UID", "userId", "user_id"])).trim();
+      const uid = String(pick(row, ["Mã tài khoản (UID)", "uid", "UID", "userId", "user_id"])).trim();
       const employeeCode = String(
         pick(row, ["Mã nhân viên", "Mã NV", "Ma NV", "employee_code"]),
       ).trim();
@@ -332,7 +332,7 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
 
   return rawRows
     .map((row) => {
-      const uid = String(pick(row, ["uid", "UID", "userId", "user_id"])).trim();
+      const uid = String(pick(row, ["Mã tài khoản (UID)", "uid", "UID", "userId", "user_id"])).trim();
       const employeeCode = String(
         pick(row, ["Mã nhân viên", "Mã NV", "Ma NV", "employee_code"]),
       ).trim();
@@ -442,7 +442,7 @@ function AdminCheckAttendance() {
     exportToExcel(`mau_check_cong_${month}`, {
       "Bảng kiểm công": [
         {
-          uid: sampleUser?.uid || "HL000000",
+          "Mã tài khoản (UID)": sampleUser?.uid || "HL000000",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Số điện thoại": sampleUser?.phone || "0900000000",
@@ -461,7 +461,7 @@ function AdminCheckAttendance() {
           "390%": 0,
         },
         {
-          uid: sampleUser?.uid || "HL000000",
+          "Mã tài khoản (UID)": sampleUser?.uid || "HL000000",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Số điện thoại": sampleUser?.phone || "0900000000",
@@ -480,7 +480,7 @@ function AdminCheckAttendance() {
           "390%": "",
         },
         {
-          uid: sampleUser?.uid || "HL000000",
+          "Mã tài khoản (UID)": sampleUser?.uid || "HL000000",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Số điện thoại": sampleUser?.phone || "0900000000",
@@ -525,14 +525,20 @@ function AdminCheckAttendance() {
         string,
         { user: UserRecord; rows: CheckAttendanceRow[]; summary: RateBuckets }
       >();
-      const unmatched = new Set<string>();
+      const unmatchedRows: Array<Record<string, unknown>> = [];
 
       for (const row of parsedRows) {
         const user = row.uid
           ? userIdMap.get(accountIdentityKey(row.uid))
           : employeeMap.get(employeeCompanyKey(row.employeeCode, row.company));
         if (!user) {
-          unmatched.add(`${row.uid || row.employeeCode} - ${row.company}`);
+          unmatchedRows.push({
+            "Lý do lỗi": "Không khớp được nhân sự theo UID hoặc mã nhân viên + nhà máy",
+            "Mã tài khoản (UID)": row.uid,
+            "Mã nhân viên": row.employeeCode,
+            "Nhà máy": row.company,
+            "Ngày": formatDisplayDate(row.date),
+          });
           continue;
         }
         const current = grouped.get(user.id) || { user, rows: [], summary: EMPTY_CHECK_BUCKETS() };
@@ -582,9 +588,13 @@ function AdminCheckAttendance() {
 
       toast.success(
         `Đã gửi check công lần ${nextRound} cho ${grouped.size} nhân sự${
-          unmatched.size ? `, ${unmatched.size} dòng chưa khớp` : ""
+          unmatchedRows.length ? `, ${unmatchedRows.length} dòng chưa khớp` : ""
         }`,
       );
+      if (unmatchedRows.length) {
+        exportToExcel(`check_cong_loi_${month}_${Date.now()}`, { "Dòng lỗi": unmatchedRows });
+        toast.warning("Đã xuất file các dòng check công chưa khớp");
+      }
       setNote("");
       await load();
     } catch (error: unknown) {
@@ -599,7 +609,7 @@ function AdminCheckAttendance() {
     exportToExcel(`mau_check_luong_${salaryMonth}`, {
       "Bảng kiểm lương": [
         {
-          uid: sampleUser?.uid || "HL000000",
+          "Mã tài khoản (UID)": sampleUser?.uid || "HL000000",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
@@ -616,7 +626,7 @@ function AdminCheckAttendance() {
           "Tiền khấu trừ": 525000,
         },
         {
-          uid: sampleUser?.uid || "HL000000",
+          "Mã tài khoản (UID)": sampleUser?.uid || "HL000000",
           "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
@@ -665,14 +675,21 @@ function AdminCheckAttendance() {
           deductionLines: SalaryMoneyLine[];
         }
       >();
-      const unmatched = new Set<string>();
+      const unmatchedRows: Array<Record<string, unknown>> = [];
 
       for (const row of parsedRows) {
         const user = row.uid
           ? userIdMap.get(accountIdentityKey(row.uid))
           : employeeMap.get(employeeCompanyKey(row.employeeCode, row.company));
         if (!user) {
-          unmatched.add(`${row.uid || row.employeeCode} - ${row.company}`);
+          unmatchedRows.push({
+            "Lý do lỗi": "Không khớp được nhân sự theo UID hoặc mã nhân viên + nhà máy",
+            "Mã tài khoản (UID)": row.uid,
+            "Mã nhân viên": row.employeeCode,
+            "Nhà máy": row.company,
+            "Ngày vào làm": formatDisplayDate(row.personal.start_date),
+            "Ngày nghỉ": formatDisplayDate(row.personal.end_date),
+          });
           continue;
         }
         const current =
@@ -743,9 +760,15 @@ function AdminCheckAttendance() {
 
       toast.success(
         `Đã gửi check lương lần ${nextSalaryRound} cho ${grouped.size} nhân sự${
-          unmatched.size ? `, ${unmatched.size} dòng chưa khớp` : ""
+          unmatchedRows.length ? `, ${unmatchedRows.length} dòng chưa khớp` : ""
         }`,
       );
+      if (unmatchedRows.length) {
+        exportToExcel(`check_luong_loi_${salaryMonth}_${Date.now()}`, {
+          "Dòng lỗi": unmatchedRows,
+        });
+        toast.warning("Đã xuất file các dòng check lương chưa khớp");
+      }
       setSalaryNote("");
       await load();
     } catch (error: unknown) {

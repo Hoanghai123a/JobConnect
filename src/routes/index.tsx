@@ -324,6 +324,12 @@ function DashboardPage() {
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <FeatureTile
+                to="/admin/accounts/stats"
+                label="Thống kê TK"
+                description="Đăng nhập theo role"
+                icon={Users}
+              />
+              <FeatureTile
                 to="/admin/staff"
                 label="Quản lý staff"
                 description="Tạo, import tài khoản staff"

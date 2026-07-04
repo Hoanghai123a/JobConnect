@@ -8,7 +8,8 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { exportToExcel } from "@/lib/excel";
+import { exportToExcel, formatDateOnly } from "@/lib/excel";
+import { normalizeDate } from "@/lib/date-utils";
 import { fetchFactories } from "@/lib/factories";
 import {
   createEmploymentHistory,
@@ -43,16 +44,16 @@ function AdminImportsPage() {
 
   const downloadCccdTemplate = () => {
     exportToExcel("mau_import_cccd", {
-      Mapping: [
+      "Mapping CCCD": [
         {
-          ten_file: "nguyen_van_a_truoc.jpg",
-          uid: "HL000001",
-          mat: "truoc",
+          "Tên file": "nguyen_van_a_truoc.jpg",
+          "Mã tài khoản (UID)": "HL000001",
+          "Mặt": "trước",
         },
         {
-          ten_file: "nguyen_van_a_sau.jpg",
-          uid: "HL000001",
-          mat: "sau",
+          "Tên file": "nguyen_van_a_sau.jpg",
+          "Mã tài khoản (UID)": "HL000001",
+          "Mặt": "sau",
         },
       ],
     });
@@ -84,18 +85,33 @@ function AdminImportsPage() {
 
       let success = 0;
       let failed = 0;
-      const errors: string[] = [];
+      const failedRows: Array<Record<string, unknown>> = [];
+
+      const addFailedCccdRow = (
+        row: Record<string, unknown>,
+        rowNumber: number,
+        reason: string,
+      ) => {
+        failed++;
+        failedRows.push({
+          Dòng: rowNumber,
+          "Lý do lỗi": reason,
+          "Tên file": pickValue(row, ["ten_file", "Tên file", "filename"]),
+          "Mã tài khoản (UID)": pickValue(row, ["Mã tài khoản (UID)", "uid", "Mã TK", "UID"]),
+          "Tên đăng nhập": pickValue(row, ["username", "Tên đăng nhập"]),
+          "Mặt": pickValue(row, ["mat", "Mặt", "side"]),
+        });
+      };
 
       for (const [index, row] of rows.entries()) {
         const rowNum = index + 2;
         const fileName = pickValue(row, ["ten_file", "Tên file", "filename"]);
-        const uid = pickValue(row, ["uid", "Mã TK", "UID"]);
+        const uid = pickValue(row, ["Mã tài khoản (UID)", "uid", "Mã TK", "UID"]);
         const username = pickValue(row, ["username", "Tên đăng nhập"]);
         const side = pickValue(row, ["mat", "Mặt", "side"]).toLowerCase();
 
         if (!fileName) {
-          errors.push(`Dòng ${rowNum}: thiếu tên file`);
-          failed++;
+          addFailedCccdRow(row, rowNum, "Thiếu tên file");
           continue;
         }
 
@@ -106,8 +122,7 @@ function AdminImportsPage() {
               ? "cccd_back"
               : null;
         if (!resolvedSide) {
-          errors.push(`Dòng ${rowNum}: cột "mặt" phải là truoc/sau (nhận: "${side}")`);
-          failed++;
+          addFailedCccdRow(row, rowNum, `Cột "Mặt" phải là trước/sau (nhận: "${side}")`);
           continue;
         }
 
@@ -115,8 +130,7 @@ function AdminImportsPage() {
           (uid ? userByUid.get(accountIdentityKey(uid)) : undefined) ||
           (username ? userByUsername.get(accountIdentityKey(username)) : undefined);
         if (!user) {
-          errors.push(`Dòng ${rowNum}: không tìm thấy user (uid="${uid}", username="${username}")`);
-          failed++;
+          addFailedCccdRow(row, rowNum, "Không tìm thấy tài khoản theo mã tài khoản (UID) hoặc tên đăng nhập");
           continue;
         }
 
@@ -127,8 +141,7 @@ function AdminImportsPage() {
             (f) => f.endsWith(fileName) || f.split("/").pop() === fileName,
           );
           if (!match) {
-            errors.push(`Dòng ${rowNum}: không tìm thấy "${fileName}" trong ZIP`);
-            failed++;
+            addFailedCccdRow(row, rowNum, `Không tìm thấy "${fileName}" trong ZIP`);
             continue;
           }
           const blob = await zip.files[match].async("blob");
@@ -150,8 +163,9 @@ function AdminImportsPage() {
       setCccdResult(summary);
       toast.success(summary);
 
-      if (errors.length) {
-        toast.warning(`${errors.length} dòng lỗi — xem chi tiết bên dưới`);
+      if (failedRows.length) {
+        exportToExcel(`cccd_import_loi_${Date.now()}`, { "Dòng lỗi": failedRows });
+        toast.warning("Đã xuất file các dòng import ảnh CCCD bị lỗi");
       }
 
       await createStaffActionLog({
@@ -184,7 +198,7 @@ function AdminImportsPage() {
           "CCCD tại nhà máy": "012345678901",
           "Mã số thuế": "0123456789",
           "Người tuyển": "staff01",
-          "Ngày vào làm": "2026-05-01",
+          "Ngày vào làm": "01/05/2026",
           "Ngày nghỉ": "",
           "Trạng thái": "Đang làm",
           "Ghi chú": "Nhập mẫu",
@@ -248,10 +262,13 @@ function AdminImportsPage() {
           "Tên đăng nhập": pickValue(row, ["username", "Tên đăng nhập"]),
           "Tên nhà máy": pickValue(row, ["Tên nhà máy", "factory_name", "Nhà máy"]),
           "Mã nhà máy": pickValue(row, ["factory_code", "Mã nhà máy"]),
-          "Ngày vào làm": row["Ngày vào làm"] ?? row["join_date"] ?? row["Ngày vào"] ?? "",
+          "Ngày vào làm": formatDateOnly(row["Ngày vào làm"] ?? row["join_date"] ?? row["Ngày vào"]),
+          "Ngày nghỉ": formatDateOnly(row["leave_date"] ?? row["Ngày nghỉ"]),
           "Họ tên tại nhà máy": pickValue(row, ["worker_name_snapshot", "Họ tên tại nhà máy"]),
           "CCCD tại nhà máy": pickValue(row, ["worker_cccd_snapshot", "CCCD tại nhà máy"]),
           "Mã số thuế": pickValue(row, ["worker_tax_code_snapshot", "Mã số thuế", "MST"]),
+          "Người tuyển": pickValue(row, ["recruiter_username", "Người tuyển"]),
+          "Trạng thái": pickValue(row, ["status", "Trạng thái"]),
           "Ghi chú": pickValue(row, ["note", "Ghi chú"]),
         });
       };
@@ -290,7 +307,7 @@ function AdminImportsPage() {
           addFailedRow(
             row,
             rowNumber,
-            "Không tìm thấy tài khoản theo UID hoặc username. Cần tạo tài khoản trước.",
+            "Không tìm thấy tài khoản theo mã tài khoản (UID) hoặc tên đăng nhập. Cần tạo tài khoản trước.",
           );
           continue;
         }
@@ -393,12 +410,12 @@ function AdminImportsPage() {
   return (
     <PageContainer
       title="Nhập lịch sử đi làm"
-      subtitle="Dùng UID để tìm tài khoản, nếu không khớp mới kiểm tra username"
+      subtitle="Dùng mã tài khoản (UID) để tìm tài khoản, nếu không khớp mới kiểm tra tên đăng nhập"
     >
       <Card className="space-y-3 rounded-2xl p-4 shadow-soft">
         <div className="text-sm font-semibold">Nhập lịch sử đi làm</div>
         <div className="text-sm text-muted-foreground">
-          File lịch sử phải có UID hoặc username của tài khoản đã tồn tại, nhà máy, ngày vào và họ
+          File lịch sử phải có mã tài khoản (UID) hoặc tên đăng nhập của tài khoản đã tồn tại, nhà máy, ngày vào và họ
           tên/CCCD dùng tại nhà máy. Nếu không tìm thấy tài khoản, hệ thống sẽ xuất lại danh sách
           dòng lỗi để tạo tài khoản trước.
         </div>
@@ -434,7 +451,7 @@ function AdminImportsPage() {
         </div>
         <ul className="space-y-1 text-sm text-muted-foreground">
           <li>- Muốn báo đi làm nhà máy mới thì hồ sơ cũ phải kết thúc trước.</li>
-          <li>- Import lịch sử không tạo UID và không tạo tài khoản mới.</li>
+          <li>- Import lịch sử không tạo mã tài khoản (UID) và không tạo tài khoản mới.</li>
           <li>- Họ tên và CCCD trong lịch sử là snapshot riêng, không lấy cứng từ hồ sơ gốc.</li>
           <li>- Lần nhập này ghi nhật ký đầy đủ để quản trị viên tra cứu người thay đổi.</li>
         </ul>
@@ -445,7 +462,7 @@ function AdminImportsPage() {
           <IdCard className="h-4 w-4 text-primary" /> Nhập ảnh CCCD hàng loạt
         </div>
         <div className="text-sm text-muted-foreground">
-          Upload 1 file ZIP chứa ảnh CCCD kèm 1 file Excel mapping (tên file → UID/username → mặt
+          Upload 1 file ZIP chứa ảnh CCCD kèm 1 file Excel mapping (tên file → mã tài khoản (UID)/tên đăng nhập → mặt
           trước/sau). Hệ thống sẽ tự gán ảnh cho từng user.
         </div>
         <div className="flex flex-wrap gap-2">
@@ -512,7 +529,7 @@ function AdminImportsPage() {
         </div>
         <ul className="space-y-1 text-sm text-muted-foreground">
           <li>- File ZIP chứa ảnh, tên file tuỳ ý (VD: abc_truoc.jpg, xyz.png).</li>
-          <li>- File Excel mapping có 3 cột: ten_file, uid (hoặc username), mat (truoc/sau).</li>
+          <li>- File Excel mapping có 3 cột: Tên file, Mã tài khoản (UID) hoặc Tên đăng nhập, Mặt (trước/sau).</li>
           <li>- Nếu user không tồn tại hoặc file không tìm thấy trong ZIP → bỏ qua dòng đó.</li>
           <li>- Ảnh cũ sẽ bị ghi đè nếu user đã có ảnh CCCD trước đó.</li>
         </ul>
@@ -539,20 +556,7 @@ function pickHistoryStatus(value: string, leaveDate: string): "working" | "left"
 
 function normalizeExcelDate(value: unknown) {
   if (!value) return "";
-  if (typeof value === "number") {
-    const parsed = XLSX.SSF.parse_date_code(value);
-    if (!parsed) return "";
-    return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
-  }
-  if (value instanceof Date) {
-    return value.toISOString().slice(0, 10);
-  }
-  const text = String(value).trim();
-  if (!text) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
-  const asDate = new Date(text);
-  if (Number.isNaN(asDate.getTime())) return "";
-  return asDate.toISOString().slice(0, 10);
+  return normalizeDate(value);
 }
 
 function escapePb(value: string) {

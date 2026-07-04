@@ -123,6 +123,7 @@ export function RoamingPet() {
   }, [user?.id]);
 
   const enabled = Boolean(user?.id) && !loading && garden?.roamingEnabled !== false;
+  const starving = garden ? hunger(garden.pet) <= 0 : false;
 
   const glideDurationRef = useRef(0);
 
@@ -149,9 +150,19 @@ export function RoamingPet() {
       const current = loadGarden(user!.id);
       const currentMood = petMood(current.pet);
       setMood(currentMood);
-      const speed = SPEED_PX_PER_S[currentMood];
 
-      const span = (maxX - offsetLeft - 12) * (currentMood === "sad" ? 0.35 : 1);
+      // Tốc độ tỉ lệ thuận với no bụng; 0% = đứng yên
+      const hungerLevel = hunger(current.pet);
+      if (hungerLevel <= 0) {
+        setMoving(false);
+        wanderTimer.current = window.setTimeout(planLeg, 2000);
+        return;
+      }
+
+      const baseSpeed = SPEED_PX_PER_S[currentMood];
+      const speed = baseSpeed * hungerLevel;
+
+      const span = (maxX - offsetLeft - 12) * (currentMood === "sad" ? 0.35 : hungerLevel);
       const minX = offsetLeft + 12;
       const maxRight = offsetLeft + 12 + (maxX - offsetLeft - 12);
       const cur = posRef.current.x;

@@ -65,6 +65,18 @@ async function resolveCanonicalIdentity(identity: string) {
   return matched?.username || matched?.email || null;
 }
 
+function updateLastLogin(token: string, recordId: string) {
+  fetch(`${getPBUpstream()}/api/collections/users/records/${recordId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      "ngrok-skip-browser-warning": "true",
+    },
+    body: JSON.stringify({ last_login: new Date().toISOString() }),
+  }).catch(() => {});
+}
+
 export const Route = createFileRoute("/api/public/pocketbase-auth")({
   server: {
     handlers: {
@@ -83,6 +95,9 @@ export const Route = createFileRoute("/api/public/pocketbase-auth")({
             lastResult = await authWithPassword(identity, parsed.data.password);
 
             if (lastResult.response.ok || lastResult.response.status !== 400) {
+              if (lastResult.response.ok && lastResult.body?.token && lastResult.body?.record?.id) {
+                updateLastLogin(lastResult.body.token, lastResult.body.record.id);
+              }
               return Response.json(lastResult.body, { status: lastResult.response.status });
             }
           }
@@ -90,6 +105,10 @@ export const Route = createFileRoute("/api/public/pocketbase-auth")({
           const canonicalIdentity = await resolveCanonicalIdentity(parsed.data.identity);
           if (canonicalIdentity && !identityCandidates.includes(canonicalIdentity)) {
             lastResult = await authWithPassword(canonicalIdentity, parsed.data.password);
+          }
+
+          if (lastResult?.response.ok && lastResult.body?.token && lastResult.body?.record?.id) {
+            updateLastLogin(lastResult.body.token, lastResult.body.record.id);
           }
 
           return Response.json(lastResult?.body || {}, {

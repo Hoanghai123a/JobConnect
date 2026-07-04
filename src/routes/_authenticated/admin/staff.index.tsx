@@ -33,6 +33,7 @@ import { findUserByUsernameInsensitive, normalizeAccountUsername } from "@/lib/a
 import { createStaffActionLog } from "@/lib/staff-log";
 import { fetchFactories, fetchFactoryManagers, isFactoryAssignmentActive, type FactoryRecord } from "@/lib/factories";
 import { exportToExcel } from "@/lib/excel";
+import { normalizeDate } from "@/lib/date-utils";
 import { escapePb } from "@/lib/delegations";
 
 export const Route = createFileRoute("/_authenticated/admin/staff/")({
@@ -111,14 +112,14 @@ function AdminStaffPage() {
 
   const downloadTemplate = () => {
     exportToExcel("mau_import_staff", {
-      Staff: [
+      "Tài khoản Staff": [
         {
-          username: "nguyenvana",
-          full_name: "Nguyễn Văn A",
-          phone: "0901234567",
-          date_of_birth: "1990-05-15",
-          address: "Hà Nội",
-          password: "",
+          "Tên đăng nhập": "nguyenvana",
+          "Họ tên": "Nguyễn Văn A",
+          "Số điện thoại": "0901234567",
+          "Ngày sinh": "15/05/1990",
+          "Địa chỉ": "Hà Nội",
+          "Mật khẩu": "",
           "Nhà máy 1": "Nhà máy A",
           "Nhà máy 2": "Nhà máy B",
           "Nhà máy 3": "",
@@ -154,7 +155,7 @@ function AdminStaffPage() {
         );
         const fullName = pickValue(row, ["full_name", "Họ tên", "Họ và tên"]);
         const phone = pickValue(row, ["phone", "Số điện thoại", "SĐT"]);
-        const dob = pickValue(row, ["date_of_birth", "Ngày sinh"]);
+        const dob = normalizeDate(pickValue(row, ["date_of_birth", "Ngày sinh"]));
         const address = pickValue(row, ["address", "Địa chỉ"]);
         const password = pickValue(row, ["password", "Mật khẩu"]) || DEFAULT_PASSWORD;
 

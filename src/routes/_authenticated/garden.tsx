@@ -37,6 +37,7 @@ import {
   happiness,
   petMood,
   applyFood,
+  applyPlay,
   normalizeFullness,
   type GardenState,
   type Flower,
@@ -231,15 +232,15 @@ function GardenPage() {
   const petFoods = foods.filter((f) => !f.petType || f.petType === "all" || f.petType === state.pet.id);
 
   const plantSeed = (plotIndex: number, flower: Flower) => {
-    if (!isAdmin && coins < flower.seedCost) {
+    if (coins < flower.seedCost) {
       toast.error("Không đủ xu để mua hạt giống");
       return;
     }
     const plots = state.plots.slice();
     plots[plotIndex] = { flowerId: flower.id, plantedAt: Date.now() };
-    const newCoins = isAdmin ? coins : coins - flower.seedCost;
+    const newCoins = coins - flower.seedCost;
     commit({ ...state, coins: newCoins, plots });
-    if (!isAdmin) syncGardenState(newCoins, plots);
+    syncGardenState(newCoins, plots);
     setSeedPickerFor(null);
     toast.success(`Đã trồng ${flower.name}`);
   };
@@ -266,7 +267,7 @@ function GardenPage() {
   };
 
   const buyFood = (food: GardenFood) => {
-    if (!isAdmin && coins < food.price) {
+    if (coins < food.price) {
       toast.error("Không đủ xu");
       return;
     }
@@ -275,17 +276,19 @@ function GardenPage() {
       toast.error("Thức ăn này chưa có điểm no hợp lệ");
       return;
     }
-    const newCoins = isAdmin ? coins : coins - food.price;
+    const newCoins = coins - food.price;
     const newPet = applyFood(state.pet, fullness, Date.now());
     commit({ ...state, coins: newCoins, pet: newPet });
-    if (!isAdmin) syncCoins(newCoins);
+    syncCoins(newCoins);
     toast.success(`${state.pet.name} ăn ${food.name}, no thêm ${fullness}%!`);
   };
 
   const playPet = () => {
-    commit({ ...state, pet: { ...state.pet, lastPlayedAt: Date.now() } });
+    const { pet: newPet, addedPct } = applyPlay(state.pet);
+    commit({ ...state, pet: newPet });
     setPlayHearts(true);
     setTimeout(() => setPlayHearts(false), 1500);
+    toast.success(`${state.pet.name} vui hơn +${addedPct}%`);
   };
 
   const unlockPlot = () => {
@@ -293,11 +296,11 @@ function GardenPage() {
     if (nextCount > PLOT_MAX) return;
     const cost = plotUnlockCost(state.unlockedPlots);
     if (cost === null) return;
-    if (!isAdmin && coins < cost) { toast.error("Không đủ xu để mở ô đất"); return; }
-    const newCoins = isAdmin ? coins : coins - cost;
+    if (coins < cost) { toast.error("Không đủ xu để mở ô đất"); return; }
+    const newCoins = coins - cost;
     const newPlots = [...state.plots, { flowerId: null, plantedAt: null }];
     commit({ ...state, coins: newCoins, plots: newPlots, unlockedPlots: nextCount });
-    if (!isAdmin) syncCoins(newCoins);
+    syncCoins(newCoins);
     toast.success(`Đã mở ô đất thứ ${nextCount}!`);
   };
 
@@ -307,18 +310,18 @@ function GardenPage() {
       toast.success("Đã chọn thú cưng");
       return;
     }
-    if (!isAdmin && coins < cost) {
+    if (coins < cost) {
       toast.error("Không đủ xu");
       return;
     }
-    const newCoins = isAdmin ? coins : coins - cost;
+    const newCoins = coins - cost;
     commit({
       ...state,
       coins: newCoins,
       ownedPets: [...state.ownedPets, petId],
       pet: { ...state.pet, id: petId },
     });
-    if (!isAdmin) syncCoins(newCoins);
+    syncCoins(newCoins);
     toast.success("Mở khóa thú cưng mới!");
   };
 
@@ -615,7 +618,7 @@ function GardenPage() {
             {/* Nút mở ô tiếp theo */}
             {state.unlockedPlots < PLOT_MAX && (() => {
               const cost = plotUnlockCost(state.unlockedPlots);
-              const canAfford = isAdmin || coins >= (cost ?? Infinity);
+              const canAfford = coins >= (cost ?? Infinity);
               return (
                 <button
                   onClick={unlockPlot}
@@ -640,7 +643,7 @@ function GardenPage() {
           </TabsContent>
 
           <TabsContent value="food" className="mt-0 space-y-3">
-            <FoodShopTab foods={petFoods} coins={coins} petName={state.pet.name} onBuy={buyFood} isAdmin={isAdmin} />
+            <FoodShopTab foods={petFoods} coins={coins} petName={state.pet.name} onBuy={buyFood} />
           </TabsContent>
 
           {!isStaff && (
@@ -671,7 +674,7 @@ function GardenPage() {
           </DialogHeader>
           <div className="space-y-2">
             {FLOWERS.map((f) => {
-              const affordable = isAdmin || coins >= f.seedCost;
+              const affordable = coins >= f.seedCost;
               return (
                 <button
                   key={f.id}
@@ -713,7 +716,7 @@ function GardenPage() {
               </div>
             ) : (
               petFoods.map((f) => {
-                const affordable = isAdmin || coins >= f.price;
+                const affordable = coins >= f.price;
                 return (
                   <button
                     key={f.id}
@@ -1084,7 +1087,7 @@ function Meter({ label, value, icon }: { label: string; value: number; icon: Rea
   return (
     <div className="mt-1.5">
       <div className="mb-0.5 flex items-center gap-1 text-[10px] text-white/80">
-        {icon} {label}
+        {icon} {label} {value}%
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/25">
         <div
@@ -1101,7 +1104,7 @@ function Meter({ label, value, icon }: { label: string; value: number; icon: Rea
 
 // ---- Food Shop Tab ----
 
-function FoodShopTab({ foods, coins, petName, onBuy, isAdmin = false }: { foods: GardenFood[]; coins: number; petName: string; onBuy: (food: GardenFood) => void; isAdmin?: boolean }) {
+function FoodShopTab({ foods, coins, petName, onBuy }: { foods: GardenFood[]; coins: number; petName: string; onBuy: (food: GardenFood) => void }) {
   if (foods.length === 0) {
     return <EmptyState icon={Drumstick} title="Chưa có thức ăn" description="Admin chưa thêm thức ăn vào cửa hàng." />;
   }
@@ -1109,7 +1112,7 @@ function FoodShopTab({ foods, coins, petName, onBuy, isAdmin = false }: { foods:
     <div className="space-y-2">
       <div className="text-xs text-muted-foreground">Mua thức ăn cho {petName}. Mỗi món cho no bụng khác nhau.</div>
       {foods.map((f) => {
-        const canAfford = isAdmin || coins >= f.price;
+        const canAfford = coins >= f.price;
         return (
           <button
             key={f.id}
