@@ -52,18 +52,18 @@ export const PLOT_COUNT = 6;   // ô ban đầu
 export const PLOT_MAX = 16;    // tối đa 16 ô (mở thêm 10)
 
 /** Chi phí mở khóa từng ô bổ sung (slot 7 → 16). Index 0 = ô thứ 7. */
-export const PLOT_UNLOCK_COSTS = [20, 35, 55, 80, 110, 150, 200, 260, 330, 420];
+export const PLOT_UNLOCK_COSTS = [60, 105, 165, 240, 330, 450, 600, 780, 990, 1260];
 const HUNGER_FULL_MS = 8 * 60 * 60 * 1000; // 8h thì đói hẳn
 const HAPPY_FULL_MS = 12 * 60 * 60 * 1000; // 12h thì buồn hẳn
 
 export const FLOWERS: Flower[] = [
-  { id: "sunflower",  name: "Hướng dương", emoji: "🌻", sproutEmoji: "🌱", seedCost: 10, reward: 22,  growMinutes: 240 }, // 4h  +120%
-  { id: "hibiscus",   name: "Dâm bụt",     emoji: "🌺", sproutEmoji: "🌱", seedCost: 12, reward: 31,  growMinutes: 300 }, // 5h  +158%
-  { id: "tulip",      name: "Tulip",        emoji: "🌷", sproutEmoji: "🌱", seedCost: 15, reward: 43,  growMinutes: 360 }, // 6h  +187%
-  { id: "blossom",    name: "Hoa anh đào",  emoji: "🌸", sproutEmoji: "🌱", seedCost: 18, reward: 57,  growMinutes: 420 }, // 7h  +217%
-  { id: "rose",       name: "Hoa hồng",     emoji: "🌹", sproutEmoji: "🌱", seedCost: 22, reward: 77,  growMinutes: 480 }, // 8h  +250%
-  { id: "orchid",     name: "Lan",          emoji: "🌼", sproutEmoji: "🌱", seedCost: 30, reward: 135, growMinutes: 600 }, // 10h +350%
-  { id: "lotus",      name: "Cỏ 4 lá",     emoji: "🍀", sproutEmoji: "🌱", seedCost: 40, reward: 232, growMinutes: 720 }, // 12h +480%
+  { id: "sunflower",  name: "Hướng dương", emoji: "🌻", sproutEmoji: "🌱", seedCost: 10, reward: 15,  growMinutes: 240 }, // 4h  +50%
+  { id: "hibiscus",   name: "Dâm bụt",     emoji: "🌺", sproutEmoji: "🌱", seedCost: 12, reward: 20,  growMinutes: 300 }, // 5h  +67%
+  { id: "tulip",      name: "Tulip",        emoji: "🌷", sproutEmoji: "🌱", seedCost: 15, reward: 28,  growMinutes: 360 }, // 6h  +87%
+  { id: "blossom",    name: "Hoa anh đào",  emoji: "🌸", sproutEmoji: "🌱", seedCost: 18, reward: 38,  growMinutes: 420 }, // 7h  +111%
+  { id: "rose",       name: "Hoa hồng",     emoji: "🌹", sproutEmoji: "🌱", seedCost: 22, reward: 50,  growMinutes: 480 }, // 8h  +127%
+  { id: "orchid",     name: "Lan",          emoji: "🌼", sproutEmoji: "🌱", seedCost: 30, reward: 85, growMinutes: 600 }, // 10h +183%
+  { id: "lotus",      name: "Cỏ 4 lá",     emoji: "🍀", sproutEmoji: "🌱", seedCost: 40, reward: 140, growMinutes: 720 }, // 12h +250%
 ];
 
 export const PETS: Pet[] = [
