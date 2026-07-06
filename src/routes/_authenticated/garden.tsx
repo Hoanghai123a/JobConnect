@@ -24,6 +24,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import {
   FLOWERS,
   PETS,
+  PLOT_COUNT,
   PLOT_MAX,
   flowerById,
   petById,
@@ -41,6 +42,8 @@ import {
   normalizeFullness,
   type GardenState,
   type Flower,
+  type Plot,
+  type PetState,
 } from "@/lib/garden";
 import {
   fetchFoods,
@@ -122,26 +125,34 @@ function GardenPage() {
       setFoods(foodList.filter((f) => f.active));
       setTiers(tierList.filter((t) => t.active));
 
-      // Sync stolenAmount từ server vào local state
-      if (bal && Array.isArray(bal.plots)) {
+      // Hydrate local state từ server (PB là source of truth cho plots, pet, coins)
+      if (bal) {
         setState((prev) => {
-          if (!prev) return prev;
-          const serverPlots = bal.plots as { flowerId: string | null; plantedAt: number | null; stolenAmount?: number }[];
-          let changed = false;
-          const merged = prev.plots.map((lp, i) => {
-            const sp = serverPlots[i];
-            if (sp?.stolenAmount && lp.flowerId === sp.flowerId && !lp.stolenAmount) {
-              changed = true;
-              return { ...lp, stolenAmount: sp.stolenAmount };
-            }
-            return lp;
-          });
-          if (changed) {
-            const next = { ...prev, plots: merged };
-            saveGarden(user.id, next);
-            return next;
-          }
-          return prev;
+          const local = prev ?? loadGarden(user.id);
+          const serverPlots: Plot[] = Array.isArray(bal.plots) && bal.plots.length > 0
+            ? (bal.plots as Plot[]).map((p: any) => ({
+                flowerId: p?.flowerId ?? null,
+                plantedAt: typeof p?.plantedAt === "number" ? p.plantedAt : null,
+                stolenAmount: p?.stolenAmount,
+              }))
+            : local.plots;
+          const serverPet: PetState | null = bal.pet && typeof (bal.pet as any).id === "string"
+            ? bal.pet as unknown as PetState
+            : null;
+          const unlockedPlots = Math.max(PLOT_COUNT, serverPlots.length, local.unlockedPlots);
+          while (serverPlots.length < unlockedPlots) serverPlots.push({ flowerId: null, plantedAt: null });
+
+          const merged: GardenState = {
+            coins: bal.coins ?? local.coins,
+            plots: serverPlots,
+            unlockedPlots,
+            pet: serverPet ?? local.pet,
+            ownedPets: (bal.ownedPets as string[] | undefined)?.length ? bal.ownedPets as string[] : local.ownedPets,
+            roamingEnabled: bal.roamingEnabled ?? local.roamingEnabled,
+            totalHarvested: bal.totalHarvested ?? local.totalHarvested,
+          };
+          saveGarden(user.id, merged);
+          return merged;
         });
       }
     } catch {
@@ -191,31 +202,31 @@ function GardenPage() {
     (next: GardenState) => {
       setState(next);
       saveGarden(user?.id, next);
-    },
-    [user?.id],
-  );
-
-  const syncCoins = useCallback(
-    async (newCoins: number) => {
       if (balance) {
-        const updated = await updateBalance(balance.id, { coins: newCoins });
-        setBalance(updated);
+        updateBalance(balance.id, {
+          coins: next.coins,
+          plots: next.plots as any,
+          pet: next.pet as any,
+          ownedPets: next.ownedPets as any,
+          roamingEnabled: next.roamingEnabled,
+          totalHarvested: next.totalHarvested,
+        })
+          .then((updated) => setBalance(updated))
+          .catch(() => {});
       }
     },
-    [balance],
-  );
-
-  const syncGardenState = useCallback(
-    async (newCoins: number, newPlots: { flowerId: string | null; plantedAt: number | null }[]) => {
-      if (balance) {
-        const updated = await updateBalance(balance.id, { coins: newCoins, plots: newPlots });
-        setBalance(updated);
-      }
-    },
-    [balance],
+    [user?.id, balance],
   );
 
   const now = Date.now();
+
+  if (isStaff) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-sm text-muted-foreground">
+        Tính năng này không khả dụng cho tài khoản staff.
+      </div>
+    );
+  }
 
   if (!state) {
     return (
@@ -240,7 +251,6 @@ function GardenPage() {
     plots[plotIndex] = { flowerId: flower.id, plantedAt: Date.now() };
     const newCoins = coins - flower.seedCost;
     commit({ ...state, coins: newCoins, plots });
-    syncGardenState(newCoins, plots);
     setSeedPickerFor(null);
     toast.success(`Đã trồng ${flower.name}`);
   };
@@ -255,7 +265,6 @@ function GardenPage() {
     plots[plotIndex] = { flowerId: null, plantedAt: null };
     const newCoins = coins + actualReward;
     commit({ ...state, coins: newCoins, plots, totalHarvested: state.totalHarvested + 1 });
-    syncGardenState(newCoins, plots);
     setHarvestAnim({ emoji: flower.emoji, plotIndex, key: Date.now() });
     setTimeout(() => setHarvestAnim(null), 1200);
     toast.success(`Thu hoạch ${flower.name} +${actualReward} xu${stolenAmount > 0 ? ` (bị chộm ${stolenAmount})` : ""}`);
@@ -279,7 +288,6 @@ function GardenPage() {
     const newCoins = coins - food.price;
     const newPet = applyFood(state.pet, fullness, Date.now());
     commit({ ...state, coins: newCoins, pet: newPet });
-    syncCoins(newCoins);
     toast.success(`${state.pet.name} ăn ${food.name}, no thêm ${fullness}%!`);
   };
 
@@ -300,7 +308,6 @@ function GardenPage() {
     const newCoins = coins - cost;
     const newPlots = [...state.plots, { flowerId: null, plantedAt: null }];
     commit({ ...state, coins: newCoins, plots: newPlots, unlockedPlots: nextCount });
-    syncCoins(newCoins);
     toast.success(`Đã mở ô đất thứ ${nextCount}!`);
   };
 
@@ -321,7 +328,6 @@ function GardenPage() {
       ownedPets: [...state.ownedPets, petId],
       pet: { ...state.pet, id: petId },
     });
-    syncCoins(newCoins);
     toast.success("Mở khóa thú cưng mới!");
   };
 
@@ -1154,7 +1160,8 @@ function ExchangeTab({ user, balance, tiers, onSuccess }: { user: { id: string; 
 
   const doExchange = async (tier: GardenExchangeTier) => {
     if (!hasBank) { toast.error("Bạn cần cập nhật số tài khoản ngân hàng trước khi quy đổi"); return; }
-    if (coins < tier.exchange_coins) { toast.error("Không đủ xu"); return; }
+    if (coins < tier.min_coins) { toast.error(`Cần tối thiểu ${tier.min_coins} xu để gửi yêu cầu`); return; }
+    if (coins < tier.exchange_coins) { toast.error("Không đủ xu để quy đổi"); return; }
     setSubmitting(true);
     try {
       await createExchangeRequest({
@@ -1198,7 +1205,7 @@ function ExchangeTab({ user, balance, tiers, onSuccess }: { user: { id: string; 
         <EmptyState icon={ArrowRightLeft} title="Chưa có mốc quy đổi" description="Admin chưa thiết lập bảng quy đổi." />
       ) : (
         tiers.map((t) => {
-          const canExchange = coins >= t.exchange_coins && hasBank;
+          const canExchange = coins >= t.min_coins && coins >= t.exchange_coins && hasBank;
           return (
             <Card key={t.id} className="flex items-center justify-between gap-3 p-3">
               <div>
@@ -1228,7 +1235,7 @@ function ExchangeTab({ user, balance, tiers, onSuccess }: { user: { id: string; 
               <div className="flex items-center justify-between gap-2">
                 <div className="text-sm font-medium">{r.coins_spent} xu → {r.money_amount.toLocaleString("vi-VN")} đ</div>
                 <StatusChip tone={r.status === "approved" ? "success" : r.status === "rejected" ? "danger" : "warning"}>
-                  {r.status === "approved" ? "Đã duyệt" : r.status === "rejected" ? "Đã huỷ" : "Chờ duyệt"}
+                  {r.status === "approved" ? "Đã duyệt" : r.status === "rejected" ? "Đã huỷ" : r.status === "processing" ? "Đang xử lý" : "Chờ duyệt"}
                 </StatusChip>
               </div>
               <div className="mt-1 text-[11px] text-muted-foreground">
@@ -1303,7 +1310,8 @@ function AdminRequests({ onDataChanged }: { onDataChanged: () => void }) {
   };
 
   const pending = requests.filter((r) => r.status === "pending");
-  const resolved = requests.filter((r) => r.status !== "pending");
+  const processing = requests.filter((r) => r.status === "processing");
+  const resolved = requests.filter((r) => r.status !== "pending" && r.status !== "processing");
 
   return (
     <div className="space-y-3">
@@ -1335,6 +1343,20 @@ function AdminRequests({ onDataChanged }: { onDataChanged: () => void }) {
           )}
         </Card>
       ))}
+      {processing.length > 0 && (
+        <>
+          <div className="text-xs font-semibold">Đang xử lý ({processing.length})</div>
+          {processing.map((r) => (
+            <Card key={r.id} className="p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">{r.expand?.user?.full_name || "User"} · {r.coins_spent} xu</div>
+                <StatusChip tone="warning">Đang xử lý</StatusChip>
+              </div>
+              {r.admin_note && <div className="mt-1 text-[11px] text-muted-foreground">{r.admin_note}</div>}
+            </Card>
+          ))}
+        </>
+      )}
       {resolved.length > 0 && (
         <>
           <div className="text-xs font-semibold">Đã xử lý ({resolved.length})</div>

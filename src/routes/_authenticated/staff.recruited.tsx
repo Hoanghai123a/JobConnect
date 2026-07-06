@@ -17,13 +17,13 @@ import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { useAuth } from "@/lib/auth";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 
-export const Route = createFileRoute("/_authenticated/staff/workers/")({
-  component: StaffWorkersPage,
+export const Route = createFileRoute("/_authenticated/staff/recruited")({
+  component: StaffRecruitedPage,
 });
 
-type WorkerScope = "all" | "qlnm" | "nvtd" | "working" | "left";
+type RecruitedScope = "all" | "working" | "left";
 
-function StaffWorkersPage() {
+function StaffRecruitedPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [workers, setWorkers] = useState<StaffWorkerRecord[]>([]);
@@ -32,7 +32,7 @@ function StaffWorkersPage() {
   const [managedFactoryIds, setManagedFactoryIds] = useState<Set<string>>(new Set());
   const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
   const [search, setSearch] = useState("");
-  const [scope, setScope] = useState<WorkerScope>("all");
+  const [scope, setScope] = useState<RecruitedScope>("all");
   const [selected, setSelected] = useState<StaffWorkerRecord | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -62,7 +62,7 @@ function StaffWorkersPage() {
         fetchFactoryManagers(user.id),
         fetchMainHouses().catch(() => [] as MainHouseRecord[]),
       ]);
-      setWorkers(workspace.workers);
+      setWorkers(workspace.workers.filter((w) => w.reasons.includes("nvtd")));
       setFactories(factoryList);
       setStaffUsers(staffList);
       setMainHouses(mainHouseList);
@@ -103,8 +103,6 @@ function StaffWorkersPage() {
 
       if (query && !haystack.includes(query)) return false;
 
-      if (scope === "qlnm" && !worker.reasons.includes("qlnm")) return false;
-      if (scope === "nvtd" && !worker.reasons.includes("nvtd")) return false;
       if (scope === "working" && latest?.status !== "working") return false;
       if (scope === "left" && latest?.status !== "left") return false;
 
@@ -114,8 +112,8 @@ function StaffWorkersPage() {
 
   return (
     <PageContainer
-      title="Lao động trong quyền"
-      subtitle="Tìm theo mã NV, họ tên, CCCD và nhà máy gần nhất"
+      title="Người tôi tuyển"
+      subtitle="Lao động bạn trực tiếp tuyển vào"
     >
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -130,16 +128,6 @@ function StaffWorkersPage() {
       <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         <ScopeChip label="Tất cả" active={scope === "all"} onClick={() => setScope("all")} />
         <ScopeChip
-          label="Nhà máy tôi quản lý"
-          active={scope === "qlnm"}
-          onClick={() => setScope("qlnm")}
-        />
-        <ScopeChip
-          label="Người tôi tuyển"
-          active={scope === "nvtd"}
-          onClick={() => setScope("nvtd")}
-        />
-        <ScopeChip
           label="Đang làm"
           active={scope === "working"}
           onClick={() => setScope("working")}
@@ -148,18 +136,18 @@ function StaffWorkersPage() {
       </div>
 
       <div className="text-xs text-muted-foreground">
-        Tổng {filteredWorkers.length} hồ sơ hiển thị trong phạm vi 90 ngày gần đây.
+        Tổng {filteredWorkers.length} lao động bạn tuyển.
       </div>
 
       {loading ? (
         <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">
-          Đang tải danh sách lao động...
+          Đang tải danh sách...
         </div>
       ) : filteredWorkers.length === 0 ? (
         <EmptyState
           icon={UserRoundSearch}
           title="Không có hồ sơ phù hợp"
-          description="Thử đổi bộ lọc hoặc tìm theo mã NV, CCCD, tên nhà máy gần nhất."
+          description="Chưa có lao động nào do bạn tuyển, hoặc thử đổi bộ lọc."
         />
       ) : (
         filteredWorkers.map((worker) => {
@@ -184,10 +172,7 @@ function StaffWorkersPage() {
                     {latest?.worker_tax_code_snapshot && ` · MST: ${latest.worker_tax_code_snapshot}`}
                   </div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    {latest?.expand?.factory?.name || "Chưa có nhà máy"} · Người tuyển:{" "}
-                    {latest?.expand?.recruiter_staff?.full_name ||
-                      latest?.expand?.recruiter_staff?.username ||
-                      "Chưa gán"}
+                    {latest?.expand?.factory?.name || "Chưa có nhà máy"}
                   </div>
                   {latest?.expand?.main_house?.name && (
                     <div className="mt-0.5 text-[11px] text-muted-foreground">
@@ -208,11 +193,9 @@ function StaffWorkersPage() {
               </div>
 
               <div className="mt-2 flex flex-wrap gap-1.5">
+                <StatusChip tone="primary">Bạn là người tuyển</StatusChip>
                 {worker.reasons.includes("qlnm") && (
                   <StatusChip tone="info">Thuộc nhà máy phụ trách</StatusChip>
-                )}
-                {worker.reasons.includes("nvtd") && (
-                  <StatusChip tone="primary">Bạn là người tuyển</StatusChip>
                 )}
                 {(worker.canReportAdvance || worker.canReportLeave || worker.canReportJoin) && (
                   <StatusChip tone="success">Có thể thao tác</StatusChip>
@@ -237,4 +220,3 @@ function StaffWorkersPage() {
     </PageContainer>
   );
 }
-

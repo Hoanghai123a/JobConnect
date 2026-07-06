@@ -122,7 +122,8 @@ export function RoamingPet() {
     };
   }, [user?.id]);
 
-  const enabled = Boolean(user?.id) && !loading && garden?.roamingEnabled !== false;
+  const isStaff = (user as any)?.role === "staff";
+  const enabled = Boolean(user?.id) && !loading && !isStaff && garden?.roamingEnabled !== false;
   const starving = garden ? hunger(garden.pet) <= 0 : false;
 
   const glideDurationRef = useRef(0);
@@ -328,7 +329,18 @@ export function RoamingPet() {
             className="pet-face inline-block"
             style={{ transform: `scaleX(${facing})` }}
           >
-            {pet.sprite && !spriteFailed ? (
+            {starving && pet.sleepSprite ? (
+              <img
+                src={pet.sleepSprite}
+                alt={pet.name}
+                style={{
+                  width: pet.frameSize ?? 40,
+                  height: pet.frameSize ?? 40,
+                  imageRendering: "pixelated",
+                }}
+                className="pet-rest inline-block"
+              />
+            ) : pet.sprite && !spriteFailed ? (
               <div
                 className="pet-sprite"
                 style={{

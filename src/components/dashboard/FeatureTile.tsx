@@ -16,6 +16,7 @@ interface Props {
   description?: string;
   icon: LucideIcon;
   variant?: "default" | "accent";
+  size?: "default" | "compact";
   badge?: string;
   disabled?: boolean;
   disabledReason?: string;
@@ -27,22 +28,26 @@ export function FeatureTile({
   description,
   icon: Icon,
   variant = "default",
+  size = "default",
   badge,
   disabled = false,
   disabledReason,
 }: Props) {
   const [open, setOpen] = useState(false);
 
+  const isCompact = size === "compact";
+
   const tileClass = cn(
-    "group relative flex flex-col gap-3 rounded-2xl border bg-card p-4 transition-all text-left",
-    "shadow-soft",
+    "group relative flex rounded-2xl border bg-card transition-all text-left shadow-soft",
+    isCompact ? "flex-col items-center gap-1.5 p-2.5" : "flex-col gap-3 p-4",
     disabled
       ? "cursor-pointer opacity-60 hover:opacity-75"
       : "hover:-translate-y-0.5 hover:shadow-[var(--shadow-card)] active:scale-[0.98]",
   );
 
   const iconClass = cn(
-    "flex h-11 w-11 items-center justify-center rounded-xl text-primary-foreground shadow-sm",
+    "flex items-center justify-center rounded-xl text-primary-foreground shadow-sm",
+    isCompact ? "h-10 w-10" : "h-11 w-11",
     variant === "accent" ? "gradient-accent text-accent-foreground" : "gradient-primary",
     disabled && "grayscale",
   );
@@ -50,27 +55,45 @@ export function FeatureTile({
   const content = (
     <>
       <div className={iconClass}>
-        <Icon className="h-5 w-5" />
+        <Icon className={isCompact ? "h-[18px] w-[18px]" : "h-5 w-5"} />
       </div>
       {disabled ? (
-        <span className="absolute right-3 top-3 inline-flex items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">
+        <span
+          className={cn(
+            "absolute inline-flex items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground",
+            isCompact ? "right-1.5 top-1.5" : "right-3 top-3",
+          )}
+        >
           <Lock className="h-3 w-3" />
         </span>
       ) : (
         badge && (
-          <span className="absolute right-3 top-3 inline-flex min-w-6 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+          <span
+            className={cn(
+              "absolute inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm",
+              isCompact ? "right-1.5 top-1.5" : "right-3 top-3",
+            )}
+          >
             {badge}
           </span>
         )
       )}
-      <div>
-        <div className="text-sm font-semibold tracking-tight">{label}</div>
-        {description && (
-          <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-            {description}
+      {isCompact ? (
+        <div className="w-full min-w-0 text-center">
+          <div className="truncate text-[12px] font-semibold leading-tight tracking-tight">
+            {label}
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div>
+          <div className="text-sm font-semibold tracking-tight">{label}</div>
+          {description && (
+            <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+              {description}
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 

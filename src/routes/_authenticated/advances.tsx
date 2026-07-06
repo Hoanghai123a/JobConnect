@@ -43,6 +43,7 @@ import {
   Clock,
   FileDown,
   History,
+  Pencil,
   Send,
   ShieldCheck,
   TriangleAlert,
@@ -76,6 +77,7 @@ type AdvanceRecord = {
   bank_account_number?: string;
   bank_account_name?: string;
   amount: number;
+  original_amount?: number;
   reason: string;
   status?: AdvanceStatus;
   recovery_status?: RecoveryStatus;
@@ -200,6 +202,8 @@ export function AdvancesPage() {
     bank_account_name: "",
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
+  const [editAmountText, setEditAmountText] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(false);
@@ -515,6 +519,64 @@ export function AdvancesPage() {
     }
   };
 
+  const saveEditedAmount = async (row: AdvanceRecord) => {
+    const newAmount = parseMoneyInput(editAmountText);
+    if (!newAmount || newAmount <= 0) {
+      toast.error("Số tiền không hợp lệ");
+      return;
+    }
+    if (newAmount === row.amount) {
+      setEditingAmountId(null);
+      return;
+    }
+    try {
+      const payload: Partial<AdvanceRecord> = {
+        amount: newAmount,
+        original_amount: row.original_amount || row.amount,
+      };
+      await updateRow(row.id, payload);
+      await createStaffActionLog({
+        actor: user,
+        targetUserId: row.user,
+        targetCollection: "advances",
+        targetRecord: row.id,
+        action: "update",
+        before: { amount: row.amount },
+        after: { amount: newAmount, original_amount: row.original_amount || row.amount },
+        note: `Admin sửa số tiền ứng: ${formatMoney(row.amount)} → ${formatMoney(newAmount)}`,
+      });
+      toast.success("Đã cập nhật số tiền");
+      setEditingAmountId(null);
+      load();
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi cập nhật số tiền");
+    }
+  };
+
+  const adminResolve = async (row: AdvanceRecord, newStatus: "accepted" | "rejected") => {
+    try {
+      const after = {
+        status: newStatus,
+        resolved_at: new Date().toISOString(),
+      };
+      await updateRow(row.id, after);
+      await createStaffActionLog({
+        actor: user,
+        targetUserId: row.user,
+        targetCollection: "advances",
+        targetRecord: row.id,
+        action: "update",
+        before: { status: row.status || "recruiter_approved" },
+        after,
+        note: newStatus === "accepted" ? "Admin tiếp nhận ứng lương" : "Admin từ chối ứng lương",
+      });
+      toast.success(newStatus === "accepted" ? "Đã tiếp nhận" : "Đã từ chối");
+      load();
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi xử lý");
+    }
+  };
+
   const exportCurrent = () => {
     const rows = filtered.map((row) => ({
       "Họ tên": row.full_name,
@@ -530,6 +592,7 @@ export function AdvancesPage() {
       "Số tài khoản": row.bank_account_number || "",
       "Tên chủ tài khoản": row.bank_account_name || "",
       "Số tiền": row.amount,
+      "Số tiền ban đầu": row.original_amount && row.original_amount !== row.amount ? row.original_amount : "",
       "Lý do": row.reason,
       "Trạng thái": STATUS_META[(row.status || "pending") as AdvanceStatus].label,
       "Thu hồi": RECOVERY_META[(row.recovery_status || "none") as RecoveryStatus].label,
@@ -999,8 +1062,63 @@ export function AdvancesPage() {
                   <div className="truncate text-sm font-semibold leading-tight">
                     {row.employee_code || "-"} - {row.full_name || "-"}
                   </div>
-                  <div className="mt-0.5 text-sm font-bold leading-tight text-primary">
-                    {formatMoney(row.amount)}
+                  <div className="mt-0.5 flex items-center gap-1">
+                    {editingAmountId === row.id ? (
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <Input
+                          value={editAmountText}
+                          onChange={(e) => setEditAmountText(formatMoneyInput(e.target.value))}
+                          inputMode="numeric"
+                          className="h-7 w-28 text-sm font-bold"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveEditedAmount(row);
+                            if (e.key === "Escape") setEditingAmountId(null);
+                          }}
+                        />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6"
+                          onClick={() => saveEditedAmount(row)}
+                        >
+                          <Check className="h-3.5 w-3.5 text-green-600" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6"
+                          onClick={() => setEditingAmountId(null)}
+                        >
+                          <X className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-sm font-bold leading-tight text-primary">
+                          {formatMoney(row.amount)}
+                        </span>
+                        {row.original_amount && row.original_amount !== row.amount && (
+                          <span className="text-[11px] text-muted-foreground line-through">
+                            {formatMoney(row.original_amount)}
+                          </span>
+                        )}
+                        {status === "recruiter_approved" && (
+                          <button
+                            type="button"
+                            className="ml-0.5 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            title="Sửa số tiền"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingAmountId(row.id);
+                              setEditAmountText(formatMoneyInput(String(row.amount)));
+                            }}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        )}
+                      </>
+                    )}
                   </div>
                   <div className="truncate text-[11px] leading-tight text-muted-foreground">
                     Báo ứng: {requesterName}
@@ -1030,10 +1148,7 @@ export function AdvancesPage() {
                       aria-label="Tiếp nhận ứng lương"
                       onClick={(event) => {
                         event.stopPropagation();
-                        updateRow(row.id, {
-                          status: "accepted",
-                          resolved_at: new Date().toISOString(),
-                        }).then(load);
+                        adminResolve(row, "accepted");
                       }}
                     >
                       <Check className="h-3.5 w-3.5" />
@@ -1046,10 +1161,7 @@ export function AdvancesPage() {
                       aria-label="Từ chối ứng lương"
                       onClick={(event) => {
                         event.stopPropagation();
-                        updateRow(row.id, {
-                          status: "rejected",
-                          resolved_at: new Date().toISOString(),
-                        }).then(load);
+                        adminResolve(row, "rejected");
                       }}
                     >
                       <X className="h-3.5 w-3.5" />
@@ -1259,6 +1371,11 @@ function AdvanceDetailDialog({
               </div>
               <div className="mt-2 text-2xl font-bold text-primary">
                 {formatMoney(advanceDetail.amount)}
+                {advanceDetail.original_amount && advanceDetail.original_amount !== advanceDetail.amount && (
+                  <span className="ml-2 text-sm font-normal text-muted-foreground line-through">
+                    {formatMoney(advanceDetail.original_amount)}
+                  </span>
+                )}
               </div>
             </div>
 

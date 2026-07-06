@@ -20,6 +20,7 @@ import { Route as AuthenticatedTransportRouteImport } from './routes/_authentica
 import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/staff'
 import { Route as AuthenticatedNewsRouteImport } from './routes/_authenticated/news'
 import { Route as AuthenticatedGuidesRouteImport } from './routes/_authenticated/guides'
+import { Route as AuthenticatedGemsRouteImport } from './routes/_authenticated/gems'
 import { Route as AuthenticatedGardenRouteImport } from './routes/_authenticated/garden'
 import { Route as AuthenticatedForceChangePasswordRouteImport } from './routes/_authenticated/force-change-password'
 import { Route as AuthenticatedComplaintsRouteImport } from './routes/_authenticated/complaints'
@@ -32,6 +33,7 @@ import { Route as AuthenticatedStaffIndexRouteImport } from './routes/_authentic
 import { Route as ApiPublicPocketbaseAuthRouteImport } from './routes/api/public/pocketbase-auth'
 import { Route as ApiPublicAppLogoRouteImport } from './routes/api/public/app-logo'
 import { Route as ApiPublicAppIconRouteImport } from './routes/api/public/app-icon'
+import { Route as AuthenticatedStaffRecruitedRouteImport } from './routes/_authenticated/staff.recruited'
 import { Route as AuthenticatedStaffExportRouteImport } from './routes/_authenticated/staff.export'
 import { Route as AuthenticatedAdminWorkforceRouteImport } from './routes/_authenticated/admin/workforce'
 import { Route as AuthenticatedAdminStaffRouteImport } from './routes/_authenticated/admin/staff'
@@ -104,6 +106,11 @@ const AuthenticatedGuidesRoute = AuthenticatedGuidesRouteImport.update({
   path: '/guides',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedGemsRoute = AuthenticatedGemsRouteImport.update({
+  id: '/gems',
+  path: '/gems',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedGardenRoute = AuthenticatedGardenRouteImport.update({
   id: '/garden',
   path: '/garden',
@@ -166,6 +173,12 @@ const ApiPublicAppIconRoute = ApiPublicAppIconRouteImport.update({
   path: '/api/public/app-icon',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedStaffRecruitedRoute =
+  AuthenticatedStaffRecruitedRouteImport.update({
+    id: '/recruited',
+    path: '/recruited',
+    getParentRoute: () => AuthenticatedStaffRoute,
+  } as any)
 const AuthenticatedStaffExportRoute =
   AuthenticatedStaffExportRouteImport.update({
     id: '/export',
@@ -275,6 +288,7 @@ export interface FileRoutesByFullPath {
   '/complaints': typeof AuthenticatedComplaintsRoute
   '/force-change-password': typeof AuthenticatedForceChangePasswordRoute
   '/garden': typeof AuthenticatedGardenRoute
+  '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
   '/news': typeof AuthenticatedNewsRoute
   '/staff': typeof AuthenticatedStaffRouteWithChildren
@@ -287,6 +301,7 @@ export interface FileRoutesByFullPath {
   '/admin/staff': typeof AuthenticatedAdminStaffRouteWithChildren
   '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
+  '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
@@ -315,6 +330,7 @@ export interface FileRoutesByTo {
   '/complaints': typeof AuthenticatedComplaintsRoute
   '/force-change-password': typeof AuthenticatedForceChangePasswordRoute
   '/garden': typeof AuthenticatedGardenRoute
+  '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
   '/news': typeof AuthenticatedNewsRoute
   '/transport': typeof AuthenticatedTransportRoute
@@ -324,6 +340,7 @@ export interface FileRoutesByTo {
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
+  '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
@@ -354,6 +371,7 @@ export interface FileRoutesById {
   '/_authenticated/complaints': typeof AuthenticatedComplaintsRoute
   '/_authenticated/force-change-password': typeof AuthenticatedForceChangePasswordRoute
   '/_authenticated/garden': typeof AuthenticatedGardenRoute
+  '/_authenticated/gems': typeof AuthenticatedGemsRoute
   '/_authenticated/guides': typeof AuthenticatedGuidesRoute
   '/_authenticated/news': typeof AuthenticatedNewsRoute
   '/_authenticated/staff': typeof AuthenticatedStaffRouteWithChildren
@@ -366,6 +384,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/staff': typeof AuthenticatedAdminStaffRouteWithChildren
   '/_authenticated/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
   '/_authenticated/staff/export': typeof AuthenticatedStaffExportRoute
+  '/_authenticated/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
@@ -396,6 +415,7 @@ export interface FileRouteTypes {
     | '/complaints'
     | '/force-change-password'
     | '/garden'
+    | '/gems'
     | '/guides'
     | '/news'
     | '/staff'
@@ -408,6 +428,7 @@ export interface FileRouteTypes {
     | '/admin/staff'
     | '/admin/workforce'
     | '/staff/export'
+    | '/staff/recruited'
     | '/api/public/app-icon'
     | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
@@ -436,6 +457,7 @@ export interface FileRouteTypes {
     | '/complaints'
     | '/force-change-password'
     | '/garden'
+    | '/gems'
     | '/guides'
     | '/news'
     | '/transport'
@@ -445,6 +467,7 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/workforce'
     | '/staff/export'
+    | '/staff/recruited'
     | '/api/public/app-icon'
     | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
@@ -474,6 +497,7 @@ export interface FileRouteTypes {
     | '/_authenticated/complaints'
     | '/_authenticated/force-change-password'
     | '/_authenticated/garden'
+    | '/_authenticated/gems'
     | '/_authenticated/guides'
     | '/_authenticated/news'
     | '/_authenticated/staff'
@@ -486,6 +510,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/staff'
     | '/_authenticated/admin/workforce'
     | '/_authenticated/staff/export'
+    | '/_authenticated/staff/recruited'
     | '/api/public/app-icon'
     | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
@@ -594,6 +619,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedGuidesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/gems': {
+      id: '/_authenticated/gems'
+      path: '/gems'
+      fullPath: '/gems'
+      preLoaderRoute: typeof AuthenticatedGemsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/garden': {
       id: '/_authenticated/garden'
       path: '/garden'
@@ -677,6 +709,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/public/app-icon'
       preLoaderRoute: typeof ApiPublicAppIconRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/staff/recruited': {
+      id: '/_authenticated/staff/recruited'
+      path: '/recruited'
+      fullPath: '/staff/recruited'
+      preLoaderRoute: typeof AuthenticatedStaffRecruitedRouteImport
+      parentRoute: typeof AuthenticatedStaffRoute
     }
     '/_authenticated/staff/export': {
       id: '/_authenticated/staff/export'
@@ -795,6 +834,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedStaffRouteChildren {
   AuthenticatedStaffExportRoute: typeof AuthenticatedStaffExportRoute
+  AuthenticatedStaffRecruitedRoute: typeof AuthenticatedStaffRecruitedRoute
   AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
   AuthenticatedStaffWorkersWorkerIdRoute: typeof AuthenticatedStaffWorkersWorkerIdRoute
   AuthenticatedStaffWorkersIndexRoute: typeof AuthenticatedStaffWorkersIndexRoute
@@ -802,6 +842,7 @@ interface AuthenticatedStaffRouteChildren {
 
 const AuthenticatedStaffRouteChildren: AuthenticatedStaffRouteChildren = {
   AuthenticatedStaffExportRoute: AuthenticatedStaffExportRoute,
+  AuthenticatedStaffRecruitedRoute: AuthenticatedStaffRecruitedRoute,
   AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
   AuthenticatedStaffWorkersWorkerIdRoute:
     AuthenticatedStaffWorkersWorkerIdRoute,
@@ -855,6 +896,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedComplaintsRoute: typeof AuthenticatedComplaintsRoute
   AuthenticatedForceChangePasswordRoute: typeof AuthenticatedForceChangePasswordRoute
   AuthenticatedGardenRoute: typeof AuthenticatedGardenRoute
+  AuthenticatedGemsRoute: typeof AuthenticatedGemsRoute
   AuthenticatedGuidesRoute: typeof AuthenticatedGuidesRoute
   AuthenticatedNewsRoute: typeof AuthenticatedNewsRoute
   AuthenticatedStaffRoute: typeof AuthenticatedStaffRouteWithChildren
@@ -877,6 +919,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedComplaintsRoute: AuthenticatedComplaintsRoute,
   AuthenticatedForceChangePasswordRoute: AuthenticatedForceChangePasswordRoute,
   AuthenticatedGardenRoute: AuthenticatedGardenRoute,
+  AuthenticatedGemsRoute: AuthenticatedGemsRoute,
   AuthenticatedGuidesRoute: AuthenticatedGuidesRoute,
   AuthenticatedNewsRoute: AuthenticatedNewsRoute,
   AuthenticatedStaffRoute: AuthenticatedStaffRouteWithChildren,

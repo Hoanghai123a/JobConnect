@@ -1,10 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { BriefcaseBusiness, Building2, BusFront, Download, Newspaper, NotebookPen, ShieldCheck, Sprout, Users } from "lucide-react";
+import { BriefcaseBusiness, BookOpen, Building2, BusFront, ChevronRight, Download, LayoutGrid, MessagesSquare, Newspaper, NotebookPen, ShieldCheck, UserCheck, Users } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusChip } from "@/components/ui/status-chip";
+import { FeatureTile } from "@/components/dashboard/FeatureTile";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { fetchFactoryManagers, type FactoryManagerRecord } from "@/lib/factories";
 import { fetchStaffWorkspace } from "@/lib/staff-permissions";
 import { useAuth } from "@/lib/auth";
@@ -20,6 +28,7 @@ function StaffDashboardPage() {
   const [workersCount, setWorkersCount] = useState(0);
   const [operableCount, setOperableCount] = useState(0);
   const [assignments, setAssignments] = useState<FactoryManagerRecord[]>([]);
+  const [utilOpen, setUtilOpen] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -92,30 +101,52 @@ function StaffDashboardPage() {
           icon={Users}
         />
         <DashboardLink
+          to="/staff/recruited"
+          title="Người tôi tuyển"
+          description="Xem và xử lý lao động bạn trực tiếp tuyển."
+          icon={UserCheck}
+        />
+        <DashboardLink
           to="/staff/export"
           title="Xuất dữ liệu"
           description="Lọc 90 ngày gần đây và xuất Excel nhanh."
           icon={Download}
         />
-        <DashboardLink
-          to="/news"
-          title="Bảng tin"
-          description="Xem tin tuyển dụng và thông báo mới."
-          icon={Newspaper}
-        />
-        <DashboardLink
-          to="/transport"
-          title="Tìm nhà xe"
-          description="Tra cứu nhà xe đưa đón công nhân."
-          icon={BusFront}
-        />
-        <DashboardLink
-          to="/garden"
-          title="Vườn cây"
-          description="Trồng hoa, nuôi thú, thư giãn chút nha."
-          icon={Sprout}
-        />
+        <button
+          type="button"
+          onClick={() => setUtilOpen(true)}
+          className="group rounded-2xl border border-border/60 bg-card p-4 text-left shadow-soft transition hover:-translate-y-0.5"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <LayoutGrid className="h-5 w-5" />
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+          </div>
+          <div className="mt-3 text-sm font-semibold">Tiện ích</div>
+          <div className="mt-1 text-xs leading-5 text-muted-foreground">Bảng tin, nhà xe, trò chuyện, hướng dẫn</div>
+        </button>
       </div>
+
+      <Dialog open={utilOpen} onOpenChange={setUtilOpen}>
+        <DialogContent className="rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="gradient-primary flex h-8 w-8 items-center justify-center rounded-xl text-primary-foreground shadow-sm">
+                <LayoutGrid className="h-4 w-4" />
+              </div>
+              Tiện ích
+            </DialogTitle>
+            <DialogDescription>Các tiện ích dành cho staff</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-3 gap-2" onClick={() => setUtilOpen(false)}>
+            <FeatureTile to="/news" label="Bảng tin" icon={Newspaper} size="compact" />
+            <FeatureTile to="/transport" label="Tìm nhà xe" icon={BusFront} size="compact" />
+            <FeatureTile to="/chat" label="Trò chuyện" icon={MessagesSquare} size="compact" />
+            <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {loading ? (
         <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">

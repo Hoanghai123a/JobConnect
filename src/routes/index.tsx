@@ -13,7 +13,6 @@ import {
   Clock,
   BookOpen,
   MessageSquareWarning,
-  User,
   Settings,
   Building2,
   CalendarCheck,
@@ -25,7 +24,18 @@ import {
   Sprout,
   History,
   Users,
+  LayoutGrid,
+  Gamepad2,
+  Gem,
+  ChevronRight,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => {
@@ -38,11 +48,14 @@ export const Route = createFileRoute("/")({
   component: DashboardPage,
 });
 
+type UtilKey = "utilities" | "entertainment" | null;
+
 function DashboardPage() {
   const { loading, user, isAdmin } = useAuth();
   const { data: settings, logoUrl } = useAppSettings();
   const [pendingComplaintCount, setPendingComplaintCount] = useState(0);
   const [unread, setUnread] = useState({ news: 0, chat: 0, check: 0, advances: 0 });
+  const [openUtil, setOpenUtil] = useState<UtilKey>(null);
   const nav = useNavigate();
 
   useEffect(() => {
@@ -104,9 +117,35 @@ function DashboardPage() {
 
     (async () => {
       const me = `user = "${user.id}"`;
+      const chatCount = async () => {
+        try {
+          const memberships = await pb.collection("chat_room_members").getFullList({
+            filter: `user = "${user.id}"`,
+          });
+          const roomIds = (memberships as any[]).map((m) => m.room);
+          if (!roomIds.length) return 0;
+          let total = 0;
+          for (const roomId of roomIds) {
+            const seen = getSeen(`chat:${roomId}`, user.id);
+            const seenIso = seen ? new Date(seen).toISOString().replace("T", " ") : "";
+            const filter = [
+              `room = "${roomId}"`,
+              `user != "${user.id}"`,
+              seenIso ? `created > "${seenIso}"` : "",
+            ]
+              .filter(Boolean)
+              .join(" && ");
+            const res = await pb.collection("group_chat_messages").getList(1, 1, { filter });
+            total += res.totalItems || 0;
+          }
+          return total;
+        } catch {
+          return 0;
+        }
+      };
       const [news, chat, check, salary, advances] = await Promise.all([
         countNewer("recruitments", "created", "news", "is_active = true").catch(() => 0),
-        countNewer("group_chat_messages", "created", "chat").catch(() => 0),
+        chatCount(),
         countNewer("check_attendance_items", "created", "check-attendance", me).catch(() => 0),
         countNewer("check_salary_items", "created", "check-attendance", me).catch(() => 0),
         countNewer("advances", "resolved_at", "advances", me).catch(() => 0),
@@ -194,52 +233,55 @@ function DashboardPage() {
       </div>
 
       <div className="space-y-4 px-4 pt-2">
-        <section className="rounded-3xl bg-card p-3 shadow-soft">
-          <div className="flex items-center justify-between px-1 pb-2 pt-1">
-            <div>
-              <div className="text-sm font-semibold tracking-tight">Tiện ích chung</div>
-              <div className="text-[11px] text-muted-foreground">Dành cho mọi người dùng</div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <FeatureTile
-              to="/news"
-              label="Bảng tin"
-              description="Tin tuyển dụng mới"
-              icon={Newspaper}
-              badge={toBadge(unread.news)}
-            />
-            <FeatureTile
-              to="/guides"
-              label="Hướng dẫn"
-              description="Tài liệu, biểu mẫu"
-              icon={BookOpen}
-            />
-            <FeatureTile
-              to="/transport"
-              label="Tìm nhà xe"
-              description="Thông tin cộng đồng"
-              icon={BusFront}
-            />
-            <FeatureTile
-              to="/chat"
-              label="Trò chuyện"
-              description="Nhắn tin nhóm"
-              icon={MessagesSquare}
-              badge={toBadge(unread.chat)}
-            />
-            <FeatureTile
-              to="/account"
-              label="Tài khoản"
-              description="Thông tin cá nhân"
-              icon={User}
-            />
-            <FeatureTile
-              to="/garden"
-              label="Vườn cây"
-              description="Trồng hoa, nuôi thú"
-              icon={Sprout}
-            />
+        <section>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setOpenUtil("utilities")}
+              className="group relative overflow-hidden rounded-3xl border bg-card p-4 text-left shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-card)] active:scale-[0.98]"
+            >
+              <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary/10 blur-2xl transition-transform group-hover:scale-110" />
+              <div className="relative flex items-start justify-between gap-2">
+                <div className="gradient-primary flex h-11 w-11 items-center justify-center rounded-2xl text-primary-foreground shadow-sm">
+                  <LayoutGrid className="h-5 w-5" />
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              </div>
+              <div className="relative mt-3">
+                <div className="text-sm font-semibold tracking-tight">Tiện ích</div>
+                <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  Bảng tin, nhà xe, trò chuyện, hướng dẫn
+                </div>
+              </div>
+              {(unread.news > 0 || unread.chat > 0) && (
+                <span className="absolute right-3 top-3 inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+                  {(() => {
+                    const total = unread.news + unread.chat;
+                    return total > 9 ? "9+" : total;
+                  })()}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setOpenUtil("entertainment")}
+              className="group relative overflow-hidden rounded-3xl border bg-card p-4 text-left shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-card)] active:scale-[0.98]"
+            >
+              <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-accent/40 blur-2xl transition-transform group-hover:scale-110" />
+              <div className="relative flex items-start justify-between gap-2">
+                <div className="gradient-accent flex h-11 w-11 items-center justify-center rounded-2xl text-accent-foreground shadow-sm">
+                  <Gamepad2 className="h-5 w-5" />
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              </div>
+              <div className="relative mt-3">
+                <div className="text-sm font-semibold tracking-tight">Giải trí</div>
+                <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  Vườn cây và các trò chơi thư giãn
+                </div>
+              </div>
+            </button>
           </div>
         </section>
 
@@ -353,6 +395,83 @@ function DashboardPage() {
       </div>
 
       <BottomNav />
+
+      <Dialog open={openUtil !== null} onOpenChange={(o) => !o && setOpenUtil(null)}>
+        <DialogContent className="rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {openUtil === "utilities" ? (
+                <>
+                  <div className="gradient-primary flex h-8 w-8 items-center justify-center rounded-xl text-primary-foreground shadow-sm">
+                    <LayoutGrid className="h-4 w-4" />
+                  </div>
+                  Tiện ích
+                </>
+              ) : (
+                <>
+                  <div className="gradient-accent flex h-8 w-8 items-center justify-center rounded-xl text-accent-foreground shadow-sm">
+                    <Gamepad2 className="h-4 w-4" />
+                  </div>
+                  Giải trí
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {openUtil === "utilities"
+                ? "Các tiện ích dành cho mọi người dùng"
+                : "Chơi và thư giãn"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {openUtil === "utilities" && (
+            <div className="grid grid-cols-3 gap-2" onClick={() => setOpenUtil(null)}>
+              <FeatureTile
+                to="/news"
+                label="Bảng tin"
+                icon={Newspaper}
+                size="compact"
+                badge={toBadge(unread.news)}
+              />
+              <FeatureTile
+                to="/transport"
+                label="Tìm nhà xe"
+                icon={BusFront}
+                size="compact"
+              />
+              <FeatureTile
+                to="/chat"
+                label="Trò chuyện"
+                icon={MessagesSquare}
+                size="compact"
+                badge={toBadge(unread.chat)}
+              />
+              <FeatureTile
+                to="/guides"
+                label="Hướng dẫn"
+                icon={BookOpen}
+                size="compact"
+              />
+            </div>
+          )}
+
+          {openUtil === "entertainment" && (
+            <div className="grid grid-cols-3 gap-2" onClick={() => setOpenUtil(null)}>
+              <FeatureTile
+                to="/garden"
+                label="Vườn cây"
+                icon={Sprout}
+                size="compact"
+              />
+              <FeatureTile
+                to="/gems"
+                label="Xếp kim cương"
+                icon={Gem}
+                size="compact"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

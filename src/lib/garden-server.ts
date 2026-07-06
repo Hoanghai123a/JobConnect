@@ -36,11 +36,12 @@ export interface GardenBalance {
   totalHarvested?: number;
   lastStolenAt?: number;   // epoch ms — lần cuối bị chộm
   stolenCount?: number;    // số lần bị chộm trong chu kỳ hiện tại (max 2)
+  gemsBestScore?: number;
   created?: string;
   updated?: string;
 }
 
-export type ExchangeStatus = "pending" | "approved" | "rejected";
+export type ExchangeStatus = "pending" | "processing" | "approved" | "rejected";
 
 export interface GardenExchangeRequest {
   id: string;
@@ -186,8 +187,27 @@ export async function createExchangeRequest(data: {
   bank_account_number: string;
   bank_account_name: string;
 }) {
+  const coinsSpent = Number(data.coins_spent) || 0;
+  const moneyAmount = Number(data.money_amount) || 0;
+  if (coinsSpent <= 0 || moneyAmount <= 0) throw new Error("Mốc quy đổi không hợp lệ");
+
+  const balance = await fetchBalance(data.user);
+  const tiers = await fetchExchangeTiers();
+  const tier = tiers.find(
+    (item) =>
+      item.active &&
+      item.exchange_coins === coinsSpent &&
+      item.money_amount === moneyAmount &&
+      item.type === data.type,
+  );
+  if (!tier) throw new Error("Mốc quy đổi không còn hiệu lực");
+  if (balance.coins < tier.min_coins) throw new Error(`Cần tối thiểu ${tier.min_coins} xu để gửi yêu cầu`);
+  if (balance.coins < tier.exchange_coins) throw new Error("Không đủ xu để quy đổi");
+
   return (await pb.collection("garden_exchange_requests").create({
     ...data,
+    coins_spent: tier.exchange_coins,
+    money_amount: tier.money_amount,
     status: "pending",
   })) as unknown as GardenExchangeRequest;
 }
@@ -198,20 +218,53 @@ export async function approveExchangeRequest(requestId: string, adminNote?: stri
     .getOne(requestId)) as unknown as GardenExchangeRequest;
   if (request.status !== "pending") throw new Error("Yêu cầu đã được xử lý");
 
-  const balance = await fetchBalance(request.user);
-  if (balance.coins < request.coins_spent) throw new Error("User không đủ xu");
+  const processingNote = adminNote?.trim() || "Đang xử lý quy đổi";
+  const claimedRequest = (await pb.collection("garden_exchange_requests").update(requestId, {
+    status: "processing",
+    admin_note: processingNote,
+  })) as unknown as GardenExchangeRequest;
+  if (claimedRequest.status !== "processing") throw new Error("Không thể khóa yêu cầu để xử lý");
 
-  await updateBalance(balance.id, {
+  const balance = await fetchBalance(request.user);
+  if (balance.coins < request.coins_spent) {
+    await pb.collection("garden_exchange_requests").update(requestId, {
+      status: "pending",
+      admin_note: "Không đủ xu tại thời điểm duyệt",
+    });
+    throw new Error("User không đủ xu");
+  }
+
+  const nextBalance = {
     coins: balance.coins - request.coins_spent,
     ...(request.type === "reserve"
       ? { reserve_balance: balance.reserve_balance + request.money_amount }
       : {}),
-  });
+  };
+  let balanceUpdated = false;
 
-  return (await pb.collection("garden_exchange_requests").update(requestId, {
-    status: "approved",
-    admin_note: adminNote || "",
-  })) as unknown as GardenExchangeRequest;
+  try {
+    await updateBalance(balance.id, nextBalance);
+    balanceUpdated = true;
+
+    return (await pb.collection("garden_exchange_requests").update(requestId, {
+      status: "approved",
+      admin_note: adminNote || "",
+    })) as unknown as GardenExchangeRequest;
+  } catch (error) {
+    if (balanceUpdated) {
+      await updateBalance(balance.id, {
+        coins: balance.coins,
+        ...(request.type === "reserve"
+          ? { reserve_balance: balance.reserve_balance }
+          : {}),
+      });
+    }
+    await pb.collection("garden_exchange_requests").update(requestId, {
+      status: "pending",
+      admin_note: "Duyệt lỗi, chưa trừ xu. Vui lòng thử lại.",
+    });
+    throw error;
+  }
 }
 
 export async function rejectExchangeRequest(requestId: string, adminNote: string) {
