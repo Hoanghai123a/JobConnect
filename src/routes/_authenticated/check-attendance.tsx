@@ -136,9 +136,9 @@ type ParsedSalaryRow = {
   employeeCode: string;
   company: string;
   personal: SalaryPersonalInfo;
-  wageLine?: SalaryWageLine;
-  allowanceLine?: SalaryMoneyLine;
-  deductionLine?: SalaryMoneyLine;
+  wageLines: SalaryWageLine[];
+  allowanceLines: SalaryMoneyLine[];
+  deductionLines: SalaryMoneyLine[];
 };
 
 const EMPTY_CHECK_BUCKETS = (): RateBuckets => ({
@@ -323,6 +323,19 @@ async function readAttendanceExcel(file: File): Promise<ParsedRow[]> {
     );
 }
 
+function parseRateNumber(rate: string) {
+  const match = rate.replace(/\s/g, "").match(/-?\d+(?:[.,]\d+)?/);
+  if (!match) return 0;
+  const value = Number(match[0].replace(",", "."));
+  return Number.isFinite(value) ? value : 0;
+}
+
+function stripPrefix(key: string, prefix: "HC" | "PC" | "KT") {
+  const pattern = new RegExp(`^${prefix}[_\\s-]+(.+)$`, "i");
+  const match = key.trim().match(pattern);
+  return match ? match[1].trim() : null;
+}
+
 async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: "array" });
@@ -337,27 +350,41 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
         pick(row, ["Mã nhân viên", "Mã NV", "Ma NV", "employee_code"]),
       ).trim();
       const company = String(pick(row, ["Nhà máy", "Công ty", "company", "factory"])).trim();
-      const wageLine = {
-        rate: formatSalaryRate(pick(row, ["Hệ số", "He so", "rate", "coefficient"])),
-        hours: parseNumber(pick(row, ["Số giờ", "So gio", "hours"])),
-        amount: parseNumber(pick(row, ["Thành tiền", "Thanh tien", "Tiền lương", "wage_amount"])),
-      };
-      const allowanceLine = {
-        label: String(
-          pick(row, ["Loại phụ cấp", "Loai phu cap", "Phụ cấp", "allowance_type"]),
-        ).trim(),
-        amount: parseNumber(
-          pick(row, ["Tiền phụ cấp", "Tien phu cap", "Số tiền phụ cấp", "allowance_amount"]),
-        ),
-      };
-      const deductionLine = {
-        label: String(
-          pick(row, ["Loại khấu trừ", "Loai khau tru", "Khấu trừ", "deduction_type"]),
-        ).trim(),
-        amount: parseNumber(
-          pick(row, ["Tiền khấu trừ", "Tien khau tru", "Số tiền khấu trừ", "deduction_amount"]),
-        ),
-      };
+      const baseSalary = parseNumber(pick(row, ["Lương cơ bản", "Luong co ban", "base_salary"]));
+      const unit = baseSalary / 26 / 8;
+
+      const wageLines: SalaryWageLine[] = [];
+      const allowanceLines: SalaryMoneyLine[] = [];
+      const deductionLines: SalaryMoneyLine[] = [];
+
+      for (const [key, value] of Object.entries(row)) {
+        const hcLabel = stripPrefix(key, "HC");
+        if (hcLabel) {
+          const hours = parseNumber(value);
+          if (hours > 0) {
+            const rate = formatSalaryRate(hcLabel);
+            const ratePercent = parseRateNumber(rate);
+            wageLines.push({
+              rate,
+              hours,
+              amount: Math.round(unit * (ratePercent / 100) * hours),
+            });
+          }
+          continue;
+        }
+        const pcLabel = stripPrefix(key, "PC");
+        if (pcLabel) {
+          const amount = parseNumber(value);
+          if (amount > 0) allowanceLines.push({ label: pcLabel, amount });
+          continue;
+        }
+        const ktLabel = stripPrefix(key, "KT");
+        if (ktLabel) {
+          const amount = parseNumber(value);
+          if (amount > 0) deductionLines.push({ label: ktLabel, amount });
+        }
+      }
+
       return {
         uid,
         employeeCode,
@@ -367,20 +394,20 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
           company,
           start_date: parseExcelDate(pick(row, ["Ngày vào làm", "Ngay vao lam", "start_date"])),
           end_date: parseExcelDate(pick(row, ["Ngày nghỉ", "Ngay nghi", "end_date"])),
-          base_salary: parseNumber(pick(row, ["Lương cơ bản", "Luong co ban", "base_salary"])),
+          base_salary: baseSalary,
           standard_workdays: parseNumber(
             pick(row, ["Số công HC", "So cong HC", "standard_workdays"]),
           ),
         },
-        wageLine: wageLine.rate || wageLine.hours || wageLine.amount ? wageLine : undefined,
-        allowanceLine: allowanceLine.label || allowanceLine.amount ? allowanceLine : undefined,
-        deductionLine: deductionLine.label || deductionLine.amount ? deductionLine : undefined,
+        wageLines,
+        allowanceLines,
+        deductionLines,
       };
     })
     .filter(
       (row) =>
         (row.uid || (row.employeeCode && row.company)) &&
-        (row.wageLine || row.allowanceLine || row.deductionLine),
+        (row.wageLines.length || row.allowanceLines.length || row.deductionLines.length),
     );
 }
 
@@ -617,30 +644,17 @@ function AdminCheckAttendance() {
           "Ngày nghỉ": "",
           "Lương cơ bản": 5000000,
           "Số công HC": 26,
-          "Hệ số": "100%",
-          "Số giờ": 208,
-          "Thành tiền": 5000000,
-          "Loại phụ cấp": "Chuyên cần",
-          "Tiền phụ cấp": 500000,
-          "Loại khấu trừ": "BHXH",
-          "Tiền khấu trừ": 525000,
-        },
-        {
-          "Mã tài khoản (UID)": sampleUser?.uid || "HL000000",
-          "Mã nhân viên": sampleUser?.employee_code || "NV001",
-          "Nhà máy": sampleUser?.company || "Nhà máy A",
-          "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
-          "Ngày vào làm": "",
-          "Ngày nghỉ": "",
-          "Lương cơ bản": "",
-          "Số công HC": "",
-          "Hệ số": "150%",
-          "Số giờ": 10,
-          "Thành tiền": 360577,
-          "Loại phụ cấp": "Đời sống",
-          "Tiền phụ cấp": 300000,
-          "Loại khấu trừ": "Tạm ứng",
-          "Tiền khấu trừ": 200000,
+          "HC_100%": 208,
+          "HC_130%": 12,
+          "HC_150%": 10,
+          "HC_200%": "",
+          "HC_270%": "",
+          "HC_300%": "",
+          "HC_390%": "",
+          "PC_Đời sống": 300000,
+          "PC_Chuyên cần": 500000,
+          "KT_BHXH": 525000,
+          "KT_Ứng": 200000,
         },
       ],
     });
@@ -716,9 +730,9 @@ function AdminCheckAttendance() {
           base_salary: current.personal.base_salary || row.personal.base_salary,
           standard_workdays: current.personal.standard_workdays || row.personal.standard_workdays,
         };
-        if (row.wageLine) current.wageLines.push(row.wageLine);
-        if (row.allowanceLine) current.allowanceLines.push(row.allowanceLine);
-        if (row.deductionLine) current.deductionLines.push(row.deductionLine);
+        current.wageLines.push(...row.wageLines);
+        current.allowanceLines.push(...row.allowanceLines);
+        current.deductionLines.push(...row.deductionLines);
         grouped.set(user.id, current);
       }
 
@@ -864,6 +878,11 @@ function AdminCheckAttendance() {
                   <div className="text-sm font-semibold">Gửi check lương</div>
                   <div className="text-[11px] text-muted-foreground">
                     Tháng {salaryMonth} · lần gửi tiếp theo: {nextSalaryRound}
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    Cột động: <code>HC_&lt;hệ số&gt;</code> (số giờ),{" "}
+                    <code>PC_&lt;tên&gt;</code> (tiền phụ cấp), <code>KT_&lt;tên&gt;</code> (tiền
+                    khấu trừ). Thành tiền tự tính = Lương cơ bản / 26 / 8 × hệ số × số giờ.
                   </div>
                 </div>
               </div>

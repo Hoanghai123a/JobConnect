@@ -28,6 +28,7 @@ import {
   Gamepad2,
   Gem,
   ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 import {
   Dialog,
@@ -56,7 +57,18 @@ function DashboardPage() {
   const [pendingComplaintCount, setPendingComplaintCount] = useState(0);
   const [unread, setUnread] = useState({ news: 0, chat: 0, check: 0, advances: 0 });
   const [openUtil, setOpenUtil] = useState<UtilKey>(null);
+  const [reloading, setReloading] = useState(false);
   const nav = useNavigate();
+
+  const handleReload = async () => {
+    if (reloading) return;
+    setReloading(true);
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+    window.location.reload();
+  };
 
   useEffect(() => {
     if (loading) return;
@@ -205,6 +217,16 @@ function DashboardPage() {
                 <div className="truncate text-xs text-white/80">{settings.slogan}</div>
               )}
             </div>
+            <button
+              type="button"
+              onClick={handleReload}
+              disabled={reloading}
+              aria-label="Tải lại trang"
+              title="Tải lại trang"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20 text-white shadow-sm backdrop-blur transition hover:bg-white/30 active:scale-95 disabled:opacity-70"
+            >
+              <RefreshCw className={reloading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+            </button>
           </div>
 
           <div className="relative mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
