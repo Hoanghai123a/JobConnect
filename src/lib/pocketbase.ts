@@ -21,6 +21,7 @@ export interface UserRecord {
   status?: "active" | "disabled";
   default_hc_hours?: number;
   default_ot_hours?: number;
+  attendance_cutoff_day?: number;
   company?: string;
   employee_code?: string;
   lcb?: number;

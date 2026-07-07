@@ -1,12 +1,15 @@
-import { pb, type UserRecord } from "./pocketbase";
+import { type UserRecord } from "./pocketbase";
 import {
-  fetchEmploymentHistories,
   getLatestEmploymentHistory,
   isHistoryWithinLast90Days,
   type EmploymentHistoryRecord,
 } from "./employment";
 import { fetchFactoryManagers, isFactoryAssignmentActive } from "./factories";
-import { relationInFilter } from "./delegations";
+import {
+  readCachedStaffData,
+  syncStaffData,
+  fetchUsersBatched,
+} from "./staff-cache";
 
 export type StaffVisibilityReason = "qlnm" | "nvtd";
 
@@ -105,36 +108,18 @@ export function canReportJoin(
   return managedFactoryIds.has(targetFactoryId);
 }
 
-export async function fetchStaffWorkspace(viewer: UserRecord) {
-  const [histories, managers] = await Promise.all([
-    fetchEmploymentHistories(),
-    fetchFactoryManagers(viewer.id),
-  ]);
-
-  const managedFactoryIds = new Set(
-    managers.filter((item) => isFactoryAssignmentActive(item)).map((item) => item.factory),
-  );
-
+function buildWorkspace(
+  viewer: UserRecord,
+  histories: EmploymentHistoryRecord[],
+  users: UserRecord[],
+  managedFactoryIds: Set<string>,
+) {
   const grouped = new Map<string, EmploymentHistoryRecord[]>();
-
   for (const history of histories) {
     const bucket = grouped.get(history.user) || [];
     bucket.push(history);
     grouped.set(history.user, bucket);
   }
-
-  const userIds = [...grouped.keys()];
-  if (!userIds.length) {
-    return {
-      managedFactoryIds,
-      workers: [] as StaffWorkerRecord[],
-    };
-  }
-
-  const users = (await pb.collection("users").getFullList({
-    filter: relationInFilter("id", userIds),
-    sort: "full_name,username",
-  })) as unknown as UserRecord[];
 
   const workerMap = new Map(users.map((item) => [item.id, item]));
 
@@ -187,8 +172,35 @@ export async function fetchStaffWorkspace(viewer: UserRecord) {
       return nameA.localeCompare(nameB, "vi");
     }) as StaffWorkerRecord[];
 
-  return {
-    managedFactoryIds,
-    workers,
-  };
+  return { managedFactoryIds, workers };
 }
+
+export async function fetchStaffWorkspace(
+  viewer: UserRecord,
+  opts?: { onCacheReady?: (result: StaffWorkspaceResult) => void },
+) {
+  const managers = await fetchFactoryManagers(viewer.id);
+  const managedFactoryIds = new Set(
+    managers.filter((item) => isFactoryAssignmentActive(item)).map((item) => item.factory),
+  );
+
+  const cached = await readCachedStaffData();
+  if (cached) {
+    const cachedResult = buildWorkspace(viewer, cached.histories, cached.users, managedFactoryIds);
+    opts?.onCacheReady?.(cachedResult);
+  }
+
+  const synced = await syncStaffData();
+
+  const userIds = [...new Set(synced.histories.map((h) => h.user).filter(Boolean))];
+  const cachedUserIds = new Set(synced.users.map((u) => u.id));
+  const missingIds = userIds.filter((id) => !cachedUserIds.has(id));
+  if (missingIds.length) {
+    const extra = await fetchUsersBatched(missingIds);
+    synced.users.push(...extra);
+  }
+
+  return buildWorkspace(viewer, synced.histories, synced.users, managedFactoryIds);
+}
+
+export type StaffWorkspaceResult = ReturnType<typeof buildWorkspace>;

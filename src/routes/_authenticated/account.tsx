@@ -84,7 +84,6 @@ import {
   Pencil,
   CircleX,
   ImagePlus,
-  IdCard,
   MoreHorizontal,
   Trash,
 } from "lucide-react";
@@ -95,15 +94,6 @@ export const Route = createFileRoute("/_authenticated/account")({
   }),
   component: AccountPage,
 });
-
-const NUM_FIELDS = [
-  ["default_hc_hours", "Số giờ HC mặc định"],
-  ["default_ot_hours", "Số giờ tăng ca mặc định"],
-  ["lcb", "LCB (Lương cơ bản)"],
-  ["chuyen_can", "Chuyên cần"],
-  ["doi_song", "Đời sống"],
-  ["tham_nien", "Thâm niên"],
-] as const;
 
 const ROLE_LABELS: Record<Role, string> = {
   admin: "Quản trị viên",
@@ -209,12 +199,6 @@ function UserProfileForm() {
   const { user, refresh, isAdmin } = useAuth();
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
-  const [cccdFrontFile, setCccdFrontFile] = useState<File | null>(null);
-  const [cccdBackFile, setCccdBackFile] = useState<File | null>(null);
-  const [cccdFrontPreview, setCccdFrontPreview] = useState<string>("");
-  const [cccdBackPreview, setCccdBackPreview] = useState<string>("");
-  const [removeFront, setRemoveFront] = useState(false);
-  const [removeBack, setRemoveBack] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const [removeAvatar, setRemoveAvatar] = useState(false);
@@ -232,64 +216,14 @@ function UserProfileForm() {
       full_name: user?.full_name || "",
       phone: user?.phone || "",
       cccd: user?.cccd || "",
-      default_hc_hours: user?.default_hc_hours ?? 8,
-      default_ot_hours: user?.default_ot_hours ?? 0,
-      company: user?.company || "",
-      employee_code: user?.employee_code || "",
-      lcb: user?.lcb ?? 0,
-      chuyen_can: user?.chuyen_can ?? 0,
-      doi_song: user?.doi_song ?? 0,
-      tham_nien: user?.tham_nien ?? 0,
       bank_name: user?.bank_name || "",
       bank_account_number: user?.bank_account_number || "",
       bank_account_name: user?.bank_account_name || "",
     });
-    setCccdFrontFile(null);
-    setCccdBackFile(null);
-    setCccdFrontPreview(user?.cccd_front ? fileUrl(user, user.cccd_front) : "");
-    setCccdBackPreview(user?.cccd_back ? fileUrl(user, user.cccd_back) : "");
-    setRemoveFront(false);
-    setRemoveBack(false);
     setAvatarFile(null);
     setAvatarPreview(user?.avatar ? fileUrl(user, user.avatar) : "");
     setRemoveAvatar(false);
-  }, [user?.id, user?.cccd_front, user?.cccd_back, user?.avatar]);
-
-  const pickCccd = (side: "front" | "back") => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Vui lòng chọn ảnh");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = reader.result as string;
-      if (side === "front") {
-        setCccdFrontPreview(url);
-        setCccdFrontFile(dataUrlToFile(url, file.name || "cccd_front.jpg"));
-        setRemoveFront(false);
-      } else {
-        setCccdBackPreview(url);
-        setCccdBackFile(dataUrlToFile(url, file.name || "cccd_back.jpg"));
-        setRemoveBack(false);
-      }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
-
-  const clearCccd = (side: "front" | "back") => {
-    if (side === "front") {
-      setCccdFrontFile(null);
-      setCccdFrontPreview("");
-      setRemoveFront(true);
-    } else {
-      setCccdBackFile(null);
-      setCccdBackPreview("");
-      setRemoveBack(true);
-    }
-  };
+  }, [user?.id, user?.avatar]);
 
   const save = async () => {
     if (!user) return;
@@ -300,33 +234,28 @@ function UserProfileForm() {
             full_name: form.full_name || "",
             phone: form.phone || "",
           }
-        : { ...form };
-      if (!isAdmin) {
-        for (const [k] of NUM_FIELDS) payload[k] = Number(payload[k]) || 0;
-      }
+        : {
+            full_name: form.full_name || "",
+            phone: form.phone || "",
+            cccd: form.cccd || "",
+            bank_name: form.bank_name || "",
+            bank_account_number: form.bank_account_number || "",
+            bank_account_name: form.bank_account_name || "",
+          };
 
-      const hasFileChange =
-        cccdFrontFile || cccdBackFile || removeFront || removeBack || avatarFile || removeAvatar;
-      if (hasFileChange) {
+      if (avatarFile || removeAvatar) {
         const fd = new FormData();
         for (const [k, v] of Object.entries(payload)) {
           fd.append(k, (v as any) ?? "");
         }
-        if (cccdFrontFile) fd.append("cccd_front", cccdFrontFile);
-        else if (removeFront) fd.append("cccd_front", "");
-        if (cccdBackFile) fd.append("cccd_back", cccdBackFile);
-        else if (removeBack) fd.append("cccd_back", "");
         if (avatarFile) fd.append("avatar", avatarFile);
         else if (removeAvatar) fd.append("avatar", "");
         await pb.collection("users").update(user.id, fd);
       } else {
         await pb.collection("users").update(user.id, payload);
       }
-      setCccdFrontFile(null);
-      setCccdBackFile(null);
       setAvatarFile(null);
-      setRemoveFront(false);
-      setRemoveBack(false);
+      setRemoveAvatar(false);
       await refresh();
       toast.success("Đã lưu");
     } catch (e: any) {
@@ -414,60 +343,13 @@ function UserProfileForm() {
           onChange={(v) => setForm({ ...form, phone: v })}
         />
         {!isAdmin && (
-          <>
-            <TextField
-              label="CCCD"
-              value={form.cccd || ""}
-              onChange={(v) => setForm({ ...form, cccd: v.replace(/\D/g, "") })}
-            />
-            <FactorySelect
-              value={form.company}
-              onChange={(v) => setForm({ ...form, company: v })}
-            />
-            <TextField
-              label="Mã NV"
-              value={form.employee_code}
-              onChange={(v) => setForm({ ...form, employee_code: v })}
-            />
-          </>
+          <TextField
+            label="CCCD"
+            value={form.cccd || ""}
+            onChange={(v) => setForm({ ...form, cccd: v.replace(/\D/g, "") })}
+          />
         )}
       </Section>
-
-      {!isAdmin && (
-        <Section title="Ảnh CCCD">
-          <p className="text-[11px] text-muted-foreground">
-            Tải lên 2 ảnh CCCD: mặt trước và mặt sau. Ảnh dùng cho hồ sơ cá nhân, không gắn với từng
-            lịch sử đi làm.
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <CccdUploader
-              label="Mặt trước"
-              preview={cccdFrontPreview}
-              onPick={pickCccd("front")}
-              onClear={() => clearCccd("front")}
-            />
-            <CccdUploader
-              label="Mặt sau"
-              preview={cccdBackPreview}
-              onPick={pickCccd("back")}
-              onClear={() => clearCccd("back")}
-            />
-          </div>
-        </Section>
-      )}
-
-      {!isAdmin && (
-        <Section title="Mặc định lương & giờ">
-          {NUM_FIELDS.map(([k, label]) => (
-            <NumberField
-              key={k}
-              label={label}
-              value={Number(form[k] ?? 0)}
-              onChange={(n) => setForm({ ...form, [k]: n })}
-            />
-          ))}
-        </Section>
-      )}
 
       {!isAdmin && (
         <Section title="Số tài khoản (STK)">
@@ -2681,41 +2563,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function NumberField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (n: number) => void;
-}) {
-  const [text, setText] = useState<string>(() =>
-    Number.isFinite(value) ? new Intl.NumberFormat("vi-VN").format(value) : "",
-  );
-  useEffect(() => {
-    const formatted = Number.isFinite(value) ? new Intl.NumberFormat("vi-VN").format(value) : "";
-    const currentDigits = text.replace(/\D/g, "");
-    if (currentDigits !== String(value)) setText(formatted);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs">{label}</Label>
-      <Input
-        inputMode="numeric"
-        value={text}
-        onChange={(e) => {
-          const digits = e.target.value.replace(/\D/g, "");
-          const n = digits ? Number(digits) : 0;
-          setText(digits ? new Intl.NumberFormat("vi-VN").format(n) : "");
-          onChange(n);
-        }}
-      />
-    </div>
-  );
-}
-
 function TextField({
   label,
   value,
@@ -2742,92 +2589,3 @@ function TextField({
   );
 }
 
-function CccdUploader({
-  label,
-  preview,
-  onPick,
-  onClear,
-}: {
-  label: string;
-  preview: string;
-  onPick: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onClear: () => void;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs">{label}</Label>
-      <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-muted/30">
-        {preview ? (
-          <>
-            <img src={preview} alt={label} className="h-full w-full object-cover" />
-            <button
-              type="button"
-              onClick={onClear}
-              className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white"
-              aria-label={`Xoá ${label}`}
-            >
-              <Trash className="h-3.5 w-3.5" />
-            </button>
-          </>
-        ) : (
-          <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1 text-muted-foreground">
-            <input type="file" accept="image/*" hidden onChange={onPick} />
-            <IdCard className="h-6 w-6" />
-            <span className="text-[11px] font-medium">Bấm để chọn ảnh</span>
-          </label>
-        )}
-      </div>
-      {preview && (
-        <label className="block cursor-pointer">
-          <input type="file" accept="image/*" hidden onChange={onPick} />
-          <span className="inline-flex items-center gap-1 text-[11px] text-primary">
-            <ImagePlus className="h-3 w-3" /> Đổi ảnh
-          </span>
-        </label>
-      )}
-    </div>
-  );
-}
-
-function FactorySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [factories, setFactories] = useState<{ id: string; name: string }[]>([]);
-  const [loading, setLoading] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    pb.collection("factories")
-      .getList(1, 300, { sort: "name" })
-      .then((res) => {
-        if (!cancelled) setFactories(res.items as any);
-      })
-      .catch(() => {})
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  const hasMatch = !value || factories.some((f) => f.name === value);
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs">Nhà máy</Label>
-      <Select value={value || ""} onValueChange={onChange}>
-        <SelectTrigger>
-          <SelectValue placeholder={loading ? "Đang tải..." : "Chọn nhà máy"} />
-        </SelectTrigger>
-        <SelectContent className="max-h-72">
-          {!hasMatch && value && <SelectItem value={value}>{value} (cũ)</SelectItem>}
-          {factories.map((f) => (
-            <SelectItem key={f.id} value={f.name}>
-              {f.name}
-            </SelectItem>
-          ))}
-          {factories.length === 0 && !loading && (
-            <div className="px-2 py-1.5 text-xs text-muted-foreground">
-              Chưa có nhà máy. Admin hãy thêm trong Cài đặt hệ thống.
-            </div>
-          )}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}

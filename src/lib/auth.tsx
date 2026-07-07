@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
 import { pb, type UserRecord } from "./pocketbase";
 import { getPBUpstream } from "./pocketbase-config";
+import { clearStaffCache } from "./staff-cache";
 
 interface AuthCtx {
   user: UserRecord | null;
@@ -99,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     pb.authStore.clear();
+    clearStaffCache();
   }, []);
 
   const refresh = useCallback(async () => {

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { BriefcaseBusiness, BookOpen, Building2, BusFront, ChevronRight, Download, LayoutGrid, MessagesSquare, Newspaper, NotebookPen, ShieldCheck, UserCheck, Users } from "lucide-react";
+import { BookOpen, Building2, BusFront, ChevronRight, Download, LayoutGrid, MessagesSquare, Newspaper, NotebookPen, RefreshCw, UserCheck, Users } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -29,6 +29,17 @@ function StaffDashboardPage() {
   const [operableCount, setOperableCount] = useState(0);
   const [assignments, setAssignments] = useState<FactoryManagerRecord[]>([]);
   const [utilOpen, setUtilOpen] = useState(false);
+  const [reloading, setReloading] = useState(false);
+
+  const handleReload = async () => {
+    if (reloading) return;
+    setReloading(true);
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+    window.location.reload();
+  };
 
   useEffect(() => {
     if (!user?.id) return;
@@ -80,9 +91,16 @@ function StaffDashboardPage() {
                 : "Bạn xem lao động theo nhà máy phụ trách và người tuyển của mình."}
             </div>
           </div>
-          <div className="rounded-2xl bg-white/15 p-3 backdrop-blur">
-            {user?.role === "admin" ? <ShieldCheck className="h-6 w-6" /> : <BriefcaseBusiness className="h-6 w-6" />}
-          </div>
+          <button
+            type="button"
+            onClick={handleReload}
+            disabled={reloading}
+            aria-label="Tải lại trang"
+            title="Tải lại trang"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20 text-white shadow-sm backdrop-blur transition hover:bg-white/30 active:scale-95 disabled:opacity-70"
+          >
+            <RefreshCw className={reloading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+          </button>
         </div>
       </div>
 
