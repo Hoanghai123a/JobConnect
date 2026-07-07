@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { pb, dataUrlToFile, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import { createStaffActionLog, type StaffActionType } from "@/lib/staff-log";
+import { compressImage } from "@/lib/image-compress";
+import { getCurrentCccdVersion, updateCccdVersionImages } from "@/lib/cccd-versions";
 
 interface CccdManagerProps {
   targetUser: UserRecord;
@@ -35,9 +37,24 @@ export function CccdManager({ targetUser, actor, onUpdated, readOnly }: CccdMana
     }
     setUploading(true);
     try {
+      const compressed = await compressImage(file);
+
       const fd = new FormData();
-      fd.append(side, file);
-      await pb.collection("users").update(targetUser.id, fd);
+      fd.append(side, compressed);
+
+      const versionField = side === "cccd_front" ? "front_image" : "back_image";
+      const [, currentVersion] = await Promise.all([
+        pb.collection("users").update(targetUser.id, fd),
+        getCurrentCccdVersion(targetUser.id),
+      ]);
+      if (currentVersion) {
+        await updateCccdVersionImages(
+          currentVersion.id,
+          versionField === "front_image" ? compressed : undefined,
+          versionField === "back_image" ? compressed : undefined,
+        );
+      }
+
       const action: StaffActionType = targetUser[side] ? "update" : "create";
       await createStaffActionLog({
         actor,
@@ -45,7 +62,7 @@ export function CccdManager({ targetUser, actor, onUpdated, readOnly }: CccdMana
         targetCollection: "users",
         targetRecord: targetUser.id,
         action,
-        after: { [side]: file.name },
+        after: { [side]: compressed.name },
         note: `${actor?.role === "admin" ? "Admin" : "Staff"} ${action === "create" ? "thêm" : "cập nhật"} ảnh ${side === "cccd_front" ? "CCCD mặt trước" : "CCCD mặt sau"}`,
       });
       toast.success("Đã cập nhật ảnh CCCD");

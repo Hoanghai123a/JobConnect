@@ -43,14 +43,6 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -58,6 +50,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { pb, fileUrl, type UserRecord } from "@/lib/pocketbase";
+import { relationInFilter } from "@/lib/delegations";
+import type { CccdVersionRecord } from "@/lib/cccd-versions";
 import {
   createEmploymentHistory,
   fetchEmploymentHistories,
@@ -986,16 +980,17 @@ function AdminWorkerDrawer({
   const isWorking = latest?.status === "working" && !latest.leave_date;
 
   return (
-    <Drawer open={open} onOpenChange={(v) => !v && onClose()}>
-      <DrawerContent className="max-h-[92dvh]">
-        <DrawerHeader>
-          <DrawerTitle>{user.full_name || user.username || "Người lao động"}</DrawerTitle>
-          <DrawerDescription>
+  <>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{user.full_name || user.username || "Người lao động"}</DialogTitle>
+          <DialogDescription>
             {isWorking ? "Đang đi làm" : "Đã nghỉ"} · Quản trị viên có toàn quyền chỉnh sửa
-          </DrawerDescription>
-        </DrawerHeader>
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="space-y-4 overflow-y-auto px-4 pb-6">
+        <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2 text-sm">
             {user.uid && (
               <div className="col-span-2 rounded-xl bg-primary/10 p-2.5">
@@ -1024,7 +1019,7 @@ function AdminWorkerDrawer({
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Ảnh CCCD
           </div>
-          <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} />
+          <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} readOnly />
 
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Lịch sử đi làm ({histories.length})
@@ -1035,219 +1030,182 @@ function AdminWorkerDrawer({
               Chưa có lịch sử
             </div>
           ) : (
-            histories.map((h) => {
-              const isEditing = editingId === h.id;
-              return (
-                <Card key={h.id} className="space-y-2 rounded-2xl p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold">
-                        {h.expand?.factory?.name || "Nhà máy"}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {h.worker_name_snapshot} · {maskCccd(h.worker_cccd_snapshot)} · Mã:{" "}
-                        {h.employee_code || "—"}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">
-                        Mã số thuế: {h.worker_tax_code_snapshot || "—"}
-                      </div>
+            histories.map((h) => (
+              <Card
+                key={h.id}
+                className="cursor-pointer space-y-2 rounded-2xl p-3 transition-colors hover:bg-muted/30"
+                onClick={() => startEdit(h)}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold">
+                      {h.expand?.factory?.name || "Nhà máy"}
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <StatusChip tone={h.status === "working" ? "success" : "neutral"}>
-                        {h.status === "working" ? "Đang làm" : "Đã nghỉ"}
-                      </StatusChip>
-                      {!isEditing && (
-                        <button
-                          type="button"
-                          onClick={() => startEdit(h)}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 text-muted-foreground"
-                          aria-label="Sửa"
-                        >
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </button>
-                      )}
+                    <div className="text-[11px] text-muted-foreground">
+                      {h.worker_name_snapshot} · {maskCccd(h.worker_cccd_snapshot)} · Mã:{" "}
+                      {h.employee_code || "—"}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Mã số thuế: {h.worker_tax_code_snapshot || "—"}
                     </div>
                   </div>
-
-                  {!isEditing && (
-                    <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                      <div>Vào: {formatDate(h.join_date)}</div>
-                      <div>Nghỉ: {formatDate(h.leave_date) || "—"}</div>
-                      <div>
-                        Người tuyển:{" "}
-                        {h.expand?.recruiter_staff?.full_name ||
-                          h.expand?.recruiter_staff?.username ||
-                          "—"}
-                      </div>
-                      <div>Nhà chính: {h.expand?.main_house?.name || "—"}</div>
-                      {h.note && <div className="col-span-2 text-muted-foreground">{h.note}</div>}
-                    </div>
-                  )}
-
-                  {isEditing && (
-                    <div className="space-y-2 rounded-xl border bg-muted/20 p-3">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-[10px]">Họ tên (NM)</Label>
-                          <Input
-                            value={form.worker_name_snapshot}
-                            onChange={(e) =>
-                              setForm((f) => ({ ...f, worker_name_snapshot: e.target.value }))
-                            }
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px]">CCCD (NM)</Label>
-                          <Input
-                            value={form.worker_cccd_snapshot}
-                            onChange={(e) =>
-                              setForm((f) => ({
-                                ...f,
-                                worker_cccd_snapshot: e.target.value.replace(/[^\d]/g, ""),
-                              }))
-                            }
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px]">Mã NV</Label>
-                          <Input
-                            value={form.employee_code}
-                            onChange={(e) =>
-                              setForm((f) => ({ ...f, employee_code: e.target.value }))
-                            }
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px]">Mã số thuế</Label>
-                          <Input
-                            value={form.worker_tax_code_snapshot}
-                            onChange={(e) =>
-                              setForm((f) => ({
-                                ...f,
-                                worker_tax_code_snapshot: e.target.value.replace(/[^\d]/g, ""),
-                              }))
-                            }
-                            inputMode="numeric"
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px]">Trạng thái</Label>
-                          <Select
-                            value={form.status}
-                            onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="working">Đang làm</SelectItem>
-                              <SelectItem value="left">Đã nghỉ</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px]">Ngày vào</Label>
-                          <Input
-                            type="date"
-                            value={form.join_date}
-                            onChange={(e) => setForm((f) => ({ ...f, join_date: e.target.value }))}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px]">Ngày nghỉ</Label>
-                          <Input
-                            type="date"
-                            value={form.leave_date}
-                            onChange={(e) => setForm((f) => ({ ...f, leave_date: e.target.value }))}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px]">Người tuyển</Label>
-                        <Select
-                          value={form.recruiter_staff}
-                          onValueChange={(v) => setForm((f) => ({ ...f, recruiter_staff: v }))}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Chọn người tuyển" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {staffUsers.map((s) => (
-                              <SelectItem key={s.id} value={s.id}>
-                                {s.full_name || s.username || s.id}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px]">Nhà chính</Label>
-                        <Select
-                          value={form.main_house}
-                          onValueChange={(v) =>
-                            setForm((f) => ({ ...f, main_house: v }))
-                          }
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Chọn nhà chính" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {mainHouses.map((m) => (
-                              <SelectItem key={m.id} value={m.id}>
-                                {m.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px]">Ghi chú</Label>
-                        <Input
-                          value={form.note}
-                          onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
-                          className="h-8 text-xs"
-                          placeholder="Tuỳ chọn"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setEditingId(null)}
-                          className="h-7 text-xs"
-                        >
-                          Huỷ
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={saveEdit}
-                          disabled={saving}
-                          className="h-7 text-xs"
-                        >
-                          {saving ? "Đang lưu..." : "Lưu"}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </Card>
-              );
-            })
+                  <div className="flex items-center gap-1.5">
+                    <StatusChip tone={h.status === "working" ? "success" : "neutral"}>
+                      {h.status === "working" ? "Đang làm" : "Đã nghỉ"}
+                    </StatusChip>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                  <div>Vào: {formatDate(h.join_date)}</div>
+                  <div>Nghỉ: {formatDate(h.leave_date) || "—"}</div>
+                  <div>
+                    Người tuyển:{" "}
+                    {h.expand?.recruiter_staff?.full_name ||
+                      h.expand?.recruiter_staff?.username ||
+                      "—"}
+                  </div>
+                  <div>Nhà chính: {h.expand?.main_house?.name || "—"}</div>
+                  {h.note && <div className="col-span-2 text-muted-foreground">{h.note}</div>}
+                </div>
+              </Card>
+            ))
           )}
         </div>
 
-        <DrawerFooter>
+        <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Đóng
           </Button>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={!!editingId} onOpenChange={(v) => !v && setEditingId(null)}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Sửa lịch sử đi làm</DialogTitle>
+          <DialogDescription>Chỉnh sửa thông tin lịch sử đi làm của người lao động.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Họ tên (NM)</Label>
+              <Input
+                value={form.worker_name_snapshot}
+                onChange={(e) => setForm((f) => ({ ...f, worker_name_snapshot: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">CCCD (NM)</Label>
+              <Input
+                value={form.worker_cccd_snapshot}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, worker_cccd_snapshot: e.target.value.replace(/[^\d]/g, "") }))
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Mã NV</Label>
+              <Input
+                value={form.employee_code}
+                onChange={(e) => setForm((f) => ({ ...f, employee_code: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Mã số thuế</Label>
+              <Input
+                value={form.worker_tax_code_snapshot}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, worker_tax_code_snapshot: e.target.value.replace(/[^\d]/g, "") }))
+                }
+                inputMode="numeric"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Trạng thái</Label>
+              <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="working">Đang làm</SelectItem>
+                  <SelectItem value="left">Đã nghỉ</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Ngày vào</Label>
+              <Input
+                type="date"
+                value={form.join_date}
+                onChange={(e) => setForm((f) => ({ ...f, join_date: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Ngày nghỉ</Label>
+              <Input
+                type="date"
+                value={form.leave_date}
+                onChange={(e) => setForm((f) => ({ ...f, leave_date: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Người tuyển</Label>
+            <Select value={form.recruiter_staff} onValueChange={(v) => setForm((f) => ({ ...f, recruiter_staff: v }))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Chọn người tuyển" />
+              </SelectTrigger>
+              <SelectContent>
+                {staffUsers.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.full_name || s.username || s.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Nhà chính</Label>
+            <Select value={form.main_house} onValueChange={(v) => setForm((f) => ({ ...f, main_house: v }))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Chọn nhà chính" />
+              </SelectTrigger>
+              <SelectContent>
+                {mainHouses.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Ghi chú</Label>
+            <Input
+              value={form.note}
+              onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+              placeholder="Tuỳ chọn"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ảnh CCCD</Label>
+            <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setEditingId(null)}>
+            Huỷ
+          </Button>
+          <Button onClick={saveEdit} disabled={saving}>
+            {saving ? "Đang lưu..." : "Lưu"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }
 
@@ -1668,103 +1626,156 @@ function CccdExportDialog({
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
   const [exporting, setExporting] = useState(false);
-  const [progress, setProgress] = useState("");
+  const [progressPct, setProgressPct] = useState(0);
+  const [progressText, setProgressText] = useState("");
 
   useEffect(() => {
     if (open) {
       setFrom(defaultFrom);
       setTo(defaultTo);
       setFactory("all");
-      setProgress("");
+      setProgressPct(0);
+      setProgressText("");
     }
   }, [open, defaultFrom, defaultTo]);
 
-  const matchingUsers = useMemo(() => {
+  const matchingHistories = useMemo(() => {
     const fromT = new Date(`${from}T00:00:00`).getTime();
     const toT = new Date(`${to}T23:59:59.999`).getTime();
 
-    const userIdsInRange = new Set<string>();
-    for (const h of histories) {
-      if (factory !== "all" && h.factory !== factory) continue;
+    return histories.filter((h) => {
+      if (factory !== "all" && h.factory !== factory) return false;
       const joinT = new Date(h.join_date).getTime();
-      if (Number.isNaN(joinT)) continue;
-      if (joinT >= fromT && joinT <= toT) {
-        userIdsInRange.add(h.user);
-      }
+      if (Number.isNaN(joinT)) return false;
+      const inRange = joinT >= fromT && joinT <= toT;
+      if (inRange) return true;
       if (h.leave_date) {
         const leaveT = new Date(h.leave_date).getTime();
-        if (!Number.isNaN(leaveT) && leaveT >= fromT && leaveT <= toT) {
-          userIdsInRange.add(h.user);
-        }
+        if (!Number.isNaN(leaveT) && leaveT >= fromT && leaveT <= toT) return true;
       }
-    }
+      return false;
+    });
+  }, [histories, factory, from, to]);
 
-    return users.filter((u) => userIdsInRange.has(u.id) && (u.cccd_front || u.cccd_back));
-  }, [histories, users, factory, from, to]);
+  const matchingWithCccd = useMemo(() => {
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    return matchingHistories.filter((h) => {
+      if (h.cccd_version) return true;
+      const u = userMap.get(h.user);
+      return u && (u.cccd_front || u.cccd_back);
+    });
+  }, [matchingHistories, users]);
 
   const doExport = async () => {
-    if (!matchingUsers.length) {
+    if (!matchingWithCccd.length) {
       toast.warning("Không có ảnh CCCD phù hợp để xuất");
       return;
     }
     setExporting(true);
-    setProgress("Đang chuẩn bị...");
+    setProgressText("Đang chuẩn bị...");
+    setProgressPct(0);
+
     try {
       const zip = new JSZip();
-      let count = 0;
+      const userMap = new Map(users.map((u) => [u.id, u]));
+      const factoryMap = new Map(factories.map((f) => [f.id, f]));
 
-      for (const u of matchingUsers) {
-        const name = (u.full_name || u.username || u.id).replace(/[/\\:*?"<>|]/g, "_");
-        if (u.cccd_front) {
-          const url = fileUrl(u, u.cccd_front);
-          try {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const blob = await res.blob();
-            zip.file(`${name}_mat_truoc.jpg`, blob);
-            count++;
-          } catch {
-            /* skip failed */
-          }
+      const versionIds = [...new Set(matchingWithCccd.map((h) => h.cccd_version).filter(Boolean))] as string[];
+      let versionMap = new Map<string, CccdVersionRecord>();
+      if (versionIds.length) {
+        setProgressText("Đang tải thông tin CCCD...");
+        const BATCH = 50;
+        for (let i = 0; i < versionIds.length; i += BATCH) {
+          const batch = versionIds.slice(i, i + BATCH);
+          const items = (await pb.collection("cccd_versions").getFullList({
+            filter: relationInFilter("id", batch),
+          })) as unknown as CccdVersionRecord[];
+          for (const v of items) versionMap.set(v.id, v);
         }
-        if (u.cccd_back) {
-          const url = fileUrl(u, u.cccd_back);
-          try {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const blob = await res.blob();
-            zip.file(`${name}_mat_sau.jpg`, blob);
-            count++;
-          } catch {
-            /* skip failed */
-          }
-        }
-        setProgress(`Đã tải ${count} ảnh...`);
       }
 
-      if (!count) {
+      type DownloadTask = { url: string; zipPath: string };
+      const tasks: DownloadTask[] = [];
+      const fetchedVersions = new Set<string>();
+
+      for (const h of matchingWithCccd) {
+        const workerName = (h.worker_name_snapshot || "worker").replace(/[/\\:*?"<>|]/g, "_");
+        const factoryName = (factoryMap.get(h.factory)?.name || "factory").replace(/[/\\:*?"<>|]/g, "_");
+        const dateStr = h.join_date ? h.join_date.slice(0, 10) : "";
+        const prefix = `${workerName}_${factoryName}${dateStr ? `_${dateStr}` : ""}`;
+
+        const ver = h.cccd_version ? versionMap.get(h.cccd_version) : undefined;
+        if (ver && !fetchedVersions.has(ver.id)) {
+          fetchedVersions.add(ver.id);
+          if (ver.front_image) {
+            tasks.push({ url: fileUrl(ver, ver.front_image), zipPath: `${prefix}_mat_truoc.jpg` });
+          }
+          if (ver.back_image) {
+            tasks.push({ url: fileUrl(ver, ver.back_image), zipPath: `${prefix}_mat_sau.jpg` });
+          }
+        } else if (!ver) {
+          const u = userMap.get(h.user);
+          if (u?.cccd_front) {
+            tasks.push({ url: fileUrl(u, u.cccd_front), zipPath: `${prefix}_mat_truoc.jpg` });
+          }
+          if (u?.cccd_back) {
+            tasks.push({ url: fileUrl(u, u.cccd_back), zipPath: `${prefix}_mat_sau.jpg` });
+          }
+        }
+      }
+
+      if (!tasks.length) {
         toast.warning("Không tải được ảnh nào");
         return;
       }
 
-      setProgress("Đang nén file...");
+      setProgressText(`0 / ${tasks.length} ảnh`);
+      let completed = 0;
+      const CONCURRENCY = 4;
+
+      const downloadOne = async (task: DownloadTask) => {
+        try {
+          const res = await fetch(task.url);
+          if (!res.ok) return;
+          const blob = await res.blob();
+          zip.file(task.zipPath, blob);
+        } catch {
+          /* skip failed */
+        }
+        completed++;
+        const pct = Math.round((completed / tasks.length) * 100);
+        setProgressPct(pct);
+        setProgressText(`${completed} / ${tasks.length} ảnh`);
+      };
+
+      let idx = 0;
+      const workers = Array.from({ length: CONCURRENCY }, async () => {
+        while (idx < tasks.length) {
+          const current = idx++;
+          await downloadOne(tasks[current]);
+        }
+      });
+      await Promise.all(workers);
+
+      setProgressText("Đang nén file...");
       const content = await zip.generateAsync({ type: "blob" });
-      const factoryName =
+      const factoryLabel =
         factory === "all"
           ? "tat_ca"
           : (factories.find((f) => f.id === factory)?.name || factory).replace(
               /[/\\:*?"<>|]/g,
               "_",
             );
-      saveAs(content, `CCCD_${factoryName}_${from}_${to}.zip`);
+      saveAs(content, `CCCD_${factoryLabel}_${from}_${to}.zip`);
 
-      toast.success(`Đã xuất ${count} ảnh CCCD`);
+      toast.success(`Đã xuất ${completed} ảnh CCCD`);
       onClose();
     } catch (err: unknown) {
       toast.error(getErrorMessage(err, "Lỗi xuất CCCD"));
     } finally {
       setExporting(false);
-      setProgress("");
+      setProgressText("");
+      setProgressPct(0);
     }
   };
 
@@ -1818,13 +1829,19 @@ function CccdExportDialog({
           </div>
 
           <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-center text-sm">
-            <span className="font-semibold text-primary">{matchingUsers.length}</span> người lao
-            động có ảnh CCCD phù hợp
+            <span className="font-semibold text-primary">{matchingWithCccd.length}</span> lịch sử
+            có ảnh CCCD phù hợp
           </div>
 
-          {progress && (
-            <div className="rounded-xl bg-primary/5 p-2.5 text-center text-xs text-primary">
-              {progress}
+          {progressText && (
+            <div className="space-y-1.5">
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-300"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <div className="text-center text-xs text-muted-foreground">{progressText}</div>
             </div>
           )}
         </div>
@@ -1835,7 +1852,7 @@ function CccdExportDialog({
           </Button>
           <Button
             onClick={doExport}
-            disabled={exporting || !matchingUsers.length}
+            disabled={exporting || !matchingWithCccd.length}
             className="rounded-xl"
           >
             {exporting ? "Đang xuất..." : "Tải ZIP"}

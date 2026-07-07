@@ -32,6 +32,27 @@ export function formatDateOnly(value: string | number | Date | undefined | null)
   return text.replace(/[T ]\d{2}:\d{2}.*$/, "");
 }
 
+export async function parseExcelToRows(file: File): Promise<string[][]> {
+  const buffer = await file.arrayBuffer();
+  const wb = XLSX.read(buffer, { type: "array" });
+  const sheetName = wb.SheetNames[0];
+  if (!sheetName) return [];
+  const ws = wb.Sheets[sheetName];
+  const rows: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+  return rows.map((row) => row.map((cell) => String(cell ?? "")));
+}
+
+export async function parseExcelToRowsFromUrl(url: string): Promise<string[][]> {
+  const resp = await fetch(url);
+  const buffer = await resp.arrayBuffer();
+  const wb = XLSX.read(buffer, { type: "array" });
+  const sheetName = wb.SheetNames[0];
+  if (!sheetName) return [];
+  const ws = wb.Sheets[sheetName];
+  const rows: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+  return rows.map((row) => row.map((cell) => String(cell ?? "")));
+}
+
 export function exportToExcel(filename: string, sheets: Record<string, any[]>) {
   const wb = XLSX.utils.book_new();
   for (const [name, rows] of Object.entries(sheets)) {

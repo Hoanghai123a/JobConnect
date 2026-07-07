@@ -18,6 +18,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedWorkHistoryRouteImport } from './routes/_authenticated/work-history'
 import { Route as AuthenticatedTransportRouteImport } from './routes/_authenticated/transport'
 import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/staff'
+import { Route as AuthenticatedNotebookRouteImport } from './routes/_authenticated/notebook'
 import { Route as AuthenticatedNewsRouteImport } from './routes/_authenticated/news'
 import { Route as AuthenticatedGuidesRouteImport } from './routes/_authenticated/guides'
 import { Route as AuthenticatedGemsRouteImport } from './routes/_authenticated/gems'
@@ -35,6 +36,7 @@ import { Route as ApiPublicAppLogoRouteImport } from './routes/api/public/app-lo
 import { Route as ApiPublicAppIconRouteImport } from './routes/api/public/app-icon'
 import { Route as AuthenticatedStaffRecruitedRouteImport } from './routes/_authenticated/staff.recruited'
 import { Route as AuthenticatedStaffExportRouteImport } from './routes/_authenticated/staff.export'
+import { Route as AuthenticatedStaffApprovalsRouteImport } from './routes/_authenticated/staff.approvals'
 import { Route as AuthenticatedAdminWorkforceRouteImport } from './routes/_authenticated/admin/workforce'
 import { Route as AuthenticatedAdminStaffRouteImport } from './routes/_authenticated/admin/staff'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
@@ -94,6 +96,11 @@ const AuthenticatedTransportRoute = AuthenticatedTransportRouteImport.update({
 const AuthenticatedStaffRoute = AuthenticatedStaffRouteImport.update({
   id: '/staff',
   path: '/staff',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedNotebookRoute = AuthenticatedNotebookRouteImport.update({
+  id: '/notebook',
+  path: '/notebook',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedNewsRoute = AuthenticatedNewsRouteImport.update({
@@ -183,6 +190,12 @@ const AuthenticatedStaffExportRoute =
   AuthenticatedStaffExportRouteImport.update({
     id: '/export',
     path: '/export',
+    getParentRoute: () => AuthenticatedStaffRoute,
+  } as any)
+const AuthenticatedStaffApprovalsRoute =
+  AuthenticatedStaffApprovalsRouteImport.update({
+    id: '/approvals',
+    path: '/approvals',
     getParentRoute: () => AuthenticatedStaffRoute,
   } as any)
 const AuthenticatedAdminWorkforceRoute =
@@ -291,6 +304,7 @@ export interface FileRoutesByFullPath {
   '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
   '/news': typeof AuthenticatedNewsRoute
+  '/notebook': typeof AuthenticatedNotebookRoute
   '/staff': typeof AuthenticatedStaffRouteWithChildren
   '/transport': typeof AuthenticatedTransportRoute
   '/work-history': typeof AuthenticatedWorkHistoryRoute
@@ -300,6 +314,7 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/staff': typeof AuthenticatedAdminStaffRouteWithChildren
   '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
+  '/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
@@ -333,12 +348,14 @@ export interface FileRoutesByTo {
   '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
   '/news': typeof AuthenticatedNewsRoute
+  '/notebook': typeof AuthenticatedNotebookRoute
   '/transport': typeof AuthenticatedTransportRoute
   '/work-history': typeof AuthenticatedWorkHistoryRoute
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
+  '/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
@@ -374,6 +391,7 @@ export interface FileRoutesById {
   '/_authenticated/gems': typeof AuthenticatedGemsRoute
   '/_authenticated/guides': typeof AuthenticatedGuidesRoute
   '/_authenticated/news': typeof AuthenticatedNewsRoute
+  '/_authenticated/notebook': typeof AuthenticatedNotebookRoute
   '/_authenticated/staff': typeof AuthenticatedStaffRouteWithChildren
   '/_authenticated/transport': typeof AuthenticatedTransportRoute
   '/_authenticated/work-history': typeof AuthenticatedWorkHistoryRoute
@@ -383,6 +401,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/staff': typeof AuthenticatedAdminStaffRouteWithChildren
   '/_authenticated/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
+  '/_authenticated/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
   '/_authenticated/staff/export': typeof AuthenticatedStaffExportRoute
   '/_authenticated/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
@@ -418,6 +437,7 @@ export interface FileRouteTypes {
     | '/gems'
     | '/guides'
     | '/news'
+    | '/notebook'
     | '/staff'
     | '/transport'
     | '/work-history'
@@ -427,6 +447,7 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/staff'
     | '/admin/workforce'
+    | '/staff/approvals'
     | '/staff/export'
     | '/staff/recruited'
     | '/api/public/app-icon'
@@ -460,12 +481,14 @@ export interface FileRouteTypes {
     | '/gems'
     | '/guides'
     | '/news'
+    | '/notebook'
     | '/transport'
     | '/work-history'
     | '/admin/approvals'
     | '/admin/imports'
     | '/admin/settings'
     | '/admin/workforce'
+    | '/staff/approvals'
     | '/staff/export'
     | '/staff/recruited'
     | '/api/public/app-icon'
@@ -500,6 +523,7 @@ export interface FileRouteTypes {
     | '/_authenticated/gems'
     | '/_authenticated/guides'
     | '/_authenticated/news'
+    | '/_authenticated/notebook'
     | '/_authenticated/staff'
     | '/_authenticated/transport'
     | '/_authenticated/work-history'
@@ -509,6 +533,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/staff'
     | '/_authenticated/admin/workforce'
+    | '/_authenticated/staff/approvals'
     | '/_authenticated/staff/export'
     | '/_authenticated/staff/recruited'
     | '/api/public/app-icon'
@@ -603,6 +628,13 @@ declare module '@tanstack/react-router' {
       path: '/staff'
       fullPath: '/staff'
       preLoaderRoute: typeof AuthenticatedStaffRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/notebook': {
+      id: '/_authenticated/notebook'
+      path: '/notebook'
+      fullPath: '/notebook'
+      preLoaderRoute: typeof AuthenticatedNotebookRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/news': {
@@ -724,6 +756,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStaffExportRouteImport
       parentRoute: typeof AuthenticatedStaffRoute
     }
+    '/_authenticated/staff/approvals': {
+      id: '/_authenticated/staff/approvals'
+      path: '/approvals'
+      fullPath: '/staff/approvals'
+      preLoaderRoute: typeof AuthenticatedStaffApprovalsRouteImport
+      parentRoute: typeof AuthenticatedStaffRoute
+    }
     '/_authenticated/admin/workforce': {
       id: '/_authenticated/admin/workforce'
       path: '/admin/workforce'
@@ -833,6 +872,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedStaffRouteChildren {
+  AuthenticatedStaffApprovalsRoute: typeof AuthenticatedStaffApprovalsRoute
   AuthenticatedStaffExportRoute: typeof AuthenticatedStaffExportRoute
   AuthenticatedStaffRecruitedRoute: typeof AuthenticatedStaffRecruitedRoute
   AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
@@ -841,6 +881,7 @@ interface AuthenticatedStaffRouteChildren {
 }
 
 const AuthenticatedStaffRouteChildren: AuthenticatedStaffRouteChildren = {
+  AuthenticatedStaffApprovalsRoute: AuthenticatedStaffApprovalsRoute,
   AuthenticatedStaffExportRoute: AuthenticatedStaffExportRoute,
   AuthenticatedStaffRecruitedRoute: AuthenticatedStaffRecruitedRoute,
   AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
@@ -899,6 +940,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedGemsRoute: typeof AuthenticatedGemsRoute
   AuthenticatedGuidesRoute: typeof AuthenticatedGuidesRoute
   AuthenticatedNewsRoute: typeof AuthenticatedNewsRoute
+  AuthenticatedNotebookRoute: typeof AuthenticatedNotebookRoute
   AuthenticatedStaffRoute: typeof AuthenticatedStaffRouteWithChildren
   AuthenticatedTransportRoute: typeof AuthenticatedTransportRoute
   AuthenticatedWorkHistoryRoute: typeof AuthenticatedWorkHistoryRoute
@@ -922,6 +964,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedGemsRoute: AuthenticatedGemsRoute,
   AuthenticatedGuidesRoute: AuthenticatedGuidesRoute,
   AuthenticatedNewsRoute: AuthenticatedNewsRoute,
+  AuthenticatedNotebookRoute: AuthenticatedNotebookRoute,
   AuthenticatedStaffRoute: AuthenticatedStaffRouteWithChildren,
   AuthenticatedTransportRoute: AuthenticatedTransportRoute,
   AuthenticatedWorkHistoryRoute: AuthenticatedWorkHistoryRoute,

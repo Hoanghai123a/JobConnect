@@ -5,12 +5,16 @@ import {
   CheckCircle2,
   Clock3,
   Download,
+  IdCard,
+  ImagePlus,
   Landmark,
   NotebookPen,
   Pencil,
   Plus,
+  Trash,
   UserSquare2,
   Wallet,
+  ZoomIn,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -66,6 +70,13 @@ import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
 import {
+  getCurrentCccdVersion,
+  updateCccdVersionImages,
+  findOrCreateCccdVersion,
+  type CccdVersionRecord,
+} from "@/lib/cccd-versions";
+import { compressImage } from "@/lib/image-compress";
+import {
   canAccessStaffWorkspace,
   canReportAdvance,
   canReportJoin,
@@ -74,7 +85,7 @@ import {
   getStaffReasonsForHistory,
   isRecentRecruiter,
 } from "@/lib/staff-permissions";
-import { pb, type UserRecord } from "@/lib/pocketbase";
+import { pb, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import { VN_BANKS } from "@/lib/vn-banks";
 
 export const Route = createFileRoute("/_authenticated/staff/workers/$workerId")({
@@ -128,6 +139,9 @@ function StaffWorkerDetailPage() {
   const [joinOpen, setJoinOpen] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
   const [editingHistory, setEditingHistory] = useState<EmploymentHistoryRecord | null>(null);
+  const [detailHistory, setDetailHistory] = useState<EmploymentHistoryRecord | null>(null);
+  const [detailCccdVersion, setDetailCccdVersion] = useState<CccdVersionRecord | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const [amountText, setAmountText] = useState("");
   const [advanceReason, setAdvanceReason] = useState("");
@@ -144,6 +158,8 @@ function StaffWorkerDetailPage() {
     join_date: todayDate(),
     note: "",
   });
+  const [joinCccdFront, setJoinCccdFront] = useState<File | null>(null);
+  const [joinCccdBack, setJoinCccdBack] = useState<File | null>(null);
   const [bankForm, setBankForm] = useState({
     bank_name: "",
     bank_account_number: "",
@@ -294,6 +310,17 @@ function StaffWorkerDetailPage() {
       alive = false;
     };
   }, [histories, payrollOpen, viewer, workerUser?.id]);
+
+  useEffect(() => {
+    setDetailCccdVersion(null);
+    if (!detailHistory?.cccd_version) return;
+    setDetailLoading(true);
+    pb.collection("cccd_versions")
+      .getOne(detailHistory.cccd_version)
+      .then((r) => setDetailCccdVersion(r as unknown as CccdVersionRecord))
+      .catch(() => setDetailCccdVersion(null))
+      .finally(() => setDetailLoading(false));
+  }, [detailHistory]);
 
   const latestHistory = useMemo(() => getLatestEmploymentHistory(histories), [histories]);
   const activeHistory = useMemo(
@@ -493,6 +520,33 @@ function StaffWorkerDetailPage() {
       return;
     }
 
+    let cccdVersionId: string | undefined;
+    const cccdNumber = joinForm.worker_cccd_snapshot.trim() || workerUser.cccd || "";
+    if (joinCccdFront || joinCccdBack) {
+      if (!cccdNumber) {
+        toast.warning("Cần có số CCCD để lưu ảnh");
+        return;
+      }
+      const [compressedFront, compressedBack] = await Promise.all([
+        joinCccdFront ? compressImage(joinCccdFront) : Promise.resolve(null),
+        joinCccdBack ? compressImage(joinCccdBack) : Promise.resolve(null),
+      ]);
+      const version = await findOrCreateCccdVersion(
+        workerUser.id,
+        cccdNumber,
+        compressedFront,
+        compressedBack,
+      );
+      const isExisting = !!(version.front_image || version.back_image);
+      if (isExisting && (compressedFront || compressedBack)) {
+        await updateCccdVersionImages(version.id, compressedFront || undefined, compressedBack || undefined);
+      }
+      cccdVersionId = version.id;
+    } else {
+      const currentCccdVersion = await getCurrentCccdVersion(workerUser.id);
+      cccdVersionId = currentCccdVersion?.id;
+    }
+
     const created = await createEmploymentHistory({
       user: workerUser.id,
       factory: joinForm.factory,
@@ -503,6 +557,7 @@ function StaffWorkerDetailPage() {
       worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim() || workerUser.cccd || "",
       worker_tax_code_snapshot: joinForm.worker_tax_code_snapshot.trim(),
       recruiter_staff: joinForm.recruiter_staff,
+      cccd_version: cccdVersionId,
       join_date: joinForm.join_date,
       status: "working",
       note: joinForm.note.trim(),
@@ -521,6 +576,8 @@ function StaffWorkerDetailPage() {
     });
 
     setJoinOpen(false);
+    setJoinCccdFront(null);
+    setJoinCccdBack(null);
     toast.success("Đã tạo bản ghi đi làm mới");
   };
 
@@ -718,6 +775,7 @@ function StaffWorkerDetailPage() {
           <CccdManager
             targetUser={workerUser}
             actor={viewer as UserRecord}
+            readOnly
             onUpdated={async () => {
               const refreshed = await pb
                 .collection("users")
@@ -763,7 +821,8 @@ function StaffWorkerDetailPage() {
           histories.map((history) => (
             <Card
               key={history.id}
-              className="space-y-3 rounded-2xl border-border/60 p-4 shadow-soft"
+              className="cursor-pointer space-y-3 rounded-2xl border-border/60 p-4 shadow-soft transition-colors hover:bg-muted/30"
+              onClick={() => setDetailHistory(history)}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -772,6 +831,12 @@ function StaffWorkerDetailPage() {
                   </div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {history.worker_name_snapshot} · CCCD: {maskCccd(history.worker_cccd_snapshot)}
+                    {history.cccd_version && (
+                      <span className="ml-1 inline-flex items-center gap-0.5 text-primary">
+                        <IdCard className="inline h-3 w-3" />
+                        <span>Có ảnh</span>
+                      </span>
+                    )}
                   </div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     Mã số thuế: {history.worker_tax_code_snapshot || "Chưa có"}
@@ -794,7 +859,7 @@ function StaffWorkerDetailPage() {
                   {viewer?.role === "admin" && (
                     <button
                       type="button"
-                      onClick={() => openEditHistory(history)}
+                      onClick={(e) => { e.stopPropagation(); openEditHistory(history); }}
                       className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground"
                       aria-label="Sửa lịch sử"
                     >
@@ -1096,6 +1161,24 @@ function StaffWorkerDetailPage() {
                 className="rounded-xl"
               />
             </FormField>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Ảnh CCCD (tuỳ chọn)</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <CccdPickSlot
+                  label="Mặt trước"
+                  file={joinCccdFront}
+                  onPick={(f) => setJoinCccdFront(f)}
+                  onClear={() => setJoinCccdFront(null)}
+                />
+                <CccdPickSlot
+                  label="Mặt sau"
+                  file={joinCccdBack}
+                  onPick={(f) => setJoinCccdBack(f)}
+                  onClear={() => setJoinCccdBack(null)}
+                />
+              </div>
+            </div>
           </div>
           <DrawerFooter>
             <Button variant="outline" onClick={() => setJoinOpen(false)} className="rounded-xl">
@@ -1328,6 +1411,68 @@ function StaffWorkerDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Drawer open={!!detailHistory} onOpenChange={(open) => !open && setDetailHistory(null)}>
+        <DrawerContent className="max-h-[85vh]">
+          <DrawerHeader>
+            <DrawerTitle>Chi tiết lịch sử đi làm</DrawerTitle>
+            <DrawerDescription>
+              {detailHistory?.expand?.factory?.name || "Nhà máy"} ·{" "}
+              {detailHistory?.worker_name_snapshot}
+            </DrawerDescription>
+          </DrawerHeader>
+          {detailHistory && (
+            <div className="space-y-4 overflow-y-auto px-4 pb-6">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <InfoCell label="Nhà máy" value={detailHistory.expand?.factory?.name || "—"} />
+                <InfoCell label="Trạng thái" value={detailHistory.status === "working" ? "Đang làm" : "Đã nghỉ"} />
+                <InfoCell label="Ngày vào" value={formatDate(detailHistory.join_date)} />
+                <InfoCell label="Ngày nghỉ" value={formatDate(detailHistory.leave_date)} />
+                <InfoCell label="Mã NV" value={detailHistory.employee_code || "Chưa có"} />
+                <InfoCell label="CCCD" value={detailHistory.worker_cccd_snapshot || "—"} />
+                <InfoCell label="Mã số thuế" value={detailHistory.worker_tax_code_snapshot || "Chưa có"} />
+                <InfoCell label="Người tuyển" value={detailHistory.expand?.recruiter_staff?.full_name || detailHistory.expand?.recruiter_staff?.username || "Chưa gán"} />
+                <InfoCell label="Nhà chính" value={detailHistory.expand?.main_house?.name || "Chưa gán"} />
+              </div>
+
+              {detailHistory.note && (
+                <div className="rounded-xl bg-muted/40 p-3 text-sm text-muted-foreground">
+                  {detailHistory.note}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <div className="text-sm font-semibold">Ảnh CCCD</div>
+                {detailLoading ? (
+                  <div className="text-center text-xs text-muted-foreground py-4">Đang tải...</div>
+                ) : detailCccdVersion ? (
+                  <HistoryCccdImages
+                    version={detailCccdVersion}
+                    history={detailHistory}
+                    actor={viewer as UserRecord}
+                    onUpdated={async () => {
+                      if (!detailHistory.cccd_version) return;
+                      const refreshed = await pb.collection("cccd_versions").getOne(detailHistory.cccd_version).catch(() => null);
+                      if (refreshed) setDetailCccdVersion(refreshed as unknown as CccdVersionRecord);
+                    }}
+                  />
+                ) : (
+                  <HistoryCccdUpload
+                    history={detailHistory}
+                    workerUser={workerUser}
+                    actor={viewer as UserRecord}
+                    onCreated={async (version) => {
+                      setDetailCccdVersion(version);
+                      await pb.collection("employment_histories").update(detailHistory.id, { cccd_version: version.id });
+                      await reloadHistories();
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+        </DrawerContent>
+      </Drawer>
     </PageContainer>
   );
 }
@@ -1396,6 +1541,227 @@ function formatMoney(value: number) {
   }).format(value || 0);
 }
 
+function HistoryCccdImages({
+  version,
+  history,
+  actor,
+  onUpdated,
+}: {
+  version: CccdVersionRecord;
+  history: EmploymentHistoryRecord;
+  actor: Partial<UserRecord> | null;
+  onUpdated: () => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [zoomSrc, setZoomSrc] = useState("");
+
+  const frontUrl = version.front_image ? fileUrl(version, version.front_image) : "";
+  const backUrl = version.back_image ? fileUrl(version, version.back_image) : "";
+
+  const upload = (side: "front_image" | "back_image") => async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    setUploading(true);
+    try {
+      const compressed = await compressImage(file);
+      await updateCccdVersionImages(
+        version.id,
+        side === "front_image" ? compressed : undefined,
+        side === "back_image" ? compressed : undefined,
+      );
+      toast.success("Đã cập nhật ảnh CCCD");
+      onUpdated();
+    } catch (err: any) {
+      toast.error(err?.message || "Lỗi upload ảnh");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const remove = async (side: "front_image" | "back_image") => {
+    if (!confirm(`Xoá ảnh ${side === "front_image" ? "mặt trước" : "mặt sau"}?`)) return;
+    setUploading(true);
+    try {
+      await pb.collection("cccd_versions").update(version.id, { [side]: null });
+      toast.success("Đã xoá ảnh CCCD");
+      onUpdated();
+    } catch (err: any) {
+      toast.error(err?.message || "Lỗi xoá ảnh");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const download = async (url: string, label: string) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `CCCD_${history.worker_name_snapshot}_${label}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast.error("Không tải được ảnh");
+    }
+  };
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <CccdImageSlot
+          label="Mặt trước"
+          url={frontUrl}
+          uploading={uploading}
+          onPick={upload("front_image")}
+          onDelete={() => remove("front_image")}
+          onZoom={() => setZoomSrc(frontUrl)}
+          onDownload={() => download(frontUrl, "mat_truoc")}
+        />
+        <CccdImageSlot
+          label="Mặt sau"
+          url={backUrl}
+          uploading={uploading}
+          onPick={upload("back_image")}
+          onDelete={() => remove("back_image")}
+          onZoom={() => setZoomSrc(backUrl)}
+          onDownload={() => download(backUrl, "mat_sau")}
+        />
+      </div>
+      <Dialog open={!!zoomSrc} onOpenChange={() => setZoomSrc("")}>
+        <DialogContent className="max-w-[92vw] rounded-2xl p-2">
+          <DialogHeader>
+            <DialogTitle>Ảnh CCCD</DialogTitle>
+          </DialogHeader>
+          {zoomSrc && <img src={zoomSrc} alt="CCCD" className="w-full rounded-xl" />}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function CccdImageSlot({
+  label,
+  url,
+  uploading,
+  onPick,
+  onDelete,
+  onZoom,
+  onDownload,
+}: {
+  label: string;
+  url: string;
+  uploading: boolean;
+  onPick: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onDelete: () => void;
+  onZoom: () => void;
+  onDownload: () => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-muted/30">
+        {url ? (
+          <>
+            <img src={url} alt={label} className="h-full w-full object-cover" />
+            <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1.5 bg-gradient-to-t from-black/50 to-transparent px-2 pb-1.5 pt-4">
+              <button type="button" onClick={onZoom} className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-foreground shadow" aria-label="Phóng to">
+                <ZoomIn className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" onClick={onDownload} className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-foreground shadow" aria-label="Tải xuống">
+                <Download className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" onClick={onDelete} disabled={uploading} className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-destructive shadow" aria-label="Xoá">
+                <Trash className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </>
+        ) : (
+          <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1 text-muted-foreground">
+            <input type="file" accept="image/*" hidden onChange={onPick} disabled={uploading} />
+            <IdCard className="h-6 w-6" />
+            <span className="text-[11px] font-medium">Bấm để chọn ảnh</span>
+          </label>
+        )}
+      </div>
+      {url && (
+        <label className="block cursor-pointer">
+          <input type="file" accept="image/*" hidden onChange={onPick} disabled={uploading} />
+          <span className="inline-flex items-center gap-1 text-[11px] text-primary">
+            <ImagePlus className="h-3 w-3" /> Đổi ảnh
+          </span>
+        </label>
+      )}
+    </div>
+  );
+}
+
+function HistoryCccdUpload({
+  history,
+  workerUser,
+  actor,
+  onCreated,
+}: {
+  history: EmploymentHistoryRecord;
+  workerUser: UserRecord | null;
+  actor: Partial<UserRecord> | null;
+  onCreated: (version: CccdVersionRecord) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = (side: "front" | "back") => async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    const userId = history.user;
+    const cccdNumber = history.worker_cccd_snapshot || workerUser?.cccd || "";
+    if (!cccdNumber) {
+      toast.error("Không có số CCCD để tạo phiên bản");
+      return;
+    }
+    setUploading(true);
+    try {
+      const compressed = await compressImage(file);
+      const version = await findOrCreateCccdVersion(
+        userId,
+        cccdNumber,
+        side === "front" ? compressed : undefined,
+        side === "back" ? compressed : undefined,
+      );
+      toast.success("Đã thêm ảnh CCCD");
+      onCreated(version);
+    } catch (err: any) {
+      toast.error(err?.message || "Lỗi upload ảnh");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-1.5">
+        <Label className="text-xs">Mặt trước</Label>
+        <label className="flex aspect-[1.586/1] cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/30 text-muted-foreground">
+          <input type="file" accept="image/*" hidden onChange={handleUpload("front")} disabled={uploading} />
+          <IdCard className="h-6 w-6" />
+          <span className="text-[11px] font-medium">Bấm để chọn ảnh</span>
+        </label>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Mặt sau</Label>
+        <label className="flex aspect-[1.586/1] cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/30 text-muted-foreground">
+          <input type="file" accept="image/*" hidden onChange={handleUpload("back")} disabled={uploading} />
+          <IdCard className="h-6 w-6" />
+          <span className="text-[11px] font-medium">Bấm để chọn ảnh</span>
+        </label>
+      </div>
+    </div>
+  );
+}
+
 function AdvanceStatusChip({
   status,
   recoveryStatus,
@@ -1411,4 +1777,73 @@ function AdvanceStatusChip({
     return <StatusChip tone="info">Thu hồi 1 phần</StatusChip>;
   if (status === "accepted") return <StatusChip tone="success">Đã duyệt</StatusChip>;
   return <StatusChip tone="neutral">{status || "—"}</StatusChip>;
+}
+
+function CccdPickSlot({
+  label,
+  file,
+  onPick,
+  onClear,
+}: {
+  label: string;
+  file: File | null;
+  onPick: (f: File) => void;
+  onClear: () => void;
+}) {
+  const preview = file ? URL.createObjectURL(file) : "";
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-muted/30">
+        {preview ? (
+          <>
+            <img src={preview} alt={label} className="h-full w-full object-cover" />
+            <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1.5 bg-gradient-to-t from-black/50 to-transparent px-2 pb-1.5 pt-4">
+              <button
+                type="button"
+                onClick={onClear}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-destructive shadow"
+                aria-label="Xoá"
+              >
+                <Trash className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </>
+        ) : (
+          <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1 text-muted-foreground">
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f && f.type.startsWith("image/")) onPick(f);
+                e.target.value = "";
+              }}
+            />
+            <IdCard className="h-6 w-6" />
+            <span className="text-[11px] font-medium">Chọn ảnh</span>
+          </label>
+        )}
+      </div>
+      {preview && (
+        <label className="block cursor-pointer">
+          <input
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f && f.type.startsWith("image/")) onPick(f);
+              e.target.value = "";
+            }}
+          />
+          <span className="inline-flex items-center gap-1 text-[11px] text-primary">
+            <ImagePlus className="h-3 w-3" /> Đổi ảnh
+          </span>
+        </label>
+      )}
+    </div>
+  );
 }

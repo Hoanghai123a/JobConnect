@@ -130,6 +130,12 @@ function StaffDashboardPage() {
           description="Lọc 90 ngày gần đây và xuất Excel nhanh."
           icon={Download}
         />
+        <DashboardLink
+          to="/notebook"
+          title="Sổ tay"
+          description="Ghi chú, ghi nợ theo ngày tháng."
+          icon={NotebookPen}
+        />
         <button
           type="button"
           onClick={() => setUtilOpen(true)}

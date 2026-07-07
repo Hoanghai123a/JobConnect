@@ -29,6 +29,8 @@ import {
   Gem,
   ChevronRight,
   RefreshCw,
+  NotebookPen,
+  ClipboardCheck,
 } from "lucide-react";
 import {
   Dialog,
@@ -55,6 +57,7 @@ function DashboardPage() {
   const { loading, user, isAdmin } = useAuth();
   const { data: settings, logoUrl } = useAppSettings();
   const [pendingComplaintCount, setPendingComplaintCount] = useState(0);
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
   const [unread, setUnread] = useState({ news: 0, chat: 0, check: 0, advances: 0 });
   const [openUtil, setOpenUtil] = useState<UtilKey>(null);
   const [reloading, setReloading] = useState(false);
@@ -104,6 +107,26 @@ function DashboardPage() {
       alive = false;
     };
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin || !user?.id) return;
+    let alive = true;
+
+    (async () => {
+      try {
+        const res = await pb.collection("approval_responses").getList(1, 1, {
+          filter: `admin = "${user.id}" && status = "pending"`,
+        });
+        if (alive) setPendingApprovalCount(res.totalItems || 0);
+      } catch {
+        if (alive) setPendingApprovalCount(0);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin, user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -411,6 +434,19 @@ function DashboardPage() {
                 description="Quản trị hệ thống"
                 icon={Settings}
               />
+              <FeatureTile
+                to="/notebook"
+                label="Sổ tay"
+                description="Ghi chú, ghi nợ theo ngày"
+                icon={NotebookPen}
+              />
+              <FeatureTile
+                to="/staff/approvals"
+                label="Phê duyệt"
+                description="Yêu cầu từ staff"
+                icon={ClipboardCheck}
+                badge={toBadge(pendingApprovalCount)}
+              />
             </div>
           </section>
         )}
@@ -471,6 +507,12 @@ function DashboardPage() {
                 to="/guides"
                 label="Hướng dẫn"
                 icon={BookOpen}
+                size="compact"
+              />
+              <FeatureTile
+                to="/notebook"
+                label="Sổ tay"
+                icon={NotebookPen}
                 size="compact"
               />
             </div>

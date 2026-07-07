@@ -1,11 +1,13 @@
 import { pb, type UserRecord } from "./pocketbase";
 import { relationInFilter } from "./delegations";
 import type { EmploymentHistoryRecord } from "./employment";
+import type { CccdVersionRecord } from "./cccd-versions";
 
 const DB_NAME = "jobconnect-staff-cache";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_HISTORIES = "employment_histories";
 const STORE_USERS = "users";
+const STORE_CCCD_VERSIONS = "cccd_versions";
 const STORE_META = "_meta";
 const BATCH_SIZE = 50;
 
@@ -19,6 +21,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_USERS)) {
         db.createObjectStore(STORE_USERS, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(STORE_CCCD_VERSIONS)) {
+        db.createObjectStore(STORE_CCCD_VERSIONS, { keyPath: "id" });
       }
       if (!db.objectStoreNames.contains(STORE_META)) {
         db.createObjectStore(STORE_META);
@@ -162,6 +167,16 @@ export async function syncStaffData(): Promise<{
     await idbPutMany(db, STORE_USERS, updatedUsers);
   }
 
+  const cccdVerFilter = lastSync ? `updated>"${lastSync}"` : "";
+  const freshCccdVersions = (await pb.collection("cccd_versions").getFullList({
+    filter: cccdVerFilter,
+    sort: "-created",
+  })) as unknown as CccdVersionRecord[];
+
+  if (freshCccdVersions.length) {
+    await idbPutMany(db, STORE_CCCD_VERSIONS, freshCccdVersions);
+  }
+
   const allUsers = await idbGetAll<UserRecord>(db, STORE_USERS);
   const now = new Date().toISOString().replace("T", " ");
   await setLastSyncAt(db, now);
@@ -183,11 +198,19 @@ export async function updateCachedUser(record: UserRecord): Promise<void> {
   } catch {}
 }
 
+export async function updateCachedCccdVersion(record: CccdVersionRecord): Promise<void> {
+  try {
+    const db = await openDB();
+    await idbPut(db, STORE_CCCD_VERSIONS, record);
+  } catch {}
+}
+
 export async function clearStaffCache(): Promise<void> {
   try {
     const db = await openDB();
     await idbClear(db, STORE_HISTORIES);
     await idbClear(db, STORE_USERS);
+    await idbClear(db, STORE_CCCD_VERSIONS);
     await idbClear(db, STORE_META);
   } catch {}
 }

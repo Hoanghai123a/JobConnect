@@ -1,6 +1,7 @@
 import { pb, type UserRecord } from "./pocketbase";
 import type { FactoryRecord } from "./factories";
 import type { MainHouseRecord } from "./main-houses";
+import type { CccdVersionRecord } from "./cccd-versions";
 import { relationInFilter } from "./delegations";
 import { fetchAppSettings } from "./app-settings";
 
@@ -17,6 +18,7 @@ export interface EmploymentHistoryRecord {
   worker_cccd_snapshot: string;
   worker_tax_code_snapshot?: string;
   recruiter_staff?: string;
+  cccd_version?: string;
   join_date: string;
   leave_date?: string;
   status?: EmploymentStatus;
@@ -28,6 +30,7 @@ export interface EmploymentHistoryRecord {
     factory?: FactoryRecord;
     main_house?: MainHouseRecord;
     recruiter_staff?: UserRecord;
+    cccd_version?: CccdVersionRecord;
   };
 }
 
@@ -40,6 +43,7 @@ export interface EmploymentDraft {
   worker_cccd_snapshot: string;
   worker_tax_code_snapshot?: string;
   recruiter_staff?: string;
+  cccd_version?: string;
   join_date: string;
   leave_date?: string;
   status: EmploymentStatus;
@@ -160,13 +164,13 @@ export async function createEmploymentHistory(
   const uid = opts?.uid || (await generateEmploymentHistoryUid());
   return (await pb.collection("employment_histories").create(
     { ...draft, uid },
-    { expand: "user,factory,recruiter_staff,main_house" },
+    { expand: "user,factory,recruiter_staff,main_house,cccd_version" },
   )) as unknown as EmploymentHistoryRecord;
 }
 
 export async function updateEmploymentHistory(id: string, payload: Partial<EmploymentDraft>) {
   return (await pb.collection("employment_histories").update(id, payload, {
-    expand: "user,factory,recruiter_staff",
+    expand: "user,factory,recruiter_staff,cccd_version",
   })) as unknown as EmploymentHistoryRecord;
 }
 
