@@ -1,6 +1,7 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
+  BarChart3,
   BriefcaseBusiness,
   Building2,
   ChevronRight,
@@ -10,6 +11,7 @@ import {
   Plus,
   Search,
   ShieldCheck,
+  Wallet,
   UserRoundCheck,
   UserRoundMinus,
   Users,
@@ -51,6 +53,8 @@ import {
 } from "@/components/ui/select";
 import { pb, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import { relationInFilter } from "@/lib/delegations";
+import { useAppSettings } from "@/lib/app-settings";
+import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import type { CccdVersionRecord } from "@/lib/cccd-versions";
 import {
   createEmploymentHistory,
@@ -66,6 +70,7 @@ import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { cn } from "@/lib/utils";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
+import { RecruitChartDialog } from "@/components/workforce/RecruitChartDialog";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 
@@ -141,6 +146,7 @@ function WorkforcePage() {
   const [openRegister, setOpenRegister] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [cccdExportOpen, setCccdExportOpen] = useState(false);
+  const [chartOpen, setChartOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -293,6 +299,18 @@ function WorkforcePage() {
             <StatCard label="Đã nghỉ" value={stats.left} icon={UserRoundMinus} tone="warning" />
           </div>
 
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-lg"
+              onClick={() => setChartOpen(true)}
+              aria-label="Biểu đồ tuyển dụng"
+            >
+              <BarChart3 className="h-4 w-4" />
+            </Button>
+          </div>
+
           <div className="flex gap-2">
             <Link
               to="/admin/imports"
@@ -372,6 +390,14 @@ function WorkforcePage() {
         factories={factories}
         from={from}
         to={to}
+      />
+
+      <RecruitChartDialog
+        open={chartOpen}
+        onOpenChange={setChartOpen}
+        histories={histories}
+        users={users}
+        factories={factories}
       />
     </PageContainer>
   );
@@ -891,7 +917,12 @@ function AdminWorkerDrawer({
   onClose: () => void;
   onDataChanged: () => void;
 }) {
+  const { data: settings } = useAppSettings();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [advanceOpen, setAdvanceOpen] = useState(false);
+  const [advanceAmount, setAdvanceAmount] = useState("");
+  const [advanceReason, setAdvanceReason] = useState("");
+  const [advanceBankChoice, setAdvanceBankChoice] = useState<"worker" | "actor">("worker");
   const [form, setForm] = useState({
     employee_code: "",
     worker_name_snapshot: "",
@@ -905,6 +936,7 @@ function AdminWorkerDrawer({
     note: "",
   });
   const [saving, setSaving] = useState(false);
+  const [submittingAdvance, setSubmittingAdvance] = useState(false);
 
   const staffUsers = useMemo(
     () => users.filter((u) => u.role === "staff" || u.role === "admin"),
@@ -974,10 +1006,110 @@ function AdminWorkerDrawer({
     }
   };
 
+  const submitAdvance = async () => {
+    const activeHistory = histories.find((item) => item.status === "working" && !item.leave_date);
+    if (!user || !actor || !activeHistory) {
+      toast.error("Chỉ báo ứng cho người lao động đang đi làm");
+      return;
+    }
+
+    const amount = parseMoneyInput(advanceAmount);
+    if (!amount) {
+      toast.warning("Nhập số tiền ứng");
+      return;
+    }
+    if (!advanceReason.trim()) {
+      toast.warning("Nhập lý do ứng");
+      return;
+    }
+    const bankSource = advanceBankChoice === "actor" ? actor : user;
+    if (!bankSource.bank_account_number) {
+      toast.warning(
+        advanceBankChoice === "actor"
+          ? "Tài khoản của người thao tác chưa có số tài khoản ngân hàng"
+          : "Người lao động chưa có số tài khoản ngân hàng",
+      );
+      return;
+    }
+
+    setSubmittingAdvance(true);
+    try {
+      const existingAdvances = await pb.collection("advances").getList(1, 500, {
+        filter: `user="${user.id}" && (status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))`,
+        fields: "amount",
+      });
+      const outstanding = existingAdvances.items.reduce(
+        (sum: number, item: any) => sum + Number(item.amount || 0),
+        0,
+      );
+      const limit = Number(settings?.advance_limit || 0);
+      if (limit <= 0) {
+        toast.error("Admin chưa cài hạn mức Ứng lương");
+        return;
+      }
+      if (outstanding + amount > limit) {
+        toast.error(
+          `Vượt hạn mức ứng lương. Đang dùng ${outstanding.toLocaleString("vi-VN")} đ / ${limit.toLocaleString("vi-VN")} đ. Còn lại ${(limit - outstanding).toLocaleString("vi-VN")} đ`,
+        );
+        return;
+      }
+
+      const created = await pb.collection("advances").create({
+        user: user.id,
+        requested_by: actor.id,
+        recruiter_id: activeHistory.recruiter_staff || "",
+        employee_code: activeHistory.employee_code || user.employee_code || "",
+        full_name: activeHistory.worker_name_snapshot || user.full_name || "",
+        company: activeHistory.expand?.factory?.name || user.company || "",
+        phone: user.phone || "",
+        join_date: activeHistory.join_date || "",
+        bank_name: bankSource.bank_name || "",
+        bank_account_number: bankSource.bank_account_number || "",
+        bank_account_name: bankSource.bank_account_name || "",
+        amount,
+        reason: advanceReason.trim(),
+        status: "recruiter_approved",
+        recovery_status: "none",
+      });
+      await createStaffActionLog({
+        actor,
+        targetUserId: user.id,
+        targetCollection: "advances",
+        targetRecord: created.id,
+        action: "report_advance",
+        after: created,
+        note: "Admin báo ứng cho người lao động đang đi làm",
+      });
+      toast.success("Đã tạo yêu cầu ứng lương");
+      setAdvanceAmount("");
+      setAdvanceReason("");
+      setAdvanceOpen(false);
+      onDataChanged();
+    } catch (error: unknown) {
+      const fieldErrors = getPocketBaseFieldErrors(error);
+      toast.error(fieldErrors || getErrorMessage(error, "Lỗi báo ứng"));
+    } finally {
+      setSubmittingAdvance(false);
+    }
+  };
+
   if (!user) return null;
 
-  const latest = histories[0] || null;
-  const isWorking = latest?.status === "working" && !latest.leave_date;
+  const activeHistory = histories.find((item) => item.status === "working" && !item.leave_date);
+  const isWorking = Boolean(activeHistory);
+  const advanceLimit = Number(settings?.advance_limit || 0);
+  const workerBank = user.bank_account_number
+    ? `${user.bank_name || "NH"} · ${user.bank_account_number} · ${user.bank_account_name || ""}`
+    : "";
+  const actorBank = actor?.bank_account_number
+    ? `${actor.bank_name || "NH"} · ${actor.bank_account_number} · ${actor.bank_account_name || ""}`
+    : "";
+  const actorBankRoleLabel = actor?.role === "admin" ? "Admin" : "Staff";
+
+  const openAdvanceDialog = () => {
+    setAdvanceBankChoice(workerBank ? "worker" : actorBank ? "actor" : "worker");
+    setAdvanceOpen(true);
+  };
 
   return (
   <>
@@ -1020,6 +1152,25 @@ function AdminWorkerDrawer({
             Ảnh CCCD
           </div>
           <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} readOnly />
+
+          {isWorking && (
+            <button
+              type="button"
+              onClick={openAdvanceDialog}
+              className="flex w-full items-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-3 text-left shadow-soft active:scale-[0.99]"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Wallet className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">Báo ứng lương</span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  Tạo yêu cầu ứng cho lao động đang đi làm
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </button>
+          )}
 
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Lịch sử đi làm ({histories.length})
@@ -1201,6 +1352,109 @@ function AdminWorkerDrawer({
           </Button>
           <Button onClick={saveEdit} disabled={saving}>
             {saving ? "Đang lưu..." : "Lưu"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={advanceOpen} onOpenChange={setAdvanceOpen}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+        <DialogHeader>
+          <DialogTitle>Báo ứng lương</DialogTitle>
+          <DialogDescription>
+            Chỉ áp dụng cho người lao động đang có trạng thái đi làm.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="rounded-xl border bg-muted/30 p-3 text-sm">
+            <div className="font-semibold">{user.full_name || user.username || "Người lao động"}</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              {activeHistory?.expand?.factory?.name || user.company || "Chưa có nhà máy"} · Mã NV:{" "}
+              {activeHistory?.employee_code || user.employee_code || "—"}
+            </div>
+          </div>
+
+          {advanceLimit > 0 && (
+            <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+              Hạn mức ứng lương:{" "}
+              <span className="font-semibold text-foreground">
+                {advanceLimit.toLocaleString("vi-VN")} đ
+              </span>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <Label className="text-xs">Tài khoản nhận tiền</Label>
+            <div className="space-y-1.5">
+              {workerBank && (
+                <button
+                  type="button"
+                  onClick={() => setAdvanceBankChoice("worker")}
+                  className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${advanceBankChoice === "worker" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+                >
+                  <div
+                    className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${advanceBankChoice === "worker" ? "border-primary bg-primary" : "border-muted-foreground"}`}
+                  />
+                  <div>
+                    <div className="font-medium">STK của NLĐ</div>
+                    <div className="text-muted-foreground">{workerBank}</div>
+                  </div>
+                </button>
+              )}
+              {actorBank && (
+                <button
+                  type="button"
+                  onClick={() => setAdvanceBankChoice("actor")}
+                  className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${advanceBankChoice === "actor" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+                >
+                  <div
+                    className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${advanceBankChoice === "actor" ? "border-primary bg-primary" : "border-muted-foreground"}`}
+                  />
+                  <div>
+                    <div className="font-medium">STK của tôi ({actorBankRoleLabel})</div>
+                    <div className="text-muted-foreground">{actorBank}</div>
+                  </div>
+                </button>
+              )}
+              {!workerBank && !actorBank && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+                  Chưa có STK nào. Cập nhật ngân hàng trước khi báo ứng.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">Số tiền</Label>
+            <Input
+              value={advanceAmount}
+              onChange={(e) => setAdvanceAmount(formatMoneyInput(e.target.value))}
+              inputMode="numeric"
+              placeholder="Nhập số tiền ứng"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">Lý do</Label>
+            <Textarea
+              rows={3}
+              value={advanceReason}
+              onChange={(e) => setAdvanceReason(e.target.value)}
+              placeholder="Ví dụ: ứng tiền sinh hoạt..."
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setAdvanceOpen(false)}>
+            Huỷ
+          </Button>
+          <Button
+            onClick={submitAdvance}
+            disabled={submittingAdvance || !isWorking || (!workerBank && !actorBank)}
+          >
+            {submittingAdvance ? "Đang gửi..." : "Gửi yêu cầu"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -408,7 +408,7 @@ function StaffWorkerDetailPage() {
     }
 
     const existingAdvances = await pb.collection("advances").getList(1, 100, {
-      filter: `user="${workerUser.id}" && (status="pending" || (status="accepted" && recovery_status="none"))`,
+      filter: `user="${workerUser.id}" && (status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))`,
     });
     const outstanding = existingAdvances.items.reduce(
       (sum: number, r: any) => sum + Number(r.amount || 0),

@@ -106,7 +106,19 @@ export function ApprovalDetail({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-3xl sm:max-w-lg">
+      <DialogContent
+        className="max-h-[90dvh] overflow-y-auto rounded-3xl sm:max-w-lg"
+        onEscapeKeyDown={(event) => {
+          if (document.body.dataset.approvalImageViewerOpen === "true") {
+            event.preventDefault();
+          }
+        }}
+        onInteractOutside={(event) => {
+          if (document.body.dataset.approvalImageViewerOpen === "true") {
+            event.preventDefault();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="pr-6 text-base leading-snug">{request.title}</DialogTitle>
           <div className="flex items-center gap-2 pt-1">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, ZoomIn } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, ZoomIn } from "lucide-react";
 
 export function ImageViewer({
   images,
@@ -10,18 +10,50 @@ export function ImageViewer({
   className?: string;
 }) {
   const [viewIdx, setViewIdx] = useState<number | null>(null);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const activeImage = viewIdx !== null ? images[viewIdx] : null;
+  const canBrowse = images.length > 1;
+
+  const showPrev = () => {
+    setViewIdx((current) => {
+      if (current === null) return current;
+      return current === 0 ? images.length - 1 : current - 1;
+    });
+  };
+
+  const showNext = () => {
+    setViewIdx((current) => {
+      if (current === null) return current;
+      return current === images.length - 1 ? 0 : current + 1;
+    });
+  };
 
   useEffect(() => {
     if (!activeImage) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setViewIdx(null);
+      if (event.key === "ArrowLeft" && canBrowse) showPrev();
+      if (event.key === "ArrowRight" && canBrowse) showNext();
     };
 
+    document.body.dataset.approvalImageViewerOpen = "true";
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [activeImage]);
+    return () => {
+      delete document.body.dataset.approvalImageViewerOpen;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [activeImage, canBrowse, images.length]);
+
+  function handleTouchEnd(event: React.TouchEvent<HTMLDivElement>) {
+    if (touchStartX === null || !canBrowse) return;
+    const diff = event.changedTouches[0].clientX - touchStartX;
+    setTouchStartX(null);
+
+    if (Math.abs(diff) < 40) return;
+    if (diff > 0) showPrev();
+    else showNext();
+  }
 
   if (!images.length) return null;
 
@@ -52,7 +84,14 @@ export function ImageViewer({
 
       {activeImage &&
         createPortal(
-          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 p-3 sm:p-6">
+          <div
+            data-approval-image-viewer
+            className="fixed inset-0 z-[80] flex touch-pan-y select-none items-center justify-center bg-black/90 p-3 sm:p-6"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            onTouchStart={(event) => setTouchStartX(event.touches[0].clientX)}
+            onTouchEnd={handleTouchEnd}
+          >
             <button
               type="button"
               onClick={() => setViewIdx(null)}
@@ -61,6 +100,31 @@ export function ImageViewer({
             >
               <X className="h-5 w-5" />
             </button>
+
+            {canBrowse && (
+              <>
+                <button
+                  type="button"
+                  onClick={showPrev}
+                  className="absolute left-3 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-foreground shadow-lg transition hover:bg-white sm:flex"
+                  aria-label="Xem ảnh trước"
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </button>
+                <button
+                  type="button"
+                  onClick={showNext}
+                  className="absolute right-3 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-foreground shadow-lg transition hover:bg-white sm:flex"
+                  aria-label="Xem ảnh tiếp theo"
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </button>
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white">
+                  {viewIdx + 1}/{images.length}
+                </div>
+              </>
+            )}
+
             <img
               src={activeImage.url}
               alt={`Ảnh ${viewIdx + 1}`}

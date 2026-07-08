@@ -109,6 +109,9 @@ function containsAny(fields: string[], keyword: string) {
   return `(${fields.map((field) => `${field}~"${q}"`).join(" || ")})`;
 }
 
+const LEGACY_STAFF_REQUESTED_PENDING_FILTER =
+  '(status="pending" && (requested_by.role="staff" || requested_by.role="admin"))';
+
 function buildAdvanceFilter(input: {
   isAdmin: boolean;
   isStaff: boolean;
@@ -140,13 +143,14 @@ function buildAdvanceFilter(input: {
   if (!input.isAdmin && !input.isStaff && input.userId) {
     roleFilter = `user="${escapePb(input.userId)}"`;
   } else if (input.isStaff && !input.isAdmin && input.userId) {
-    roleFilter = `recruiter_id="${escapePb(input.userId)}"`;
+    const currentUserId = escapePb(input.userId);
+    roleFilter = `(recruiter_id="${currentUserId}" || requested_by="${currentUserId}")`;
   }
 
   let tabFilter = "";
   if (input.tab) {
     if (input.isAdmin && input.tab === "pending") {
-      tabFilter = 'status="recruiter_approved"';
+      tabFilter = `(status="recruiter_approved" || ${LEGACY_STAFF_REQUESTED_PENDING_FILTER})`;
     } else {
       tabFilter = ADVANCE_TAB_FILTERS[input.tab];
     }
@@ -281,9 +285,10 @@ export function AdvancesPage() {
       search,
     });
     const withBase = (statusFilter: string) => joinPbFilters([base, statusFilter]);
+    const adminPendingFilter = `(status="recruiter_approved" || ${LEGACY_STAFF_REQUESTED_PENDING_FILTER})`;
     const [pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all] = await Promise.all([
       countAdvances(withBase(ADVANCE_TAB_FILTERS.pending)),
-      countAdvances(withBase(ADVANCE_TAB_FILTERS.recruiter_approved)),
+      countAdvances(withBase(isAdmin ? adminPendingFilter : ADVANCE_TAB_FILTERS.recruiter_approved)),
       countAdvances(withBase(ADVANCE_TAB_FILTERS.accepted)),
       countAdvances(withBase(ADVANCE_TAB_FILTERS.recovered)),
       countAdvances(withBase(ADVANCE_TAB_FILTERS.unrecoverable)),
@@ -330,12 +335,18 @@ export function AdvancesPage() {
   const isActionable = (row: AdvanceRecord) => {
     const status = row.status || "pending";
     const recovery = row.recovery_status || "none";
-    if (isAdmin) return status === "recruiter_approved" || (status === "accepted" && recovery === "none");
+    if (isAdmin) {
+      return status === "pending" || status === "recruiter_approved" || (status === "accepted" && recovery === "none");
+    }
     return status === "pending" || (status === "accepted" && recovery === "none");
   };
   const selectableFiltered = useMemo(() => filtered.filter(isActionable), [filtered]);
   const selectedPendingCount = filtered.filter(
-    (row) => selectedIds.has(row.id) && (row.status || "pending") === (isAdmin ? "recruiter_approved" : "pending"),
+    (row) =>
+      selectedIds.has(row.id) &&
+      (isAdmin
+        ? (row.status || "pending") === "pending" || row.status === "recruiter_approved"
+        : (row.status || "pending") === "pending"),
   ).length;
   const selectedRecoverableCount = filtered.filter(
     (row) =>
@@ -416,9 +427,12 @@ export function AdvancesPage() {
   };
 
   const bulkUpdate = async (status: Exclude<AdvanceStatus, "pending" | "recruiter_approved">) => {
-    const targetStatus = isAdmin ? "recruiter_approved" : "pending";
     const rows = filtered.filter(
-      (row) => selectedIds.has(row.id) && (row.status || "pending") === targetStatus,
+      (row) =>
+        selectedIds.has(row.id) &&
+        (isAdmin
+          ? (row.status || "pending") === "pending" || row.status === "recruiter_approved"
+          : (row.status || "pending") === "pending"),
     );
     if (!rows.length) return;
     try {
@@ -1023,6 +1037,7 @@ export function AdvancesPage() {
           const recovery = (row.recovery_status || "none") as RecoveryStatus;
           const selectable = isActionable(row);
           const canRecover = status === "accepted" && recovery === "none";
+          const canAdminResolve = status === "pending" || status === "recruiter_approved";
           const requesterName = getAdvanceRequesterName(row);
           return (
             <div
@@ -1103,7 +1118,7 @@ export function AdvancesPage() {
                             {formatMoney(row.original_amount)}
                           </span>
                         )}
-                        {status === "recruiter_approved" && (
+                        {canAdminResolve && (
                           <button
                             type="button"
                             className="ml-0.5 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -1139,7 +1154,7 @@ export function AdvancesPage() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                {status === "recruiter_approved" && (
+                {canAdminResolve && (
                   <>
                     <Button
                       size="icon"

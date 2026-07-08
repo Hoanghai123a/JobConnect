@@ -45,6 +45,12 @@ import {
   syncLegacyUserWorkFields,
   updateEmploymentHistory,
 } from "@/lib/employment";
+import {
+  findOrCreateCccdVersion,
+  getCurrentCccdVersion,
+  updateCccdVersionImages,
+} from "@/lib/cccd-versions";
+import { compressImage } from "@/lib/image-compress";
 import type { FactoryRecord } from "@/lib/factories";
 import type { MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
@@ -122,6 +128,8 @@ export function WorkerQuickDrawer({
     join_date: todayDate(),
     note: "",
   });
+  const [joinCccdFront, setJoinCccdFront] = useState<File | null>(null);
+  const [joinCccdBack, setJoinCccdBack] = useState<File | null>(null);
   const [amountText, setAmountText] = useState("");
   const [advanceReason, setAdvanceReason] = useState("");
   const [bankChoice, setBankChoice] = useState<"worker" | "viewer">("worker");
@@ -156,8 +164,8 @@ export function WorkerQuickDrawer({
     const latest = worker.latestHistory;
     setJoinForm({
       factory: "",
-      main_house: latest?.main_house || "",
-      employee_code: latest?.employee_code || worker.user.employee_code || "",
+      main_house: "",
+      employee_code: "",
       worker_name_snapshot: latest?.worker_name_snapshot || worker.user.full_name || "",
       worker_cccd_snapshot: latest?.worker_cccd_snapshot || worker.user.cccd || "",
       worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
@@ -165,6 +173,8 @@ export function WorkerQuickDrawer({
       join_date: todayDate(),
       note: "",
     });
+    setJoinCccdFront(null);
+    setJoinCccdBack(null);
     setBankForm({
       bank_name: worker.user.bank_name || "",
       bank_account_number: worker.user.bank_account_number || "",
@@ -279,6 +289,36 @@ export function WorkerQuickDrawer({
         setSubmitting(false);
         return;
       }
+
+      let cccdVersionId: string | undefined;
+      const cccdNumber = joinForm.worker_cccd_snapshot.trim() || worker.user.cccd || "";
+      if (joinCccdFront || joinCccdBack) {
+        if (!cccdNumber) {
+          toast.warning("Cần có số CCCD để lưu ảnh");
+          setSubmitting(false);
+          return;
+        }
+        const [compressedFront, compressedBack] = await Promise.all([
+          joinCccdFront ? compressImage(joinCccdFront) : Promise.resolve(null),
+          joinCccdBack ? compressImage(joinCccdBack) : Promise.resolve(null),
+        ]);
+        const version = await findOrCreateCccdVersion(
+          worker.user.id,
+          cccdNumber,
+          compressedFront,
+          compressedBack,
+        );
+        if (version.front_image || version.back_image) {
+          if (compressedFront || compressedBack) {
+            await updateCccdVersionImages(version.id, compressedFront || undefined, compressedBack || undefined);
+          }
+        }
+        cccdVersionId = version.id;
+      } else {
+        const currentCccdVersion = await getCurrentCccdVersion(worker.user.id);
+        cccdVersionId = currentCccdVersion?.id;
+      }
+
       const created = await createEmploymentHistory({
         user: worker.user.id,
         factory: joinForm.factory,
@@ -292,6 +332,7 @@ export function WorkerQuickDrawer({
         worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim() || worker.user.cccd || "",
         worker_tax_code_snapshot: joinForm.worker_tax_code_snapshot.trim(),
         recruiter_staff: joinForm.recruiter_staff,
+        cccd_version: cccdVersionId,
         join_date: joinForm.join_date,
         status: "working",
         note: joinForm.note.trim(),
@@ -306,6 +347,8 @@ export function WorkerQuickDrawer({
         note: "Báo đi làm mới từ danh sách",
       });
       toast.success("Đã tạo bản ghi đi làm mới");
+      setJoinCccdFront(null);
+      setJoinCccdBack(null);
       onClose();
       onDataChanged();
     } catch (e: any) {
@@ -317,6 +360,10 @@ export function WorkerQuickDrawer({
 
   const submitAdvance = async () => {
     if (!worker || !viewer?.id || !latest) return;
+    if (!activeHistory) {
+      toast.error("Chỉ báo ứng cho người lao động đang đi làm");
+      return;
+    }
     const amount = Number(amountText.replace(/\D/g, ""));
     if (!amount) {
       toast.warning("Nhập số tiền");
@@ -334,7 +381,7 @@ export function WorkerQuickDrawer({
     setSubmitting(true);
     try {
       const existingAdvances = await pb.collection("advances").getList(1, 100, {
-        filter: `user="${worker.user.id}" && (status="pending" || (status="accepted" && recovery_status="none"))`,
+        filter: `user="${worker.user.id}" && (status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))`,
       });
       const outstanding = existingAdvances.items.reduce(
         (sum: number, r: any) => sum + Number(r.amount || 0),
@@ -357,16 +404,18 @@ export function WorkerQuickDrawer({
       await pb.collection("advances").create({
         user: worker.user.id,
         requested_by: viewer.id,
+        recruiter_id: viewer.id,
         employee_code: latest.employee_code || worker.user.employee_code || "",
         full_name: latest.worker_name_snapshot || worker.user.full_name || "",
         company: latest.expand?.factory?.name || worker.user.company || "",
         phone: worker.user.phone || "",
+        join_date: activeHistory.join_date || "",
         bank_name: bankSource.bank_name || "",
         bank_account_number: bankSource.bank_account_number || "",
         bank_account_name: bankSource.bank_account_name || "",
         amount,
         reason: advanceReason.trim(),
-        status: "pending",
+        status: "recruiter_approved",
         recovery_status: "none",
       });
       await createStaffActionLog({
@@ -497,7 +546,7 @@ export function WorkerQuickDrawer({
                     onClick={() => setView("join")}
                   />
                 )}
-                {worker.canReportAdvance && (
+                {worker.canReportAdvance && isWorking && (
                   <ActionButton
                     icon={Wallet}
                     label="Báo ứng lương"
@@ -511,14 +560,14 @@ export function WorkerQuickDrawer({
                     onClick={() => setView("payroll")}
                   />
                 )}
-                {worker.canReportAdvance && (
+                {worker.canReportAdvance && isWorking && (
                   <ActionButton
                     icon={Landmark}
                     label="Cập nhật ngân hàng"
                     onClick={() => setView("bank")}
                   />
                 )}
-                {(worker.canReportLeave || worker.canReportJoin || worker.canReportAdvance) && (
+                {(worker.canReportLeave || worker.canReportJoin || (worker.canReportAdvance && isWorking)) && (
                   <ActionButton
                     icon={Hash}
                     label="Cập nhật mã NV"
@@ -647,6 +696,38 @@ export function WorkerQuickDrawer({
                       }))
                     }
                   />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Ảnh CCCD mặt trước</Label>
+                  <label className="flex h-9 cursor-pointer items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground hover:bg-muted/40">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        setJoinCccdFront(e.target.files?.[0] || null);
+                        e.target.value = "";
+                      }}
+                    />
+                    {joinCccdFront ? joinCccdFront.name.slice(0, 15) + "…" : "Chọn ảnh trước"}
+                  </label>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Ảnh CCCD mặt sau</Label>
+                  <label className="flex h-9 cursor-pointer items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground hover:bg-muted/40">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        setJoinCccdBack(e.target.files?.[0] || null);
+                        e.target.value = "";
+                      }}
+                    />
+                    {joinCccdBack ? joinCccdBack.name.slice(0, 15) + "…" : "Chọn ảnh sau"}
+                  </label>
                 </div>
               </div>
               <div className="space-y-1">
@@ -964,6 +1045,7 @@ function AdvanceForm({
   const viewerBank = viewer.bank_account_number
     ? `${viewer.bank_name || "NH"} · ${viewer.bank_account_number} · ${viewer.bank_account_name || ""}`
     : "";
+  const viewerBankRoleLabel = viewer.role === "admin" ? "Admin" : "Staff";
 
   return (
     <div className="space-y-3">
@@ -1019,7 +1101,7 @@ function AdvanceForm({
                 className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${bankChoice === "viewer" ? "border-primary bg-primary" : "border-muted-foreground"}`}
               />
               <div>
-                <div className="font-medium">STK của tôi (Staff)</div>
+                <div className="font-medium">STK của tôi ({viewerBankRoleLabel})</div>
                 <div className="text-muted-foreground">{viewerBank}</div>
               </div>
             </button>
