@@ -13,6 +13,7 @@ export interface AppSettings {
   advance_rules?: string;
   account_code_prefix?: string;
   logo?: string;
+  updated?: string;
   install_guide_images?: string[];
   collectionId?: string;
   collectionName?: string;

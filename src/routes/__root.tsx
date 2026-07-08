@@ -14,6 +14,7 @@ import { AuthProvider } from "@/lib/auth";
 import { Toaster } from "@/components/ui/sonner";
 import { installPwaPromptListeners } from "@/lib/pwa-install";
 import { RoamingPet } from "@/components/garden/RoamingPet";
+import { BrandHeadLinks } from "@/components/layout/BrandHeadLinks";
 
 function NotFoundComponent() {
   return (
@@ -112,6 +113,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <BrandHeadLinks />
         <div className="app-shell">
           <Outlet />
           <RoamingPet />
