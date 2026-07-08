@@ -62,12 +62,14 @@ export function RecruitChartDialog({
         month: "2-digit",
       });
 
-      const joined = histories.filter((h) => h.join_date === dateStr).length;
+      const joined = histories.filter(
+        (h) => h.join_date?.slice(0, 10) === dateStr,
+      ).length;
 
       let working = 0;
       for (const h of histories) {
-        if (!h.join_date || h.join_date > dateStr) continue;
-        if (!h.leave_date || h.leave_date > dateStr) working++;
+        if (!h.join_date || h.join_date.slice(0, 10) > dateStr) continue;
+        if (!h.leave_date || h.leave_date.slice(0, 10) > dateStr) working++;
       }
 
       days.push({ date: dateStr, label, joined, working });
@@ -88,7 +90,9 @@ export function RecruitChartDialog({
   const breakdown = useMemo(() => {
     if (!selectedDay) return [];
 
-    const dayHistories = histories.filter((h) => h.join_date === selectedDay);
+    const dayHistories = histories.filter(
+      (h) => h.join_date?.slice(0, 10) === selectedDay,
+    );
 
     const factoryMap = new Map<string, Map<string, number>>();
     for (const h of dayHistories) {
@@ -144,13 +148,26 @@ export function RecruitChartDialog({
           <ChartContainer config={chartConfig} className="h-[220px] w-full">
             <ComposedChart
               data={dailyData}
-              margin={{ top: 8, right: 8, bottom: 0, left: -16 }}
+              margin={{ top: 8, right: 4, bottom: 0, left: -8 }}
             >
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
-              <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+              <YAxis
+                yAxisId="left"
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+              />
               <ChartTooltip content={<ChartTooltipContent />} />
               <Bar
+                yAxisId="left"
                 dataKey="joined"
                 radius={[4, 4, 0, 0]}
                 cursor="pointer"
@@ -170,6 +187,7 @@ export function RecruitChartDialog({
                 ))}
               </Bar>
               <Line
+                yAxisId="right"
                 type="monotone"
                 dataKey="working"
                 stroke="var(--color-working)"
