@@ -7,6 +7,7 @@ import {
   YAxis,
   CartesianGrid,
   Cell,
+  LabelList,
 } from "recharts";
 import { Building2 } from "lucide-react";
 import {
@@ -148,7 +149,7 @@ export function RecruitChartDialog({
           <ChartContainer config={chartConfig} className="h-[220px] w-full">
             <ComposedChart
               data={dailyData}
-              margin={{ top: 8, right: 4, bottom: 0, left: -8 }}
+              margin={{ top: 16, right: 4, bottom: 0, left: -8 }}
             >
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
@@ -175,6 +176,13 @@ export function RecruitChartDialog({
                   handleBarClick(dailyData[index])
                 }
               >
+                <LabelList
+                  dataKey="joined"
+                  position="top"
+                  fontSize={11}
+                  fontWeight={600}
+                  formatter={(v: number) => (v > 0 ? v : "")}
+                />
                 {dailyData.map((entry) => (
                   <Cell
                     key={entry.date}
@@ -231,7 +239,7 @@ export function RecruitChartDialog({
                         <span className="text-foreground">{r.name}</span>
                         {r.isVendor && (
                           <span className="rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-medium leading-none text-white">
-                            vendor
+                            Đối tác
                           </span>
                         )}
                         <span className="ml-auto font-medium tabular-nums">

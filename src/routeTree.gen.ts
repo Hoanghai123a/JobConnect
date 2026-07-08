@@ -31,6 +31,9 @@ import { Route as AuthenticatedAttendanceRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdvancesRouteImport } from './routes/_authenticated/advances'
 import { Route as AuthenticatedAccountRouteImport } from './routes/_authenticated/account'
 import { Route as AuthenticatedStaffIndexRouteImport } from './routes/_authenticated/staff.index'
+import { Route as ApiPushSubscriptionRouteImport } from './routes/api/push/subscription'
+import { Route as ApiPushPublicKeyRouteImport } from './routes/api/push/public-key'
+import { Route as ApiPushApprovalRouteImport } from './routes/api/push/approval'
 import { Route as ApiPublicPocketbaseAuthRouteImport } from './routes/api/public/pocketbase-auth'
 import { Route as ApiPublicAppLogoRouteImport } from './routes/api/public/app-logo'
 import { Route as ApiPublicAppIconRouteImport } from './routes/api/public/app-icon'
@@ -164,6 +167,21 @@ const AuthenticatedStaffIndexRoute = AuthenticatedStaffIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedStaffRoute,
+} as any)
+const ApiPushSubscriptionRoute = ApiPushSubscriptionRouteImport.update({
+  id: '/api/push/subscription',
+  path: '/api/push/subscription',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPushPublicKeyRoute = ApiPushPublicKeyRouteImport.update({
+  id: '/api/push/public-key',
+  path: '/api/push/public-key',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPushApprovalRoute = ApiPushApprovalRouteImport.update({
+  id: '/api/push/approval',
+  path: '/api/push/approval',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicPocketbaseAuthRoute = ApiPublicPocketbaseAuthRouteImport.update({
   id: '/api/public/pocketbase-auth',
@@ -320,6 +338,9 @@ export interface FileRoutesByFullPath {
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
+  '/api/push/approval': typeof ApiPushApprovalRoute
+  '/api/push/public-key': typeof ApiPushPublicKeyRoute
+  '/api/push/subscription': typeof ApiPushSubscriptionRoute
   '/staff/': typeof AuthenticatedStaffIndexRoute
   '/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
@@ -361,6 +382,9 @@ export interface FileRoutesByTo {
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
+  '/api/push/approval': typeof ApiPushApprovalRoute
+  '/api/push/public-key': typeof ApiPushPublicKeyRoute
+  '/api/push/subscription': typeof ApiPushSubscriptionRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
   '/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
@@ -407,6 +431,9 @@ export interface FileRoutesById {
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
+  '/api/push/approval': typeof ApiPushApprovalRoute
+  '/api/push/public-key': typeof ApiPushPublicKeyRoute
+  '/api/push/subscription': typeof ApiPushSubscriptionRoute
   '/_authenticated/staff/': typeof AuthenticatedStaffIndexRoute
   '/_authenticated/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/_authenticated/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
@@ -453,6 +480,9 @@ export interface FileRouteTypes {
     | '/api/public/app-icon'
     | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
+    | '/api/push/approval'
+    | '/api/push/public-key'
+    | '/api/push/subscription'
     | '/staff/'
     | '/admin/accounts/factories'
     | '/admin/accounts/logs'
@@ -494,6 +524,9 @@ export interface FileRouteTypes {
     | '/api/public/app-icon'
     | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
+    | '/api/push/approval'
+    | '/api/push/public-key'
+    | '/api/push/subscription'
     | '/staff'
     | '/admin/accounts/factories'
     | '/admin/accounts/logs'
@@ -539,6 +572,9 @@ export interface FileRouteTypes {
     | '/api/public/app-icon'
     | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
+    | '/api/push/approval'
+    | '/api/push/public-key'
+    | '/api/push/subscription'
     | '/_authenticated/staff/'
     | '/_authenticated/admin/accounts/factories'
     | '/_authenticated/admin/accounts/logs'
@@ -561,6 +597,9 @@ export interface RootRouteChildren {
   ApiPublicAppIconRoute: typeof ApiPublicAppIconRoute
   ApiPublicAppLogoRoute: typeof ApiPublicAppLogoRoute
   ApiPublicPocketbaseAuthRoute: typeof ApiPublicPocketbaseAuthRoute
+  ApiPushApprovalRoute: typeof ApiPushApprovalRoute
+  ApiPushPublicKeyRoute: typeof ApiPushPublicKeyRoute
+  ApiPushSubscriptionRoute: typeof ApiPushSubscriptionRoute
   ApiPublicManifestWebmanifestRoute: typeof ApiPublicManifestWebmanifestRoute
   ApiPublicPbSplatRoute: typeof ApiPublicPbSplatRoute
 }
@@ -720,6 +759,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/staff/'
       preLoaderRoute: typeof AuthenticatedStaffIndexRouteImport
       parentRoute: typeof AuthenticatedStaffRoute
+    }
+    '/api/push/subscription': {
+      id: '/api/push/subscription'
+      path: '/api/push/subscription'
+      fullPath: '/api/push/subscription'
+      preLoaderRoute: typeof ApiPushSubscriptionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/push/public-key': {
+      id: '/api/push/public-key'
+      path: '/api/push/public-key'
+      fullPath: '/api/push/public-key'
+      preLoaderRoute: typeof ApiPushPublicKeyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/push/approval': {
+      id: '/api/push/approval'
+      path: '/api/push/approval'
+      fullPath: '/api/push/approval'
+      preLoaderRoute: typeof ApiPushApprovalRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/public/pocketbase-auth': {
       id: '/api/public/pocketbase-auth'
@@ -990,6 +1050,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicAppIconRoute: ApiPublicAppIconRoute,
   ApiPublicAppLogoRoute: ApiPublicAppLogoRoute,
   ApiPublicPocketbaseAuthRoute: ApiPublicPocketbaseAuthRoute,
+  ApiPushApprovalRoute: ApiPushApprovalRoute,
+  ApiPushPublicKeyRoute: ApiPushPublicKeyRoute,
+  ApiPushSubscriptionRoute: ApiPushSubscriptionRoute,
   ApiPublicManifestWebmanifestRoute: ApiPublicManifestWebmanifestRoute,
   ApiPublicPbSplatRoute: ApiPublicPbSplatRoute,
 }

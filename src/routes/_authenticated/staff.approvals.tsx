@@ -267,6 +267,7 @@ function ApprovalsPage() {
         open={showForm}
         onOpenChange={setShowForm}
         creatorId={user?.id || ""}
+        currentUserId={user?.id || ""}
         onCreated={() => { load(); loadStats(); }}
       />
 

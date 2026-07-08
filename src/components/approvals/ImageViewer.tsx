@@ -120,14 +120,14 @@ export function ImageViewer({
                   <ChevronRight className="h-6 w-6" />
                 </button>
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white">
-                  {viewIdx + 1}/{images.length}
+                  {viewIdx! + 1}/{images.length}
                 </div>
               </>
             )}
 
             <img
               src={activeImage.url}
-              alt={`Ảnh ${viewIdx + 1}`}
+              alt={`Ảnh ${viewIdx! + 1}`}
               className="max-h-[88dvh] max-w-[96vw] rounded-lg object-contain shadow-2xl"
             />
           </div>,

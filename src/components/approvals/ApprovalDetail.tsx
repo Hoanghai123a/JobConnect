@@ -61,7 +61,7 @@ export function ApprovalDetail({
   if (!request) return null;
 
   const myResponse = responses.find((r) => r.admin === currentUserId);
-  const canRespond = isAdmin && myResponse?.status === "pending";
+  const canRespond = isAdmin && request.status === "pending" && myResponse?.status === "pending";
   const canComplete = request.status === "approved" && request.creator === currentUserId;
 
   const images = (request.images || []).map((filename) => ({
@@ -141,7 +141,7 @@ export function ApprovalDetail({
           ))}
 
           <div className="space-y-2 rounded-xl border p-3">
-            <div className="text-xs font-medium text-muted-foreground">Phê duyệt của admin</div>
+            <div className="text-xs font-medium text-muted-foreground">Phê duyệt của quản trị viên</div>
             {responses.map((resp) => (
               <div key={resp.id} className="flex items-start gap-2 text-sm">
                 <div className="min-w-0 flex-1">
@@ -168,7 +168,7 @@ export function ApprovalDetail({
           {request.completed_at && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" />
-              Staff xác nhận hoàn thành: {formatTime(request.completed_at)}
+              Nhân viên xác nhận hoàn thành: {formatTime(request.completed_at)}
             </div>
           )}
 
@@ -177,7 +177,7 @@ export function ApprovalDetail({
               <Textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Ghi chú (không bắt buộc)"
+                placeholder="Ghi chú (bắt buộc khi từ chối)"
                 className="min-h-16 rounded-xl text-sm"
               />
               <div className="flex gap-2">
@@ -190,7 +190,13 @@ export function ApprovalDetail({
                   Phê duyệt
                 </Button>
                 <Button
-                  onClick={() => handleRespond("rejected")}
+                  onClick={() => {
+                    if (!note.trim()) {
+                      toast.error("Vui lòng nhập lý do từ chối");
+                      return;
+                    }
+                    handleRespond("rejected");
+                  }}
                   disabled={acting}
                   variant="destructive"
                   className="flex-1 gap-1.5 rounded-xl"

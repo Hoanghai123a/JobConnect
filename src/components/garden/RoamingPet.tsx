@@ -60,18 +60,21 @@ export function RoamingPet() {
   const speechHideTimer = useRef<number | null>(null);
   const reactTimer = useRef<number | null>(null);
   const reactHideTimer = useRef<number | null>(null);
+  const userId = user?.id ?? "";
+  const employeeCode = user?.employee_code?.trim() ?? "";
+  const company = user?.company?.trim() ?? "";
 
   // Tải state + theo dõi thay đổi từ trang vườn.
   useEffect(() => {
-    if (!user?.id) return;
-    const sync = () => setGarden(loadGarden(user.id));
+    if (!userId) return;
+    const sync = () => setGarden(loadGarden(userId));
     sync();
     return onGardenChange(sync);
-  }, [user?.id]);
+  }, [userId]);
 
   // Lấy ngữ cảnh (chấm công hôm nay, tin mới) để thú cưng nhắc đúng việc.
   useEffect(() => {
-    if (!user?.id) return;
+    if (!userId) return;
     let alive = true;
 
     const refresh = async () => {
@@ -81,20 +84,18 @@ export function RoamingPet() {
       const dd = String(today.getDate()).padStart(2, "0");
       const todayKey = `${yyyy}-${mm}-${dd}`;
 
-      const hasEmployment = Boolean(
-        (user as any)?.employee_code?.trim() && (user as any)?.company?.trim(),
-      );
+      const hasEmployment = Boolean(employeeCode && company);
 
       const [attCount, newsCount] = await Promise.all([
         hasEmployment
           ? pb
               .collection("attendance")
-              .getList(1, 1, { filter: `user="${user.id}" && date="${todayKey}"` })
+              .getList(1, 1, { filter: `user="${userId}" && date="${todayKey}"` })
               .then((r) => r.totalItems)
               .catch(() => 1)
           : Promise.resolve(1),
         (async () => {
-          const seen = getSeen("news", user.id);
+          const seen = getSeen("news", userId);
           const seenIso = seen ? new Date(seen).toISOString().replace("T", " ") : "";
           const filter = ["is_active = true", seenIso ? `created > "${seenIso}"` : ""]
             .filter(Boolean)
@@ -120,10 +121,10 @@ export function RoamingPet() {
       alive = false;
       window.clearInterval(id);
     };
-  }, [user?.id]);
+  }, [company, employeeCode, userId]);
 
-  const isStaff = (user as any)?.role === "staff";
-  const enabled = Boolean(user?.id) && !loading && !isStaff && garden?.roamingEnabled !== false;
+  const isStaff = user?.role === "staff";
+  const enabled = Boolean(userId) && !loading && !isStaff && garden?.roamingEnabled !== false;
   const starving = garden ? hunger(garden.pet) <= 0 : false;
 
   const glideDurationRef = useRef(0);
@@ -140,7 +141,7 @@ export function RoamingPet() {
       return { offsetLeft, maxX, y };
     };
 
-    const currentPet = () => petById(loadGarden(user!.id).pet.id);
+    const currentPet = () => petById(loadGarden(userId).pet.id);
 
     const planLeg = () => {
       if (!alive) return;
@@ -148,7 +149,7 @@ export function RoamingPet() {
       seedRef.current = (seedRef.current * 9301 + 49297) % 233280;
       const r = seedRef.current / 233280;
 
-      const current = loadGarden(user!.id);
+      const current = loadGarden(userId);
       const currentMood = petMood(current.pet);
       setMood(currentMood);
 
@@ -209,7 +210,7 @@ export function RoamingPet() {
       if (wanderTimer.current) window.clearTimeout(wanderTimer.current);
       if (moveEndTimer.current) window.clearTimeout(moveEndTimer.current);
     };
-  }, [enabled, user]);
+  }, [enabled, userId]);
 
   // Vòng lặp nói chuyện.
   useEffect(() => {
@@ -219,7 +220,7 @@ export function RoamingPet() {
     const speakOnce = () => {
       if (!alive) return;
       seedRef.current = (seedRef.current * 1103515245 + 12345) & 0x7fffffff;
-      const current = loadGarden(user!.id);
+      const current = loadGarden(userId);
 
       const starving = hunger(current.pet) <= 0;
       const lonely = happiness(current.pet) <= 0;
@@ -263,7 +264,7 @@ export function RoamingPet() {
       if (speakTimer.current) window.clearTimeout(speakTimer.current);
       if (speechHideTimer.current) window.clearTimeout(speechHideTimer.current);
     };
-  }, [enabled, garden, user]);
+  }, [enabled, garden, userId]);
 
   useEffect(() => {
     if (!enabled || !garden) return;
@@ -272,7 +273,7 @@ export function RoamingPet() {
     const reactOnce = () => {
       if (!alive) return;
       seedRef.current = (seedRef.current * 22695477 + 1) & 0x7fffffff;
-      const current = loadGarden(user!.id);
+      const current = loadGarden(userId);
       const emoji = pickReaction(current, seedRef.current, ctxRef.current);
       setReaction({ emoji, key: seedRef.current });
       if (reactHideTimer.current) window.clearTimeout(reactHideTimer.current);
@@ -286,7 +287,7 @@ export function RoamingPet() {
       if (reactTimer.current) window.clearTimeout(reactTimer.current);
       if (reactHideTimer.current) window.clearTimeout(reactHideTimer.current);
     };
-  }, [enabled, garden, user]);
+  }, [enabled, garden, userId]);
 
 
   if (!enabled || !garden || !pos) return null;
@@ -335,10 +336,11 @@ export function RoamingPet() {
                 alt={pet.name}
                 style={{
                   width: pet.frameSize ?? 40,
-                  height: pet.frameSize ?? 40,
+                  height: Math.round((pet.frameSize ?? 40) * 0.82),
                   imageRendering: "pixelated",
+                  objectFit: "contain",
                 }}
-                className="pet-rest inline-block"
+                className="pet-rest inline-block max-w-full"
               />
             ) : pet.sprite && !spriteFailed ? (
               <div

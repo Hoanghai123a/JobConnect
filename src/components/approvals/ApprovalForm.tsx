@@ -20,11 +20,13 @@ export function ApprovalForm({
   open,
   onOpenChange,
   creatorId,
+  currentUserId,
   onCreated,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   creatorId: string;
+  currentUserId: string;
   onCreated: () => void;
 }) {
   const [title, setTitle] = useState("");
@@ -41,9 +43,9 @@ export function ApprovalForm({
     if (!open) return;
     pb.collection("users")
       .getFullList<UserRecord>({ filter: 'role = "admin"', sort: "full_name" })
-      .then((admins) => setAdminList(admins.filter((admin) => admin.id !== creatorId)))
+      .then((admins) => setAdminList(admins.filter((a) => a.id !== currentUserId)))
       .catch(() => {});
-  }, [open, creatorId]);
+  }, [open, currentUserId]);
 
   function reset() {
     setTitle("");
@@ -56,7 +58,7 @@ export function ApprovalForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return toast.error("Vui lòng nhập tiêu đề");
-    if (!selectedAdmins.length) return toast.error("Vui lòng chọn ít nhất 1 admin");
+    if (!selectedAdmins.length) return toast.error("Vui lòng chọn ít nhất 1 quản trị viên");
 
     setSubmitting(true);
     try {
@@ -202,7 +204,7 @@ export function ApprovalForm({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Gửi tới admin * ({selectedAdmins.length} đã chọn)</Label>
+            <Label>Gửi tới quản trị viên * ({selectedAdmins.length} đã chọn)</Label>
             <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border p-2">
               {adminList.map((admin) => (
                 <label
@@ -218,7 +220,7 @@ export function ApprovalForm({
               ))}
               {!adminList.length && (
                 <div className="py-2 text-center text-xs text-muted-foreground">
-                  Không tìm thấy admin
+                  Không tìm thấy quản trị viên
                 </div>
               )}
             </div>

@@ -33,6 +33,7 @@ import { markSeen } from "@/lib/seen";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { findActiveEmploymentByUser } from "@/lib/employment";
+import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { VN_BANKS, buildVietQrUrl, resolveBankName } from "@/lib/vn-banks";
 import { toast } from "sonner";
 import {
@@ -120,6 +121,7 @@ function buildAdvanceFilter(input: {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+  factoryName?: string;
 }) {
   if (!input.isAdmin && !input.userId) return 'id=""';
 
@@ -159,6 +161,7 @@ function buildAdvanceFilter(input: {
   return joinPbFilters([
     roleFilter,
     tabFilter,
+    input.factoryName ? `company="${escapePb(input.factoryName)}"` : "",
     input.dateFrom ? `created>="${input.dateFrom} 00:00:00"` : "",
     input.dateTo ? `created<="${input.dateTo} 23:59:59"` : "",
     searchFilter,
@@ -210,6 +213,8 @@ export function AdvancesPage() {
   const [editAmountText, setEditAmountText] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [factoryFilter, setFactoryFilter] = useState("all");
+  const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [advanceDetail, setAdvanceDetail] = useState<AdvanceRecord | null>(null);
   const [adminNoteDraft, setAdminNoteDraft] = useState("");
@@ -227,6 +232,10 @@ export function AdvancesPage() {
   });
 
   const selectedAdvanceUser = user as UserRecord | null;
+  const selectedFactoryName = useMemo(
+    () => factories.find((factory) => factory.id === factoryFilter)?.name || "",
+    [factories, factoryFilter],
+  );
 
   useEffect(() => {
     setAdminNoteDraft(advanceDetail?.admin_note || "");
@@ -242,6 +251,27 @@ export function AdvancesPage() {
     });
   }, [selectedAdvanceUser?.id, selectedAdvanceUser?.bank_name, selectedAdvanceUser?.bank_account_number, selectedAdvanceUser?.bank_account_name]);
 
+  useEffect(() => {
+    if (!isAdmin) {
+      setFactories([]);
+      setFactoryFilter("all");
+      return;
+    }
+
+    let active = true;
+    fetchFactories()
+      .then((rows) => {
+        if (active) setFactories(rows);
+      })
+      .catch((error: unknown) => {
+        toast.error((error as any)?.message || "Lỗi tải danh sách nhà máy");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAdmin]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -253,6 +283,7 @@ export function AdvancesPage() {
         dateFrom,
         dateTo,
         search,
+        factoryName: isAdmin ? selectedFactoryName : "",
       });
       const res = await pb.collection("advances").getList(1, 300, {
         filter,
@@ -273,7 +304,7 @@ export function AdvancesPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, isAdmin, isStaff, search, tab, user?.id]);
+  }, [dateFrom, dateTo, isAdmin, isStaff, search, selectedFactoryName, tab, user?.id]);
 
   const loadStats = useCallback(async () => {
     const base = buildAdvanceFilter({
@@ -283,6 +314,7 @@ export function AdvancesPage() {
       dateFrom,
       dateTo,
       search,
+      factoryName: isAdmin ? selectedFactoryName : "",
     });
     const withBase = (statusFilter: string) => joinPbFilters([base, statusFilter]);
     const adminPendingFilter = `(status="recruiter_approved" || ${LEGACY_STAFF_REQUESTED_PENDING_FILTER})`;
@@ -296,7 +328,7 @@ export function AdvancesPage() {
       countAdvances(base),
     ]);
     setStats({ pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all });
-  }, [dateFrom, dateTo, isAdmin, isStaff, search, user?.id]);
+  }, [dateFrom, dateTo, isAdmin, isStaff, search, selectedFactoryName, user?.id]);
 
   const loadOutstanding = useCallback(async () => {
     if (!user?.id || isAdmin) {
@@ -326,6 +358,10 @@ export function AdvancesPage() {
   useEffect(() => {
     loadOutstanding().catch(() => {});
   }, [loadOutstanding]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [dateFrom, dateTo, factoryFilter, search, tab]);
 
   const limit = Number(settings.advance_limit || 0);
   const outstanding = isAdmin ? 0 : outstandingAmount;
@@ -961,7 +997,23 @@ export function AdvancesPage() {
         onChipChange={(v) => setTab(v as AdminTab)}
       />
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="space-y-1 sm:col-span-1">
+          <Label className="text-xs">Nhà máy</Label>
+          <Select value={factoryFilter} onValueChange={setFactoryFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Tất cả nhà máy" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tất cả nhà máy</SelectItem>
+              {factories.map((factory) => (
+                <SelectItem key={factory.id} value={factory.id}>
+                  {[factory.code, factory.name].filter(Boolean).join(" - ")}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="space-y-1">
           <Label className="text-xs">Từ ngày</Label>
           <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
@@ -1026,7 +1078,7 @@ export function AdvancesPage() {
           icon={Wallet}
           title="Không có Ứng lương"
           description={
-            search || dateFrom || dateTo
+            search || dateFrom || dateTo || factoryFilter !== "all"
               ? "Không có kết quả phù hợp."
               : "Dữ liệu sẽ hiển thị ở đây."
           }
