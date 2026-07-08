@@ -62,7 +62,7 @@ export function ApprovalDetail({
 
   const myResponse = responses.find((r) => r.admin === currentUserId);
   const canRespond = isAdmin && myResponse?.status === "pending";
-  const canComplete = !isAdmin && request.status === "approved" && request.creator === currentUserId;
+  const canComplete = request.status === "approved" && request.creator === currentUserId;
 
   const images = (request.images || []).map((filename) => ({
     url: getRequestFileUrl(request, filename),

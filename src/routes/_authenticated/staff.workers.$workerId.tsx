@@ -82,7 +82,7 @@ import {
   canReportJoin,
   canReportLeave,
   canViewPayroll,
-  getStaffReasonsForHistory,
+  filterHistoriesForStaffScope,
   isRecentRecruiter,
 } from "@/lib/staff-permissions";
 import { pb, fileUrl, type UserRecord } from "@/lib/pocketbase";
@@ -228,25 +228,24 @@ function StaffWorkerDetailPage() {
               .filter((item) => isFactoryAssignmentActive(item))
               .map((item) => item.factory),
           );
-          const canAccessWorker =
-            viewer.role === "admin" ||
-            isRecentRecruiter(viewer, historyRows) ||
-            historyRows.some(
-              (history) =>
-                getStaffReasonsForHistory(viewer.id, history, managedFactoryIds).length > 0,
-            );
+          const visibleHistoryRows = filterHistoriesForStaffScope(
+            viewer,
+            historyRows,
+            managedFactoryIds,
+          );
+          const canAccessWorker = visibleHistoryRows.length > 0;
 
           if (!canAccessWorker) {
             setLoading(false);
             return;
           }
 
-          const historyUser = historyRows[0]?.expand?.user;
+          const historyUser = visibleHistoryRows[0]?.expand?.user || historyRows[0]?.expand?.user;
           const userRecord = (historyUser || rawUser) as UserRecord | null;
-          const latest = getLatestEmploymentHistory(historyRows);
+          const latest = getLatestEmploymentHistory(visibleHistoryRows);
 
           setWorkerUser(userRecord);
-          setHistories(historyRows);
+          setHistories(visibleHistoryRows);
           setManagedFactoryIds(managedFactoryIds);
           setFactories(factoryRows);
           setMainHouses(mainHouseRows);
@@ -357,7 +356,8 @@ function StaffWorkerDetailPage() {
 
   const reloadHistories = async () => {
     const nextRows = await fetchEmploymentHistories([workerId]);
-    setHistories(nextRows);
+    const nextVisibleRows = filterHistoriesForStaffScope(viewer, nextRows, managedFactoryIds);
+    setHistories(nextVisibleRows);
     const nextLatest = getLatestEmploymentHistory(nextRows);
     await syncLegacyUserWorkFields(workerId, nextLatest);
   };

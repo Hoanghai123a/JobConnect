@@ -80,9 +80,10 @@ function ApprovalsPage() {
     if (!user?.id) return;
     setLoading(true);
     try {
+      const userId = escapePb(user.id);
       const rolePart = isAdmin
-        ? `admins ~ "${escapePb(user.id)}"`
-        : `creator = "${escapePb(user.id)}"`;
+        ? `(admins ~ "${userId}" || creator = "${userId}")`
+        : `creator = "${userId}"`;
       const tabPart = TAB_FILTERS[tab];
       const searchPart = search.trim()
         ? `title ~ "${escapePb(search.trim())}"`
@@ -104,9 +105,10 @@ function ApprovalsPage() {
 
   const loadStats = useCallback(async () => {
     if (!user?.id) return;
+    const userId = escapePb(user.id);
     const rolePart = isAdmin
-      ? `admins ~ "${escapePb(user.id)}"`
-      : `creator = "${escapePb(user.id)}"`;
+      ? `(admins ~ "${userId}" || creator = "${userId}")`
+      : `creator = "${userId}"`;
 
     const counts = await Promise.all(
       (Object.keys(TAB_FILTERS) as Tab[]).map(async (key) => {
@@ -241,15 +243,13 @@ function ApprovalsPage() {
         </div>
       </div>
 
-      {!isAdmin && (
-        <button
-          type="button"
-          onClick={() => setShowForm(true)}
-          className="fixed bottom-20 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition active:scale-95"
-        >
-          <Plus className="h-6 w-6" />
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => setShowForm(true)}
+        className="fixed bottom-20 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition active:scale-95"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
 
       <ApprovalForm
         open={showForm}
@@ -296,4 +296,3 @@ function ApprovalsPage() {
     </PageContainer>
   );
 }
-

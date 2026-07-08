@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Building2, BusFront, ChevronRight, Download, LayoutGrid, MessagesSquare, Newspaper, NotebookPen, RefreshCw, UserCheck, Users } from "lucide-react";
+import { BookOpen, Building2, BusFront, ChevronRight, ClipboardCheck, Download, LayoutGrid, MessagesSquare, Newspaper, NotebookPen, RefreshCw, UserCheck, Users } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -130,12 +130,6 @@ function StaffDashboardPage() {
           description="Lọc 90 ngày gần đây và xuất Excel nhanh."
           icon={Download}
         />
-        <DashboardLink
-          to="/notebook"
-          title="Sổ tay"
-          description="Ghi chú, ghi nợ theo ngày tháng."
-          icon={NotebookPen}
-        />
         <button
           type="button"
           onClick={() => setUtilOpen(true)}
@@ -167,7 +161,9 @@ function StaffDashboardPage() {
             <FeatureTile to="/news" label="Bảng tin" icon={Newspaper} size="compact" />
             <FeatureTile to="/transport" label="Tìm nhà xe" icon={BusFront} size="compact" />
             <FeatureTile to="/chat" label="Trò chuyện" icon={MessagesSquare} size="compact" />
+            <FeatureTile to="/notebook" label="Sổ tay" icon={NotebookPen} size="compact" />
             <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
+            <FeatureTile to="/staff/approvals" label="Phê duyệt" icon={ClipboardCheck} size="compact" />
           </div>
         </DialogContent>
       </Dialog>

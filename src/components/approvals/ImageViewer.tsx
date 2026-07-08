@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { X, ZoomIn } from "lucide-react";
 
 export function ImageViewer({
   images,
@@ -9,6 +10,18 @@ export function ImageViewer({
   className?: string;
 }) {
   const [viewIdx, setViewIdx] = useState<number | null>(null);
+  const activeImage = viewIdx !== null ? images[viewIdx] : null;
+
+  useEffect(() => {
+    if (!activeImage) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setViewIdx(null);
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [activeImage]);
 
   if (!images.length) return null;
 
@@ -21,29 +34,41 @@ export function ImageViewer({
               key={i}
               type="button"
               onClick={() => setViewIdx(i)}
-              className="h-16 w-16 overflow-hidden rounded-lg border shadow-sm transition hover:shadow-md active:scale-95"
+              className="group relative h-16 w-16 overflow-hidden rounded-lg border shadow-sm transition hover:shadow-md active:scale-95"
+              aria-label={`Xem ảnh ${i + 1} kích thước lớn`}
             >
               <img
                 src={img.thumbUrl}
                 alt={`Ảnh ${i + 1}`}
                 className="h-full w-full object-cover"
               />
+              <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition group-hover:bg-black/30 group-hover:opacity-100">
+                <ZoomIn className="h-4 w-4" />
+              </span>
             </button>
           ))}
         </div>
       </div>
 
-      <Dialog open={viewIdx !== null} onOpenChange={() => setViewIdx(null)}>
-        <DialogContent className="max-w-[95vw] p-2 sm:max-w-2xl">
-          {viewIdx !== null && (
+      {activeImage &&
+        createPortal(
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 p-3 sm:p-6">
+            <button
+              type="button"
+              onClick={() => setViewIdx(null)}
+              className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-foreground shadow-lg transition hover:bg-white"
+              aria-label="Đóng ảnh"
+            >
+              <X className="h-5 w-5" />
+            </button>
             <img
-              src={images[viewIdx].url}
+              src={activeImage.url}
               alt={`Ảnh ${viewIdx + 1}`}
-              className="max-h-[80vh] w-full rounded-lg object-contain"
+              className="max-h-[88dvh] max-w-[96vw] rounded-lg object-contain shadow-2xl"
             />
-          )}
-        </DialogContent>
-      </Dialog>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

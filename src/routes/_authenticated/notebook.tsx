@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { fetchStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
@@ -163,15 +164,12 @@ function NotebookPage() {
   }, [statusTab, catFilter, dateFrom, dateTo, search]);
 
   const loadWorkers = useCallback(async () => {
-    if (!isStaffOrAdmin) return;
+    if (!isStaffOrAdmin || !user) return;
     try {
-      const res = await pb.collection("users").getList(1, 500, {
-        sort: "full_name",
-        fields: "id,full_name,username",
-      });
-      setWorkers(res.items as unknown as UserRecord[]);
+      const workspace = await fetchStaffWorkspace(user as UserRecord);
+      setWorkers(workspace.workers.map((w: StaffWorkerRecord) => w.user));
     } catch {}
-  }, [isStaffOrAdmin]);
+  }, [isStaffOrAdmin, user]);
 
   useEffect(() => {
     loadCategories();
@@ -420,15 +418,11 @@ function NotebookPage() {
             {isStaffOrAdmin && (
               <div>
                 <Label className="text-xs">Người lao động</Label>
-                <Select value={fWorker || "__none__"} onValueChange={(v) => setFWorker(v === "__none__" ? "" : v)}>
-                  <SelectTrigger><SelectValue placeholder="Chọn NLĐ" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— Không chọn —</SelectItem>
-                    {workers.map((w) => (
-                      <SelectItem key={w.id} value={w.id}>{w.full_name || w.username}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <WorkerSearchSelect
+                  workers={workers}
+                  value={fWorker}
+                  onChange={setFWorker}
+                />
               </div>
             )}
             <div>
@@ -573,6 +567,105 @@ function EntryCard({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function WorkerSearchSelect({
+  workers,
+  value,
+  onChange,
+}: {
+  workers: UserRecord[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const selectedWorker = workers.find((w) => w.id === value);
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return workers;
+    const q = query.toLowerCase();
+    return workers.filter(
+      (w) =>
+        (w.full_name || "").toLowerCase().includes(q) ||
+        (w.username || "").toLowerCase().includes(q),
+    );
+  }, [workers, query]);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(!open);
+          setTimeout(() => inputRef.current?.focus(), 50);
+        }}
+        className="flex h-10 w-full items-center justify-between rounded-xl border border-border bg-card px-3 text-sm transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+      >
+        <span className={selectedWorker ? "" : "text-muted-foreground"}>
+          {selectedWorker ? selectedWorker.full_name || selectedWorker.username : "Chọn NLĐ"}
+        </span>
+        <svg className="h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xl border border-border bg-card shadow-lg">
+          <div className="p-2">
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Tìm tên lao động..."
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto px-1 pb-1">
+            <button
+              type="button"
+              onClick={() => { onChange(""); setOpen(false); setQuery(""); }}
+              className="w-full rounded-lg px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted transition"
+            >
+              — Không chọn —
+            </button>
+            {filtered.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-muted-foreground">Không tìm thấy</p>
+            ) : (
+              filtered.map((w) => (
+                <button
+                  key={w.id}
+                  type="button"
+                  onClick={() => { onChange(w.id); setOpen(false); setQuery(""); }}
+                  className={cn(
+                    "w-full rounded-lg px-3 py-2 text-left text-sm transition",
+                    w.id === value ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted",
+                  )}
+                >
+                  {w.full_name || w.username}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import type { EmploymentHistoryRecord } from "./employment";
 import type { CccdVersionRecord } from "./cccd-versions";
 
 const DB_NAME = "jobconnect-staff-cache";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_HISTORIES = "employment_histories";
 const STORE_USERS = "users";
 const STORE_CCCD_VERSIONS = "cccd_versions";
@@ -27,6 +27,11 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_META)) {
         db.createObjectStore(STORE_META);
+      }
+      if (request.oldVersion < 3) {
+        for (const store of [STORE_HISTORIES, STORE_USERS, STORE_CCCD_VERSIONS, STORE_META]) {
+          if (db.objectStoreNames.contains(store)) request.transaction?.objectStore(store).clear();
+        }
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -123,19 +128,32 @@ export async function readCachedStaffData(): Promise<{
   }
 }
 
-export async function syncStaffData(): Promise<{
+export async function syncStaffData(opts?: {
+  historyFilter?: string;
+  useCache?: boolean;
+  includeCccdVersions?: boolean;
+}): Promise<{
   histories: EmploymentHistoryRecord[];
   users: UserRecord[];
 }> {
   const db = await openDB();
-  const lastSync = await getLastSyncAt(db);
+  const useCache = opts?.useCache ?? true;
+  const includeCccdVersions = opts?.includeCccdVersions ?? true;
+  const lastSync = useCache ? await getLastSyncAt(db) : "";
 
-  const historyFilter = lastSync ? `updated>"${lastSync}"` : "";
+  const filters = [opts?.historyFilter, lastSync ? `updated>"${lastSync}"` : ""].filter(Boolean);
+  const historyFilter = filters.length ? filters.map((item) => `(${item})`).join(" && ") : "";
   const freshHistories = (await pb.collection("employment_histories").getFullList({
     filter: historyFilter,
     sort: "-join_date,-created",
     expand: "user,factory,recruiter_staff,main_house",
   })) as unknown as EmploymentHistoryRecord[];
+
+  if (!useCache) {
+    const userIds = [...new Set(freshHistories.map((h) => h.user).filter(Boolean))];
+    const users = await fetchUsersBatched(userIds);
+    return { histories: freshHistories, users };
+  }
 
   if (freshHistories.length) {
     await idbPutMany(db, STORE_HISTORIES, freshHistories);
@@ -167,14 +185,16 @@ export async function syncStaffData(): Promise<{
     await idbPutMany(db, STORE_USERS, updatedUsers);
   }
 
-  const cccdVerFilter = lastSync ? `updated>"${lastSync}"` : "";
-  const freshCccdVersions = (await pb.collection("cccd_versions").getFullList({
-    filter: cccdVerFilter,
-    sort: "-created",
-  })) as unknown as CccdVersionRecord[];
+  if (includeCccdVersions) {
+    const cccdVerFilter = lastSync ? `updated>"${lastSync}"` : "";
+    const freshCccdVersions = (await pb.collection("cccd_versions").getFullList({
+      filter: cccdVerFilter,
+      sort: "-created",
+    })) as unknown as CccdVersionRecord[];
 
-  if (freshCccdVersions.length) {
-    await idbPutMany(db, STORE_CCCD_VERSIONS, freshCccdVersions);
+    if (freshCccdVersions.length) {
+      await idbPutMany(db, STORE_CCCD_VERSIONS, freshCccdVersions);
+    }
   }
 
   const allUsers = await idbGetAll<UserRecord>(db, STORE_USERS);

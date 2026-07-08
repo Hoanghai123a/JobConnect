@@ -41,9 +41,9 @@ export function ApprovalForm({
     if (!open) return;
     pb.collection("users")
       .getFullList<UserRecord>({ filter: 'role = "admin"', sort: "full_name" })
-      .then(setAdminList)
+      .then((admins) => setAdminList(admins.filter((admin) => admin.id !== creatorId)))
       .catch(() => {});
-  }, [open]);
+  }, [open, creatorId]);
 
   function reset() {
     setTitle("");
