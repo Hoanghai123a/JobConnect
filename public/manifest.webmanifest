@@ -11,13 +11,13 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/pwa-icon.svg",
+      "src": "/icons/app-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/pwa-icon.svg",
+      "src": "/icons/app-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "maskable"

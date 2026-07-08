@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { fetchAppSettingsRecord } from "@/lib/server-app-brand";
 
+const FALLBACK_ICON = "/icons/app-icon.svg";
+
 export const Route = createFileRoute("/api/public/manifest/webmanifest")({
   server: {
     handlers: {
@@ -11,7 +13,8 @@ export const Route = createFileRoute("/api/public/manifest/webmanifest")({
         const iconVersion = app?.item.updated || app?.item.id || "";
         const iconSrc = app?.item.logo
           ? `/api/public/app-icon${iconVersion ? `?v=${encodeURIComponent(iconVersion)}` : ""}`
-          : "/pwa-icon.svg";
+          : FALLBACK_ICON;
+        const iconType = app?.item.logo ? undefined : "image/svg+xml";
 
         return Response.json(
           {
@@ -27,15 +30,15 @@ export const Route = createFileRoute("/api/public/manifest/webmanifest")({
             orientation: "portrait-primary",
             icons: [
               {
-                src: "/pwa-icon.svg",
+                src: iconSrc,
                 sizes: "any",
-                type: "image/svg+xml",
+                type: iconType,
                 purpose: "any",
               },
               {
-                src: "/pwa-icon.svg",
+                src: iconSrc,
                 sizes: "any",
-                type: "image/svg+xml",
+                type: iconType,
                 purpose: "maskable",
               },
             ],
