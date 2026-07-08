@@ -169,7 +169,19 @@ function ApprovalsPage() {
   ];
 
   return (
-    <PageContainer title="Phê duyệt">
+    <PageContainer
+      title="Phê duyệt"
+      right={
+        <button
+          type="button"
+          onClick={() => setShowForm(true)}
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-primary shadow-sm transition hover:bg-muted active:scale-95"
+          aria-label="Tạo yêu cầu phê duyệt"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      }
+    >
       <div className="space-y-3 pb-24">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard label="Chờ duyệt" value={stats.pending} tone="warning" />
