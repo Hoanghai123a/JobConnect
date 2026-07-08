@@ -37,6 +37,8 @@ export interface GardenBalance {
   lastStolenAt?: number;   // epoch ms — lần cuối bị chộm
   stolenCount?: number;    // số lần bị chộm trong chu kỳ hiện tại (max 2)
   gemsBestScore?: number;
+  minesweeperBestTime?: number;
+  minesweeperBestDifficulty?: string;
   created?: string;
   updated?: string;
 }

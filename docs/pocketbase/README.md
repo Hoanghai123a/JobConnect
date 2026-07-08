@@ -17,6 +17,9 @@ File này chỉ chứa các collection mới cần thêm:
 - `push_subscriptions` (nếu bật thông báo PWA)
 
 Collection `users` đã có sẵn. Chỉ cần đảm bảo field `role` chấp nhận thêm giá trị `staff` (xem hướng dẫn ở `users-role-update.md`).
+Luồng tạo nhanh NLĐ trong mục danh sách lao động còn cần rule `users.create/update`
+cho admin/staff và các field ảnh CCCD/ngân hàng/ngày sinh như hướng dẫn trong
+`users-role-update.md`.
 
 ## Rule cần có trong PocketBase
 
@@ -61,6 +64,8 @@ staff_action_logs
 - QLNM được báo nghỉ cho nhà máy đang quản lý và báo đi làm vào nhà máy mình quản lý.
 - User thường chỉ được tự báo nghỉ, không được tự báo đi làm mới.
 - Mọi thao tác xuất/import/báo ứng/báo nghỉ/báo đi làm/cập nhật STK/chỉnh lịch sử đều được ghi vào `staff_action_logs` khi app thực hiện được thao tác.
+- Tạo nhanh NLĐ ghi đồng thời `users`, `employment_histories`, `cccd_versions`
+  (nếu có ảnh/số CCCD) và `staff_action_logs`.
 
 ## Thông báo PWA
 

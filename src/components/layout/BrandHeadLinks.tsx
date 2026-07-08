@@ -27,10 +27,8 @@ export function BrandHeadLinks() {
   const version = versionParam(settings.updated || settings.id);
 
   useEffect(() => {
-    const manifestHref = `/api/public/manifest/webmanifest${version}`;
     const iconHref = settings.logo ? `/api/public/app-icon${version}` : "/icons/app-icon.svg";
 
-    upsertHeadLink("manifest", manifestHref);
     upsertHeadLink("icon", iconHref);
     upsertHeadLink("apple-touch-icon", iconHref);
   }, [settings.logo, version]);

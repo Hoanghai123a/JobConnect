@@ -1,15 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Search, ShieldCheck, UserRoundSearch } from "lucide-react";
+import { Plus, Search, ShieldCheck, UserRoundSearch } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/ui/status-chip";
+import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
 import { ScopeChip, WorkerQuickDrawer } from "@/components/staff/WorkerQuickDrawer";
-import {
-  fetchStaffWorkspace,
-  type StaffWorkerRecord,
-} from "@/lib/staff-permissions";
+import { fetchStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
 import { fetchFactoryManagers, isFactoryAssignmentActive } from "@/lib/factories";
 import { maskCccd } from "@/lib/employment";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
@@ -25,6 +23,7 @@ type WorkerScope = "all" | "qlnm" | "nvtd" | "working" | "left";
 
 function StaffWorkersPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [workers, setWorkers] = useState<StaffWorkerRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
@@ -35,6 +34,7 @@ function StaffWorkersPage() {
   const [scope, setScope] = useState<WorkerScope>("all");
   const [selected, setSelected] = useState<StaffWorkerRecord | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
 
   const openWorker = (w: StaffWorkerRecord) => {
     setSelected(w);
@@ -74,7 +74,7 @@ function StaffWorkersPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user]);
 
   useEffect(() => {
     loadWorkers();
@@ -112,10 +112,26 @@ function StaffWorkersPage() {
     });
   }, [scope, search, workers]);
 
+  const quickCreateFactories = useMemo(() => {
+    if (user?.role === "admin") return factories;
+    return factories.filter((factory) => managedFactoryIds.has(factory.id));
+  }, [factories, managedFactoryIds, user?.role]);
+
   return (
     <PageContainer
       title="Lao động trong quyền"
       subtitle="Tìm theo mã NV, họ tên, CCCD và nhà máy gần nhất"
+      right={
+        <button
+          type="button"
+          onClick={() => setQuickCreateOpen(true)}
+          className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground shadow active:scale-[0.98]"
+          aria-label="Tạo nhanh tài khoản NLĐ"
+        >
+          <Plus className="h-4 w-4" />
+          Tạo nhanh
+        </button>
+      }
     >
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -181,7 +197,8 @@ function StaffWorkersPage() {
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     Mã NV: {latest?.employee_code || worker.user.employee_code || "Chưa có"} · CCCD:{" "}
                     {maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)}
-                    {latest?.worker_tax_code_snapshot && ` · MST: ${latest.worker_tax_code_snapshot}`}
+                    {latest?.worker_tax_code_snapshot &&
+                      ` · MST: ${latest.worker_tax_code_snapshot}`}
                   </div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {latest?.expand?.factory?.name || "Chưa có nhà máy"} · Người tuyển:{" "}
@@ -234,7 +251,19 @@ function StaffWorkersPage() {
         onClose={closeDrawer}
         onDataChanged={loadWorkers}
       />
+
+      <QuickWorkerAccountDialog
+        open={quickCreateOpen}
+        onOpenChange={setQuickCreateOpen}
+        actor={user as UserRecord}
+        factories={quickCreateFactories}
+        mainHouses={mainHouses}
+        staffUsers={staffUsers}
+        onCreated={async (userId) => {
+          await loadWorkers();
+          navigate({ to: "/staff/workers/$workerId", params: { workerId: userId } });
+        }}
+      />
     </PageContainer>
   );
 }
-

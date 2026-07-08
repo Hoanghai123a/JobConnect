@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Download, Smartphone, X } from "lucide-react";
+import { Download, Monitor, Smartphone, X } from "lucide-react";
 import { isStandaloneMode, usePwaInstallPrompt } from "@/lib/pwa-install";
-import { toast } from "sonner";
 import { IosInstallGuideDialog } from "./IosInstallGuideDialog";
+import { DesktopInstallGuideDialog } from "./DesktopInstallGuideDialog";
 
 const HIDE_FLAG_KEY = "hideInstallBanner";
 const HIDE_UNTIL_KEY = "hideInstallBannerUntil";
@@ -18,6 +18,9 @@ export function InstallFloatingBanner() {
   const [ready, setReady] = useState(false);
   const [hidden, setHidden] = useState(true);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [desktopGuideOpen, setDesktopGuideOpen] = useState(false);
+
+  const isDesktop = !isIos && !isAndroid;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -29,19 +32,7 @@ export function InstallFloatingBanner() {
         return;
       }
 
-      if (isIos) {
-        setHidden(false);
-        setReady(true);
-        return;
-      }
-
-      if (isAndroid) {
-        setHidden(false);
-        setReady(true);
-        return;
-      }
-
-      setHidden(!installPrompt);
+      setHidden(false);
       setReady(true);
     };
 
@@ -57,7 +48,7 @@ export function InstallFloatingBanner() {
     return () => {
       window.removeEventListener("appinstalled", onAppInstalled);
     };
-  }, [installPrompt, isAndroid, isIos]);
+  }, [installPrompt, isAndroid, isIos, isDesktop]);
 
   const close = () => {
     window.localStorage.setItem(HIDE_FLAG_KEY, "true");
@@ -66,15 +57,14 @@ export function InstallFloatingBanner() {
   };
 
   const install = async () => {
-    if (!installPrompt) {
-      toast.info("Chưa thể mở hộp cài đặt", {
-        description:
-          "Vui lòng mở bằng Chrome hoặc Edge, sau đó tải lại trang rồi bấm Cài đặt.",
-      });
+    if (installPrompt) {
+      const choice = await installApp();
+      if (choice === "accepted") setHidden(true);
       return;
     }
-    const choice = await installApp();
-    if (choice === "accepted") setHidden(true);
+    if (isDesktop) {
+      setDesktopGuideOpen(true);
+    }
   };
 
   if (!ready || hidden) return null;
@@ -97,7 +87,7 @@ export function InstallFloatingBanner() {
 
         <div className="flex items-center gap-2.5 pr-4">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
-            {isIos ? <Smartphone className="h-4.5 w-4.5" /> : <Download className="h-4.5 w-4.5" />}
+            {isIos ? <Smartphone className="h-4.5 w-4.5" /> : isDesktop ? <Monitor className="h-4.5 w-4.5" /> : <Download className="h-4.5 w-4.5" />}
           </div>
 
           <div className="min-w-0 flex-1">
@@ -138,6 +128,7 @@ export function InstallFloatingBanner() {
       </div>
 
       <IosInstallGuideDialog open={guideOpen} onOpenChange={setGuideOpen} />
+      <DesktopInstallGuideDialog open={desktopGuideOpen} onOpenChange={setDesktopGuideOpen} />
     </>
   );
 }

@@ -27,6 +27,7 @@ import {
   LayoutGrid,
   Gamepad2,
   Gem,
+  Bomb,
   ChevronRight,
   RefreshCw,
   NotebookPen,
@@ -530,6 +531,12 @@ function DashboardPage() {
                 to="/gems"
                 label="Xếp kim cương"
                 icon={Gem}
+                size="compact"
+              />
+              <FeatureTile
+                to="/minesweeper"
+                label="Dò mìn"
+                icon={Bomb}
                 size="compact"
               />
             </div>

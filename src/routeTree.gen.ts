@@ -20,6 +20,7 @@ import { Route as AuthenticatedTransportRouteImport } from './routes/_authentica
 import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/staff'
 import { Route as AuthenticatedNotebookRouteImport } from './routes/_authenticated/notebook'
 import { Route as AuthenticatedNewsRouteImport } from './routes/_authenticated/news'
+import { Route as AuthenticatedMinesweeperRouteImport } from './routes/_authenticated/minesweeper'
 import { Route as AuthenticatedGuidesRouteImport } from './routes/_authenticated/guides'
 import { Route as AuthenticatedGemsRouteImport } from './routes/_authenticated/gems'
 import { Route as AuthenticatedGardenRouteImport } from './routes/_authenticated/garden'
@@ -36,6 +37,8 @@ import { Route as ApiPushPublicKeyRouteImport } from './routes/api/push/public-k
 import { Route as ApiPushApprovalRouteImport } from './routes/api/push/approval'
 import { Route as ApiPublicPocketbaseAuthRouteImport } from './routes/api/public/pocketbase-auth'
 import { Route as ApiPublicAppLogoRouteImport } from './routes/api/public/app-logo'
+import { Route as ApiPublicAppIcon512RouteImport } from './routes/api/public/app-icon-512'
+import { Route as ApiPublicAppIcon192RouteImport } from './routes/api/public/app-icon-192'
 import { Route as ApiPublicAppIconRouteImport } from './routes/api/public/app-icon'
 import { Route as AuthenticatedStaffRecruitedRouteImport } from './routes/_authenticated/staff.recruited'
 import { Route as AuthenticatedStaffExportRouteImport } from './routes/_authenticated/staff.export'
@@ -111,6 +114,12 @@ const AuthenticatedNewsRoute = AuthenticatedNewsRouteImport.update({
   path: '/news',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedMinesweeperRoute =
+  AuthenticatedMinesweeperRouteImport.update({
+    id: '/minesweeper',
+    path: '/minesweeper',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedGuidesRoute = AuthenticatedGuidesRouteImport.update({
   id: '/guides',
   path: '/guides',
@@ -191,6 +200,16 @@ const ApiPublicPocketbaseAuthRoute = ApiPublicPocketbaseAuthRouteImport.update({
 const ApiPublicAppLogoRoute = ApiPublicAppLogoRouteImport.update({
   id: '/api/public/app-logo',
   path: '/api/public/app-logo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicAppIcon512Route = ApiPublicAppIcon512RouteImport.update({
+  id: '/api/public/app-icon-512',
+  path: '/api/public/app-icon-512',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicAppIcon192Route = ApiPublicAppIcon192RouteImport.update({
+  id: '/api/public/app-icon-192',
+  path: '/api/public/app-icon-192',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicAppIconRoute = ApiPublicAppIconRouteImport.update({
@@ -321,6 +340,7 @@ export interface FileRoutesByFullPath {
   '/garden': typeof AuthenticatedGardenRoute
   '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
+  '/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/news': typeof AuthenticatedNewsRoute
   '/notebook': typeof AuthenticatedNotebookRoute
   '/staff': typeof AuthenticatedStaffRouteWithChildren
@@ -336,6 +356,8 @@ export interface FileRoutesByFullPath {
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
+  '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
+  '/api/public/app-icon-512': typeof ApiPublicAppIcon512Route
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
   '/api/push/approval': typeof ApiPushApprovalRoute
@@ -368,6 +390,7 @@ export interface FileRoutesByTo {
   '/garden': typeof AuthenticatedGardenRoute
   '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
+  '/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/news': typeof AuthenticatedNewsRoute
   '/notebook': typeof AuthenticatedNotebookRoute
   '/transport': typeof AuthenticatedTransportRoute
@@ -380,6 +403,8 @@ export interface FileRoutesByTo {
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
+  '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
+  '/api/public/app-icon-512': typeof ApiPublicAppIcon512Route
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
   '/api/push/approval': typeof ApiPushApprovalRoute
@@ -414,6 +439,7 @@ export interface FileRoutesById {
   '/_authenticated/garden': typeof AuthenticatedGardenRoute
   '/_authenticated/gems': typeof AuthenticatedGemsRoute
   '/_authenticated/guides': typeof AuthenticatedGuidesRoute
+  '/_authenticated/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/_authenticated/news': typeof AuthenticatedNewsRoute
   '/_authenticated/notebook': typeof AuthenticatedNotebookRoute
   '/_authenticated/staff': typeof AuthenticatedStaffRouteWithChildren
@@ -429,6 +455,8 @@ export interface FileRoutesById {
   '/_authenticated/staff/export': typeof AuthenticatedStaffExportRoute
   '/_authenticated/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
+  '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
+  '/api/public/app-icon-512': typeof ApiPublicAppIcon512Route
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
   '/api/push/approval': typeof ApiPushApprovalRoute
@@ -463,6 +491,7 @@ export interface FileRouteTypes {
     | '/garden'
     | '/gems'
     | '/guides'
+    | '/minesweeper'
     | '/news'
     | '/notebook'
     | '/staff'
@@ -478,6 +507,8 @@ export interface FileRouteTypes {
     | '/staff/export'
     | '/staff/recruited'
     | '/api/public/app-icon'
+    | '/api/public/app-icon-192'
+    | '/api/public/app-icon-512'
     | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
     | '/api/push/approval'
@@ -510,6 +541,7 @@ export interface FileRouteTypes {
     | '/garden'
     | '/gems'
     | '/guides'
+    | '/minesweeper'
     | '/news'
     | '/notebook'
     | '/transport'
@@ -522,6 +554,8 @@ export interface FileRouteTypes {
     | '/staff/export'
     | '/staff/recruited'
     | '/api/public/app-icon'
+    | '/api/public/app-icon-192'
+    | '/api/public/app-icon-512'
     | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
     | '/api/push/approval'
@@ -555,6 +589,7 @@ export interface FileRouteTypes {
     | '/_authenticated/garden'
     | '/_authenticated/gems'
     | '/_authenticated/guides'
+    | '/_authenticated/minesweeper'
     | '/_authenticated/news'
     | '/_authenticated/notebook'
     | '/_authenticated/staff'
@@ -570,6 +605,8 @@ export interface FileRouteTypes {
     | '/_authenticated/staff/export'
     | '/_authenticated/staff/recruited'
     | '/api/public/app-icon'
+    | '/api/public/app-icon-192'
+    | '/api/public/app-icon-512'
     | '/api/public/app-logo'
     | '/api/public/pocketbase-auth'
     | '/api/push/approval'
@@ -595,6 +632,8 @@ export interface RootRouteChildren {
   PendingRoute: typeof PendingRoute
   RegisterRoute: typeof RegisterRoute
   ApiPublicAppIconRoute: typeof ApiPublicAppIconRoute
+  ApiPublicAppIcon192Route: typeof ApiPublicAppIcon192Route
+  ApiPublicAppIcon512Route: typeof ApiPublicAppIcon512Route
   ApiPublicAppLogoRoute: typeof ApiPublicAppLogoRoute
   ApiPublicPocketbaseAuthRoute: typeof ApiPublicPocketbaseAuthRoute
   ApiPushApprovalRoute: typeof ApiPushApprovalRoute
@@ -681,6 +720,13 @@ declare module '@tanstack/react-router' {
       path: '/news'
       fullPath: '/news'
       preLoaderRoute: typeof AuthenticatedNewsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/minesweeper': {
+      id: '/_authenticated/minesweeper'
+      path: '/minesweeper'
+      fullPath: '/minesweeper'
+      preLoaderRoute: typeof AuthenticatedMinesweeperRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/guides': {
@@ -793,6 +839,20 @@ declare module '@tanstack/react-router' {
       path: '/api/public/app-logo'
       fullPath: '/api/public/app-logo'
       preLoaderRoute: typeof ApiPublicAppLogoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/app-icon-512': {
+      id: '/api/public/app-icon-512'
+      path: '/api/public/app-icon-512'
+      fullPath: '/api/public/app-icon-512'
+      preLoaderRoute: typeof ApiPublicAppIcon512RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/app-icon-192': {
+      id: '/api/public/app-icon-192'
+      path: '/api/public/app-icon-192'
+      fullPath: '/api/public/app-icon-192'
+      preLoaderRoute: typeof ApiPublicAppIcon192RouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/app-icon': {
@@ -999,6 +1059,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedGardenRoute: typeof AuthenticatedGardenRoute
   AuthenticatedGemsRoute: typeof AuthenticatedGemsRoute
   AuthenticatedGuidesRoute: typeof AuthenticatedGuidesRoute
+  AuthenticatedMinesweeperRoute: typeof AuthenticatedMinesweeperRoute
   AuthenticatedNewsRoute: typeof AuthenticatedNewsRoute
   AuthenticatedNotebookRoute: typeof AuthenticatedNotebookRoute
   AuthenticatedStaffRoute: typeof AuthenticatedStaffRouteWithChildren
@@ -1023,6 +1084,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedGardenRoute: AuthenticatedGardenRoute,
   AuthenticatedGemsRoute: AuthenticatedGemsRoute,
   AuthenticatedGuidesRoute: AuthenticatedGuidesRoute,
+  AuthenticatedMinesweeperRoute: AuthenticatedMinesweeperRoute,
   AuthenticatedNewsRoute: AuthenticatedNewsRoute,
   AuthenticatedNotebookRoute: AuthenticatedNotebookRoute,
   AuthenticatedStaffRoute: AuthenticatedStaffRouteWithChildren,
@@ -1048,6 +1110,8 @@ const rootRouteChildren: RootRouteChildren = {
   PendingRoute: PendingRoute,
   RegisterRoute: RegisterRoute,
   ApiPublicAppIconRoute: ApiPublicAppIconRoute,
+  ApiPublicAppIcon192Route: ApiPublicAppIcon192Route,
+  ApiPublicAppIcon512Route: ApiPublicAppIcon512Route,
   ApiPublicAppLogoRoute: ApiPublicAppLogoRoute,
   ApiPublicPocketbaseAuthRoute: ApiPublicPocketbaseAuthRoute,
   ApiPushApprovalRoute: ApiPushApprovalRoute,

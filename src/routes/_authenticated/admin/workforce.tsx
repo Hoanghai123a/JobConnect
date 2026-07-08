@@ -70,6 +70,7 @@ import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { cn } from "@/lib/utils";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
+import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
 import { RecruitChartDialog } from "@/components/workforce/RecruitChartDialog";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
@@ -144,6 +145,7 @@ function WorkforcePage() {
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [mainHouses, setMainHouses] = useState<MainHouseRecord[]>([]);
   const [openRegister, setOpenRegister] = useState(false);
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [cccdExportOpen, setCccdExportOpen] = useState(false);
   const [chartOpen, setChartOpen] = useState(false);
@@ -211,14 +213,24 @@ function WorkforcePage() {
       title="Nhân sự đi làm"
       subtitle="Quản trị tuyển dụng & danh sách lao động"
       right={
-        <button
-          onClick={() => setOpenRegister(true)}
-          className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground shadow active:scale-[0.98]"
-          aria-label="Đăng ký đi làm"
-        >
-          <Plus className="h-4 w-4" />
-          Đăng ký
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setOpenRegister(true)}
+            className="flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm active:scale-[0.98]"
+            aria-label="Đăng ký đi làm"
+          >
+            <BriefcaseBusiness className="h-4 w-4" />
+            Đăng ký
+          </button>
+          <button
+            onClick={() => setQuickCreateOpen(true)}
+            className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground shadow active:scale-[0.98]"
+            aria-label="Tạo nhanh tài khoản NLĐ"
+          >
+            <Plus className="h-4 w-4" />
+            Tạo nhanh
+          </button>
+        </div>
       }
     >
       <Tabs value={tab} onValueChange={(v) => setTab(v as ActiveTab)} className="space-y-3">
@@ -368,6 +380,21 @@ function WorkforcePage() {
         factories={factories}
         mainHouses={mainHouses}
         onCreated={load}
+      />
+
+      <QuickWorkerAccountDialog
+        open={quickCreateOpen}
+        onOpenChange={setQuickCreateOpen}
+        actor={currentUser}
+        factories={factories}
+        mainHouses={mainHouses}
+        staffUsers={users.filter(
+          (item) => item.role === "staff" || item.role === "admin",
+        )}
+        onCreated={async (userId) => {
+          await load();
+          setSelectedUserId(userId);
+        }}
       />
 
       <AdminWorkerDrawer

@@ -30,16 +30,34 @@ export const Route = createFileRoute("/api/public/manifest/webmanifest")({
             orientation: "portrait-primary",
             icons: [
               {
-                src: iconSrc,
-                sizes: "any",
-                type: iconType,
+                src: "/icons/app-icon-192.png",
+                sizes: "192x192",
+                type: "image/png",
                 purpose: "any",
+              },
+              {
+                src: "/icons/app-icon-512.png",
+                sizes: "512x512",
+                type: "image/png",
+                purpose: "any",
+              },
+              {
+                src: "/icons/app-icon-192.png",
+                sizes: "192x192",
+                type: "image/png",
+                purpose: "maskable",
+              },
+              {
+                src: "/icons/app-icon-512.png",
+                sizes: "512x512",
+                type: "image/png",
+                purpose: "maskable",
               },
               {
                 src: iconSrc,
                 sizes: "any",
                 type: iconType,
-                purpose: "maskable",
+                purpose: "any",
               },
             ],
           },
