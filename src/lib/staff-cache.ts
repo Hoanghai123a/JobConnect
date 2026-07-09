@@ -93,6 +93,15 @@ function idbGet<T>(db: IDBDatabase, store: string, key: IDBValidKey): Promise<T 
   });
 }
 
+function usersFromExpandedHistories(histories: EmploymentHistoryRecord[]): UserRecord[] {
+  const map = new Map<string, UserRecord>();
+  for (const history of histories) {
+    const user = history.expand?.user;
+    if (user?.id) map.set(user.id, user);
+  }
+  return [...map.values()];
+}
+
 function idbClear(db: IDBDatabase, store: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, "readwrite");
@@ -165,15 +174,22 @@ export async function syncStaffData(opts?: {
     sort: "-join_date,-created",
     expand: "user,factory,recruiter_staff,main_house",
   })) as unknown as EmploymentHistoryRecord[];
+  const expandedUsers = usersFromExpandedHistories(freshHistories);
 
   if (!useCache) {
     const userIds = [...new Set(freshHistories.map((h) => h.user).filter(Boolean))];
-    const users = await fetchUsersBatched(userIds);
+    const expandedUserIds = new Set(expandedUsers.map((u) => u.id));
+    const missingIds = userIds.filter((id) => !expandedUserIds.has(id));
+    const fetched = await fetchUsersBatched(missingIds).catch(() => []);
+    const users = [...expandedUsers, ...fetched];
     return { histories: freshHistories, users };
   }
 
   if (freshHistories.length) {
     await idbPutMany(db, STORE_HISTORIES, freshHistories);
+  }
+  if (expandedUsers.length) {
+    await idbPutMany(db, STORE_USERS, expandedUsers);
   }
 
   const allHistories = await idbGetAll<EmploymentHistoryRecord>(db, STORE_HISTORIES);
@@ -186,15 +202,18 @@ export async function syncStaffData(opts?: {
   let updatedUsers: UserRecord[] = [];
 
   if (lastSync) {
-    const freshUsers = (await pb.collection("users").getFullList({
-      filter: `updated>"${lastSync}"`,
-      sort: "full_name,username",
-    })) as unknown as UserRecord[];
+    const freshUsers = (await pb
+      .collection("users")
+      .getFullList({
+        filter: `updated>"${lastSync}"`,
+        sort: "full_name,username",
+      })
+      .catch(() => [])) as unknown as UserRecord[];
     updatedUsers = freshUsers;
   }
 
   if (missingUserIds.length) {
-    const fetched = await fetchUsersBatched(missingUserIds);
+    const fetched = await fetchUsersBatched(missingUserIds).catch(() => []);
     updatedUsers.push(...fetched);
   }
 
@@ -204,10 +223,13 @@ export async function syncStaffData(opts?: {
 
   if (includeCccdVersions) {
     const cccdVerFilter = lastSync ? `updated>"${lastSync}"` : "";
-    const freshCccdVersions = (await pb.collection("cccd_versions").getFullList({
-      filter: cccdVerFilter,
-      sort: "-created",
-    })) as unknown as CccdVersionRecord[];
+    const freshCccdVersions = (await pb
+      .collection("cccd_versions")
+      .getFullList({
+        filter: cccdVerFilter,
+        sort: "-created",
+      })
+      .catch(() => [])) as unknown as CccdVersionRecord[];
 
     if (freshCccdVersions.length) {
       await idbPutMany(db, STORE_CCCD_VERSIONS, freshCccdVersions);

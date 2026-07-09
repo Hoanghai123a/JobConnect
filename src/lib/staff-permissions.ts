@@ -287,11 +287,16 @@ export async function fetchStaffWorkspace(
     const scopeUserIds = [...new Set(synced.histories.map((h) => h.user).filter(Boolean))];
     if (scopeUserIds.length) {
       const cachedHistoryIds = new Set(synced.histories.map((h) => h.id));
-      const extraHistories = (await pb.collection("employment_histories").getFullList({
-        filter: relationInFilter("user", scopeUserIds),
-        sort: "-join_date,-created",
-        expand: "user,factory,recruiter_staff,main_house",
-      })) as unknown as EmploymentHistoryRecord[];
+      const extraHistories: EmploymentHistoryRecord[] = [];
+      for (let i = 0; i < scopeUserIds.length; i += 30) {
+        const batch = scopeUserIds.slice(i, i + 30);
+        const items = (await pb.collection("employment_histories").getFullList({
+          filter: relationInFilter("user", batch),
+          sort: "-join_date,-created",
+          expand: "user,factory,recruiter_staff,main_house",
+        })) as unknown as EmploymentHistoryRecord[];
+        extraHistories.push(...items);
+      }
       const newHistories = extraHistories.filter((h) => !cachedHistoryIds.has(h.id));
       if (newHistories.length) {
         synced.histories.push(...newHistories);

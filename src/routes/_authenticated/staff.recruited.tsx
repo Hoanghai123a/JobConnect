@@ -72,7 +72,8 @@ function StaffRecruitedPage() {
             filter: `role="staff" || role="admin"`,
             sort: "full_name,username",
           })
-          .then((res) => res.items),
+          .then((res) => res.items)
+          .catch(() => [] as UserRecord[]),
         fetchFactoryManagers(user.id),
         fetchMainHouses().catch(() => [] as MainHouseRecord[]),
       ]);

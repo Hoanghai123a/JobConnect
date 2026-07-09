@@ -222,7 +222,7 @@ export function RecruitChartDialog({
               {breakdown.map((group) => (
                 <div
                   key={group.factoryId}
-                  className="rounded-xl border bg-card p-3 space-y-1.5"
+                  className="rounded-xl border bg-card p-3 space-y-2"
                 >
                   <div className="flex items-center gap-1.5 text-xs font-medium">
                     <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
@@ -230,24 +230,55 @@ export function RecruitChartDialog({
                     <span className="text-muted-foreground">— {group.total}</span>
                   </div>
 
-                  <div className="space-y-1 pl-5">
-                    {group.recruiters.map((r) => (
-                      <div
-                        key={r.id}
-                        className="flex items-center gap-1.5 text-xs"
-                      >
-                        <span className="text-foreground">{r.name}</span>
-                        {r.isVendor && (
-                          <span className="rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-medium leading-none text-white">
-                            Đối tác
-                          </span>
+                  {(() => {
+                    const internal = group.recruiters.filter((r) => !r.isVendor);
+                    const vendors = group.recruiters.filter((r) => r.isVendor);
+                    const internalTotal = internal.reduce((s, r) => s + r.count, 0);
+                    const vendorTotal = vendors.reduce((s, r) => s + r.count, 0);
+                    const internalPct = group.total ? Math.round((internalTotal / group.total) * 100) : 0;
+                    const vendorPct = group.total ? Math.round((vendorTotal / group.total) * 100) : 0;
+
+                    return (
+                      <>
+                        {internal.length > 0 && (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 pl-5 text-[11px] font-semibold text-muted-foreground">
+                              <span>Nội bộ</span>
+                              <span className="ml-auto tabular-nums">{internalTotal} ({internalPct}%)</span>
+                            </div>
+                            <div className="space-y-0.5 pl-5">
+                              {internal.map((r) => (
+                                <div key={r.id} className="flex items-center gap-1.5 text-xs">
+                                  <span className="text-foreground">{r.name}</span>
+                                  <span className="ml-auto font-medium tabular-nums">{r.count}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )}
-                        <span className="ml-auto font-medium tabular-nums">
-                          {r.count}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+
+                        {vendors.length > 0 && (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 pl-5 text-[11px] font-semibold text-purple-600">
+                              <span>Đối tác</span>
+                              <span className="ml-auto tabular-nums">{vendorTotal} ({vendorPct}%)</span>
+                            </div>
+                            <div className="space-y-0.5 pl-5">
+                              {vendors.map((r) => (
+                                <div key={r.id} className="flex items-center gap-1.5 text-xs">
+                                  <span className="text-foreground">{r.name}</span>
+                                  <span className="rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-medium leading-none text-white">
+                                    Đối tác
+                                  </span>
+                                  <span className="ml-auto font-medium tabular-nums">{r.count}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
