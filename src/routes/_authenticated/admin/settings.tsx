@@ -6,6 +6,7 @@ import { createStaffActionLog } from "@/lib/staff-log";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppHeader } from "@/components/layout/BottomNav";
+import { PushNotificationSettingsCard } from "@/components/layout/PushNotificationSettingsCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,7 @@ function AdminSettingsPage() {
     <div>
       <AppHeader title="Cài đặt hệ thống" back />
       <div className="p-4">
+        <PushNotificationSettingsCard />
         <Tabs defaultValue="company" className="w-full">
           <TabsList className="grid w-full grid-cols-2 rounded-2xl">
             <TabsTrigger value="company" className="rounded-xl text-xs">

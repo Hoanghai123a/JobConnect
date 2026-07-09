@@ -118,7 +118,11 @@ export async function enablePushNotifications() {
 }
 
 export async function syncExistingPushSubscription() {
-  if (!isPushBrowserSupported() || !isStandaloneMode() || Notification.permission !== "granted") {
+  if (
+    !isPushBrowserSupported() ||
+    (!import.meta.env.DEV && !isStandaloneMode()) ||
+    Notification.permission !== "granted"
+  ) {
     return;
   }
   const registration = await navigator.serviceWorker.ready;

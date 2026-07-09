@@ -131,8 +131,11 @@ export function canReportAdvance(
 export function canViewPayroll(
   viewer: Partial<UserRecord> | null | undefined,
   histories: EmploymentHistoryRecord[],
+  managedFactoryIds?: Set<string>,
 ) {
-  return canReportAdvance(viewer, histories);
+  if (canReportAdvance(viewer, histories)) return true;
+  if (!viewer?.id || viewer.role !== "staff" || !managedFactoryIds?.size) return false;
+  return histories.some((h) => managedFactoryIds.has(h.factory) && isHistoryWithinLast90Days(h));
 }
 
 export function canReportLeave(
@@ -217,7 +220,7 @@ function buildWorkspace(
         reasons: [...reasons],
         isRecentRecruiter: recentRecruiter,
         canReportAdvance: canReportAdvance(viewer, visibleHistories),
-        canViewPayroll: canViewPayroll(viewer, visibleHistories),
+        canViewPayroll: canViewPayroll(viewer, visibleHistories, managedFactoryIds),
         canReportLeave: canReportLeave(viewer, activeHistory, visibleHistories, managedFactoryIds),
         canReportJoin: canReportJoin(viewer, visibleHistories, managedFactoryIds),
       } satisfies StaffWorkerRecord;

@@ -140,19 +140,6 @@ export function WorkerQuickDrawer({
   });
   const [employeeCodeForm, setEmployeeCodeForm] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [payrollLoading, setPayrollLoading] = useState(false);
-  const [attendanceItems, setAttendanceItems] = useState<
-    Array<{ id: string; month?: string; round_no?: number; created?: string }>
-  >([]);
-  const [salaryItems, setSalaryItems] = useState<
-    Array<{
-      id: string;
-      month?: string;
-      round_no?: number;
-      totals?: { net?: number };
-      created?: string;
-    }>
-  >([]);
 
   useEffect(() => {
     if (!worker) return;
@@ -184,35 +171,6 @@ export function WorkerQuickDrawer({
       latest?.employee_code || worker.user.employee_code || "",
     );
   }, [worker, viewer?.id]);
-
-  useEffect(() => {
-    if (view !== "payroll" || !worker || !viewer?.id) return;
-    let alive = true;
-    setPayrollLoading(true);
-    Promise.all([
-      pb
-        .collection("check_attendance_items")
-        .getList(1, 20, { filter: `user="${worker.user.id}"`, sort: "-created" })
-        .then((res) => res.items)
-        .catch(() => []),
-      pb
-        .collection("check_salary_items")
-        .getList(1, 20, { filter: `user="${worker.user.id}"`, sort: "-created" })
-        .then((res) => res.items)
-        .catch(() => []),
-    ])
-      .then(([attendanceRows, salaryRows]) => {
-        if (!alive) return;
-        setAttendanceItems(attendanceRows as typeof attendanceItems);
-        setSalaryItems(salaryRows as typeof salaryItems);
-      })
-      .finally(() => {
-        if (alive) setPayrollLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [view, worker, viewer?.id]);
 
   const joinableFactories = useMemo(() => {
     if (viewer?.role === "admin") return factories;
@@ -557,7 +515,14 @@ export function WorkerQuickDrawer({
                   <ActionButton
                     icon={CalendarRange}
                     label="Check công lương"
-                    onClick={() => setView("payroll")}
+                    onClick={() => {
+                      const id = worker.user.id;
+                      onClose();
+                      setTimeout(
+                        () => navigate({ to: "/staff/workers/$workerId/payroll", params: { workerId: id } }),
+                        150,
+                      );
+                    }}
                   />
                 )}
                 {worker.canReportAdvance && isWorking && (
@@ -889,82 +854,6 @@ export function WorkerQuickDrawer({
             </div>
           )}
 
-          {view === "payroll" && (
-            <div className="space-y-4">
-              <div className="text-sm font-semibold">Check công / lương gần nhất</div>
-              {payrollLoading ? (
-                <div className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">
-                  Đang tải dữ liệu...
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Check công
-                    </div>
-                    {attendanceItems.length === 0 ? (
-                      <div className="rounded-xl border border-border/60 bg-card p-3 text-sm text-muted-foreground">
-                        Chưa có bản ghi check công.
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {attendanceItems.slice(0, 6).map((item) => (
-                          <div
-                            key={item.id}
-                            className="rounded-xl border border-border/60 bg-card p-3 text-sm"
-                          >
-                            <div className="font-semibold">
-                              {item.month || "Không rõ tháng"} · Lần {item.round_no || 1}
-                            </div>
-                            <div className="mt-0.5 text-[11px] text-muted-foreground">
-                              Tạo lúc{" "}
-                              {item.created
-                                ? new Date(item.created).toLocaleDateString("vi-VN")
-                                : "—"}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Check lương
-                    </div>
-                    {salaryItems.length === 0 ? (
-                      <div className="rounded-xl border border-border/60 bg-card p-3 text-sm text-muted-foreground">
-                        Chưa có bản ghi check lương.
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {salaryItems.slice(0, 6).map((item) => (
-                          <div
-                            key={item.id}
-                            className="rounded-xl border border-border/60 bg-card p-3 text-sm"
-                          >
-                            <div className="font-semibold">
-                              {item.month || "Không rõ tháng"} · Lần {item.round_no || 1}
-                            </div>
-                            <div className="mt-0.5 text-[11px] text-muted-foreground">
-                              Thực nhận:{" "}
-                              {new Intl.NumberFormat("vi-VN", {
-                                style: "currency",
-                                currency: "VND",
-                                maximumFractionDigits: 0,
-                              }).format(item.totals?.net || 0)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-              <Button variant="outline" onClick={() => setView("summary")} className="w-full">
-                Quay lại
-              </Button>
-            </div>
-          )}
         </div>
 
         <DrawerFooter>
@@ -977,7 +866,7 @@ export function WorkerQuickDrawer({
   );
 }
 
-type DrawerView = "summary" | "leave" | "join" | "advance" | "bank" | "payroll" | "employee_code";
+type DrawerView = "summary" | "leave" | "join" | "advance" | "bank" | "employee_code";
 
 function ActionButton({
   icon: Icon,

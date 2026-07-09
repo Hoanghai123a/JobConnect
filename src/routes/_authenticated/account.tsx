@@ -11,6 +11,7 @@ import {
   normalizeAccountUsername,
 } from "@/lib/account-identity";
 import { AppHeader } from "@/components/layout/BottomNav";
+import { PushNotificationSettingsCard } from "@/components/layout/PushNotificationSettingsCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -156,6 +157,8 @@ function AccountPage() {
           </div>
         </Card>
 
+        <PushNotificationSettingsCard />
+
         {isAdmin ? (
           <Tabs defaultValue="admin" className="space-y-3">
             <TabsList className="grid h-10 w-full grid-cols-4 rounded-2xl">
@@ -233,6 +236,9 @@ function UserProfileForm() {
         ? {
             full_name: form.full_name || "",
             phone: form.phone || "",
+            bank_name: form.bank_name || "",
+            bank_account_number: form.bank_account_number || "",
+            bank_account_name: form.bank_account_name || "",
           }
         : {
             full_name: form.full_name || "",
@@ -351,38 +357,36 @@ function UserProfileForm() {
         )}
       </Section>
 
-      {!isAdmin && (
-        <Section title="Số tài khoản (STK)">
-          <div className="space-y-1">
-            <Label className="text-xs">Ngân hàng</Label>
-            <Select
-              value={form.bank_name || ""}
-              onValueChange={(v) => setForm({ ...form, bank_name: v })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Chọn ngân hàng" />
-              </SelectTrigger>
-              <SelectContent className="max-h-72">
-                {VN_BANKS.map((b) => (
-                  <SelectItem key={b.code} value={b.name}>
-                    {b.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <TextField
-            label="Số TK"
-            value={form.bank_account_number}
-            onChange={(v) => setForm({ ...form, bank_account_number: v.replace(/\D/g, "") })}
-          />
-          <TextField
-            label="Tên TK"
-            value={form.bank_account_name}
-            onChange={(v) => setForm({ ...form, bank_account_name: v })}
-          />
-        </Section>
-      )}
+      <Section title="Số tài khoản (STK)">
+        <div className="space-y-1">
+          <Label className="text-xs">Ngân hàng</Label>
+          <Select
+            value={form.bank_name || ""}
+            onValueChange={(v) => setForm({ ...form, bank_name: v })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Chọn ngân hàng" />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              {VN_BANKS.map((b) => (
+                <SelectItem key={b.code} value={b.name}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <TextField
+          label="Số TK"
+          value={form.bank_account_number}
+          onChange={(v) => setForm({ ...form, bank_account_number: v.replace(/\D/g, "") })}
+        />
+        <TextField
+          label="Tên TK"
+          value={form.bank_account_name}
+          onChange={(v) => setForm({ ...form, bank_account_name: v })}
+        />
+      </Section>
 
       <Button onClick={save} disabled={saving} className="w-full">
         <Save className="h-4 w-4" /> Lưu thay đổi

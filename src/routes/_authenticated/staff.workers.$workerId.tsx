@@ -92,23 +92,6 @@ export const Route = createFileRoute("/_authenticated/staff/workers/$workerId")(
   component: StaffWorkerDetailPage,
 });
 
-type SalaryItem = {
-  id: string;
-  month?: string;
-  round_no?: number;
-  totals?: {
-    net?: number;
-  };
-  created?: string;
-};
-
-type AttendanceItem = {
-  id: string;
-  month?: string;
-  round_no?: number;
-  created?: string;
-};
-
 type AdvanceItem = {
   id: string;
   amount?: number;
@@ -129,12 +112,9 @@ function StaffWorkerDetailPage() {
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [managedFactoryIds, setManagedFactoryIds] = useState<Set<string>>(new Set());
   const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
-  const [attendanceItems, setAttendanceItems] = useState<AttendanceItem[]>([]);
-  const [salaryItems, setSalaryItems] = useState<SalaryItem[]>([]);
   const [advances, setAdvances] = useState<AdvanceItem[]>([]);
 
   const [advanceOpen, setAdvanceOpen] = useState(false);
-  const [payrollOpen, setPayrollOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
@@ -277,40 +257,6 @@ function StaffWorkerDetailPage() {
   }, [navigate, viewer, workerId]);
 
   useEffect(() => {
-    if (!payrollOpen || !workerUser?.id || !viewer?.id) return;
-    if (!canViewPayroll(viewer, histories)) return;
-
-    let alive = true;
-
-    Promise.all([
-      pb
-        .collection("check_attendance_items")
-        .getList(1, 20, {
-          filter: `user="${workerUser.id}"`,
-          sort: "-created",
-        })
-        .then((res) => res.items)
-        .catch(() => []),
-      pb
-        .collection("check_salary_items")
-        .getList(1, 20, {
-          filter: `user="${workerUser.id}"`,
-          sort: "-created",
-        })
-        .then((res) => res.items)
-        .catch(() => []),
-    ]).then(([attendanceRows, salaryRows]) => {
-      if (!alive) return;
-      setAttendanceItems(attendanceRows as AttendanceItem[]);
-      setSalaryItems(salaryRows as SalaryItem[]);
-    });
-
-    return () => {
-      alive = false;
-    };
-  }, [histories, payrollOpen, viewer, workerUser?.id]);
-
-  useEffect(() => {
     setDetailCccdVersion(null);
     if (!detailHistory?.cccd_version) return;
     setDetailLoading(true);
@@ -328,7 +274,7 @@ function StaffWorkerDetailPage() {
   );
   const recentRecruiter = isRecentRecruiter(viewer, histories);
   const canReportAdvanceForWorker = canReportAdvance(viewer, histories);
-  const canViewPayrollForWorker = canViewPayroll(viewer, histories);
+  const canViewPayrollForWorker = canViewPayroll(viewer, histories, managedFactoryIds);
   const canReportLeaveForWorker = canReportLeave(
     viewer,
     activeHistory,
@@ -747,7 +693,7 @@ function StaffWorkerDetailPage() {
           icon={CalendarRange}
           label="Check công lương"
           disabled={!canViewPayrollForWorker}
-          onClick={() => setPayrollOpen(true)}
+          onClick={() => navigate({ to: "/staff/workers/$workerId/payroll", params: { workerId } })}
         />
         <ActionButton
           icon={Clock3}
@@ -922,71 +868,6 @@ function StaffWorkerDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <Drawer open={payrollOpen} onOpenChange={setPayrollOpen}>
-        <DrawerContent className="max-h-[88dvh]">
-          <DrawerHeader>
-            <DrawerTitle>Check công / lương gần nhất</DrawerTitle>
-            <DrawerDescription>
-              Xem nhanh các kỳ gần đây đã được admin gửi cho người lao động.
-            </DrawerDescription>
-          </DrawerHeader>
-          <div className="space-y-4 overflow-y-auto px-4 pb-4">
-            <div>
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Check công
-              </div>
-              <div className="space-y-2">
-                {attendanceItems.length === 0 ? (
-                  <Card className="rounded-2xl p-3 text-sm text-muted-foreground">
-                    Chưa có bản ghi check công.
-                  </Card>
-                ) : (
-                  attendanceItems.slice(0, 6).map((item) => (
-                    <Card key={item.id} className="rounded-2xl p-3 text-sm">
-                      <div className="font-semibold">
-                        {item.month || "Không rõ tháng"} · Lần {item.round_no || 1}
-                      </div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">
-                        Tạo lúc {formatDate(item.created)}
-                      </div>
-                    </Card>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Check lương
-              </div>
-              <div className="space-y-2">
-                {salaryItems.length === 0 ? (
-                  <Card className="rounded-2xl p-3 text-sm text-muted-foreground">
-                    Chưa có bản ghi check lương.
-                  </Card>
-                ) : (
-                  salaryItems.slice(0, 6).map((item) => (
-                    <Card key={item.id} className="rounded-2xl p-3 text-sm">
-                      <div className="font-semibold">
-                        {item.month || "Không rõ tháng"} · Lần {item.round_no || 1}
-                      </div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">
-                        Thực nhận: {formatMoney(item.totals?.net || 0)}
-                      </div>
-                    </Card>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-          <DrawerFooter>
-            <Button variant="outline" onClick={() => setPayrollOpen(false)} className="rounded-xl">
-              Đóng
-            </Button>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
 
       <Drawer open={leaveOpen} onOpenChange={setLeaveOpen}>
         <DrawerContent className="max-h-[88dvh]">

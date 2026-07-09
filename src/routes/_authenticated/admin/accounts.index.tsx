@@ -1,14 +1,32 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ClipboardList, ShieldCheck } from "lucide-react";
+import { ClipboardList, Landmark, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { StatusChip } from "@/components/ui/status-chip";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { escapePb } from "@/lib/delegations";
+import { VN_BANKS } from "@/lib/vn-banks";
 
 function userSearchFilter(search: string) {
   const q = escapePb(search.trim());
@@ -28,6 +46,13 @@ function AdminAccountsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState<UserRecord[]>([]);
+  const [detailUser, setDetailUser] = useState<UserRecord | null>(null);
+  const [bankForm, setBankForm] = useState({
+    bank_name: "",
+    bank_account_number: "",
+    bank_account_name: "",
+  });
+  const [saving, setSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -55,6 +80,32 @@ function AdminAccountsPage() {
   const filteredUsers = users;
 
   const userCount = useMemo(() => users.length, [users]);
+
+  const openDetail = (user: UserRecord) => {
+    setDetailUser(user);
+    setBankForm({
+      bank_name: user.bank_name || "",
+      bank_account_number: user.bank_account_number || "",
+      bank_account_name: user.bank_account_name || "",
+    });
+  };
+
+  const saveBankUpdate = async () => {
+    if (!detailUser) return;
+    setSaving(true);
+    try {
+      await pb.collection("users").update(detailUser.id, bankForm);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === detailUser.id ? { ...u, ...bankForm } : u)),
+      );
+      setDetailUser((prev) => (prev ? { ...prev, ...bankForm } : prev));
+      toast.success("Đã cập nhật tài khoản ngân hàng");
+    } catch (error: any) {
+      toast.error(error?.message || "Không cập nhật được STK");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <PageContainer
@@ -120,7 +171,11 @@ function AdminAccountsPage() {
         ) : (
           filteredUsers.map((item) => {
             return (
-              <Card key={item.id} className="space-y-3 rounded-2xl p-4 shadow-soft">
+              <Card
+                key={item.id}
+                className="cursor-pointer space-y-3 rounded-2xl p-4 shadow-soft transition-colors hover:bg-muted/30"
+                onClick={() => openDetail(item)}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-semibold">
@@ -130,6 +185,12 @@ function AdminAccountsPage() {
                       @{item.username || "chưa có username"} ·{" "}
                       {item.phone || "chưa có số điện thoại"}
                     </div>
+                    {item.bank_account_number && (
+                      <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <Landmark className="h-3 w-3" />
+                        <span>{item.bank_name || "NH"} · {item.bank_account_number}</span>
+                      </div>
+                    )}
                   </div>
                   <StatusChip tone="neutral">
                     Người dùng
@@ -140,6 +201,116 @@ function AdminAccountsPage() {
           })
         )}
       </div>
+
+      <Drawer open={!!detailUser} onOpenChange={(open) => !open && setDetailUser(null)}>
+        <DrawerContent className="max-h-[88dvh]">
+          <DrawerHeader>
+            <DrawerTitle>
+              {detailUser?.full_name || detailUser?.username || "Chi tiết NLĐ"}
+            </DrawerTitle>
+            <DrawerDescription>
+              @{detailUser?.username || "—"} · {detailUser?.phone || "Chưa có SĐT"}
+            </DrawerDescription>
+          </DrawerHeader>
+          {detailUser && (
+            <div className="space-y-4 overflow-y-auto px-4 pb-4">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="rounded-2xl bg-muted/35 p-3">
+                  <div className="text-[11px] text-muted-foreground">Họ tên</div>
+                  <div className="mt-1 text-sm font-semibold">
+                    {detailUser.full_name || "Chưa có"}
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-muted/35 p-3">
+                  <div className="text-[11px] text-muted-foreground">CCCD</div>
+                  <div className="mt-1 text-sm font-semibold">
+                    {detailUser.cccd || "Chưa có"}
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-muted/35 p-3">
+                  <div className="text-[11px] text-muted-foreground">Điện thoại</div>
+                  <div className="mt-1 text-sm font-semibold">
+                    {detailUser.phone || "Chưa có"}
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-muted/35 p-3">
+                  <div className="text-[11px] text-muted-foreground">Công ty</div>
+                  <div className="mt-1 text-sm font-semibold">
+                    {detailUser.company || "Chưa có"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Landmark className="h-4 w-4 text-primary" />
+                  Cập nhật STK ngân hàng
+                </div>
+                <div className="space-y-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Ngân hàng</Label>
+                    <Select
+                      value={bankForm.bank_name}
+                      onValueChange={(value) =>
+                        setBankForm((c) => ({ ...c, bank_name: value }))
+                      }
+                    >
+                      <SelectTrigger className="rounded-xl">
+                        <SelectValue placeholder="Chọn ngân hàng" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {VN_BANKS.map((bank) => (
+                          <SelectItem key={bank.code} value={bank.name}>
+                            {bank.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Số tài khoản</Label>
+                    <Input
+                      value={bankForm.bank_account_number}
+                      onChange={(e) =>
+                        setBankForm((c) => ({
+                          ...c,
+                          bank_account_number: e.target.value.replace(/\D/g, ""),
+                        }))
+                      }
+                      inputMode="numeric"
+                      placeholder="Nhập số tài khoản"
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Tên chủ tài khoản</Label>
+                    <Input
+                      value={bankForm.bank_account_name}
+                      onChange={(e) =>
+                        setBankForm((c) => ({ ...c, bank_account_name: e.target.value }))
+                      }
+                      placeholder="Nhập tên chủ tài khoản"
+                      className="rounded-xl"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DrawerFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDetailUser(null)}
+              className="rounded-xl"
+            >
+              Đóng
+            </Button>
+            <Button onClick={saveBankUpdate} disabled={saving} className="rounded-xl">
+              {saving ? "Đang lưu..." : "Lưu STK"}
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </PageContainer>
   );
 }

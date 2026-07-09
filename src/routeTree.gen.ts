@@ -58,6 +58,7 @@ import { Route as AuthenticatedStaffWorkersWorkerIdRouteImport } from './routes/
 import { Route as AuthenticatedAdminAccountsStatsRouteImport } from './routes/_authenticated/admin/accounts.stats'
 import { Route as AuthenticatedAdminAccountsLogsRouteImport } from './routes/_authenticated/admin/accounts.logs'
 import { Route as AuthenticatedAdminAccountsFactoriesRouteImport } from './routes/_authenticated/admin/accounts.factories'
+import { Route as AuthenticatedStaffWorkersWorkerIdPayrollRouteImport } from './routes/_authenticated/staff.workers.$workerId.payroll'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
@@ -323,6 +324,12 @@ const AuthenticatedAdminAccountsFactoriesRoute =
     path: '/factories',
     getParentRoute: () => AuthenticatedAdminAccountsRoute,
   } as any)
+const AuthenticatedStaffWorkersWorkerIdPayrollRoute =
+  AuthenticatedStaffWorkersWorkerIdPayrollRouteImport.update({
+    id: '/payroll',
+    path: '/payroll',
+    getParentRoute: () => AuthenticatedStaffWorkersWorkerIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -367,12 +374,13 @@ export interface FileRoutesByFullPath {
   '/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
   '/admin/accounts/stats': typeof AuthenticatedAdminAccountsStatsRoute
-  '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
+  '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRouteWithChildren
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
   '/admin/accounts/': typeof AuthenticatedAdminAccountsIndexRoute
   '/admin/staff/': typeof AuthenticatedAdminStaffIndexRoute
   '/staff/workers/': typeof AuthenticatedStaffWorkersIndexRoute
+  '/staff/workers/$workerId/payroll': typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -414,12 +422,13 @@ export interface FileRoutesByTo {
   '/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
   '/admin/accounts/stats': typeof AuthenticatedAdminAccountsStatsRoute
-  '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
+  '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRouteWithChildren
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
   '/admin/accounts': typeof AuthenticatedAdminAccountsIndexRoute
   '/admin/staff': typeof AuthenticatedAdminStaffIndexRoute
   '/staff/workers': typeof AuthenticatedStaffWorkersIndexRoute
+  '/staff/workers/$workerId/payroll': typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -466,12 +475,13 @@ export interface FileRoutesById {
   '/_authenticated/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/_authenticated/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
   '/_authenticated/admin/accounts/stats': typeof AuthenticatedAdminAccountsStatsRoute
-  '/_authenticated/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
+  '/_authenticated/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRouteWithChildren
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
   '/_authenticated/admin/accounts/': typeof AuthenticatedAdminAccountsIndexRoute
   '/_authenticated/admin/staff/': typeof AuthenticatedAdminStaffIndexRoute
   '/_authenticated/staff/workers/': typeof AuthenticatedStaffWorkersIndexRoute
+  '/_authenticated/staff/workers/$workerId/payroll': typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -524,6 +534,7 @@ export interface FileRouteTypes {
     | '/admin/accounts/'
     | '/admin/staff/'
     | '/staff/workers/'
+    | '/staff/workers/$workerId/payroll'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -571,6 +582,7 @@ export interface FileRouteTypes {
     | '/admin/accounts'
     | '/admin/staff'
     | '/staff/workers'
+    | '/staff/workers/$workerId/payroll'
   id:
     | '__root__'
     | '/'
@@ -622,6 +634,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/accounts/'
     | '/_authenticated/admin/staff/'
     | '/_authenticated/staff/workers/'
+    | '/_authenticated/staff/workers/$workerId/payroll'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -988,15 +1001,37 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAccountsFactoriesRouteImport
       parentRoute: typeof AuthenticatedAdminAccountsRoute
     }
+    '/_authenticated/staff/workers/$workerId/payroll': {
+      id: '/_authenticated/staff/workers/$workerId/payroll'
+      path: '/payroll'
+      fullPath: '/staff/workers/$workerId/payroll'
+      preLoaderRoute: typeof AuthenticatedStaffWorkersWorkerIdPayrollRouteImport
+      parentRoute: typeof AuthenticatedStaffWorkersWorkerIdRoute
+    }
   }
 }
+
+interface AuthenticatedStaffWorkersWorkerIdRouteChildren {
+  AuthenticatedStaffWorkersWorkerIdPayrollRoute: typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
+}
+
+const AuthenticatedStaffWorkersWorkerIdRouteChildren: AuthenticatedStaffWorkersWorkerIdRouteChildren =
+  {
+    AuthenticatedStaffWorkersWorkerIdPayrollRoute:
+      AuthenticatedStaffWorkersWorkerIdPayrollRoute,
+  }
+
+const AuthenticatedStaffWorkersWorkerIdRouteWithChildren =
+  AuthenticatedStaffWorkersWorkerIdRoute._addFileChildren(
+    AuthenticatedStaffWorkersWorkerIdRouteChildren,
+  )
 
 interface AuthenticatedStaffRouteChildren {
   AuthenticatedStaffApprovalsRoute: typeof AuthenticatedStaffApprovalsRoute
   AuthenticatedStaffExportRoute: typeof AuthenticatedStaffExportRoute
   AuthenticatedStaffRecruitedRoute: typeof AuthenticatedStaffRecruitedRoute
   AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
-  AuthenticatedStaffWorkersWorkerIdRoute: typeof AuthenticatedStaffWorkersWorkerIdRoute
+  AuthenticatedStaffWorkersWorkerIdRoute: typeof AuthenticatedStaffWorkersWorkerIdRouteWithChildren
   AuthenticatedStaffWorkersIndexRoute: typeof AuthenticatedStaffWorkersIndexRoute
 }
 
@@ -1006,7 +1041,7 @@ const AuthenticatedStaffRouteChildren: AuthenticatedStaffRouteChildren = {
   AuthenticatedStaffRecruitedRoute: AuthenticatedStaffRecruitedRoute,
   AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
   AuthenticatedStaffWorkersWorkerIdRoute:
-    AuthenticatedStaffWorkersWorkerIdRoute,
+    AuthenticatedStaffWorkersWorkerIdRouteWithChildren,
   AuthenticatedStaffWorkersIndexRoute: AuthenticatedStaffWorkersIndexRoute,
 }
 
