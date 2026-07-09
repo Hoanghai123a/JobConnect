@@ -47,12 +47,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { findOrCreateCccdVersion } from "@/lib/cccd-versions";
-import {
-  displayDateToPocketBase,
-  formatDateForDisplay,
-  scanCccdQrFromFile,
-  type CccdQrData,
-} from "@/lib/cccd-qr";
+import { displayDateToPocketBase, scanCccdQrFromFile, type CccdQrData } from "@/lib/cccd-qr";
 import { findUserByUsernameInsensitive, normalizeAccountUsername } from "@/lib/account-identity";
 import { createEmploymentHistory, syncLegacyUserWorkFields } from "@/lib/employment";
 import type { FactoryRecord } from "@/lib/factories";
@@ -198,7 +193,7 @@ export function QuickWorkerAccountDialog({
       const changes: Partial<QuickWorkerForm> = {
         cccd: data.cccd || "",
         full_name: data.fullName || "",
-        date_of_birth: data.dateOfBirth || "",
+        date_of_birth: data.dateOfBirth ? displayDateToPocketBase(data.dateOfBirth) : "",
         gender: data.gender || "",
         address: data.address || "",
       };
@@ -271,7 +266,7 @@ export function QuickWorkerAccountDialog({
     if (!cccd && !phone) return toast.warning("Nhập CCCD hoặc số điện thoại");
     if (!username) return toast.warning("Không tạo được tên đăng nhập từ SĐT/CCCD");
     if (form.date_of_birth.trim() && !birthForPb) {
-      return toast.warning("Ngày sinh phải theo định dạng dd-mm-yyyy");
+      return toast.warning("Ngày sinh không hợp lệ");
     }
     if (!form.factory) return toast.warning("Chọn công ty/nhà máy");
     if (!form.main_house) return toast.warning("Chọn nhà chính");
@@ -440,12 +435,9 @@ export function QuickWorkerAccountDialog({
               />
               <TextField
                 label="Ngày sinh"
+                type="date"
                 value={form.date_of_birth}
-                onChange={(value) =>
-                  setField("date_of_birth", formatDateForDisplay(value) || value)
-                }
-                placeholder="dd-mm-yyyy"
-                inputMode="numeric"
+                onChange={(value) => setField("date_of_birth", value)}
               />
               <div className="flex flex-col gap-1">
                 <Label className="text-xs">Giới tính</Label>
