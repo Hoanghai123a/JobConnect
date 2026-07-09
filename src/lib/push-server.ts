@@ -122,6 +122,9 @@ export async function savePushSubscription(request: Request) {
   const auth = await getAuthUser(request);
   if (!auth) return jsonError("Phiên đăng nhập không hợp lệ.", 401);
 
+  const adminToken = await getAdminToken();
+  if (!adminToken) return jsonError("Máy chủ chưa cấu hình quyền admin PocketBase.", 424);
+
   const body = await request.json().catch(() => null);
   const endpoint = String(body?.endpoint || "").trim();
   const p256dh = String(body?.p256dh || "").trim();
@@ -145,7 +148,7 @@ export async function savePushSubscription(request: Request) {
   const existing = await pbFetch(
     `/api/collections/push_subscriptions/records?page=1&perPage=1&filter=${filter}&fields=id`,
     {},
-    auth.token,
+    adminToken,
   );
   if (!existing.ok) {
     return jsonError("PocketBase chưa cấu hình collection push_subscriptions.", 424);
@@ -162,7 +165,7 @@ export async function savePushSubscription(request: Request) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     },
-    auth.token,
+    adminToken,
   );
 
   if (!response.ok) return jsonError("Không lưu được thiết bị nhận thông báo.", response.status);
