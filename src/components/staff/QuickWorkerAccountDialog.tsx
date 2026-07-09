@@ -373,166 +373,168 @@ export function QuickWorkerAccountDialog({
 
   return (
     <Dialog open={open} onOpenChange={(value) => !submitting && onOpenChange(value)}>
-      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-5xl">
-        <DialogHeader>
+      <DialogContent className="max-h-[92dvh] gap-0 overflow-hidden p-0 sm:max-w-5xl">
+        <DialogHeader className="shrink-0 border-b bg-background px-5 py-4 pr-14">
           <DialogTitle>Tạo nhanh tài khoản NLĐ</DialogTitle>
           <DialogDescription>
             Tạo tài khoản user và ghi nhận lịch sử đang đi làm trong một bước.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={submit} className="flex flex-col gap-4">
-          <div className="grid gap-3 sm:grid-cols-[220px_1fr]">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-1">
-              <CccdImageBox
-                label="CCCD trước"
-                preview={frontPreview}
-                scanning={scanningSide === "front"}
-                inputRef={frontInputRef}
-                onPick={pickCccdImage("front")}
-                onScan={() => frontFile && scanImage(frontFile, "front")}
-                onClear={() => {
-                  if (frontPreview) URL.revokeObjectURL(frontPreview);
-                  setFrontFile(null);
-                  setFrontPreview("");
-                }}
-              />
-              <CccdImageBox
-                label="CCCD sau"
-                preview={backPreview}
-                scanning={scanningSide === "back"}
-                inputRef={backInputRef}
-                onPick={pickCccdImage("back")}
-                onScan={() => backFile && scanImage(backFile, "back")}
-                onClear={() => {
-                  if (backPreview) URL.revokeObjectURL(backPreview);
-                  setBackFile(null);
-                  setBackPreview("");
-                }}
-              />
-            </div>
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 overflow-y-auto px-5 py-4">
+            <div className="grid gap-3 sm:grid-cols-[220px_1fr]">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-1">
+                <CccdImageBox
+                  label="CCCD trước"
+                  preview={frontPreview}
+                  scanning={scanningSide === "front"}
+                  inputRef={frontInputRef}
+                  onPick={pickCccdImage("front")}
+                  onScan={() => frontFile && scanImage(frontFile, "front")}
+                  onClear={() => {
+                    if (frontPreview) URL.revokeObjectURL(frontPreview);
+                    setFrontFile(null);
+                    setFrontPreview("");
+                  }}
+                />
+                <CccdImageBox
+                  label="CCCD sau"
+                  preview={backPreview}
+                  scanning={scanningSide === "back"}
+                  inputRef={backInputRef}
+                  onPick={pickCccdImage("back")}
+                  onScan={() => backFile && scanImage(backFile, "back")}
+                  onClear={() => {
+                    if (backPreview) URL.revokeObjectURL(backPreview);
+                    setBackFile(null);
+                    setBackPreview("");
+                  }}
+                />
+              </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <TextField
-                label="Họ tên"
-                value={form.full_name}
-                onChange={(value) => setField("full_name", value)}
-                placeholder="Nguyễn Văn A"
-              />
-              <TextField
-                label="CMND/CCCD"
-                value={form.cccd}
-                onChange={(value) => setField("cccd", value.replace(/\D/g, ""))}
-                placeholder="001099012345"
-                inputMode="numeric"
-              />
-              <TextField
-                label="Số điện thoại"
-                value={form.phone}
-                onChange={(value) => setField("phone", value.replace(/[^\d+]/g, ""))}
-                placeholder="0900000001"
-                inputMode="tel"
-              />
-              <TextField
-                label="Ngày sinh"
-                type="date"
-                value={form.date_of_birth}
-                onChange={(value) => setField("date_of_birth", value)}
-              />
-              <div className="flex flex-col gap-1">
-                <Label className="text-xs">Giới tính</Label>
-                <Select value={form.gender} onValueChange={(value) => setField("gender", value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Giới tính" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Nam">Nam</SelectItem>
-                    <SelectItem value="Nữ">Nữ</SelectItem>
-                    <SelectItem value="Khác">Khác</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <TextField
-                label="Ngân hàng"
-                value={form.bank_name}
-                onChange={(value) => setField("bank_name", value)}
-                placeholder="Ngân hàng"
-                list="quick-worker-bank-list"
-              />
-              <TextField
-                label="Số tài khoản"
-                value={form.bank_account_number}
-                onChange={(value) => setField("bank_account_number", value.replace(/\D/g, ""))}
-                placeholder="Số tài khoản"
-                inputMode="numeric"
-              />
-              <TextField
-                label="Chủ tài khoản"
-                value={form.bank_account_name}
-                onChange={(value) => setField("bank_account_name", value)}
-                placeholder="Chủ tài khoản"
-              />
-              <div className="sm:col-span-2">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <TextField
-                  label="Địa chỉ"
-                  value={form.address}
-                  onChange={(value) => setField("address", value)}
-                  placeholder="Địa chỉ theo CCCD"
+                  label="Họ tên"
+                  value={form.full_name}
+                  onChange={(value) => setField("full_name", value)}
+                  placeholder="Nguyễn Văn A"
                 />
-              </div>
-              <ComboboxField
-                label="Người tuyển"
-                placeholder="Chọn người tuyển"
-                options={staffUsers.map((staff) => ({
-                  value: staff.id,
-                  label: staff.full_name || staff.username || staff.id,
-                  description: staff.username || staff.phone || "",
-                }))}
-                value={form.recruiter_staff}
-                onChange={(value) => setField("recruiter_staff", value)}
-              />
-              <TextField
-                label="Ngày vào làm"
-                type="date"
-                value={form.join_date}
-                onChange={(value) => setField("join_date", value)}
-              />
-              <ComboboxField
-                label="Nhà chính"
-                placeholder="Chọn nhà chính"
-                options={mainHouses.map((house) => ({
-                  value: house.id,
-                  label: house.name,
-                  description: house.note || "",
-                }))}
-                value={form.main_house}
-                onChange={(value) => setField("main_house", value)}
-              />
-              <ComboboxField
-                label="Công ty"
-                placeholder="Chọn công ty"
-                options={factories.map((factory) => ({
-                  value: factory.id,
-                  label: factory.name,
-                  description: factory.code || "",
-                }))}
-                value={form.factory}
-                onChange={(value) => setField("factory", value)}
-              />
-              <TextField
-                label="Mã nhân viên"
-                value={form.employee_code}
-                onChange={(value) => setField("employee_code", value)}
-                placeholder="Mã nhân viên"
-              />
-              <div className="sm:col-span-2 lg:col-span-4">
-                <Label className="text-xs">Ghi chú</Label>
-                <Textarea
-                  rows={2}
-                  value={form.note}
-                  onChange={(event) => setField("note", event.target.value)}
-                  placeholder="Ghi chú thêm nếu có"
+                <TextField
+                  label="CMND/CCCD"
+                  value={form.cccd}
+                  onChange={(value) => setField("cccd", value.replace(/\D/g, ""))}
+                  placeholder="001099012345"
+                  inputMode="numeric"
                 />
+                <TextField
+                  label="Số điện thoại"
+                  value={form.phone}
+                  onChange={(value) => setField("phone", value.replace(/[^\d+]/g, ""))}
+                  placeholder="0900000001"
+                  inputMode="tel"
+                />
+                <TextField
+                  label="Ngày sinh"
+                  type="date"
+                  value={form.date_of_birth}
+                  onChange={(value) => setField("date_of_birth", value)}
+                />
+                <div className="flex flex-col gap-1">
+                  <Label className="text-xs">Giới tính</Label>
+                  <Select value={form.gender} onValueChange={(value) => setField("gender", value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Giới tính" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Nam">Nam</SelectItem>
+                      <SelectItem value="Nữ">Nữ</SelectItem>
+                      <SelectItem value="Khác">Khác</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <TextField
+                  label="Ngân hàng"
+                  value={form.bank_name}
+                  onChange={(value) => setField("bank_name", value)}
+                  placeholder="Ngân hàng"
+                  list="quick-worker-bank-list"
+                />
+                <TextField
+                  label="Số tài khoản"
+                  value={form.bank_account_number}
+                  onChange={(value) => setField("bank_account_number", value.replace(/\D/g, ""))}
+                  placeholder="Số tài khoản"
+                  inputMode="numeric"
+                />
+                <TextField
+                  label="Chủ tài khoản"
+                  value={form.bank_account_name}
+                  onChange={(value) => setField("bank_account_name", value)}
+                  placeholder="Chủ tài khoản"
+                />
+                <div className="sm:col-span-2">
+                  <TextField
+                    label="Địa chỉ"
+                    value={form.address}
+                    onChange={(value) => setField("address", value)}
+                    placeholder="Địa chỉ theo CCCD"
+                  />
+                </div>
+                <ComboboxField
+                  label="Người tuyển"
+                  placeholder="Chọn người tuyển"
+                  options={staffUsers.map((staff) => ({
+                    value: staff.id,
+                    label: staff.full_name || staff.username || staff.id,
+                    description: staff.username || staff.phone || "",
+                  }))}
+                  value={form.recruiter_staff}
+                  onChange={(value) => setField("recruiter_staff", value)}
+                />
+                <TextField
+                  label="Ngày vào làm"
+                  type="date"
+                  value={form.join_date}
+                  onChange={(value) => setField("join_date", value)}
+                />
+                <ComboboxField
+                  label="Nhà chính"
+                  placeholder="Chọn nhà chính"
+                  options={mainHouses.map((house) => ({
+                    value: house.id,
+                    label: house.name,
+                    description: house.note || "",
+                  }))}
+                  value={form.main_house}
+                  onChange={(value) => setField("main_house", value)}
+                />
+                <ComboboxField
+                  label="Công ty"
+                  placeholder="Chọn công ty"
+                  options={factories.map((factory) => ({
+                    value: factory.id,
+                    label: factory.name,
+                    description: factory.code || "",
+                  }))}
+                  value={form.factory}
+                  onChange={(value) => setField("factory", value)}
+                />
+                <TextField
+                  label="Mã nhân viên"
+                  value={form.employee_code}
+                  onChange={(value) => setField("employee_code", value)}
+                  placeholder="Mã nhân viên"
+                />
+                <div className="sm:col-span-2 lg:col-span-4">
+                  <Label className="text-xs">Ghi chú</Label>
+                  <Textarea
+                    rows={2}
+                    value={form.note}
+                    onChange={(event) => setField("note", event.target.value)}
+                    placeholder="Ghi chú thêm nếu có"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -545,7 +547,7 @@ export function QuickWorkerAccountDialog({
             ))}
           </datalist>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t bg-background px-5 py-4">
             <Button
               type="button"
               variant="outline"

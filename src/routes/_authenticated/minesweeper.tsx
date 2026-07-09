@@ -573,15 +573,14 @@ function MinesweeperPage() {
               </div>
             )}
           </div>
-          <Card className="flex flex-col items-center gap-2 p-3">
+          <Card className="flex flex-col items-center gap-2 overflow-hidden p-3">
             <div
               ref={boardContainerRef}
               className="w-full touch-none select-none overflow-x-auto"
-              style={{ maxWidth: boardPixelW + 16 }}
             >
               <div
-                className="relative mx-auto"
-                style={{ width: boardPixelW, height: boardPixelH }}
+                className="relative"
+                style={{ width: boardPixelW, height: boardPixelH, minWidth: boardPixelW }}
               >
                 {(board.length > 0 ? board : Array.from({ length: config.rows * config.cols }, (_, i) => ({
                   row: Math.floor(i / config.cols),
