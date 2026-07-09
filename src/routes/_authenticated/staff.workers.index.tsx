@@ -112,11 +112,6 @@ function StaffWorkersPage() {
     });
   }, [scope, search, workers]);
 
-  const quickCreateFactories = useMemo(() => {
-    if (user?.role === "admin") return factories;
-    return factories.filter((factory) => managedFactoryIds.has(factory.id));
-  }, [factories, managedFactoryIds, user?.role]);
-
   return (
     <PageContainer
       title="Lao động trong quyền"
@@ -256,7 +251,7 @@ function StaffWorkersPage() {
         open={quickCreateOpen}
         onOpenChange={setQuickCreateOpen}
         actor={user as UserRecord}
-        factories={quickCreateFactories}
+        factories={factories}
         mainHouses={mainHouses}
         staffUsers={staffUsers}
         onCreated={async (userId) => {

@@ -373,7 +373,7 @@ export function QuickWorkerAccountDialog({
 
   return (
     <Dialog open={open} onOpenChange={(value) => !submitting && onOpenChange(value)}>
-      <DialogContent className="max-h-[92dvh] gap-0 overflow-hidden p-0 sm:max-w-5xl">
+      <DialogContent className="flex h-[92dvh] max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
         <DialogHeader className="shrink-0 border-b bg-background px-5 py-4 pr-14">
           <DialogTitle>Tạo nhanh tài khoản NLĐ</DialogTitle>
           <DialogDescription>
@@ -382,7 +382,7 @@ export function QuickWorkerAccountDialog({
         </DialogHeader>
 
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 overflow-y-auto px-5 py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
             <div className="grid gap-3 sm:grid-cols-[220px_1fr]">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-1">
                 <CccdImageBox
