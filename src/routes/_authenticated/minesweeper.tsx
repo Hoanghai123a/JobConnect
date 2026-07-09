@@ -46,7 +46,6 @@ const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];
 const DAILY_COIN_CAP = 20;
 const COIN_STOP_THRESHOLD = 500;
 const DAILY_PLAY_LIMIT = 5;
-const LONG_PRESS_MS = 400;
 const LEADERBOARD_TOP = 5;
 const LEADERBOARD_MAX = 50;
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -235,8 +234,7 @@ function MinesweeperPage() {
   const [cellSize, setCellSize] = useState(36);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressFired = useRef(false);
+  const pointerStartPos = useRef<{ x: number; y: number } | null>(null);
   const boardContainerRef = useRef<HTMLDivElement | null>(null);
   const balanceRef = useRef<GardenBalance | null>(null);
   const dailyEarnedRef = useRef(0);
@@ -449,23 +447,20 @@ function MinesweeperPage() {
     if (checkWin(currentBoard)) handleWin(currentBoard, timer);
   }, [board, gameState, config, timer, user?.id, dailyPlays, playsLeft, handleWin, handleLose]);
 
-  const handlePointerDown = useCallback((row: number, col: number) => {
-    longPressFired.current = false;
-    longPressRef.current = setTimeout(() => {
-      longPressFired.current = true;
-      handleCellAction(row, col, true);
-    }, LONG_PRESS_MS);
-  }, [handleCellAction]);
+  const handlePointerDown = useCallback((_row: number, _col: number, e: React.PointerEvent) => {
+    pointerStartPos.current = { x: e.clientX, y: e.clientY };
+  }, []);
 
-  const handlePointerUp = useCallback((row: number, col: number) => {
-    if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; }
-    if (longPressFired.current) return;
+  const handlePointerUp = useCallback((row: number, col: number, e: React.PointerEvent) => {
+    if (pointerStartPos.current) {
+      const dx = Math.abs(e.clientX - pointerStartPos.current.x);
+      const dy = Math.abs(e.clientY - pointerStartPos.current.y);
+      if (dx > 8 || dy > 8) return;
+    }
     handleCellAction(row, col, flagMode);
   }, [handleCellAction, flagMode]);
 
-  const handlePointerLeave = useCallback(() => {
-    if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; }
-  }, []);
+  const handlePointerLeave = useCallback(() => {}, []);
 
   const myRank = useMemo(() => {
     if (!user?.id) return null;
@@ -505,78 +500,64 @@ function MinesweeperPage() {
         </TabsList>
 
         <TabsContent value="play" className="mt-0 flex flex-col gap-3">
-          <section className="gradient-hero overflow-hidden rounded-3xl p-4 text-white shadow-soft">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-xs uppercase tracking-wide text-white/70">
-                  Độ khó: {config.label}
-                </div>
-                <div className="mt-1 text-xl font-semibold leading-tight">Dò mìn</div>
-                <div className="mt-1 text-sm text-white/80">
-                  {config.rows}x{config.cols} - {config.mines} quả mìn
-                </div>
-              </div>
-              <div className="rounded-2xl bg-white/15 p-3 backdrop-blur">
-                <Bomb className="h-6 w-6" />
-              </div>
+          <div className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] z-20 -mx-4 space-y-2 bg-background px-4 pb-2 pt-1">
+            <div className="flex gap-2">
+              {DIFFICULTIES.map((d) => (
+                <Button
+                  key={d}
+                  size="sm"
+                  variant={difficulty === d ? "default" : "outline"}
+                  className="flex-1 text-xs"
+                  onClick={() => startNewGame(d)}
+                >
+                  {DIFFICULTY_CONFIG[d].label}
+                </Button>
+              ))}
             </div>
-          </section>
 
-          <div className="flex gap-2">
-            {DIFFICULTIES.map((d) => (
+            <div className="grid grid-cols-4 gap-2">
+              <Card className="p-2 text-center">
+                <div className="text-[10px] text-muted-foreground"><Clock className="mx-auto h-3 w-3" /></div>
+                <div className="text-sm font-semibold">{formatTime(timer)}</div>
+              </Card>
+              <Card className="p-2 text-center">
+                <div className="text-[10px] text-muted-foreground"><Bomb className="mx-auto h-3 w-3" /></div>
+                <div className="text-sm font-semibold">{minesLeft}</div>
+              </Card>
+              <Card className="p-2 text-center">
+                <div className="text-[10px] text-muted-foreground">Lượt</div>
+                <div className="text-sm font-semibold">{playsLeft}</div>
+              </Card>
+              <Card className="p-2 text-center">
+                <div className="text-[10px] text-muted-foreground">Xu</div>
+                <div className="text-sm font-semibold">{dailyEarned}</div>
+              </Card>
+            </div>
+
+            <div className="flex items-center gap-2">
               <Button
-                key={d}
                 size="sm"
-                variant={difficulty === d ? "default" : "outline"}
-                className="flex-1 text-xs"
-                onClick={() => startNewGame(d)}
+                variant={flagMode ? "default" : "outline"}
+                className={cn("gap-1 text-xs", flagMode && "bg-red-500 hover:bg-red-600")}
+                onClick={() => setFlagMode(!flagMode)}
               >
-                {DIFFICULTY_CONFIG[d].label}
+                <Flag className="h-3.5 w-3.5" /> {flagMode ? "Đang cắm cờ" : "Cắm cờ"}
               </Button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-4 gap-2">
-            <Card className="p-2 text-center">
-              <div className="text-[10px] text-muted-foreground"><Clock className="mx-auto h-3 w-3" /></div>
-              <div className="text-sm font-semibold">{formatTime(timer)}</div>
-            </Card>
-            <Card className="p-2 text-center">
-              <div className="text-[10px] text-muted-foreground"><Bomb className="mx-auto h-3 w-3" /></div>
-              <div className="text-sm font-semibold">{minesLeft}</div>
-            </Card>
-            <Card className="p-2 text-center">
-              <div className="text-[10px] text-muted-foreground">Lượt</div>
-              <div className="text-sm font-semibold">{playsLeft}</div>
-            </Card>
-            <Card className="p-2 text-center">
-              <div className="text-[10px] text-muted-foreground">Xu</div>
-              <div className="text-sm font-semibold">{dailyEarned}</div>
-            </Card>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant={flagMode ? "default" : "outline"}
-              className={cn("gap-1 text-xs", flagMode && "bg-red-500 hover:bg-red-600")}
-              onClick={() => setFlagMode(!flagMode)}
-            >
-              <Flag className="h-3.5 w-3.5" /> {flagMode ? "Đang cắm cờ" : "Cắm cờ"}
-            </Button>
-            <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => startNewGame()}>
-              <RotateCcw className="h-3.5 w-3.5" /> Chơi lại
-            </Button>
-            {bestTimes[difficulty] !== null && (
-              <div className="ml-auto text-xs text-muted-foreground">
-                Kỷ lục: {formatTime(bestTimes[difficulty]!)}
-              </div>
-            )}
+              <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => startNewGame()}>
+                <RotateCcw className="h-3.5 w-3.5" /> Chơi lại
+              </Button>
+              {bestTimes[difficulty] !== null && (
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Kỷ lục: {formatTime(bestTimes[difficulty]!)}
+                </div>
+              )}
+            </div>
           </div>
           <Card className="flex flex-col items-center gap-2 overflow-hidden p-3">
             <div
               ref={boardContainerRef}
-              className="w-full touch-none select-none overflow-x-auto"
+              className="w-full select-none overflow-auto"
+              style={{ touchAction: "pan-x pan-y" }}
             >
               <div
                 className="relative"
@@ -609,8 +590,8 @@ function MinesweeperPage() {
                         isMineRevealed && "border-red-200 bg-red-100",
                       )}
                       style={{ width: cellSize, height: cellSize, left, top, fontSize: Math.max(10, cellSize * 0.4) }}
-                      onPointerDown={() => handlePointerDown(cell.row, cell.col)}
-                      onPointerUp={() => handlePointerUp(cell.row, cell.col)}
+                      onPointerDown={(e) => handlePointerDown(cell.row, cell.col, e)}
+                      onPointerUp={(e) => handlePointerUp(cell.row, cell.col, e)}
                       onPointerLeave={handlePointerLeave}
                       initial={false}
                       animate={{
