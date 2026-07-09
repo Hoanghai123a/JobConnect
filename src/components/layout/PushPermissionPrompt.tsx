@@ -29,7 +29,11 @@ export function PushPermissionPrompt() {
 
     const timer = window.setTimeout(async () => {
       const state = await getPushSupportState().catch(() => null);
-      if (!alive || !state?.supported || !state.standalone || !state.configured) return;
+      if (!alive || !state?.supported || !state.standalone) return;
+      if (!state.configured) {
+        console.warn("[push] Thiếu VAPID_PUBLIC_KEY nên chưa hiện popup bật thông báo.");
+        return;
+      }
 
       if (state.permission === "granted") {
         syncExistingPushSubscription().catch(() => undefined);

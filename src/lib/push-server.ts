@@ -28,7 +28,9 @@ type PushSubscriptionRecord = {
 let cachedAdminToken: string | null = null;
 
 function env(name: string) {
-  return typeof process !== "undefined" ? process.env[name] || "" : "";
+  const processValue = typeof process !== "undefined" ? process.env[name] || "" : "";
+  if (processValue) return processValue;
+  return (import.meta.env as Record<string, string | undefined>)?.[name] || "";
 }
 
 function escapePb(value: string) {

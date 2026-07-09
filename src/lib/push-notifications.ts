@@ -18,7 +18,7 @@ type PushSubscriptionPayload = {
   };
 };
 
-function authHeaders() {
+function authHeaders(): Record<string, string> {
   const token = pb.authStore.token;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
@@ -32,14 +32,20 @@ function urlBase64ToUint8Array(value: string) {
   return output;
 }
 
+const DISMISS_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+
 export function getPushDismissed(userId: string) {
   if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(`${PUSH_DISMISSED_PREFIX}${userId}`) === "1";
+  const raw = window.localStorage.getItem(`${PUSH_DISMISSED_PREFIX}${userId}`);
+  if (!raw) return false;
+  const dismissedAt = Number(raw);
+  if (Number.isNaN(dismissedAt)) return false;
+  return Date.now() - dismissedAt < DISMISS_COOLDOWN_MS;
 }
 
 export function setPushDismissed(userId: string) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(`${PUSH_DISMISSED_PREFIX}${userId}`, "1");
+  window.localStorage.setItem(`${PUSH_DISMISSED_PREFIX}${userId}`, String(Date.now()));
 }
 
 export function isPushBrowserSupported() {
@@ -56,7 +62,7 @@ export async function getVapidPublicKey() {
 
 export async function getPushSupportState(): Promise<PushSupportState> {
   const supported = isPushBrowserSupported();
-  const standalone = isStandaloneMode();
+  const standalone = import.meta.env.DEV || isStandaloneMode();
   const permission = supported ? Notification.permission : "unsupported";
   const configured = supported ? Boolean(await getVapidPublicKey().catch(() => "")) : false;
   return { supported, standalone, permission, configured };
@@ -91,7 +97,7 @@ async function saveSubscription(subscription: PushSubscription) {
 
 export async function enablePushNotifications() {
   if (!isPushBrowserSupported()) throw new Error("Thiết bị chưa hỗ trợ thông báo.");
-  if (!isStandaloneMode()) throw new Error("Chỉ bật thông báo khi dùng app đã cài.");
+  if (!import.meta.env.DEV && !isStandaloneMode()) throw new Error("Chỉ bật thông báo khi dùng app đã cài.");
 
   const publicKey = await getVapidPublicKey();
   if (!publicKey) throw new Error("Máy chủ chưa cấu hình khóa thông báo.");
