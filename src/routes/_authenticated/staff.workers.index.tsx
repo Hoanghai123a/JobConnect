@@ -14,6 +14,7 @@ import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { useAuth } from "@/lib/auth";
 import { pb, type UserRecord } from "@/lib/pocketbase";
+import { readCachedAuxData, writeCachedAuxData } from "@/lib/staff-cache";
 
 export const Route = createFileRoute("/_authenticated/staff/workers/")({
   component: StaffWorkersPage,
@@ -49,8 +50,21 @@ function StaffWorkersPage() {
     if (!user?.id) return;
     setLoading(true);
     try {
+      const auxCached = await readCachedAuxData();
+      if (auxCached) {
+        setFactories(auxCached.factories);
+        setMainHouses(auxCached.mainHouses);
+        setStaffUsers(auxCached.staffUsers);
+      }
+
       const [workspace, factoryList, staffList, managerRows, mainHouseList] = await Promise.all([
-        fetchStaffWorkspace(user as UserRecord),
+        fetchStaffWorkspace(user as UserRecord, {
+          onCacheReady: (cachedResult) => {
+            setWorkers(cachedResult.workers);
+            setManagedFactoryIds(cachedResult.managedFactoryIds);
+            setLoading(false);
+          },
+        }),
         fetchFactories(),
         pb
           .collection("users")
@@ -71,6 +85,12 @@ function StaffWorkersPage() {
           managerRows.filter((item) => isFactoryAssignmentActive(item)).map((item) => item.factory),
         ),
       );
+
+      writeCachedAuxData({
+        factories: factoryList,
+        mainHouses: mainHouseList,
+        staffUsers: staffList,
+      });
     } finally {
       setLoading(false);
     }

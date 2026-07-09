@@ -1,4 +1,4 @@
-import { type UserRecord } from "./pocketbase";
+import { pb, type UserRecord } from "./pocketbase";
 import {
   getLatestEmploymentHistory,
   isHistoryWithinLast90Days,
@@ -9,6 +9,11 @@ import {
   readCachedStaffData,
   syncStaffData,
   fetchUsersBatched,
+  buildScopeFingerprint,
+  isCacheScopeValid,
+  saveScopeFingerprint,
+  clearStaffCache,
+  idbPutManyHistories,
 } from "./staff-cache";
 import { escapePb, relationInFilter } from "./delegations";
 
@@ -56,7 +61,10 @@ function compareRecentHistories(a: EmploymentHistoryRecord, b: EmploymentHistory
 }
 
 function toDateOnly(value: Date) {
-  return value.toISOString().slice(0, 10);
+  const y = value.getFullYear();
+  const m = String(value.getMonth() + 1).padStart(2, "0");
+  const d = String(value.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function buildScopedHistoryFilter(viewer: UserRecord, managedFactoryIds: Set<string>) {
@@ -66,7 +74,7 @@ function buildScopedHistoryFilter(viewer: UserRecord, managedFactoryIds: Set<str
   if (managedFactoryIds.size > 0) {
     const referenceDate = new Date();
     const windowStart = new Date(referenceDate);
-    windowStart.setDate(windowStart.getDate() - 90);
+    windowStart.setDate(windowStart.getDate() - 180);
     const dateFilter = [
       `join_date <= "${toDateOnly(referenceDate)}"`,
       `(status="working" || leave_date >= "${toDateOnly(windowStart)}")`,
@@ -184,11 +192,18 @@ function buildWorkspace(
       const user = workerMap.get(userId);
       if (!user) return null;
 
-      const visibleHistories = filterHistoriesForStaffScope(
-        viewer,
-        userHistories,
-        managedFactoryIds,
-      );
+      const hasAccess =
+        viewer.role === "admin" ||
+        userHistories.some((h) =>
+          canViewHistoryInStaffScope(viewer, h, userHistories, managedFactoryIds),
+        );
+      if (!hasAccess) return null;
+
+      const visibleHistories =
+        viewer.role === "admin"
+          ? userHistories
+          : filterHistoriesForStaffScope(viewer, userHistories, managedFactoryIds);
+
       if (!visibleHistories.length) return null;
 
       const latestHistory = getLatestEmploymentHistory(visibleHistories);
@@ -244,8 +259,18 @@ export async function fetchStaffWorkspace(
     managers.filter((item) => isFactoryAssignmentActive(item)).map((item) => item.factory),
   );
 
-  const useCache = viewer.role === "admin";
-  const cached = useCache ? await readCachedStaffData() : null;
+  const useCache = viewer.role === "admin" || viewer.role === "staff";
+
+  let cacheValid = false;
+  if (useCache) {
+    const fingerprint = buildScopeFingerprint(viewer.id, managedFactoryIds);
+    cacheValid = await isCacheScopeValid(fingerprint);
+    if (!cacheValid) {
+      await clearStaffCache();
+    }
+  }
+
+  const cached = useCache && cacheValid ? await readCachedStaffData() : null;
   if (cached) {
     const cachedResult = buildWorkspace(viewer, cached.histories, cached.users, managedFactoryIds);
     opts?.onCacheReady?.(cachedResult);
@@ -256,6 +281,28 @@ export async function fetchStaffWorkspace(
     useCache,
     includeCccdVersions: useCache,
   });
+
+  // Fetch all remaining histories for users found in scope (first sync only)
+  if (useCache && !cacheValid && viewer.role === "staff") {
+    const scopeUserIds = [...new Set(synced.histories.map((h) => h.user).filter(Boolean))];
+    if (scopeUserIds.length) {
+      const cachedHistoryIds = new Set(synced.histories.map((h) => h.id));
+      const extraHistories = (await pb.collection("employment_histories").getFullList({
+        filter: relationInFilter("user", scopeUserIds),
+        sort: "-join_date,-created",
+        expand: "user,factory,recruiter_staff,main_house",
+      })) as unknown as EmploymentHistoryRecord[];
+      const newHistories = extraHistories.filter((h) => !cachedHistoryIds.has(h.id));
+      if (newHistories.length) {
+        synced.histories.push(...newHistories);
+        await idbPutManyHistories(newHistories);
+      }
+    }
+  }
+
+  if (useCache) {
+    await saveScopeFingerprint(buildScopeFingerprint(viewer.id, managedFactoryIds));
+  }
 
   const userIds = [...new Set(synced.histories.map((h) => h.user).filter(Boolean))];
   const cachedUserIds = new Set(synced.users.map((u) => u.id));

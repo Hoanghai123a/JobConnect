@@ -2,12 +2,17 @@ import { pb, type UserRecord } from "./pocketbase";
 import { relationInFilter } from "./delegations";
 import type { EmploymentHistoryRecord } from "./employment";
 import type { CccdVersionRecord } from "./cccd-versions";
+import type { FactoryRecord } from "./factories";
+import type { MainHouseRecord } from "./main-houses";
 
 const DB_NAME = "jobconnect-staff-cache";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const STORE_HISTORIES = "employment_histories";
 const STORE_USERS = "users";
 const STORE_CCCD_VERSIONS = "cccd_versions";
+const STORE_FACTORIES = "factories";
+const STORE_MAIN_HOUSES = "main_houses";
+const STORE_STAFF_USERS = "staff_users";
 const STORE_META = "_meta";
 const BATCH_SIZE = 50;
 
@@ -25,11 +30,23 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_CCCD_VERSIONS)) {
         db.createObjectStore(STORE_CCCD_VERSIONS, { keyPath: "id" });
       }
+      if (!db.objectStoreNames.contains(STORE_FACTORIES)) {
+        db.createObjectStore(STORE_FACTORIES, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(STORE_MAIN_HOUSES)) {
+        db.createObjectStore(STORE_MAIN_HOUSES, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(STORE_STAFF_USERS)) {
+        db.createObjectStore(STORE_STAFF_USERS, { keyPath: "id" });
+      }
       if (!db.objectStoreNames.contains(STORE_META)) {
         db.createObjectStore(STORE_META);
       }
-      if (request.oldVersion < 3) {
-        for (const store of [STORE_HISTORIES, STORE_USERS, STORE_CCCD_VERSIONS, STORE_META]) {
+      if (request.oldVersion < 4) {
+        for (const store of [
+          STORE_HISTORIES, STORE_USERS, STORE_CCCD_VERSIONS,
+          STORE_FACTORIES, STORE_MAIN_HOUSES, STORE_STAFF_USERS, STORE_META,
+        ]) {
           if (db.objectStoreNames.contains(store)) request.transaction?.objectStore(store).clear();
         }
       }
@@ -231,6 +248,67 @@ export async function clearStaffCache(): Promise<void> {
     await idbClear(db, STORE_HISTORIES);
     await idbClear(db, STORE_USERS);
     await idbClear(db, STORE_CCCD_VERSIONS);
+    await idbClear(db, STORE_FACTORIES);
+    await idbClear(db, STORE_MAIN_HOUSES);
+    await idbClear(db, STORE_STAFF_USERS);
     await idbClear(db, STORE_META);
+  } catch {}
+}
+
+export function buildScopeFingerprint(viewerId: string, managedFactoryIds: Set<string>): string {
+  return [viewerId, ...[...managedFactoryIds].sort()].join("|");
+}
+
+export async function isCacheScopeValid(currentFingerprint: string): Promise<boolean> {
+  try {
+    const db = await openDB();
+    const stored = await idbGet<string>(db, STORE_META, "scopeFingerprint");
+    return stored === currentFingerprint;
+  } catch {
+    return false;
+  }
+}
+
+export async function saveScopeFingerprint(fingerprint: string): Promise<void> {
+  try {
+    const db = await openDB();
+    await idbPut(db, STORE_META, fingerprint, "scopeFingerprint");
+  } catch {}
+}
+
+export async function readCachedAuxData(): Promise<{
+  factories: FactoryRecord[];
+  mainHouses: MainHouseRecord[];
+  staffUsers: UserRecord[];
+} | null> {
+  try {
+    const db = await openDB();
+    const factories = await idbGetAll<FactoryRecord>(db, STORE_FACTORIES);
+    const mainHouses = await idbGetAll<MainHouseRecord>(db, STORE_MAIN_HOUSES);
+    const staffUsers = await idbGetAll<UserRecord>(db, STORE_STAFF_USERS);
+    if (!factories.length) return null;
+    return { factories, mainHouses, staffUsers };
+  } catch {
+    return null;
+  }
+}
+
+export async function writeCachedAuxData(data: {
+  factories: FactoryRecord[];
+  mainHouses: MainHouseRecord[];
+  staffUsers: UserRecord[];
+}): Promise<void> {
+  try {
+    const db = await openDB();
+    await idbPutMany(db, STORE_FACTORIES, data.factories);
+    await idbPutMany(db, STORE_MAIN_HOUSES, data.mainHouses);
+    await idbPutMany(db, STORE_STAFF_USERS, data.staffUsers);
+  } catch {}
+}
+
+export async function idbPutManyHistories(items: EmploymentHistoryRecord[]): Promise<void> {
+  try {
+    const db = await openDB();
+    await idbPutMany(db, STORE_HISTORIES, items);
   } catch {}
 }
