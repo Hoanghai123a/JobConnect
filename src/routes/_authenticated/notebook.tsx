@@ -119,18 +119,28 @@ function NotebookPage() {
   const [catSending, setCatSending] = useState(false);
 
   const loadCategories = useCallback(async () => {
+    if (!user?.id) {
+      setCategories([]);
+      return;
+    }
     try {
       const res = await pb.collection("notebook_categories").getList(1, 200, {
+        filter: `created_by="${escapePb(user.id)}"`,
         sort: "name",
       });
       setCategories(res.items as unknown as CategoryRecord[]);
     } catch {}
-  }, []);
+  }, [user?.id]);
 
   const loadEntries = useCallback(async () => {
+    if (!user?.id) {
+      setEntries([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const parts: string[] = [];
+      const parts: string[] = [`created_by="${escapePb(user.id)}"`];
 
       if (statusTab !== "all") {
         parts.push(`status="${statusTab}"`);
@@ -161,7 +171,7 @@ function NotebookPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusTab, catFilter, dateFrom, dateTo, search]);
+  }, [user?.id, statusTab, catFilter, dateFrom, dateTo, search]);
 
   const loadWorkers = useCallback(async () => {
     if (!isStaffOrAdmin || !user) return;

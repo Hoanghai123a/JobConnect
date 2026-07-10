@@ -1,6 +1,5 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
-  Banknote,
   BriefcaseBusiness,
   ChevronLeft,
   Download,
@@ -30,9 +29,8 @@ export function BottomNav() {
       ? [
           { to: "/staff", label: "Staff", icon: BriefcaseBusiness },
           { to: "/staff/workers", label: "Lao động", icon: Users },
-          { to: "/advances", label: "Ứng lương", icon: Banknote },
-          { to: "/staff/export", label: "Xuất file", icon: Download },
           { to: "/account", label: "Tài khoản", icon: User },
+          { to: "/staff/export", label: "Xuất file", icon: Download },
         ]
       : user?.role === "admin"
         ? [

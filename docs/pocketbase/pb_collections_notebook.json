@@ -4,11 +4,11 @@
     "name": "notebook_categories",
     "type": "base",
     "system": false,
-    "listRule": "@request.auth.id != \"\"",
-    "viewRule": "@request.auth.id != \"\"",
-    "createRule": "@request.auth.id != \"\"",
-    "updateRule": "created_by = @request.auth.id || @request.auth.role = \"admin\"",
-    "deleteRule": "created_by = @request.auth.id || @request.auth.role = \"admin\"",
+    "listRule": "created_by = @request.auth.id",
+    "viewRule": "created_by = @request.auth.id",
+    "createRule": "@request.auth.id != \"\" && created_by = @request.auth.id",
+    "updateRule": "created_by = @request.auth.id",
+    "deleteRule": "created_by = @request.auth.id",
     "fields": [
       {
         "autogeneratePattern": "[a-z0-9]{15}",
@@ -79,11 +79,11 @@
     "name": "notebook_entries",
     "type": "base",
     "system": false,
-    "listRule": "created_by = @request.auth.id || @request.auth.role = \"admin\"",
-    "viewRule": "created_by = @request.auth.id || @request.auth.role = \"admin\"",
-    "createRule": "@request.auth.id != \"\"",
-    "updateRule": "created_by = @request.auth.id || @request.auth.role = \"admin\"",
-    "deleteRule": "created_by = @request.auth.id || @request.auth.role = \"admin\"",
+    "listRule": "created_by = @request.auth.id",
+    "viewRule": "created_by = @request.auth.id",
+    "createRule": "@request.auth.id != \"\" && created_by = @request.auth.id",
+    "updateRule": "created_by = @request.auth.id",
+    "deleteRule": "created_by = @request.auth.id",
     "fields": [
       {
         "autogeneratePattern": "[a-z0-9]{15}",

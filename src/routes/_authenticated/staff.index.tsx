@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Building2, BusFront, ChevronRight, ClipboardCheck, Download, LayoutGrid, MessagesSquare, Newspaper, NotebookPen, RefreshCw, UserCheck, Users } from "lucide-react";
+import { Banknote, BookOpen, Building2, BusFront, ChevronRight, ClipboardCheck, Download, LayoutGrid, MessagesSquare, Newspaper, NotebookPen, RefreshCw, UserCheck, Users } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -117,10 +117,10 @@ function StaffDashboardPage() {
           icon={UserCheck}
         />
         <DashboardLink
-          to="/staff/export"
-          title="Xuất dữ liệu"
-          description="Lọc 90 ngày gần đây và xuất Excel nhanh."
-          icon={Download}
+          to="/staff/advances"
+          title="Ứng lương"
+          description="Duyệt ứng NLĐ và tạo yêu cầu ứng của staff."
+          icon={Banknote}
         />
         <button
           type="button"
@@ -136,6 +136,12 @@ function StaffDashboardPage() {
           <div className="mt-3 text-sm font-semibold">Tiện ích</div>
           <div className="mt-1 text-xs leading-5 text-muted-foreground">Bảng tin, nhà xe, trò chuyện, hướng dẫn</div>
         </button>
+        <DashboardLink
+          to="/staff/export"
+          title="Xuất dữ liệu"
+          description="Lọc 90 ngày gần đây và xuất Excel nhanh."
+          icon={Download}
+        />
       </div>
 
       <Dialog open={utilOpen} onOpenChange={setUtilOpen}>

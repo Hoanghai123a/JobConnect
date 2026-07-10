@@ -70,11 +70,17 @@ export function CccdVersionViewer({ version, trigger }: CccdVersionViewerProps) 
       </Dialog>
 
       <Dialog open={!!zoomSrc} onOpenChange={() => setZoomSrc("")}>
-        <DialogContent className="max-w-[92vw] rounded-2xl p-2">
+        <DialogContent className="w-auto max-w-[calc(100vw-2rem)] rounded-2xl p-2">
           <DialogHeader>
             <DialogTitle>Ảnh CCCD</DialogTitle>
           </DialogHeader>
-          {zoomSrc && <img src={zoomSrc} alt="CCCD" className="w-full rounded-xl" />}
+          {zoomSrc && (
+            <img
+              src={zoomSrc}
+              alt="CCCD"
+              className="h-auto max-h-[min(8cm,calc(100dvh-8rem))] w-auto max-w-[min(10cm,calc(100vw-2rem))] rounded-xl object-contain"
+            />
+          )}
         </DialogContent>
       </Dialog>
     </>

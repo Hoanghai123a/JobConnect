@@ -1,8 +1,22 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
+import {
+  type AdvanceRecord,
+  type AdvanceStatus,
+  type RecoveryStatus,
+  type AdminTab,
+  ADVANCE_TAB_FILTERS,
+  LEGACY_STAFF_REQUESTED_PENDING_FILTER,
+  STATUS_META,
+  RECOVERY_META,
+  joinPbFilters,
+  buildAdvanceFilter,
+  countAdvances,
+  formatMoney,
+} from "@/lib/advances";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
@@ -57,141 +71,6 @@ export const Route = createFileRoute("/_authenticated/advances")({
   component: AdvancesPage,
 });
 
-type AdvanceStatus = "pending" | "recruiter_approved" | "accepted" | "rejected";
-type RecoveryStatus = "none" | "recovered" | "unrecoverable";
-type AdminTab = "pending" | "recruiter_approved" | "accepted" | "recovered" | "unrecoverable" | "rejected" | "all";
-
-type AdvanceRecord = {
-  id: string;
-  user?: string;
-  requested_by?: string;
-  recruiter_id?: string;
-  expand?: {
-    requested_by?: UserRecord;
-  };
-  employee_code: string;
-  full_name: string;
-  company: string;
-  phone: string;
-  join_date?: string;
-  bank_name?: string;
-  bank_account_number?: string;
-  bank_account_name?: string;
-  amount: number;
-  original_amount?: number;
-  reason: string;
-  status?: AdvanceStatus;
-  recovery_status?: RecoveryStatus;
-  admin_note?: string;
-  recruiter_note?: string;
-  recovery_note?: string;
-  resolved_at?: string;
-  recovered_at?: string;
-  created: string;
-};
-
-const ADVANCE_TAB_FILTERS = {
-  pending: 'status="pending"',
-  recruiter_approved: 'status="recruiter_approved"',
-  accepted: 'status="accepted" && (recovery_status="" || recovery_status="none")',
-  recovered: 'status="accepted" && recovery_status="recovered"',
-  unrecoverable: 'status="accepted" && recovery_status="unrecoverable"',
-  rejected: 'status="rejected"',
-  all: "",
-} satisfies Record<AdminTab, string>;
-
-function joinPbFilters(parts: Array<string | false | null | undefined>) {
-  return parts.filter(Boolean).join(" && ");
-}
-
-function containsAny(fields: string[], keyword: string) {
-  const q = escapePb(keyword.trim());
-  if (!q) return "";
-  return `(${fields.map((field) => `${field}~"${q}"`).join(" || ")})`;
-}
-
-const LEGACY_STAFF_REQUESTED_PENDING_FILTER =
-  '(status="pending" && (requested_by.role="staff" || requested_by.role="admin"))';
-
-function buildAdvanceFilter(input: {
-  isAdmin: boolean;
-  isStaff: boolean;
-  userId?: string;
-  tab?: AdminTab;
-  dateFrom?: string;
-  dateTo?: string;
-  search?: string;
-  factoryName?: string;
-}) {
-  if (!input.isAdmin && !input.userId) return 'id=""';
-
-  const searchFilter = containsAny(
-    [
-      "full_name",
-      "employee_code",
-      "company",
-      "phone",
-      "bank_name",
-      "bank_account_number",
-      "bank_account_name",
-      "reason",
-      "admin_note",
-      "recovery_note",
-    ],
-    input.search || "",
-  );
-
-  let roleFilter = "";
-  if (!input.isAdmin && !input.isStaff && input.userId) {
-    roleFilter = `user="${escapePb(input.userId)}"`;
-  } else if (input.isStaff && !input.isAdmin && input.userId) {
-    const currentUserId = escapePb(input.userId);
-    roleFilter = `(recruiter_id="${currentUserId}" || requested_by="${currentUserId}")`;
-  }
-
-  let tabFilter = "";
-  if (input.tab) {
-    if (input.isAdmin && input.tab === "pending") {
-      tabFilter = `(status="recruiter_approved" || ${LEGACY_STAFF_REQUESTED_PENDING_FILTER})`;
-    } else {
-      tabFilter = ADVANCE_TAB_FILTERS[input.tab];
-    }
-  }
-
-  return joinPbFilters([
-    roleFilter,
-    tabFilter,
-    input.factoryName ? `company="${escapePb(input.factoryName)}"` : "",
-    input.dateFrom ? `created>="${input.dateFrom} 00:00:00"` : "",
-    input.dateTo ? `created<="${input.dateTo} 23:59:59"` : "",
-    searchFilter,
-  ]);
-}
-
-async function countAdvances(filter: string) {
-  const res = await pb.collection("advances").getList(1, 1, { filter, fields: "id" });
-  return res.totalItems || 0;
-}
-
-const STATUS_META: Record<
-  AdvanceStatus,
-  { label: string; tone: "warning" | "success" | "danger" | "primary" }
-> = {
-  pending: { label: "Chờ người tuyển duyệt", tone: "warning" },
-  recruiter_approved: { label: "Chờ admin duyệt", tone: "primary" },
-  accepted: { label: "Đã tiếp nhận", tone: "success" },
-  rejected: { label: "Đã từ chối", tone: "danger" },
-};
-
-const RECOVERY_META: Record<
-  RecoveryStatus,
-  { label: string; tone: "neutral" | "success" | "danger" }
-> = {
-  none: { label: "Chờ thu hồi", tone: "neutral" },
-  recovered: { label: "Đã thu hồi", tone: "success" },
-  unrecoverable: { label: "Không thu hồi", tone: "danger" },
-};
-
 export function AdvancesPage() {
   const { user, isAdmin, isStaff } = useAuth();
   const { data: settings } = useAppSettings();
@@ -230,6 +109,7 @@ export function AdvancesPage() {
     rejected: 0,
     all: 0,
   });
+  const [adminSegment, setAdminSegment] = useState<"workers" | "staff">("workers");
 
   const selectedAdvanceUser = user as UserRecord | null;
   const selectedFactoryName = useMemo(
@@ -275,7 +155,7 @@ export function AdvancesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const filter = buildAdvanceFilter({
+      const baseFilter = buildAdvanceFilter({
         isAdmin,
         isStaff,
         userId: user?.id,
@@ -285,8 +165,13 @@ export function AdvancesPage() {
         search,
         factoryName: isAdmin ? selectedFactoryName : "",
       });
+      const segmentFilter = isAdmin && adminSegment === "staff"
+        ? joinPbFilters([baseFilter, 'recruiter_id=""', 'requested_by=user'])
+        : isAdmin && adminSegment === "workers"
+          ? joinPbFilters([baseFilter, 'recruiter_id!=""'])
+          : baseFilter;
       const res = await pb.collection("advances").getList(1, 300, {
-        filter,
+        filter: segmentFilter,
         sort: "-created",
         expand: "requested_by",
       });
@@ -304,7 +189,7 @@ export function AdvancesPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, isAdmin, isStaff, search, selectedFactoryName, tab, user?.id]);
+  }, [adminSegment, dateFrom, dateTo, isAdmin, isStaff, search, selectedFactoryName, tab, user?.id]);
 
   const loadStats = useCallback(async () => {
     const base = buildAdvanceFilter({
@@ -316,7 +201,12 @@ export function AdvancesPage() {
       search,
       factoryName: isAdmin ? selectedFactoryName : "",
     });
-    const withBase = (statusFilter: string) => joinPbFilters([base, statusFilter]);
+    const segmentBase = isAdmin && adminSegment === "staff"
+      ? joinPbFilters([base, 'recruiter_id=""', 'requested_by=user'])
+      : isAdmin && adminSegment === "workers"
+        ? joinPbFilters([base, 'recruiter_id!=""'])
+        : base;
+    const withBase = (statusFilter: string) => joinPbFilters([segmentBase, statusFilter]);
     const adminPendingFilter = `(status="recruiter_approved" || ${LEGACY_STAFF_REQUESTED_PENDING_FILTER})`;
     const [pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all] = await Promise.all([
       countAdvances(withBase(ADVANCE_TAB_FILTERS.pending)),
@@ -325,10 +215,10 @@ export function AdvancesPage() {
       countAdvances(withBase(ADVANCE_TAB_FILTERS.recovered)),
       countAdvances(withBase(ADVANCE_TAB_FILTERS.unrecoverable)),
       countAdvances(withBase(ADVANCE_TAB_FILTERS.rejected)),
-      countAdvances(base),
+      countAdvances(segmentBase),
     ]);
     setStats({ pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all });
-  }, [dateFrom, dateTo, isAdmin, isStaff, search, selectedFactoryName, user?.id]);
+  }, [adminSegment, dateFrom, dateTo, isAdmin, isStaff, search, selectedFactoryName, user?.id]);
 
   const loadOutstanding = useCallback(async () => {
     if (!user?.id || isAdmin) {
@@ -822,140 +712,7 @@ export function AdvancesPage() {
   }
 
   if (isStaff && !isAdmin) {
-    const staffResolve = async (row: AdvanceRecord, newStatus: "recruiter_approved" | "rejected") => {
-      try {
-        const after = {
-          status: newStatus,
-          ...(newStatus === "rejected" ? { resolved_at: new Date().toISOString() } : {}),
-        };
-        await updateRow(row.id, after);
-        await createStaffActionLog({
-          actor: user,
-          targetUserId: row.user,
-          targetCollection: "advances",
-          targetRecord: row.id,
-          action: "update",
-          before: { status: row.status || "pending" },
-          after,
-          note: newStatus === "recruiter_approved" ? "Người tuyển chấp nhận ứng lương" : "Người tuyển từ chối ứng lương",
-        });
-        toast.success(newStatus === "recruiter_approved" ? "Đã chấp nhận" : "Đã từ chối");
-        load();
-      } catch (error: unknown) {
-        toast.error((error as any)?.message || "Lỗi xử lý");
-      }
-    };
-
-    return (
-      <PageContainer title="Ứng lương" subtitle="Đơn ứng của NLĐ bạn tuyển">
-        <div className="grid grid-cols-2 gap-2">
-          <StatCard label="Chờ duyệt" value={stats.pending} icon={Clock} tone="warning" />
-          <StatCard label="Đã chuyển admin" value={stats.recruiter_approved} icon={Check} tone="primary" />
-          <StatCard label="Đã duyệt" value={stats.accepted} icon={Check} tone="success" />
-          <StatCard label="Từ chối" value={stats.rejected} icon={X} tone="danger" />
-        </div>
-
-        <FilterBar
-          search={search}
-          onSearchChange={setSearch}
-          placeholder="Tìm theo tên, mã NV…"
-          chips={[
-            { key: "pending", label: `Chờ duyệt (${stats.pending})` },
-            { key: "recruiter_approved", label: `Đã chuyển admin (${stats.recruiter_approved})` },
-            { key: "accepted", label: `Đã duyệt (${stats.accepted})` },
-            { key: "rejected", label: `Từ chối (${stats.rejected})` },
-            { key: "all", label: "Tất cả" },
-          ]}
-          activeChip={tab}
-          onChipChange={(v) => setTab(v as AdminTab)}
-        />
-
-        {filtered.length === 0 ? (
-          <EmptyState
-            icon={Wallet}
-            title="Không có đơn ứng lương"
-            description="Đơn ứng của NLĐ bạn tuyển sẽ hiển thị tại đây."
-          />
-        ) : (
-          filtered.map((row) => {
-            const status = (row.status || "pending") as AdvanceStatus;
-            return (
-              <div
-                key={row.id}
-                className={cn(
-                  "list-card cursor-pointer px-3 py-2",
-                  toneBorder[STATUS_META[status].tone] || "",
-                )}
-                role="button"
-                tabIndex={0}
-                onClick={() => setAdvanceDetail(row)}
-                onKeyDown={(event) => {
-                  if (event.currentTarget !== event.target) return;
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    setAdvanceDetail(row);
-                  }
-                }}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold">
-                      {row.employee_code || "-"} - {row.full_name || "-"}
-                    </div>
-                    <div className="text-sm font-bold text-primary">{formatMoney(row.amount)}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {new Date(row.created).toLocaleString("vi-VN")}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <StatusChip tone={STATUS_META[status].tone as any}>
-                      {STATUS_META[status].label}
-                    </StatusChip>
-                    {status === "pending" && (
-                      <div className="flex gap-1">
-                        <Button
-                          size="icon"
-                          className="h-7 w-7"
-                          title="Chấp nhận"
-                          onClick={(e) => { e.stopPropagation(); staffResolve(row, "recruiter_approved"); }}
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="destructive"
-                          className="h-7 w-7"
-                          title="Từ chối"
-                          onClick={(e) => { e.stopPropagation(); staffResolve(row, "rejected"); }}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <p className="mt-1 truncate text-[12px] text-muted-foreground">{row.reason}</p>
-              </div>
-            );
-          })
-        )}
-
-        <AdvanceDetailDialog
-          advanceDetail={advanceDetail}
-          setAdvanceDetail={setAdvanceDetail}
-          items={filtered}
-          isAdmin={false}
-          adminNoteDraft={adminNoteDraft}
-          setAdminNoteDraft={setAdminNoteDraft}
-          recoveryNoteDraft={recoveryNoteDraft}
-          setRecoveryNoteDraft={setRecoveryNoteDraft}
-          savingNotes={savingNotes}
-          setSavingNotes={setSavingNotes}
-          updateRow={updateRow}
-          load={load}
-        />
-      </PageContainer>
-    );
+    return <Navigate to="/staff/advances" />;
   }
 
   return (
@@ -973,6 +730,28 @@ export function AdvancesPage() {
       }
     >
       <AdvanceRulesCard rules={settings.advance_rules} />
+      <div className="flex gap-1 rounded-lg bg-muted p-1">
+        <button
+          type="button"
+          className={cn(
+            "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+            adminSegment === "workers" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={() => setAdminSegment("workers")}
+        >
+          Ứng NLĐ
+        </button>
+        <button
+          type="button"
+          className={cn(
+            "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+            adminSegment === "staff" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={() => setAdminSegment("staff")}
+        >
+          Ứng Staff
+        </button>
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <StatCard label="Chờ duyệt" value={stats.recruiter_approved} icon={Clock} tone="warning" />
         <StatCard label="Đã tiếp nhận" value={stats.accepted} icon={Check} tone="success" />
@@ -1682,10 +1461,6 @@ function ReadOnlyField({ label, value }: { label: string; value?: string | null 
       </div>
     </div>
   );
-}
-
-function formatMoney(value: number) {
-  return Number(value || 0).toLocaleString("vi-VN");
 }
 
 function UserProfileCollapsible({ user }: { user: UserRecord | null }) {

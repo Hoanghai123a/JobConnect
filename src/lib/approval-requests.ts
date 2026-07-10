@@ -131,6 +131,19 @@ export async function getPendingApprovalCount(adminId: string): Promise<number> 
   return res.totalItems;
 }
 
+export async function withdrawApprovalRequest(requestId: string): Promise<void> {
+  const responses = await pb
+    .collection("approval_responses")
+    .getFullList<ApprovalResponseRecord>({
+      filter: `request = "${escapePb(requestId)}"`,
+    });
+
+  await Promise.all(
+    responses.map((r) => pb.collection("approval_responses").delete(r.id)),
+  );
+  await pb.collection("approval_requests").delete(requestId);
+}
+
 export async function deleteOldRequests(beforeDate: string): Promise<number> {
   const requests = await pb
     .collection("approval_requests")

@@ -43,6 +43,7 @@ import { Route as ApiPublicAppIconRouteImport } from './routes/api/public/app-ic
 import { Route as AuthenticatedStaffRecruitedRouteImport } from './routes/_authenticated/staff.recruited'
 import { Route as AuthenticatedStaffExportRouteImport } from './routes/_authenticated/staff.export'
 import { Route as AuthenticatedStaffApprovalsRouteImport } from './routes/_authenticated/staff.approvals'
+import { Route as AuthenticatedStaffAdvancesRouteImport } from './routes/_authenticated/staff.advances'
 import { Route as AuthenticatedAdminWorkforceRouteImport } from './routes/_authenticated/admin/workforce'
 import { Route as AuthenticatedAdminStaffRouteImport } from './routes/_authenticated/admin/staff'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
@@ -236,6 +237,12 @@ const AuthenticatedStaffApprovalsRoute =
     path: '/approvals',
     getParentRoute: () => AuthenticatedStaffRoute,
   } as any)
+const AuthenticatedStaffAdvancesRoute =
+  AuthenticatedStaffAdvancesRouteImport.update({
+    id: '/advances',
+    path: '/advances',
+    getParentRoute: () => AuthenticatedStaffRoute,
+  } as any)
 const AuthenticatedAdminWorkforceRoute =
   AuthenticatedAdminWorkforceRouteImport.update({
     id: '/admin/workforce',
@@ -359,6 +366,7 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/staff': typeof AuthenticatedAdminStaffRouteWithChildren
   '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
+  '/staff/advances': typeof AuthenticatedStaffAdvancesRoute
   '/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
@@ -407,6 +415,7 @@ export interface FileRoutesByTo {
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
+  '/staff/advances': typeof AuthenticatedStaffAdvancesRoute
   '/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
@@ -460,6 +469,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/staff': typeof AuthenticatedAdminStaffRouteWithChildren
   '/_authenticated/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
+  '/_authenticated/staff/advances': typeof AuthenticatedStaffAdvancesRoute
   '/_authenticated/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
   '/_authenticated/staff/export': typeof AuthenticatedStaffExportRoute
   '/_authenticated/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
@@ -513,6 +523,7 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/staff'
     | '/admin/workforce'
+    | '/staff/advances'
     | '/staff/approvals'
     | '/staff/export'
     | '/staff/recruited'
@@ -561,6 +572,7 @@ export interface FileRouteTypes {
     | '/admin/imports'
     | '/admin/settings'
     | '/admin/workforce'
+    | '/staff/advances'
     | '/staff/approvals'
     | '/staff/export'
     | '/staff/recruited'
@@ -613,6 +625,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/staff'
     | '/_authenticated/admin/workforce'
+    | '/_authenticated/staff/advances'
     | '/_authenticated/staff/approvals'
     | '/_authenticated/staff/export'
     | '/_authenticated/staff/recruited'
@@ -896,6 +909,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStaffApprovalsRouteImport
       parentRoute: typeof AuthenticatedStaffRoute
     }
+    '/_authenticated/staff/advances': {
+      id: '/_authenticated/staff/advances'
+      path: '/advances'
+      fullPath: '/staff/advances'
+      preLoaderRoute: typeof AuthenticatedStaffAdvancesRouteImport
+      parentRoute: typeof AuthenticatedStaffRoute
+    }
     '/_authenticated/admin/workforce': {
       id: '/_authenticated/admin/workforce'
       path: '/admin/workforce'
@@ -1027,6 +1047,7 @@ const AuthenticatedStaffWorkersWorkerIdRouteWithChildren =
   )
 
 interface AuthenticatedStaffRouteChildren {
+  AuthenticatedStaffAdvancesRoute: typeof AuthenticatedStaffAdvancesRoute
   AuthenticatedStaffApprovalsRoute: typeof AuthenticatedStaffApprovalsRoute
   AuthenticatedStaffExportRoute: typeof AuthenticatedStaffExportRoute
   AuthenticatedStaffRecruitedRoute: typeof AuthenticatedStaffRecruitedRoute
@@ -1036,6 +1057,7 @@ interface AuthenticatedStaffRouteChildren {
 }
 
 const AuthenticatedStaffRouteChildren: AuthenticatedStaffRouteChildren = {
+  AuthenticatedStaffAdvancesRoute: AuthenticatedStaffAdvancesRoute,
   AuthenticatedStaffApprovalsRoute: AuthenticatedStaffApprovalsRoute,
   AuthenticatedStaffExportRoute: AuthenticatedStaffExportRoute,
   AuthenticatedStaffRecruitedRoute: AuthenticatedStaffRecruitedRoute,

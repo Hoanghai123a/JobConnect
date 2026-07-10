@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ApprovalRequestRecord, ApprovalResponseRecord } from "@/lib/approval-requests";
-import { respondToApproval, markRequestCompleted, getRequestFileUrl } from "@/lib/approval-requests";
+import { respondToApproval, markRequestCompleted, withdrawApprovalRequest, getRequestFileUrl } from "@/lib/approval-requests";
 import { userDisplayName } from "@/lib/delegations";
 import type { UserRecord } from "@/lib/pocketbase";
 import { StatusChip, type ChipTone } from "@/components/ui/status-chip";
@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Check, X, CheckCircle2, Clock } from "lucide-react";
+import { Check, X, CheckCircle2, Clock, Undo2 } from "lucide-react";
 
 const STATUS_TONE: Record<string, ChipTone> = {
   pending: "warning",
@@ -63,6 +63,7 @@ export function ApprovalDetail({
   const myResponse = responses.find((r) => r.admin === currentUserId);
   const canRespond = isAdmin && request.status === "pending" && myResponse?.status === "pending";
   const canComplete = request.status === "approved" && request.creator === currentUserId;
+  const canWithdraw = request.creator === currentUserId && request.status === "pending";
 
   const images = (request.images || []).map((filename) => ({
     url: getRequestFileUrl(request, filename),
@@ -99,6 +100,20 @@ export function ApprovalDetail({
       onUpdated();
     } catch {
       toast.error("Có lỗi xảy ra");
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function handleWithdraw() {
+    setActing(true);
+    try {
+      await withdrawApprovalRequest(request!.id);
+      toast.success("Đã thu hồi yêu cầu");
+      onOpenChange(false);
+      onUpdated();
+    } catch {
+      toast.error("Không thể thu hồi");
     } finally {
       setActing(false);
     }
@@ -218,6 +233,20 @@ export function ApprovalDetail({
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Đánh dấu hoàn thành
+              </Button>
+            </div>
+          )}
+
+          {canWithdraw && (
+            <div className="border-t pt-3">
+              <Button
+                onClick={handleWithdraw}
+                disabled={acting}
+                variant="destructive"
+                className="w-full gap-1.5 rounded-xl"
+              >
+                <Undo2 className="h-4 w-4" />
+                Thu hồi yêu cầu
               </Button>
             </div>
           )}
