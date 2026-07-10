@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
-import { useAppSettings } from "@/lib/app-settings";
 import {
   type AdvanceRecord,
   type AdvanceStatus,
@@ -11,10 +10,8 @@ import {
   STATUS_META,
   joinPbFilters,
   buildAdvanceFilter,
-  countAdvances,
   formatMoney,
 } from "@/lib/advances";
-import { escapePb } from "@/lib/delegations";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
@@ -49,11 +46,48 @@ export const Route = createFileRoute("/_authenticated/staff/advances")({
   component: StaffAdvancesPage,
 });
 
+type AdvanceSummary = {
+  count: number;
+  total: number;
+};
+
+function emptyAdvanceSummaries(): Record<AdminTab, AdvanceSummary> {
+  return {
+    pending: { count: 0, total: 0 },
+    recruiter_approved: { count: 0, total: 0 },
+    accepted: { count: 0, total: 0 },
+    recovered: { count: 0, total: 0 },
+    unrecoverable: { count: 0, total: 0 },
+    rejected: { count: 0, total: 0 },
+    all: { count: 0, total: 0 },
+  };
+}
+
+function statValue(summary: AdvanceSummary) {
+  return (
+    <span className="block text-[15px] leading-tight sm:text-base">
+      {summary.count} - {formatMoney(summary.total)}
+    </span>
+  );
+}
+
+async function loadAdvanceSummary(filter: string): Promise<AdvanceSummary> {
+  const rows = await pb.collection("advances").getFullList<Pick<AdvanceRecord, "amount">>({
+    filter,
+    fields: "amount",
+  });
+  return rows.reduce<AdvanceSummary>(
+    (summary, row) => ({
+      count: summary.count + 1,
+      total: summary.total + Number(row.amount || 0),
+    }),
+    { count: 0, total: 0 },
+  );
+}
+
 // PLACEHOLDER_CONTINUE
 
 function StaffAdvancesPage() {
-  const { user, isAdmin, isStaff } = useAuth();
-  const { data: settings } = useAppSettings();
   const [segment, setSegment] = useState<"workers" | "mine">("workers");
 
   return (
@@ -99,15 +133,7 @@ function WorkerAdvancesView() {
   const [tab, setTab] = useState<AdminTab>("pending");
   const [loading, setLoading] = useState(false);
   const [advanceDetail, setAdvanceDetail] = useState<AdvanceRecord | null>(null);
-  const [stats, setStats] = useState<Record<AdminTab, number>>({
-    pending: 0,
-    recruiter_approved: 0,
-    accepted: 0,
-    recovered: 0,
-    unrecoverable: 0,
-    rejected: 0,
-    all: 0,
-  });
+  const [stats, setStats] = useState<Record<AdminTab, AdvanceSummary>>(emptyAdvanceSummaries);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -139,11 +165,11 @@ function WorkerAdvancesView() {
     });
     const withBase = (f: string) => joinPbFilters([base, f]);
     const [pending, recruiter_approved, accepted, rejected, all] = await Promise.all([
-      countAdvances(withBase(ADVANCE_TAB_FILTERS.pending)),
-      countAdvances(withBase(ADVANCE_TAB_FILTERS.recruiter_approved)),
-      countAdvances(withBase(ADVANCE_TAB_FILTERS.accepted)),
-      countAdvances(withBase(ADVANCE_TAB_FILTERS.rejected)),
-      countAdvances(base),
+      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.pending)),
+      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.recruiter_approved)),
+      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.accepted)),
+      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.rejected)),
+      loadAdvanceSummary(base),
     ]);
     setStats((s) => ({ ...s, pending, recruiter_approved, accepted, rejected, all }));
   }, [isAdmin, isStaff, user?.id]);
@@ -182,10 +208,10 @@ function WorkerAdvancesView() {
   return (
     <>
       <div className="grid grid-cols-2 gap-2">
-        <StatCard label="Chờ duyệt" value={stats.pending} icon={Clock} tone="warning" />
-        <StatCard label="Đã chuyển admin" value={stats.recruiter_approved} icon={Check} tone="primary" />
-        <StatCard label="Đã duyệt" value={stats.accepted} icon={Check} tone="success" />
-        <StatCard label="Từ chối" value={stats.rejected} icon={X} tone="danger" />
+        <StatCard label="Chờ duyệt" value={statValue(stats.pending)} icon={Clock} tone="warning" />
+        <StatCard label="Đã chuyển admin" value={statValue(stats.recruiter_approved)} icon={Check} tone="primary" />
+        <StatCard label="Đã duyệt" value={statValue(stats.accepted)} icon={Check} tone="success" />
+        <StatCard label="Từ chối" value={statValue(stats.rejected)} icon={X} tone="danger" />
       </div>
 
       <FilterBar
@@ -193,10 +219,10 @@ function WorkerAdvancesView() {
         onSearchChange={setSearch}
         placeholder="Tìm theo tên, mã NV…"
         chips={[
-          { key: "pending", label: `Chờ duyệt (${stats.pending})` },
-          { key: "recruiter_approved", label: `Đã chuyển admin (${stats.recruiter_approved})` },
-          { key: "accepted", label: `Đã duyệt (${stats.accepted})` },
-          { key: "rejected", label: `Từ chối (${stats.rejected})` },
+          { key: "pending", label: `Chờ duyệt (${stats.pending.count})` },
+          { key: "recruiter_approved", label: `Đã chuyển admin (${stats.recruiter_approved.count})` },
+          { key: "accepted", label: `Đã duyệt (${stats.accepted.count})` },
+          { key: "rejected", label: `Từ chối (${stats.rejected.count})` },
           { key: "all", label: "Tất cả" },
         ]}
         activeChip={tab}
@@ -282,7 +308,6 @@ function WorkerAdvancesView() {
 
 function MyAdvancesView() {
   const { user } = useAuth();
-  const { data: settings } = useAppSettings();
   const [items, setItems] = useState<AdvanceRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -296,10 +321,6 @@ function MyAdvancesView() {
   });
   const [adminList, setAdminList] = useState<UserRecord[]>([]);
   const [selectedAdmins, setSelectedAdmins] = useState<string[]>([]);
-  const [outstandingAmount, setOutstandingAmount] = useState(0);
-
-  const limit = Number(settings.advance_limit || 0);
-  const available = limit > 0 ? Math.max(0, limit - outstandingAmount) : 0;
 
   useEffect(() => {
     if (!user) return;
@@ -332,26 +353,7 @@ function MyAdvancesView() {
     }
   }, [user?.id]);
 
-  const loadOutstanding = useCallback(async () => {
-    if (!user?.id) return;
-    const res = await pb.collection("advances").getList(1, 500, {
-      filter: joinPbFilters([
-        `user="${escapePb(user.id)}"`,
-        `requested_by="${escapePb(user.id)}"`,
-        'recruiter_id=""',
-        '(status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))',
-      ]),
-      fields: "amount",
-    });
-    setOutstandingAmount(
-      (res.items as unknown as Pick<AdvanceRecord, "amount">[]).reduce(
-        (sum, row) => sum + Number(row.amount || 0),
-        0,
-      ),
-    );
-  }, [user?.id]);
-
-  useEffect(() => { load(); loadOutstanding().catch(() => {}); }, [load, loadOutstanding]);
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     if (!showForm) return;
@@ -367,8 +369,6 @@ function MyAdvancesView() {
     if (!amount) return toast.error("Số tiền không được để trống");
     if (!reason.trim()) return toast.error("Lý do không được để trống");
     if (!selectedAdmins.length) return toast.error("Vui lòng chọn ít nhất 1 admin duyệt");
-    if (limit <= 0) return toast.error("Admin chưa cài hạn mức ứng lương");
-    if (outstandingAmount + amount > limit) return toast.error("Vượt hạn mức ứng lương");
 
     setSending(true);
     try {
@@ -395,7 +395,6 @@ function MyAdvancesView() {
       setSelectedAdmins([]);
       setShowForm(false);
       load();
-      loadOutstanding().catch(() => {});
     } catch (error: unknown) {
       toast.error((error as any)?.message || "Lỗi gửi ứng lương");
     } finally {
@@ -403,19 +402,30 @@ function MyAdvancesView() {
     }
   };
 
-  const pendingCount = items.filter((r) => r.status === "recruiter_approved").length;
-  const acceptedCount = items.filter((r) => r.status === "accepted").length;
-  const rejectedCount = items.filter((r) => r.status === "rejected").length;
+  const myStats = useMemo(() => {
+    const result = emptyAdvanceSummaries();
+    for (const row of items) {
+      const status = (row.status || "recruiter_approved") as AdminTab;
+      const amount = Number(row.amount || 0);
+      if (result[status]) {
+        result[status].count += 1;
+        result[status].total += amount;
+      }
+      result.all.count += 1;
+      result.all.total += amount;
+    }
+    return result;
+  }, [items]);
 
   return (
     <>
       <div className="grid grid-cols-2 gap-2">
-        <StatCard label="Chờ admin duyệt" value={pendingCount} icon={Clock} tone="warning" />
-        <StatCard label="Đã tiếp nhận" value={acceptedCount} icon={Check} tone="success" />
-        <StatCard label="Từ chối" value={rejectedCount} icon={X} tone="danger" />
+        <StatCard label="Chờ admin duyệt" value={statValue(myStats.recruiter_approved)} icon={Clock} tone="warning" />
+        <StatCard label="Đã tiếp nhận" value={statValue(myStats.accepted)} icon={Check} tone="success" />
+        <StatCard label="Từ chối" value={statValue(myStats.rejected)} icon={X} tone="danger" />
         <StatCard
-          label="Còn được ứng"
-          value={limit > 0 ? formatMoney(available) : "—"}
+          label="Tổng đơn"
+          value={statValue(myStats.all)}
           icon={Wallet}
           tone="primary"
         />
@@ -476,8 +486,6 @@ function MyAdvancesView() {
         setSelectedAdmins={setSelectedAdmins}
         sending={sending}
         onSubmit={submit}
-        limit={limit}
-        outstanding={outstandingAmount}
       />
     </>
   );
@@ -499,8 +507,6 @@ function StaffAdvanceFormDialog({
   setSelectedAdmins,
   sending,
   onSubmit,
-  limit,
-  outstanding,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -515,11 +521,7 @@ function StaffAdvanceFormDialog({
   setSelectedAdmins: (v: string[]) => void;
   sending: boolean;
   onSubmit: (e: React.FormEvent) => void;
-  limit: number;
-  outstanding: number;
 }) {
-  const available = limit > 0 ? Math.max(0, limit - outstanding) : 0;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-3xl sm:max-w-lg">
@@ -528,19 +530,6 @@ function StaffAdvanceFormDialog({
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="space-y-4">
-          {limit > 0 && (
-            <div className="rounded-xl border bg-muted/30 px-3 py-2 text-xs">
-              <span className="text-muted-foreground">Hạn mức: </span>
-              <span className="font-medium">{formatMoney(limit)}</span>
-              <span className="mx-2 text-muted-foreground">|</span>
-              <span className="text-muted-foreground">Đang ứng: </span>
-              <span className="font-medium">{formatMoney(outstanding)}</span>
-              <span className="mx-2 text-muted-foreground">|</span>
-              <span className="text-muted-foreground">Còn: </span>
-              <span className="font-semibold text-primary">{formatMoney(available)}</span>
-            </div>
-          )}
-
           <div className="space-y-1.5">
             <Label>Số tiền *</Label>
             <Input
