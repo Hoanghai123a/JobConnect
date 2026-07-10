@@ -66,7 +66,7 @@ function emptyAdvanceSummaries(): Record<AdminTab, AdvanceSummary> {
 function statValue(summary: AdvanceSummary) {
   return (
     <span className="block text-[15px] leading-tight sm:text-base">
-      {summary.count} - {formatMoney(summary.total)}
+      SL:{summary.count} - {formatMoney(summary.total)}đ
     </span>
   );
 }

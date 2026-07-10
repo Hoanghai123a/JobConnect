@@ -14,7 +14,6 @@ import {
   RECOVERY_META,
   joinPbFilters,
   buildAdvanceFilter,
-  countAdvances,
   formatMoney,
 } from "@/lib/advances";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -71,6 +70,45 @@ export const Route = createFileRoute("/_authenticated/advances")({
   component: AdvancesPage,
 });
 
+type AdvanceSummary = {
+  count: number;
+  total: number;
+};
+
+function emptyAdvanceSummaries(): Record<AdminTab, AdvanceSummary> {
+  return {
+    pending: { count: 0, total: 0 },
+    recruiter_approved: { count: 0, total: 0 },
+    accepted: { count: 0, total: 0 },
+    recovered: { count: 0, total: 0 },
+    unrecoverable: { count: 0, total: 0 },
+    rejected: { count: 0, total: 0 },
+    all: { count: 0, total: 0 },
+  };
+}
+
+function statValue(summary: AdvanceSummary) {
+  return (
+    <span className="block text-[15px] leading-tight sm:text-base">
+      SL:{summary.count} - {formatMoney(summary.total)}đ
+    </span>
+  );
+}
+
+async function loadAdvanceSummary(filter: string): Promise<AdvanceSummary> {
+  const rows = await pb.collection("advances").getFullList<Pick<AdvanceRecord, "amount">>({
+    filter,
+    fields: "amount",
+  });
+  return rows.reduce<AdvanceSummary>(
+    (summary, row) => ({
+      count: summary.count + 1,
+      total: summary.total + Number(row.amount || 0),
+    }),
+    { count: 0, total: 0 },
+  );
+}
+
 export function AdvancesPage() {
   const { user, isAdmin, isStaff } = useAuth();
   const { data: settings } = useAppSettings();
@@ -100,15 +138,7 @@ export function AdvancesPage() {
   const [recoveryNoteDraft, setRecoveryNoteDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [outstandingAmount, setOutstandingAmount] = useState(0);
-  const [stats, setStats] = useState<Record<AdminTab, number>>({
-    pending: 0,
-    recruiter_approved: 0,
-    accepted: 0,
-    recovered: 0,
-    unrecoverable: 0,
-    rejected: 0,
-    all: 0,
-  });
+  const [stats, setStats] = useState<Record<AdminTab, AdvanceSummary>>(emptyAdvanceSummaries);
   const [adminSegment, setAdminSegment] = useState<"workers" | "staff">("workers");
 
   const selectedAdvanceUser = user as UserRecord | null;
@@ -209,13 +239,13 @@ export function AdvancesPage() {
     const withBase = (statusFilter: string) => joinPbFilters([segmentBase, statusFilter]);
     const adminPendingFilter = `(status="recruiter_approved" || ${LEGACY_STAFF_REQUESTED_PENDING_FILTER})`;
     const [pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all] = await Promise.all([
-      countAdvances(withBase(ADVANCE_TAB_FILTERS.pending)),
-      countAdvances(withBase(isAdmin ? adminPendingFilter : ADVANCE_TAB_FILTERS.recruiter_approved)),
-      countAdvances(withBase(ADVANCE_TAB_FILTERS.accepted)),
-      countAdvances(withBase(ADVANCE_TAB_FILTERS.recovered)),
-      countAdvances(withBase(ADVANCE_TAB_FILTERS.unrecoverable)),
-      countAdvances(withBase(ADVANCE_TAB_FILTERS.rejected)),
-      countAdvances(segmentBase),
+      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.pending)),
+      loadAdvanceSummary(withBase(isAdmin ? adminPendingFilter : ADVANCE_TAB_FILTERS.recruiter_approved)),
+      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.accepted)),
+      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.recovered)),
+      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.unrecoverable)),
+      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.rejected)),
+      loadAdvanceSummary(segmentBase),
     ]);
     setStats({ pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all });
   }, [adminSegment, dateFrom, dateTo, isAdmin, isStaff, search, selectedFactoryName, user?.id]);
@@ -753,11 +783,11 @@ export function AdvancesPage() {
         </button>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <StatCard label="Chờ duyệt" value={stats.recruiter_approved} icon={Clock} tone="warning" />
-        <StatCard label="Đã tiếp nhận" value={stats.accepted} icon={Check} tone="success" />
-        <StatCard label="Từ chối" value={stats.rejected} icon={X} tone="danger" />
-        <StatCard label="Đã thu hồi" value={stats.recovered} icon={ShieldCheck} tone="primary" />
-        <StatCard label="Không thu hồi" value={stats.unrecoverable} icon={X} tone="danger" />
+        <StatCard label="Chờ duyệt" value={statValue(stats.recruiter_approved)} icon={Clock} tone="warning" />
+        <StatCard label="Đã tiếp nhận" value={statValue(stats.accepted)} icon={Check} tone="success" />
+        <StatCard label="Từ chối" value={statValue(stats.rejected)} icon={X} tone="danger" />
+        <StatCard label="Đã thu hồi" value={statValue(stats.recovered)} icon={ShieldCheck} tone="primary" />
+        <StatCard label="Không thu hồi" value={statValue(stats.unrecoverable)} icon={X} tone="danger" />
       </div>
 
       <FilterBar
@@ -765,11 +795,11 @@ export function AdvancesPage() {
         onSearchChange={setSearch}
         placeholder="Tìm theo tên, mã NV, số tiền…"
         chips={[
-          { key: "pending", label: `Chờ duyệt (${stats.recruiter_approved})` },
-          { key: "accepted", label: `Đã tiếp nhận (${stats.accepted})` },
-          { key: "recovered", label: `Đã thu hồi (${stats.recovered})` },
-          { key: "unrecoverable", label: `Không thu hồi (${stats.unrecoverable})` },
-          { key: "rejected", label: `Từ chối (${stats.rejected})` },
+          { key: "pending", label: `Chờ duyệt (${stats.recruiter_approved.count})` },
+          { key: "accepted", label: `Đã tiếp nhận (${stats.accepted.count})` },
+          { key: "recovered", label: `Đã thu hồi (${stats.recovered.count})` },
+          { key: "unrecoverable", label: `Không thu hồi (${stats.unrecoverable.count})` },
+          { key: "rejected", label: `Từ chối (${stats.rejected.count})` },
           { key: "all", label: "Tất cả" },
         ]}
         activeChip={tab}
