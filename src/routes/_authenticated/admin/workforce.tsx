@@ -110,6 +110,37 @@ function inDateRange(value: string | undefined, from: string, to: string) {
   return t >= fromT && t <= toT;
 }
 
+function endOfDayTime(value: string) {
+  const t = new Date(`${value}T23:59:59.999`).getTime();
+  return Number.isNaN(t) ? Date.now() : t;
+}
+
+function historySortTime(history: EmploymentHistoryRecord) {
+  return new Date(history.join_date || history.created || 0).getTime();
+}
+
+function getLatestHistoryAtEndDate(histories: EmploymentHistoryRecord[], to: string) {
+  const toT = endOfDayTime(to);
+  let latest: EmploymentHistoryRecord | null = null;
+  for (const h of histories) {
+    const joinT = new Date(h.join_date).getTime();
+    if (Number.isNaN(joinT) || joinT > toT) continue;
+    if (!latest || historySortTime(h) > historySortTime(latest)) {
+      latest = h;
+    }
+  }
+  return latest;
+}
+
+function isWorkingAtEndDate(history: EmploymentHistoryRecord, to: string) {
+  const toT = endOfDayTime(to);
+  const joinT = new Date(history.join_date).getTime();
+  if (Number.isNaN(joinT) || joinT > toT) return false;
+  if (!history.leave_date) return history.status === "working";
+  const leaveT = new Date(history.leave_date).getTime();
+  return !Number.isNaN(leaveT) && leaveT > toT;
+}
+
 function formatDate(value?: string) {
   if (!value) return "—";
   const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -203,15 +234,16 @@ function WorkforcePage() {
     let working = 0;
     let joined = 0;
     let left = 0;
-    for (const h of latestByUser.values()) {
-      if (h.status === "working" && !h.leave_date) working++;
+    for (const arr of historiesByUser.values()) {
+      const h = getLatestHistoryAtEndDate(arr, to);
+      if (h && isWorkingAtEndDate(h, to)) working++;
     }
     for (const h of histories) {
       if (inDateRange(h.join_date, from, to)) joined++;
       if (h.status === "left" && inDateRange(h.leave_date, from, to)) left++;
     }
     return { working, joined, left };
-  }, [latestByUser, histories, from, to]);
+  }, [historiesByUser, histories, from, to]);
 
   const filteredHistoriesByDate = useMemo(() => {
     return histories.filter(
@@ -249,36 +281,36 @@ function WorkforcePage() {
 
   const latestByUserForStats = useMemo(() => {
     const map = new Map<string, EmploymentHistoryRecord[]>();
-    for (const h of filteredHistoriesForStats) {
+    for (const h of histories) {
+      if (selectedFactoryIds.length > 0 && !selectedFactoryIds.includes(h.factory)) continue;
+      if (selectedRecruiterIds.length > 0 && (!h.recruiter_staff || !selectedRecruiterIds.includes(h.recruiter_staff))) {
+        continue;
+      }
       const arr = map.get(h.user) || [];
       arr.push(h);
       map.set(h.user, arr);
     }
     const latest = new Map<string, EmploymentHistoryRecord>();
     for (const [userId, arr] of map.entries()) {
-      const l = getLatestEmploymentHistory(arr);
+      const l = getLatestHistoryAtEndDate(arr, to);
       if (l) latest.set(userId, l);
     }
     return latest;
-  }, [filteredHistoriesForStats]);
+  }, [histories, selectedFactoryIds, selectedRecruiterIds, to]);
 
   const filteredStats = useMemo(() => {
     let working = 0;
     let joined = 0;
     let left = 0;
-    for (const h of latestByUser.values()) {
-      if (h.status === "working" && !h.leave_date) {
-        if (selectedFactoryIds.length > 0 && !selectedFactoryIds.includes(h.factory)) continue;
-        if (selectedRecruiterIds.length > 0 && (!h.recruiter_staff || !selectedRecruiterIds.includes(h.recruiter_staff))) continue;
-        working++;
-      }
+    for (const h of latestByUserForStats.values()) {
+      if (isWorkingAtEndDate(h, to)) working++;
     }
     for (const h of filteredHistoriesForStats) {
       if (inDateRange(h.join_date, from, to)) joined++;
       if (h.status === "left" && inDateRange(h.leave_date, from, to)) left++;
     }
     return { working, joined, left };
-  }, [latestByUser, filteredHistoriesForStats, from, to, selectedFactoryIds, selectedRecruiterIds]);
+  }, [latestByUserForStats, filteredHistoriesForStats, from, to]);
 
   const filteredFactoriesForStats = useMemo(() => {
     if (selectedFactoryIds.length === 0) return factories;
@@ -578,7 +610,7 @@ function RecruitGroups({
     for (const f of factories) map.set(f.id, { working: 0, joined: 0, left: 0 });
 
     for (const h of latestByUser.values()) {
-      if (h.status === "working" && !h.leave_date) {
+      if (isWorkingAtEndDate(h, to)) {
         const s = map.get(h.factory) || { working: 0, joined: 0, left: 0 };
         s.working++;
         map.set(h.factory, s);
@@ -606,7 +638,7 @@ function RecruitGroups({
     for (const h of latestByUser.values()) {
       const recruiterId = h.recruiter_staff;
       if (!recruiterId || !staffSet.has(recruiterId)) continue;
-      if (h.status === "working" && !h.leave_date) {
+      if (isWorkingAtEndDate(h, to)) {
         const s = map.get(recruiterId) || { working: 0, joined: 0, left: 0 };
         s.working++;
         map.set(recruiterId, s);
@@ -715,7 +747,7 @@ function collectWorkersForFactory(
   const seen = new Map<string, GroupWorker>();
   for (const [userId, h] of latestByUser.entries()) {
     if (h.factory !== factoryId) continue;
-    if (h.status === "working" && !h.leave_date) {
+    if (isWorkingAtEndDate(h, to)) {
       seen.set(`${userId}:working`, {
         userId,
         fullName: h.expand?.user?.full_name || h.worker_name_snapshot || "Người lao động",
@@ -759,7 +791,7 @@ function collectWorkersForRecruiter(
   const seen = new Map<string, GroupWorker>();
   for (const [userId, h] of latestByUser.entries()) {
     if (h.recruiter_staff !== staffId) continue;
-    if (h.status === "working" && !h.leave_date) {
+    if (isWorkingAtEndDate(h, to)) {
       seen.set(`${userId}:working`, {
         userId,
         fullName: h.expand?.user?.full_name || h.worker_name_snapshot || "Người lao động",
