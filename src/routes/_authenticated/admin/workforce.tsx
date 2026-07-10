@@ -83,7 +83,7 @@ export const Route = createFileRoute("/_authenticated/admin/workforce")({
   component: WorkforcePage,
 });
 
-type ActiveTab = "recruit" | "list";
+type ActiveTab = "recruit" | "list" | "my-recruited";
 type RecruitSubTab = "factory" | "recruiter";
 type ListScope = "all" | "working" | "left";
 
@@ -208,6 +208,27 @@ function WorkforcePage() {
     return { working, joined, left };
   }, [latestByUser, histories, from, to]);
 
+  const filteredHistoriesByDate = useMemo(() => {
+    return histories.filter(
+      (h) => inDateRange(h.join_date, from, to) || (h.status === "left" && inDateRange(h.leave_date, from, to)),
+    );
+  }, [histories, from, to]);
+
+  const latestByUserFiltered = useMemo(() => {
+    const map = new Map<string, EmploymentHistoryRecord[]>();
+    for (const h of filteredHistoriesByDate) {
+      const arr = map.get(h.user) || [];
+      arr.push(h);
+      map.set(h.user, arr);
+    }
+    const latest = new Map<string, EmploymentHistoryRecord>();
+    for (const [userId, arr] of map.entries()) {
+      const l = getLatestEmploymentHistory(arr);
+      if (l) latest.set(userId, l);
+    }
+    return latest;
+  }, [filteredHistoriesByDate]);
+
   return (
     <PageContainer
       title="Nhân sự đi làm"
@@ -234,12 +255,15 @@ function WorkforcePage() {
       }
     >
       <Tabs value={tab} onValueChange={(v) => setTab(v as ActiveTab)} className="space-y-3">
-        <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl">
+        <TabsList className="grid h-10 w-full grid-cols-3 rounded-xl">
           <TabsTrigger value="recruit" className="rounded-lg text-xs">
             Tuyển dụng
           </TabsTrigger>
           <TabsTrigger value="list" className="rounded-lg text-xs">
             Danh sách
+          </TabsTrigger>
+          <TabsTrigger value="my-recruited" className="rounded-lg text-xs">
+            Tôi tuyển
           </TabsTrigger>
         </TabsList>
 
@@ -266,36 +290,66 @@ function WorkforcePage() {
                 />
               </div>
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFrom(todayIso());
+                    setTo(todayIso());
+                  }}
+                  className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                >
+                  1 ngày
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFrom(daysAgoIso(2));
+                    setTo(todayIso());
+                  }}
+                  className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                >
+                  2 ngày
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFrom(daysAgoIso(7));
+                    setTo(todayIso());
+                  }}
+                  className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                >
+                  7 ngày
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFrom(daysAgoIso(30));
+                    setTo(todayIso());
+                  }}
+                  className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                >
+                  30 ngày
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFrom(daysAgoIso(90));
+                    setTo(todayIso());
+                  }}
+                  className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                >
+                  90 ngày
+                </button>
+              </div>
               <button
                 type="button"
-                onClick={() => {
-                  setFrom(daysAgoIso(7));
-                  setTo(todayIso());
-                }}
-                className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                onClick={() => setChartOpen(true)}
+                className="ml-auto flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground shadow-sm active:scale-[0.96]"
+                aria-label="Biểu đồ tuyển dụng"
               >
-                7 ngày
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setFrom(daysAgoIso(30));
-                  setTo(todayIso());
-                }}
-                className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-              >
-                30 ngày
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setFrom(daysAgoIso(90));
-                  setTo(todayIso());
-                }}
-                className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-              >
-                90 ngày
+                <BarChart3 className="h-3.5 w-3.5" />
               </button>
             </div>
           </Card>
@@ -311,17 +365,6 @@ function WorkforcePage() {
             <StatCard label="Đã nghỉ" value={stats.left} icon={UserRoundMinus} tone="warning" />
           </div>
 
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 rounded-lg"
-              onClick={() => setChartOpen(true)}
-              aria-label="Biểu đồ tuyển dụng"
-            >
-              <BarChart3 className="h-4 w-4" />
-            </Button>
-          </div>
 
           <div className="flex gap-2">
             <Link
@@ -348,13 +391,11 @@ function WorkforcePage() {
             </button>
           </div>
 
-          <RecruitGroups
-            histories={histories}
-            factories={factories}
-            users={users}
-            from={from}
-            to={to}
-            latestByUser={latestByUser}
+          <WorkerList
+            histories={filteredHistoriesByDate}
+            userById={userById}
+            factoryById={factoryById}
+            latestByUser={latestByUserFiltered}
             loading={loading}
             onSelectWorker={setSelectedUserId}
           />
@@ -369,6 +410,10 @@ function WorkforcePage() {
             loading={loading}
             onSelectWorker={setSelectedUserId}
           />
+        </TabsContent>
+
+        <TabsContent value="my-recruited" className="mt-0 space-y-3">
+          <MyRecruitedTab histories={histories} userById={userById} factoryById={factoryById} />
         </TabsContent>
       </Tabs>
 
@@ -2141,5 +2186,154 @@ function CccdExportDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function MyRecruitedTab({
+  histories,
+  userById,
+  factoryById,
+}: {
+  histories: EmploymentHistoryRecord[];
+  userById: Map<string, UserRecord>;
+  factoryById: Map<string, FactoryRecord>;
+}) {
+  const currentUser = pb.authStore.record as UserRecord | null;
+  const [search, setSearch] = useState("");
+  const [scope, setScope] = useState<"all" | "working" | "left">("all");
+
+  const since = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 90);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
+
+  const myHistories = useMemo(() => {
+    if (!currentUser?.id) return [];
+    return histories.filter(
+      (h) => h.recruiter_staff === currentUser.id && h.join_date >= since,
+    );
+  }, [histories, currentUser?.id, since]);
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return myHistories.filter((h) => {
+      if (scope === "working" && h.status !== "working") return false;
+      if (scope === "left" && h.status !== "left") return false;
+      if (query) {
+        const u = userById.get(h.user);
+        const f = factoryById.get(h.factory);
+        const haystack = [
+          h.worker_name_snapshot,
+          h.worker_cccd_snapshot,
+          h.employee_code,
+          u?.full_name,
+          u?.username,
+          u?.phone,
+          f?.name,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [myHistories, search, scope, userById, factoryById]);
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Tìm tên, mã NV, CCCD, nhà máy..."
+          className="rounded-full pl-9"
+        />
+      </div>
+
+      <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        <button
+          type="button"
+          onClick={() => setScope("all")}
+          className={cn(
+            "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
+            scope === "all"
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border text-muted-foreground",
+          )}
+        >
+          Tất cả
+        </button>
+        <button
+          type="button"
+          onClick={() => setScope("working")}
+          className={cn(
+            "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
+            scope === "working"
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border text-muted-foreground",
+          )}
+        >
+          Đang làm
+        </button>
+        <button
+          type="button"
+          onClick={() => setScope("left")}
+          className={cn(
+            "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
+            scope === "left"
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border text-muted-foreground",
+          )}
+        >
+          Đã nghỉ
+        </button>
+      </div>
+
+      <div className="text-xs text-muted-foreground">
+        Tổng {filtered.length} hồ sơ bạn tuyển trong 90 ngày.
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="Không có hồ sơ phù hợp"
+          description="Chưa có lao động nào do bạn tuyển trong 90 ngày gần đây."
+        />
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((h) => {
+            const u = userById.get(h.user);
+            const f = factoryById.get(h.factory);
+            return (
+              <div
+                key={h.id}
+                className="rounded-2xl border border-border/60 bg-card p-3 shadow-soft"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">
+                      {h.worker_name_snapshot || u?.full_name || "Người lao động"}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      Mã NV: {h.employee_code || "Chưa có"} · CCCD: {maskCccd(h.worker_cccd_snapshot)}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      {f?.name || "Chưa có nhà máy"} · Vào: {formatDate(h.join_date)}
+                      {h.leave_date ? ` · Nghỉ: ${formatDate(h.leave_date)}` : ""}
+                    </div>
+                  </div>
+                  <StatusChip tone={h.status === "working" ? "success" : "neutral"}>
+                    {h.status === "working" ? "Đang làm" : "Đã nghỉ"}
+                  </StatusChip>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

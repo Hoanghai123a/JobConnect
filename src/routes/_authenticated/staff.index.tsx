@@ -26,7 +26,6 @@ function StaffDashboardPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [workersCount, setWorkersCount] = useState(0);
-  const [operableCount, setOperableCount] = useState(0);
   const [assignments, setAssignments] = useState<FactoryManagerRecord[]>([]);
   const [utilOpen, setUtilOpen] = useState(false);
   const [reloading, setReloading] = useState(false);
@@ -51,11 +50,6 @@ function StaffDashboardPage() {
       .then(([workspace, managerRows]) => {
         if (!alive) return;
         setWorkersCount(workspace.workers.length);
-        setOperableCount(
-          workspace.workers.filter(
-            (item) => item.canReportAdvance || item.canReportLeave || item.canReportJoin,
-          ).length,
-        );
         setAssignments(managerRows);
       })
       .finally(() => {
@@ -107,8 +101,6 @@ function StaffDashboardPage() {
       <div className="grid grid-cols-2 gap-2.5">
         <StatCard label="Nhà máy phụ trách" value={activeAssignments.length} icon={Building2} tone="info" />
         <StatCard label="Lao động trong quyền" value={workersCount} icon={Users} tone="primary" />
-        <StatCard label="Có thể cập nhật" value={operableCount} icon={NotebookPen} tone="success" />
-        <StatCard label="Xuất dữ liệu" value={1} icon={Download} tone="warning" />
       </div>
 
       <div className="grid grid-cols-2 gap-3">

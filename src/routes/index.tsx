@@ -279,6 +279,44 @@ function DashboardPage() {
       </div>
 
       <div className="space-y-4 px-4 pt-2">
+        {isAdmin && (
+          <section className="rounded-3xl bg-card p-3 shadow-soft">
+            <div className="flex items-center justify-between px-1 pb-2 pt-1">
+              <div>
+                <div className="text-sm font-semibold tracking-tight">Quản trị</div>
+                <div className="text-[11px] text-muted-foreground">Chỉ dành cho admin</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <FeatureTile
+                to="/admin/workforce"
+                label="Nhân sự đi làm"
+                description="Tuyển dụng & danh sách NLĐ"
+                icon={Users}
+              />
+              <FeatureTile
+                to="/staff/approvals"
+                label="Phê duyệt"
+                description="Yêu cầu từ staff"
+                icon={ClipboardCheck}
+                badge={toBadge(pendingApprovalCount)}
+              />
+              <FeatureTile
+                to="/admin/staff"
+                label="Quản lý staff"
+                description="Tạo, import tài khoản staff"
+                icon={ShieldCheck}
+              />
+              <FeatureTile
+                to="/admin/settings"
+                label="Cài đặt"
+                description="Quản trị hệ thống"
+                icon={Settings}
+              />
+            </div>
+          </section>
+        )}
+
         <section>
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -344,25 +382,6 @@ function DashboardPage() {
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <FeatureTile
-              to="/attendance"
-              label="Tự chấm công"
-              description="Ghi nhận giờ làm"
-              icon={Clock}
-              variant="accent"
-              disabled={workDisabled}
-              disabledReason={workDisabledReason}
-            />
-            <FeatureTile
-              to="/check-attendance"
-              label="Check công/lương"
-              description="Kiểm tra bảng công"
-              icon={CalendarCheck}
-              variant="accent"
-              disabled={workDisabled}
-              disabledReason={workDisabledReason}
-              badge={workDisabled ? undefined : toBadge(unread.check)}
-            />
-            <FeatureTile
               to="/advances"
               label="Ứng lương"
               description="Xin ứng lương"
@@ -388,6 +407,25 @@ function DashboardPage() {
                   : undefined
               }
             />
+            <FeatureTile
+              to="/check-attendance"
+              label="Check công/lương"
+              description="Kiểm tra bảng công"
+              icon={CalendarCheck}
+              variant="accent"
+              disabled={workDisabled}
+              disabledReason={workDisabledReason}
+              badge={workDisabled ? undefined : toBadge(unread.check)}
+            />
+            <FeatureTile
+              to="/attendance"
+              label="Tự chấm công"
+              description="Ghi nhận giờ làm"
+              icon={Clock}
+              variant="accent"
+              disabled={workDisabled}
+              disabledReason={workDisabledReason}
+            />
             {!isAdmin && (
               <FeatureTile
                 to="/work-history"
@@ -401,56 +439,6 @@ function DashboardPage() {
             )}
           </div>
         </section>
-
-        {isAdmin && (
-          <section className="rounded-3xl bg-card p-3 shadow-soft">
-            <div className="flex items-center justify-between px-1 pb-2 pt-1">
-              <div>
-                <div className="text-sm font-semibold tracking-tight">Quản trị</div>
-                <div className="text-[11px] text-muted-foreground">Chỉ dành cho admin</div>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <FeatureTile
-                to="/admin/accounts/stats"
-                label="Thống kê TK"
-                description="Đăng nhập theo role"
-                icon={Users}
-              />
-              <FeatureTile
-                to="/admin/staff"
-                label="Quản lý staff"
-                description="Tạo, import tài khoản staff"
-                icon={ShieldCheck}
-              />
-              <FeatureTile
-                to="/admin/workforce"
-                label="Nhân sự đi làm"
-                description="Tuyển dụng & danh sách NLĐ"
-                icon={Users}
-              />
-              <FeatureTile
-                to="/admin/settings"
-                label="Cài đặt"
-                description="Quản trị hệ thống"
-                icon={Settings}
-              />
-              <FeatureTile
-                to="/notebook"
-                label="Sổ tay"
-                description="Ghi chú, ghi nợ theo ngày"
-                icon={NotebookPen}
-              />
-              <FeatureTile
-                to="/staff/approvals"
-                label="Phê duyệt"
-                description="Yêu cầu từ staff"
-                icon={ClipboardCheck}
-                badge={toBadge(pendingApprovalCount)}
-              />
-            </div>
-          </section>
-        )}
       </div>
 
       <BottomNav />
@@ -516,6 +504,14 @@ function DashboardPage() {
                 icon={NotebookPen}
                 size="compact"
               />
+              {isAdmin && (
+                <FeatureTile
+                  to="/admin/accounts/stats"
+                  label="Thống kê TK"
+                  icon={Users}
+                  size="compact"
+                />
+              )}
             </div>
           )}
 
