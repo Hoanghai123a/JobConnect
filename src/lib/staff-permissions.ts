@@ -172,6 +172,32 @@ export function canReportJoin(
   return managedFactoryIds.has(targetFactoryId);
 }
 
+function isWorkerInStaffScope(
+  viewer: UserRecord,
+  userHistories: EmploymentHistoryRecord[],
+  managedFactoryIds: Set<string>,
+): boolean {
+  if (viewer.role === "admin") return true;
+  if (viewer.role !== "staff") return false;
+
+  if (isRecentRecruiter(viewer, userHistories)) return true;
+
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180);
+
+  const managedHistories = userHistories
+    .filter((h) => managedFactoryIds.has(h.factory))
+    .sort(compareRecentHistories);
+
+  const latestManaged = managedHistories[0];
+  if (!latestManaged) return false;
+
+  if (!latestManaged.leave_date) return true;
+
+  const leaveDate = new Date(latestManaged.leave_date);
+  return !Number.isNaN(leaveDate.getTime()) && leaveDate >= sixMonthsAgo;
+}
+
 function buildWorkspace(
   viewer: UserRecord,
   histories: EmploymentHistoryRecord[],
@@ -192,19 +218,9 @@ function buildWorkspace(
       const user = workerMap.get(userId);
       if (!user) return null;
 
-      const hasAccess =
-        viewer.role === "admin" ||
-        userHistories.some((h) =>
-          canViewHistoryInStaffScope(viewer, h, userHistories, managedFactoryIds),
-        );
-      if (!hasAccess) return null;
+      if (!isWorkerInStaffScope(viewer, userHistories, managedFactoryIds)) return null;
 
-      const visibleHistories =
-        viewer.role === "admin"
-          ? userHistories
-          : filterHistoriesForStaffScope(viewer, userHistories, managedFactoryIds);
-
-      if (!visibleHistories.length) return null;
+      const visibleHistories = userHistories;
 
       const latestHistory = getLatestEmploymentHistory(visibleHistories);
       const activeHistory =

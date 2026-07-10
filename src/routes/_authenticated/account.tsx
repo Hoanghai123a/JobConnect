@@ -482,6 +482,13 @@ function AdminUsersPanel() {
   const [adminPassword, setAdminPassword] = useState("");
   const [confirmingApproval, setConfirmingApproval] = useState(false);
   const [detailUser, setDetailUser] = useState<any>(null);
+  const [detailBankEditing, setDetailBankEditing] = useState(false);
+  const [detailBankForm, setDetailBankForm] = useState({
+    bank_name: "",
+    bank_account_number: "",
+    bank_account_name: "",
+  });
+  const [detailBankSaving, setDetailBankSaving] = useState(false);
   const [bulkStaffProcessing, setBulkStaffProcessing] = useState(false);
   const emptyNew = {
     full_name: "",
@@ -804,6 +811,38 @@ function AdminUsersPanel() {
       load();
     } catch (e: any) {
       toast.error(e?.message || "Lỗi");
+    }
+  };
+
+  const saveDetailBank = async () => {
+    if (!detailUser || !me) return;
+    setDetailBankSaving(true);
+    try {
+      await pb.collection("users").update(detailUser.id, detailBankForm);
+      await createStaffActionLog({
+        actor: me as UserRecord,
+        targetUserId: detailUser.id,
+        targetCollection: "users",
+        targetRecord: detailUser.id,
+        action: "update_bank",
+        before: {
+          bank_name: detailUser.bank_name || "",
+          bank_account_number: detailUser.bank_account_number || "",
+          bank_account_name: detailUser.bank_account_name || "",
+        },
+        after: detailBankForm,
+        note: "Admin cập nhật STK ngân hàng cho NLĐ",
+      });
+      setDetailUser((prev: any) => (prev ? { ...prev, ...detailBankForm } : prev));
+      setUsers((prev) =>
+        prev.map((u) => (u.id === detailUser.id ? { ...u, ...detailBankForm } : u)),
+      );
+      setDetailBankEditing(false);
+      toast.success("Đã cập nhật STK ngân hàng");
+    } catch (e: any) {
+      toast.error(e?.message || "Không cập nhật được STK");
+    } finally {
+      setDetailBankSaving(false);
     }
   };
 
@@ -1366,7 +1405,7 @@ function AdminUsersPanel() {
             return (
               <div key={u.id} className={"list-card flex items-start gap-3 " + tone}>
                 <Checkbox checked={isSel} onCheckedChange={() => toggle(u.id)} className="mt-1" />
-                <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setDetailUser(u)}>
+                <div className="min-w-0 flex-1 cursor-pointer" onClick={() => { setDetailUser(u); setDetailBankEditing(false); setDetailBankForm({ bank_name: u.bank_name || "", bank_account_number: u.bank_account_number || "", bank_account_name: u.bank_account_name || "" }); }}>
                   <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {"📞 " + (u.phone || "—")}
@@ -1641,9 +1680,99 @@ function AdminUsersPanel() {
               <DetailRow label="Mã tài khoản (UID)" value={detailUser.uid} />
               <DetailRow label="Mã nhân viên" value={detailUser.employee_code} />
               <DetailRow label="Nhà máy" value={detailUser.company} />
-              <DetailRow label="Ngân hàng" value={detailUser.bank_name} />
-              <DetailRow label="Số tài khoản" value={detailUser.bank_account_number} />
-              <DetailRow label="Tên tài khoản" value={detailUser.bank_account_name} />
+              <Separator />
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Tài khoản ngân hàng
+                  </span>
+                  {!detailBankEditing && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => setDetailBankEditing(true)}
+                    >
+                      Sửa STK
+                    </Button>
+                  )}
+                </div>
+                {detailBankEditing ? (
+                  <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Ngân hàng</Label>
+                      <Select
+                        value={detailBankForm.bank_name}
+                        onValueChange={(v) =>
+                          setDetailBankForm((c) => ({ ...c, bank_name: v }))
+                        }
+                      >
+                        <SelectTrigger className="rounded-xl">
+                          <SelectValue placeholder="Chọn ngân hàng" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-72">
+                          {VN_BANKS.map((bank) => (
+                            <SelectItem key={bank.code} value={bank.name}>
+                              {bank.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Số tài khoản</Label>
+                      <Input
+                        value={detailBankForm.bank_account_number}
+                        onChange={(e) =>
+                          setDetailBankForm((c) => ({
+                            ...c,
+                            bank_account_number: e.target.value.replace(/\D/g, ""),
+                          }))
+                        }
+                        inputMode="numeric"
+                        placeholder="Nhập số tài khoản"
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Tên chủ tài khoản</Label>
+                      <Input
+                        value={detailBankForm.bank_account_name}
+                        onChange={(e) =>
+                          setDetailBankForm((c) => ({ ...c, bank_account_name: e.target.value }))
+                        }
+                        placeholder="Nhập tên chủ tài khoản"
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 rounded-xl"
+                        onClick={() => setDetailBankEditing(false)}
+                      >
+                        Hủy
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1 rounded-xl"
+                        disabled={detailBankSaving}
+                        onClick={saveDetailBank}
+                      >
+                        {detailBankSaving ? "Đang lưu..." : "Lưu STK"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <DetailRow label="Ngân hàng" value={detailUser.bank_name} />
+                    <DetailRow label="Số tài khoản" value={detailUser.bank_account_number} />
+                    <DetailRow label="Tên tài khoản" value={detailUser.bank_account_name} />
+                  </>
+                )}
+              </div>
+              <Separator />
               <DetailRow label="Vai trò" value={ROLE_LABELS[(detailUser.role || "user") as Role]} />
               <DetailRow
                 label="Trạng thái"

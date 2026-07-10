@@ -8,6 +8,7 @@ import {
   FileDown,
   FileSpreadsheet,
   IdCard,
+  Landmark,
   Plus,
   Search,
   ShieldCheck,
@@ -72,6 +73,7 @@ import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
 import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
 import { RecruitChartDialog } from "@/components/workforce/RecruitChartDialog";
+import { VN_BANKS } from "@/lib/vn-banks";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 
@@ -413,7 +415,12 @@ function WorkforcePage() {
         </TabsContent>
 
         <TabsContent value="my-recruited" className="mt-0 space-y-3">
-          <MyRecruitedTab histories={histories} userById={userById} factoryById={factoryById} />
+          <MyRecruitedTab
+            histories={histories}
+            userById={userById}
+            factoryById={factoryById}
+            onSelectWorker={setSelectedUserId}
+          />
         </TabsContent>
       </Tabs>
 
@@ -1009,11 +1016,29 @@ function AdminWorkerDrawer({
   });
   const [saving, setSaving] = useState(false);
   const [submittingAdvance, setSubmittingAdvance] = useState(false);
+  const [bankEditing, setBankEditing] = useState(false);
+  const [bankForm, setBankForm] = useState({
+    bank_name: "",
+    bank_account_number: "",
+    bank_account_name: "",
+  });
+  const [bankSaving, setBankSaving] = useState(false);
 
   const staffUsers = useMemo(
     () => users.filter((u) => u.role === "staff" || u.role === "admin"),
     [users],
   );
+
+  useEffect(() => {
+    if (user) {
+      setBankEditing(false);
+      setBankForm({
+        bank_name: user.bank_name || "",
+        bank_account_number: user.bank_account_number || "",
+        bank_account_name: user.bank_account_name || "",
+      });
+    }
+  }, [user?.id]);
 
   const startEdit = (h: EmploymentHistoryRecord) => {
     setEditingId(h.id);
@@ -1165,6 +1190,35 @@ function AdminWorkerDrawer({
     }
   };
 
+  const saveBankInfo = async () => {
+    if (!user || !actor) return;
+    setBankSaving(true);
+    try {
+      await pb.collection("users").update(user.id, bankForm);
+      await createStaffActionLog({
+        actor,
+        targetUserId: user.id,
+        targetCollection: "users",
+        targetRecord: user.id,
+        action: "update_bank",
+        before: {
+          bank_name: user.bank_name || "",
+          bank_account_number: user.bank_account_number || "",
+          bank_account_name: user.bank_account_name || "",
+        },
+        after: bankForm,
+        note: "Admin cập nhật STK ngân hàng cho NLĐ (nhân sự đi làm)",
+      });
+      setBankEditing(false);
+      toast.success("Đã cập nhật STK ngân hàng");
+      onDataChanged();
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Không cập nhật được STK"));
+    } finally {
+      setBankSaving(false);
+    }
+  };
+
   if (!user) return null;
 
   const activeHistory = histories.find((item) => item.status === "working" && !item.leave_date);
@@ -1218,6 +1272,106 @@ function AdminWorkerDrawer({
               <div className="text-[10px] text-muted-foreground">Tên đăng nhập</div>
               <div className="mt-0.5 text-sm font-semibold">{user.username || "—"}</div>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Landmark className="h-3.5 w-3.5" />
+                Tài khoản ngân hàng
+              </div>
+              {!bankEditing && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => setBankEditing(true)}
+                >
+                  Sửa STK
+                </Button>
+              )}
+            </div>
+            {bankEditing ? (
+              <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Ngân hàng</Label>
+                  <Select
+                    value={bankForm.bank_name}
+                    onValueChange={(v) => setBankForm((c) => ({ ...c, bank_name: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn ngân hàng" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {VN_BANKS.map((bank) => (
+                        <SelectItem key={bank.code} value={bank.name}>
+                          {bank.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Số tài khoản</Label>
+                  <Input
+                    value={bankForm.bank_account_number}
+                    onChange={(e) =>
+                      setBankForm((c) => ({
+                        ...c,
+                        bank_account_number: e.target.value.replace(/\D/g, ""),
+                      }))
+                    }
+                    inputMode="numeric"
+                    placeholder="Nhập số tài khoản"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Tên chủ tài khoản</Label>
+                  <Input
+                    value={bankForm.bank_account_name}
+                    onChange={(e) =>
+                      setBankForm((c) => ({ ...c, bank_account_name: e.target.value }))
+                    }
+                    placeholder="Nhập tên chủ tài khoản"
+                  />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setBankEditing(false)}
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="flex-1"
+                    disabled={bankSaving}
+                    onClick={saveBankInfo}
+                  >
+                    {bankSaving ? "Đang lưu..." : "Lưu STK"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-1.5 text-sm">
+                <div className="rounded-xl bg-muted/35 p-2.5">
+                  <div className="text-[10px] text-muted-foreground">Ngân hàng</div>
+                  <div className="mt-0.5 text-sm font-semibold">{user.bank_name || "—"}</div>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div className="rounded-xl bg-muted/35 p-2.5">
+                    <div className="text-[10px] text-muted-foreground">Số tài khoản</div>
+                    <div className="mt-0.5 text-sm font-semibold">{user.bank_account_number || "—"}</div>
+                  </div>
+                  <div className="rounded-xl bg-muted/35 p-2.5">
+                    <div className="text-[10px] text-muted-foreground">Tên chủ TK</div>
+                    <div className="mt-0.5 text-sm font-semibold">{user.bank_account_name || "—"}</div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -2193,10 +2347,12 @@ function MyRecruitedTab({
   histories,
   userById,
   factoryById,
+  onSelectWorker,
 }: {
   histories: EmploymentHistoryRecord[];
   userById: Map<string, UserRecord>;
   factoryById: Map<string, FactoryRecord>;
+  onSelectWorker: (userId: string) => void;
 }) {
   const currentUser = pb.authStore.record as UserRecord | null;
   const [search, setSearch] = useState("");
@@ -2308,9 +2464,11 @@ function MyRecruitedTab({
             const u = userById.get(h.user);
             const f = factoryById.get(h.factory);
             return (
-              <div
+              <button
                 key={h.id}
-                className="rounded-2xl border border-border/60 bg-card p-3 shadow-soft"
+                type="button"
+                onClick={() => onSelectWorker(h.user)}
+                className="w-full rounded-2xl border border-border/60 bg-card p-3 text-left shadow-soft transition-colors hover:bg-muted/30 active:scale-[0.99]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -2325,11 +2483,14 @@ function MyRecruitedTab({
                       {h.leave_date ? ` · Nghỉ: ${formatDate(h.leave_date)}` : ""}
                     </div>
                   </div>
-                  <StatusChip tone={h.status === "working" ? "success" : "neutral"}>
-                    {h.status === "working" ? "Đang làm" : "Đã nghỉ"}
-                  </StatusChip>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <StatusChip tone={h.status === "working" ? "success" : "neutral"}>
+                      {h.status === "working" ? "Đang làm" : "Đã nghỉ"}
+                    </StatusChip>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
