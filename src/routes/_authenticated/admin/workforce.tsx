@@ -312,7 +312,7 @@ function WorkforcePage() {
       }
     >
       <Tabs value={tab} onValueChange={(v) => setTab(v as ActiveTab)} className="space-y-3">
-        <TabsList className="grid h-10 w-full grid-cols-3 rounded-xl">
+        <TabsList className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 grid h-10 w-full grid-cols-3 rounded-xl bg-muted shadow-sm">
           <TabsTrigger value="list" className="rounded-lg text-xs">
             Danh sách
           </TabsTrigger>
