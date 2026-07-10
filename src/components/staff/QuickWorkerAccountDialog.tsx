@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -54,13 +55,15 @@ import type { FactoryRecord } from "@/lib/factories";
 import { compressImage } from "@/lib/image-compress";
 import type { MainHouseRecord } from "@/lib/main-houses";
 import { pb, type UserRecord } from "@/lib/pocketbase";
+import { updateCachedCccdVersion, updateCachedHistory, updateCachedUser } from "@/lib/staff-cache";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { generateUid } from "@/lib/uid";
 import { cn } from "@/lib/utils";
 import { resolveBankName, VN_BANKS } from "@/lib/vn-banks";
 
 type QuickWorkerForm = {
-  full_name: string;
+  real_name: string;
+  worker_name_snapshot: string;
   cccd: string;
   phone: string;
   date_of_birth: string;
@@ -83,7 +86,8 @@ function todayIso() {
 }
 
 const emptyForm = (): QuickWorkerForm => ({
-  full_name: "",
+  real_name: "",
+  worker_name_snapshot: "",
   cccd: "",
   phone: "",
   date_of_birth: "",
@@ -150,18 +154,24 @@ export function QuickWorkerAccountDialog({
   const [backPreview, setBackPreview] = useState("");
   const [scanningSide, setScanningSide] = useState<"front" | "back" | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const frontInputRef = useRef<HTMLInputElement | null>(null);
-  const backInputRef = useRef<HTMLInputElement | null>(null);
+  const frontCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const frontLibraryInputRef = useRef<HTMLInputElement | null>(null);
+  const backCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const backLibraryInputRef = useRef<HTMLInputElement | null>(null);
+
+  const resetFormState = useCallback(() => {
+    setForm(emptyForm());
+    setFrontFile(null);
+    setBackFile(null);
+    setFrontPreview("");
+    setBackPreview("");
+    setScanningSide(null);
+    setSubmitting(false);
+  }, []);
 
   useEffect(() => {
     if (!open) {
-      setForm(emptyForm());
-      setFrontFile(null);
-      setBackFile(null);
-      setFrontPreview("");
-      setBackPreview("");
-      setScanningSide(null);
-      setSubmitting(false);
+      resetFormState();
       return;
     }
 
@@ -169,7 +179,7 @@ export function QuickWorkerAccountDialog({
       ...current,
       recruiter_staff: current.recruiter_staff || actor?.id || "",
     }));
-  }, [actor?.id, open]);
+  }, [actor?.id, open, resetFormState]);
 
   useEffect(() => {
     return () => {
@@ -192,7 +202,8 @@ export function QuickWorkerAccountDialog({
       const next = { ...current };
       const changes: Partial<QuickWorkerForm> = {
         cccd: data.cccd || "",
-        full_name: data.fullName || "",
+        real_name: data.fullName || "",
+        worker_name_snapshot: data.fullName || "",
         date_of_birth: data.dateOfBirth ? displayDateToPocketBase(data.dateOfBirth) : "",
         gender: data.gender || "",
         address: data.address || "",
@@ -256,17 +267,21 @@ export function QuickWorkerAccountDialog({
     event.preventDefault();
     if (!actor?.id) return toast.error("Không xác định người thao tác");
 
-    const fullName = form.full_name.trim();
+    const realName = form.real_name.trim();
+    const workerName = form.worker_name_snapshot.trim() || realName;
     const cccd = form.cccd.replace(/\D/g, "");
     const phone = form.phone.replace(/\s/g, "").trim();
     const username = buildUsername(phone, cccd);
     const birthForPb = displayDateToPocketBase(form.date_of_birth);
 
-    if (!fullName) return toast.warning("Nhập họ tên");
+    if (!realName) return toast.warning("Nhập tên thật");
     if (!cccd && !phone) return toast.warning("Nhập CCCD hoặc số điện thoại");
     if (!username) return toast.warning("Không tạo được tên đăng nhập từ SĐT/CCCD");
     if (form.date_of_birth.trim() && !birthForPb) {
       return toast.warning("Ngày sinh không hợp lệ");
+    }
+    if ((frontFile || backFile) && ![9, 12].includes(cccd.length)) {
+      return toast.warning("Nhập số CMND/CCCD hợp lệ trước khi lưu ảnh CCCD");
     }
     if (!form.factory) return toast.warning("Chọn công ty/nhà máy");
     if (!form.main_house) return toast.warning("Chọn nhà chính");
@@ -288,7 +303,7 @@ export function QuickWorkerAccountDialog({
       ]);
 
       const fd = new FormData();
-      fd.append("full_name", fullName);
+      fd.append("full_name", realName);
       fd.append("phone", phone);
       fd.append("username", username);
       fd.append("uid", uid);
@@ -312,57 +327,99 @@ export function QuickWorkerAccountDialog({
       if (compressedBack) fd.append("cccd_back", compressedBack);
 
       const createdUser = await pb.collection("users").create<UserRecord>(fd);
+      const secondaryWarnings: string[] = [];
+      const cacheUser: UserRecord = {
+        ...createdUser,
+        full_name: realName,
+        phone,
+        username,
+        cccd,
+        company: selectedFactory?.name || "",
+        employee_code: form.employee_code.trim(),
+      };
+
+      try {
+        await updateCachedUser(cacheUser);
+      } catch {
+        secondaryWarnings.push("chưa cập nhật được cache tài khoản");
+      }
 
       let cccdVersionId: string | undefined;
       if (cccd && (compressedFront || compressedBack)) {
-        const version = await findOrCreateCccdVersion(
-          createdUser.id,
-          cccd,
-          compressedFront,
-          compressedBack,
-        );
-        cccdVersionId = version.id;
+        try {
+          const version = await findOrCreateCccdVersion(
+            createdUser.id,
+            cccd,
+            compressedFront,
+            compressedBack,
+          );
+          cccdVersionId = version.id;
+          await updateCachedCccdVersion(version);
+        } catch {
+          secondaryWarnings.push("chưa lưu được phiên bản CCCD");
+        }
       }
 
-      const history = await createEmploymentHistory({
-        user: createdUser.id,
-        factory: form.factory,
-        main_house: form.main_house,
-        employee_code: form.employee_code.trim(),
-        worker_name_snapshot: fullName,
-        worker_cccd_snapshot: cccd,
-        recruiter_staff: form.recruiter_staff,
-        cccd_version: cccdVersionId,
-        join_date: form.join_date,
-        status: "working",
-        note: form.note.trim(),
-      });
-      await syncLegacyUserWorkFields(createdUser.id, history);
+      let historyId: string | undefined;
+      try {
+        const history = await createEmploymentHistory({
+          user: createdUser.id,
+          factory: form.factory,
+          main_house: form.main_house,
+          employee_code: form.employee_code.trim(),
+          worker_name_snapshot: workerName,
+          worker_cccd_snapshot: cccd,
+          recruiter_staff: form.recruiter_staff,
+          cccd_version: cccdVersionId,
+          join_date: form.join_date,
+          status: "working",
+          note: form.note.trim(),
+        });
+        historyId = history.id;
+        await updateCachedHistory(history);
+        await syncLegacyUserWorkFields(createdUser.id, history);
+        await updateCachedUser(cacheUser);
+      } catch {
+        secondaryWarnings.push("chưa tạo được lịch sử đi làm");
+      }
 
-      await Promise.all([
-        createStaffActionLog({
+      try {
+        await createStaffActionLog({
           actor,
           targetUserId: createdUser.id,
           targetCollection: "users",
           targetRecord: createdUser.id,
           action: "create",
-          after: { id: createdUser.id, username, uid, full_name: fullName, cccd },
+          after: { id: createdUser.id, username, uid, full_name: realName, cccd },
           note: "Tạo nhanh tài khoản NLĐ từ mục NLĐ",
-        }),
-        createStaffActionLog({
-          actor,
-          targetUserId: createdUser.id,
-          targetCollection: "employment_histories",
-          targetRecord: history.id,
-          action: "report_join",
-          after: history,
-          note: "Tạo nhanh lịch sử đi làm từ mục NLĐ",
-        }),
-      ]);
+        });
+        if (historyId) {
+          await createStaffActionLog({
+            actor,
+            targetUserId: createdUser.id,
+            targetCollection: "employment_histories",
+            targetRecord: historyId,
+            action: "report_join",
+            after: { id: historyId },
+            note: "Tạo nhanh lịch sử đi làm từ mục NLĐ",
+          });
+        }
+      } catch {
+        secondaryWarnings.push("chưa ghi được nhật ký thao tác");
+      }
 
-      toast.success("Đã tạo nhanh tài khoản NLĐ");
+      resetFormState();
       onOpenChange(false);
-      await onCreated(createdUser.id);
+      try {
+        await onCreated(createdUser.id);
+      } catch {
+        secondaryWarnings.push("chưa tải lại được danh sách");
+      }
+
+      if (secondaryWarnings.length > 0) {
+        toast.warning(`Tài khoản đã tạo, nhưng ${secondaryWarnings.join(", ")}.`);
+      }
+      toast.success("Đã tạo nhanh tài khoản NLĐ");
     } catch (error) {
       const fieldErrors = getPocketBaseFieldErrors(error);
       toast.error(fieldErrors || getErrorMessage(error, "Không tạo được tài khoản nhanh"));
@@ -389,7 +446,8 @@ export function QuickWorkerAccountDialog({
                   label="CCCD trước"
                   preview={frontPreview}
                   scanning={scanningSide === "front"}
-                  inputRef={frontInputRef}
+                  cameraInputRef={frontCameraInputRef}
+                  libraryInputRef={frontLibraryInputRef}
                   onPick={pickCccdImage("front")}
                   onScan={() => frontFile && scanImage(frontFile, "front")}
                   onClear={() => {
@@ -402,7 +460,8 @@ export function QuickWorkerAccountDialog({
                   label="CCCD sau"
                   preview={backPreview}
                   scanning={scanningSide === "back"}
-                  inputRef={backInputRef}
+                  cameraInputRef={backCameraInputRef}
+                  libraryInputRef={backLibraryInputRef}
                   onPick={pickCccdImage("back")}
                   onScan={() => backFile && scanImage(backFile, "back")}
                   onClear={() => {
@@ -415,10 +474,16 @@ export function QuickWorkerAccountDialog({
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <TextField
-                  label="Họ tên"
-                  value={form.full_name}
-                  onChange={(value) => setField("full_name", value)}
+                  label="Tên thật"
+                  value={form.real_name}
+                  onChange={(value) => setField("real_name", value)}
                   placeholder="Nguyễn Văn A"
+                />
+                <TextField
+                  label="Họ tên theo nhà máy"
+                  value={form.worker_name_snapshot}
+                  onChange={(value) => setField("worker_name_snapshot", value)}
+                  placeholder="Tên hiển thị tại nhà máy"
                 />
                 <TextField
                   label="CMND/CCCD"
@@ -568,7 +633,8 @@ export function QuickWorkerAccountDialog({
 }
 
 const fieldLabels: Record<keyof QuickWorkerForm, string> = {
-  full_name: "họ tên",
+  real_name: "tên thật",
+  worker_name_snapshot: "họ tên theo nhà máy",
   cccd: "CCCD",
   phone: "số điện thoại",
   date_of_birth: "ngày sinh",
@@ -621,7 +687,8 @@ function CccdImageBox({
   label,
   preview,
   scanning,
-  inputRef,
+  cameraInputRef,
+  libraryInputRef,
   onPick,
   onScan,
   onClear,
@@ -629,7 +696,8 @@ function CccdImageBox({
   label: string;
   preview: string;
   scanning: boolean;
-  inputRef: RefObject<HTMLInputElement | null>;
+  cameraInputRef: RefObject<HTMLInputElement | null>;
+  libraryInputRef: RefObject<HTMLInputElement | null>;
   onPick: (event: ChangeEvent<HTMLInputElement>) => void;
   onScan: () => void;
   onClear: () => void;
@@ -641,14 +709,31 @@ function CccdImageBox({
         {preview ? (
           <img src={preview} alt={label} className="size-full object-cover" />
         ) : (
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            className="flex size-full flex-col items-center justify-center gap-2 text-xs text-muted-foreground"
-          >
+          <div className="flex size-full flex-col items-center justify-center gap-2 p-2 text-xs text-muted-foreground">
             <IdCard className="h-6 w-6" />
-            {label}
-          </button>
+            <span>{label}</span>
+            <div className="grid w-full grid-cols-2 gap-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-8 px-2 text-xs"
+                onClick={() => cameraInputRef.current?.click()}
+              >
+                <Camera className="h-4 w-4" />
+                Chụp
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-8 px-2 text-xs"
+                onClick={() => libraryInputRef.current?.click()}
+              >
+                Thư viện
+              </Button>
+            </div>
+          </div>
         )}
         {preview && (
           <div className="absolute inset-x-2 bottom-2 flex gap-1">
@@ -673,23 +758,42 @@ function CccdImageBox({
             </Button>
           </div>
         )}
-        {!preview && (
+      </div>
+      {preview && (
+        <div className="grid grid-cols-2 gap-1">
           <Button
             type="button"
-            size="icon"
-            variant="secondary"
-            className="absolute bottom-2 right-2 h-8 w-8"
-            onClick={() => inputRef.current?.click()}
+            size="sm"
+            variant="outline"
+            className="h-8 px-2 text-xs"
+            onClick={() => cameraInputRef.current?.click()}
           >
             <Camera className="h-4 w-4" />
+            Chụp lại
           </Button>
-        )}
-      </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 px-2 text-xs"
+            onClick={() => libraryInputRef.current?.click()}
+          >
+            Thư viện
+          </Button>
+        </div>
+      )}
       <input
-        ref={inputRef}
+        ref={cameraInputRef}
         type="file"
         accept="image/*"
         capture="environment"
+        className="hidden"
+        onChange={onPick}
+      />
+      <input
+        ref={libraryInputRef}
+        type="file"
+        accept="image/*"
         className="hidden"
         onChange={onPick}
       />

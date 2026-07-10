@@ -4,6 +4,7 @@ import {
   BarChart3,
   BriefcaseBusiness,
   Building2,
+  Check,
   ChevronRight,
   FileDown,
   FileSpreadsheet,
@@ -85,7 +86,7 @@ export const Route = createFileRoute("/_authenticated/admin/workforce")({
   component: WorkforcePage,
 });
 
-type ActiveTab = "recruit" | "list" | "my-recruited";
+type ActiveTab = "list" | "stats" | "my-recruited";
 type RecruitSubTab = "factory" | "recruiter";
 type ListScope = "all" | "working" | "left";
 
@@ -138,7 +139,7 @@ function getPocketBaseFieldErrors(error: unknown) {
 
 function WorkforcePage() {
   const currentUser = pb.authStore.record as UserRecord | null;
-  const [tab, setTab] = useState<ActiveTab>("recruit");
+  const [tab, setTab] = useState<ActiveTab>("list");
   const [from, setFrom] = useState(daysAgoIso(30));
   const [to, setTo] = useState(todayIso());
   const [loading, setLoading] = useState(true);
@@ -151,6 +152,8 @@ function WorkforcePage() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [cccdExportOpen, setCccdExportOpen] = useState(false);
   const [chartOpen, setChartOpen] = useState(false);
+  const [selectedFactoryIds, setSelectedFactoryIds] = useState<string[]>([]);
+  const [selectedRecruiterIds, setSelectedRecruiterIds] = useState<string[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -231,6 +234,58 @@ function WorkforcePage() {
     return latest;
   }, [filteredHistoriesByDate]);
 
+  const filteredHistoriesForStats = useMemo(() => {
+    let result = filteredHistoriesByDate;
+    if (selectedFactoryIds.length > 0) {
+      const set = new Set(selectedFactoryIds);
+      result = result.filter((h) => set.has(h.factory));
+    }
+    if (selectedRecruiterIds.length > 0) {
+      const set = new Set(selectedRecruiterIds);
+      result = result.filter((h) => h.recruiter_staff && set.has(h.recruiter_staff));
+    }
+    return result;
+  }, [filteredHistoriesByDate, selectedFactoryIds, selectedRecruiterIds]);
+
+  const latestByUserForStats = useMemo(() => {
+    const map = new Map<string, EmploymentHistoryRecord[]>();
+    for (const h of filteredHistoriesForStats) {
+      const arr = map.get(h.user) || [];
+      arr.push(h);
+      map.set(h.user, arr);
+    }
+    const latest = new Map<string, EmploymentHistoryRecord>();
+    for (const [userId, arr] of map.entries()) {
+      const l = getLatestEmploymentHistory(arr);
+      if (l) latest.set(userId, l);
+    }
+    return latest;
+  }, [filteredHistoriesForStats]);
+
+  const filteredStats = useMemo(() => {
+    let working = 0;
+    let joined = 0;
+    let left = 0;
+    for (const h of latestByUser.values()) {
+      if (h.status === "working" && !h.leave_date) {
+        if (selectedFactoryIds.length > 0 && !selectedFactoryIds.includes(h.factory)) continue;
+        if (selectedRecruiterIds.length > 0 && (!h.recruiter_staff || !selectedRecruiterIds.includes(h.recruiter_staff))) continue;
+        working++;
+      }
+    }
+    for (const h of filteredHistoriesForStats) {
+      if (inDateRange(h.join_date, from, to)) joined++;
+      if (h.status === "left" && inDateRange(h.leave_date, from, to)) left++;
+    }
+    return { working, joined, left };
+  }, [latestByUser, filteredHistoriesForStats, from, to, selectedFactoryIds, selectedRecruiterIds]);
+
+  const filteredFactoriesForStats = useMemo(() => {
+    if (selectedFactoryIds.length === 0) return factories;
+    const set = new Set(selectedFactoryIds);
+    return factories.filter((f) => set.has(f.id));
+  }, [factories, selectedFactoryIds]);
+
   return (
     <PageContainer
       title="Nhân sự đi làm"
@@ -258,18 +313,53 @@ function WorkforcePage() {
     >
       <Tabs value={tab} onValueChange={(v) => setTab(v as ActiveTab)} className="space-y-3">
         <TabsList className="grid h-10 w-full grid-cols-3 rounded-xl">
-          <TabsTrigger value="recruit" className="rounded-lg text-xs">
-            Tuyển dụng
-          </TabsTrigger>
           <TabsTrigger value="list" className="rounded-lg text-xs">
             Danh sách
+          </TabsTrigger>
+          <TabsTrigger value="stats" className="rounded-lg text-xs">
+            Thống kê
           </TabsTrigger>
           <TabsTrigger value="my-recruited" className="rounded-lg text-xs">
             Tôi tuyển
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="recruit" className="mt-0 space-y-3">
+        <TabsContent value="list" className="mt-0 space-y-3">
+          <div className="flex gap-2">
+            <Link
+              to="/admin/imports"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Nhập Excel
+            </Link>
+            <Link
+              to="/staff/export"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
+            >
+              <FileDown className="h-4 w-4" />
+              Xuất Excel
+            </Link>
+            <button
+              type="button"
+              onClick={() => setCccdExportOpen(true)}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
+            >
+              <IdCard className="h-4 w-4" />
+              Xuất CCCD
+            </button>
+          </div>
+          <WorkerList
+            histories={histories}
+            userById={userById}
+            factoryById={factoryById}
+            latestByUser={latestByUser}
+            loading={loading}
+            onSelectWorker={setSelectedUserId}
+          />
+        </TabsContent>
+
+        <TabsContent value="stats" className="mt-0 space-y-3">
           <Card className="space-y-2 p-3">
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
@@ -356,59 +446,37 @@ function WorkforcePage() {
             </div>
           </Card>
 
+          <div className="grid grid-cols-2 gap-2">
+            <MultiSelectFactoryPicker
+              factories={factories}
+              selected={selectedFactoryIds}
+              onChange={setSelectedFactoryIds}
+            />
+            <MultiSelectRecruiterPicker
+              users={users.filter((u) => u.role === "staff" || u.role === "admin")}
+              selected={selectedRecruiterIds}
+              onChange={setSelectedRecruiterIds}
+            />
+          </div>
+
           <div className="grid grid-cols-3 gap-2">
             <StatCard
               label="Còn đi làm"
-              value={stats.working}
+              value={filteredStats.working}
               icon={UserRoundCheck}
               tone="success"
             />
-            <StatCard label="Tuyển mới" value={stats.joined} icon={Plus} tone="primary" />
-            <StatCard label="Đã nghỉ" value={stats.left} icon={UserRoundMinus} tone="warning" />
+            <StatCard label="Tuyển mới" value={filteredStats.joined} icon={Plus} tone="primary" />
+            <StatCard label="Đã nghỉ" value={filteredStats.left} icon={UserRoundMinus} tone="warning" />
           </div>
 
-
-          <div className="flex gap-2">
-            <Link
-              to="/admin/imports"
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              Nhập Excel
-            </Link>
-            <Link
-              to="/staff/export"
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
-            >
-              <FileDown className="h-4 w-4" />
-              Xuất Excel
-            </Link>
-            <button
-              type="button"
-              onClick={() => setCccdExportOpen(true)}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
-            >
-              <IdCard className="h-4 w-4" />
-              Xuất CCCD
-            </button>
-          </div>
-
-          <WorkerList
-            histories={filteredHistoriesByDate}
-            userById={userById}
-            factoryById={factoryById}
-            latestByUser={latestByUserFiltered}
-            loading={loading}
-            onSelectWorker={setSelectedUserId}
-          />
-        </TabsContent>
-
-        <TabsContent value="list" className="mt-0">
-          <WorkerList
-            histories={histories}
-            userById={userById}
-            factoryById={factoryById}
-            latestByUser={latestByUser}
+          <RecruitGroups
+            histories={filteredHistoriesForStats}
+            factories={filteredFactoriesForStats}
+            users={users}
+            from={from}
+            to={to}
+            latestByUser={latestByUserForStats}
             loading={loading}
             onSelectWorker={setSelectedUserId}
           />
@@ -2082,6 +2150,174 @@ function FactoryPicker({
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function MultiSelectFactoryPicker({
+  factories,
+  selected,
+  onChange,
+}: {
+  factories: FactoryRecord[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedSet = new Set(selected);
+
+  const toggle = (id: string) => {
+    if (selectedSet.has(id)) {
+      onChange(selected.filter((s) => s !== id));
+    } else {
+      onChange([...selected, id]);
+    }
+  };
+
+  const label =
+    selected.length === 0
+      ? "Tất cả nhà máy"
+      : selected.length === 1
+        ? factories.find((f) => f.id === selected[0])?.name || "1 nhà máy"
+        : `${selected.length} nhà máy`;
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">Nhà máy</Label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-left text-sm"
+          >
+            <span className={cn("truncate", selected.length === 0 && "text-muted-foreground")}>
+              {label}
+            </span>
+            <ChevronRight className="h-4 w-4 rotate-90 text-muted-foreground" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Tìm nhà máy..." />
+            <CommandList>
+              <CommandEmpty>Không tìm thấy.</CommandEmpty>
+              <CommandGroup>
+                {factories.map((f) => (
+                  <CommandItem
+                    key={f.id}
+                    value={`${f.name} ${f.code || ""}`}
+                    onSelect={() => toggle(f.id)}
+                  >
+                    <div
+                      className={cn(
+                        "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                        selectedSet.has(f.id) ? "bg-primary text-primary-foreground" : "opacity-50",
+                      )}
+                    >
+                      {selectedSet.has(f.id) && <Check className="h-3 w-3" />}
+                    </div>
+                    <Building2 className="mr-1.5 h-4 w-4 text-muted-foreground" />
+                    <span className="truncate text-sm">{f.name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {selected.length > 0 && (
+        <button
+          type="button"
+          onClick={() => onChange([])}
+          className="text-[11px] text-muted-foreground underline"
+        >
+          Bỏ lọc
+        </button>
+      )}
+    </div>
+  );
+}
+
+function MultiSelectRecruiterPicker({
+  users,
+  selected,
+  onChange,
+}: {
+  users: UserRecord[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedSet = new Set(selected);
+
+  const toggle = (id: string) => {
+    if (selectedSet.has(id)) {
+      onChange(selected.filter((s) => s !== id));
+    } else {
+      onChange([...selected, id]);
+    }
+  };
+
+  const label =
+    selected.length === 0
+      ? "Tất cả người tuyển"
+      : selected.length === 1
+        ? users.find((u) => u.id === selected[0])?.full_name || "1 người tuyển"
+        : `${selected.length} người tuyển`;
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">Người tuyển</Label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-left text-sm"
+          >
+            <span className={cn("truncate", selected.length === 0 && "text-muted-foreground")}>
+              {label}
+            </span>
+            <ChevronRight className="h-4 w-4 rotate-90 text-muted-foreground" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Tìm người tuyển..." />
+            <CommandList>
+              <CommandEmpty>Không tìm thấy.</CommandEmpty>
+              <CommandGroup>
+                {users.map((u) => (
+                  <CommandItem
+                    key={u.id}
+                    value={`${u.full_name || ""} ${u.username || ""} ${u.phone || ""}`}
+                    onSelect={() => toggle(u.id)}
+                  >
+                    <div
+                      className={cn(
+                        "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                        selectedSet.has(u.id) ? "bg-primary text-primary-foreground" : "opacity-50",
+                      )}
+                    >
+                      {selectedSet.has(u.id) && <Check className="h-3 w-3" />}
+                    </div>
+                    <ShieldCheck className="mr-1.5 h-4 w-4 text-muted-foreground" />
+                    <span className="truncate text-sm">{u.full_name || u.username || "—"}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {selected.length > 0 && (
+        <button
+          type="button"
+          onClick={() => onChange([])}
+          className="text-[11px] text-muted-foreground underline"
+        >
+          Bỏ lọc
+        </button>
+      )}
+    </div>
   );
 }
 
