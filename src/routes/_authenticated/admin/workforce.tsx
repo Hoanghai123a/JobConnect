@@ -215,20 +215,24 @@ function WorkforcePage() {
   const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const factoryById = useMemo(() => new Map(factories.map((f) => [f.id, f])), [factories]);
 
-  const latestByUser = useMemo(() => {
+  const historiesByUser = useMemo(() => {
     const map = new Map<string, EmploymentHistoryRecord[]>();
     for (const h of histories) {
       const arr = map.get(h.user) || [];
       arr.push(h);
       map.set(h.user, arr);
     }
+    return map;
+  }, [histories]);
+
+  const latestByUser = useMemo(() => {
     const latest = new Map<string, EmploymentHistoryRecord>();
-    for (const [userId, arr] of map.entries()) {
+    for (const [userId, arr] of historiesByUser.entries()) {
       const l = getLatestEmploymentHistory(arr);
       if (l) latest.set(userId, l);
     }
     return latest;
-  }, [histories]);
+  }, [historiesByUser]);
 
   const stats = useMemo(() => {
     let working = 0;
@@ -250,21 +254,6 @@ function WorkforcePage() {
       (h) => inDateRange(h.join_date, from, to) || (h.status === "left" && inDateRange(h.leave_date, from, to)),
     );
   }, [histories, from, to]);
-
-  const latestByUserFiltered = useMemo(() => {
-    const map = new Map<string, EmploymentHistoryRecord[]>();
-    for (const h of filteredHistoriesByDate) {
-      const arr = map.get(h.user) || [];
-      arr.push(h);
-      map.set(h.user, arr);
-    }
-    const latest = new Map<string, EmploymentHistoryRecord>();
-    for (const [userId, arr] of map.entries()) {
-      const l = getLatestEmploymentHistory(arr);
-      if (l) latest.set(userId, l);
-    }
-    return latest;
-  }, [filteredHistoriesByDate]);
 
   const filteredHistoriesForStats = useMemo(() => {
     let result = filteredHistoriesByDate;
