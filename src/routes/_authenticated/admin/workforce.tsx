@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   BarChart3,
   BriefcaseBusiness,
@@ -324,31 +324,7 @@ function WorkforcePage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="list" className="mt-0 space-y-3">
-          <div className="flex gap-2">
-            <Link
-              to="/admin/imports"
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              Nhập Excel
-            </Link>
-            <Link
-              to="/staff/export"
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
-            >
-              <FileDown className="h-4 w-4" />
-              Xuất Excel
-            </Link>
-            <button
-              type="button"
-              onClick={() => setCccdExportOpen(true)}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
-            >
-              <IdCard className="h-4 w-4" />
-              Xuất CCCD
-            </button>
-          </div>
+        <TabsContent value="list" className="mt-0">
           <WorkerList
             histories={histories}
             userById={userById}
@@ -356,6 +332,32 @@ function WorkforcePage() {
             latestByUser={latestByUser}
             loading={loading}
             onSelectWorker={setSelectedUserId}
+            headerSlot={
+              <div className="flex gap-2">
+                <Link
+                  to="/admin/imports"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Nhập Excel
+                </Link>
+                <Link
+                  to="/staff/export"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Xuất Excel
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setCccdExportOpen(true)}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
+                >
+                  <IdCard className="h-4 w-4" />
+                  Xuất CCCD
+                </button>
+              </div>
+            }
           />
         </TabsContent>
 
@@ -920,6 +922,7 @@ function WorkerList({
   latestByUser,
   loading,
   onSelectWorker,
+  headerSlot,
 }: {
   histories: EmploymentHistoryRecord[];
   userById: Map<string, UserRecord>;
@@ -927,6 +930,7 @@ function WorkerList({
   latestByUser: Map<string, EmploymentHistoryRecord>;
   loading: boolean;
   onSelectWorker: (userId: string) => void;
+  headerSlot?: ReactNode;
 }) {
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<ListScope>("all");
@@ -969,27 +973,30 @@ function WorkerList({
 
   return (
     <div className="space-y-3">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm tên, mã NV, CCCD, mã số thuế, SĐT, nhà máy..."
-          className="rounded-full pl-9"
-        />
-      </div>
-      <div className="flex gap-1.5">
-        <SubChip
-          label={`Tất cả (${rows.length})`}
-          active={scope === "all"}
-          onClick={() => setScope("all")}
-        />
-        <SubChip
-          label="Đang làm"
-          active={scope === "working"}
-          onClick={() => setScope("working")}
-        />
-        <SubChip label="Đã nghỉ" active={scope === "left"} onClick={() => setScope("left")} />
+      <div className="sticky top-[calc(env(safe-area-inset-top)+6.5rem)] z-10 -mx-4 space-y-3 bg-background px-4 pb-2 pt-1">
+        {headerSlot}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm tên, mã NV, CCCD, mã số thuế, SĐT, nhà máy..."
+            className="rounded-full pl-9"
+          />
+        </div>
+        <div className="flex gap-1.5">
+          <SubChip
+            label={`Tất cả (${rows.length})`}
+            active={scope === "all"}
+            onClick={() => setScope("all")}
+          />
+          <SubChip
+            label="Đang làm"
+            active={scope === "working"}
+            onClick={() => setScope("working")}
+          />
+          <SubChip label="Đã nghỉ" active={scope === "left"} onClick={() => setScope("left")} />
+        </div>
       </div>
 
       {loading ? (
@@ -2635,53 +2642,55 @@ function MyRecruitedTab({
 
   return (
     <div className="space-y-3">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm tên, mã NV, CCCD, nhà máy..."
-          className="rounded-full pl-9"
-        />
-      </div>
+      <div className="sticky top-[calc(env(safe-area-inset-top)+6.5rem)] z-10 -mx-4 space-y-3 bg-background px-4 pb-2 pt-1">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm tên, mã NV, CCCD, nhà máy..."
+            className="rounded-full pl-9"
+          />
+        </div>
 
-      <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        <button
-          type="button"
-          onClick={() => setScope("all")}
-          className={cn(
-            "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
-            scope === "all"
-              ? "border-primary bg-primary/10 text-primary"
-              : "border-border text-muted-foreground",
-          )}
-        >
-          Tất cả
-        </button>
-        <button
-          type="button"
-          onClick={() => setScope("working")}
-          className={cn(
-            "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
-            scope === "working"
-              ? "border-primary bg-primary/10 text-primary"
-              : "border-border text-muted-foreground",
-          )}
-        >
-          Đang làm
-        </button>
-        <button
-          type="button"
-          onClick={() => setScope("left")}
-          className={cn(
-            "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
-            scope === "left"
-              ? "border-primary bg-primary/10 text-primary"
-              : "border-border text-muted-foreground",
-          )}
-        >
-          Đã nghỉ
-        </button>
+        <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          <button
+            type="button"
+            onClick={() => setScope("all")}
+            className={cn(
+              "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
+              scope === "all"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground",
+            )}
+          >
+            Tất cả
+          </button>
+          <button
+            type="button"
+            onClick={() => setScope("working")}
+            className={cn(
+              "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
+              scope === "working"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground",
+            )}
+          >
+            Đang làm
+          </button>
+          <button
+            type="button"
+            onClick={() => setScope("left")}
+            className={cn(
+              "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
+              scope === "left"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground",
+            )}
+          >
+            Đã nghỉ
+          </button>
+        </div>
       </div>
 
       <div className="text-xs text-muted-foreground">
