@@ -266,14 +266,47 @@ function buildWorkspace(
   return { managedFactoryIds, workers };
 }
 
+async function getManagedFactoryIds(viewer: UserRecord) {
+  const managers = await fetchFactoryManagers(viewer.id);
+  return new Set(
+    managers.filter((item) => isFactoryAssignmentActive(item)).map((item) => item.factory),
+  );
+}
+
+export async function fetchCachedStaffWorkspace(viewer: UserRecord) {
+  const managedFactoryIds = await getManagedFactoryIds(viewer);
+  const useCache = viewer.role === "admin" || viewer.role === "staff";
+  const fingerprint = buildScopeFingerprint(viewer.id, managedFactoryIds);
+  const cacheValid = useCache ? await isCacheScopeValid(fingerprint) : false;
+  const cached = useCache && cacheValid ? await readCachedStaffData() : null;
+
+  return cached ? buildWorkspace(viewer, cached.histories, cached.users, managedFactoryIds) : null;
+}
+
+export async function fetchFreshStaffWorkspace(viewer: UserRecord) {
+  const managedFactoryIds = await getManagedFactoryIds(viewer);
+  const synced = await syncStaffData({
+    historyFilter: buildScopedHistoryFilter(viewer, managedFactoryIds),
+    useCache: false,
+    includeCccdVersions: false,
+  });
+
+  const userIds = [...new Set(synced.histories.map((h) => h.user).filter(Boolean))];
+  const cachedUserIds = new Set(synced.users.map((u) => u.id));
+  const missingIds = userIds.filter((id) => !cachedUserIds.has(id));
+  if (missingIds.length) {
+    const extra = await fetchUsersBatched(missingIds);
+    synced.users.push(...extra);
+  }
+
+  return buildWorkspace(viewer, synced.histories, synced.users, managedFactoryIds);
+}
+
 export async function fetchStaffWorkspace(
   viewer: UserRecord,
   opts?: { onCacheReady?: (result: StaffWorkspaceResult) => void },
 ) {
-  const managers = await fetchFactoryManagers(viewer.id);
-  const managedFactoryIds = new Set(
-    managers.filter((item) => isFactoryAssignmentActive(item)).map((item) => item.factory),
-  );
+  const managedFactoryIds = await getManagedFactoryIds(viewer);
 
   const useCache = viewer.role === "admin" || viewer.role === "staff";
 

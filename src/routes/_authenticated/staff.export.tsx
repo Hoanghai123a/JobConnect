@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { fetchFactories } from "@/lib/factories";
-import { fetchStaffWorkspace } from "@/lib/staff-permissions";
+import { fetchCachedStaffWorkspace, fetchFreshStaffWorkspace } from "@/lib/staff-permissions";
 import { useAuth } from "@/lib/auth";
 import type { FactoryRecord } from "@/lib/factories";
 import type { StaffWorkerRecord } from "@/lib/staff-permissions";
@@ -37,6 +37,76 @@ function computeTenureDays(histories: EmploymentHistoryRecord[], referenceDate =
   return Math.floor(totalMs / (1000 * 60 * 60 * 24));
 }
 
+function buildTenureDaysByUserId(workers: StaffWorkerRecord[]) {
+  const map = new Map<string, number>();
+  for (const worker of workers) {
+    map.set(worker.user.id, computeTenureDays(worker.histories));
+  }
+  return map;
+}
+
+function buildBasicRows(histories: EmploymentHistoryRecord[], tenureDaysByUserId: Map<string, number>) {
+  return histories.map((history, index) => ({
+    STT: index + 1,
+    "Mã lịch sử": history.uid || "",
+    "Mã nhân viên": history.employee_code || "",
+    "Họ tên tại nhà máy": history.worker_name_snapshot,
+    CCCD: history.worker_cccd_snapshot,
+    "Mã số thuế": history.worker_tax_code_snapshot || "",
+    "Người tuyển":
+      history.expand?.recruiter_staff?.full_name ||
+      history.expand?.recruiter_staff?.username ||
+      "",
+    "Nhà máy": history.expand?.factory?.name || "",
+    "Nhà chính": history.expand?.main_house?.name || "",
+    "Ngày vào": formatDateOnly(history.join_date),
+    "Ngày nghỉ": formatDateOnly(history.leave_date),
+    "Trạng thái": history.status === "working" ? "Đang làm" : "Đã nghỉ",
+    "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
+    "Tài khoản gốc": history.expand?.user?.full_name || history.expand?.user?.username || "",
+    "Số điện thoại": history.expand?.user?.phone || "",
+  }));
+}
+
+function buildFullRows(histories: EmploymentHistoryRecord[], tenureDaysByUserId: Map<string, number>) {
+  return histories.map((history, index) => {
+    const u = history.expand?.user;
+    return {
+      STT: index + 1,
+      "Mã tài khoản (UID)": u?.uid || "",
+      "Mã lịch sử": history.uid || "",
+      "Họ tên gốc": u?.full_name || "",
+      "CCCD gốc": u?.cccd || "",
+      "Số điện thoại": u?.phone || "",
+      "Tên đăng nhập": u?.username || "",
+      "Vai trò": u?.role || "",
+      "Trạng thái tài khoản": u?.status || "",
+      "Mã nhân viên": history.employee_code || "",
+      "Nhà máy": history.expand?.factory?.name || "",
+      "Nhà chính": history.expand?.main_house?.name || "",
+      "Ngày vào": formatDateOnly(history.join_date),
+      "Ngày nghỉ": formatDateOnly(history.leave_date),
+      "Người tuyển":
+        history.expand?.recruiter_staff?.full_name ||
+        history.expand?.recruiter_staff?.username ||
+        "",
+      "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
+      "Họ tên tại nhà máy": history.worker_name_snapshot,
+      "CCCD tại nhà máy": history.worker_cccd_snapshot,
+      "Mã số thuế": history.worker_tax_code_snapshot || "",
+      "Trạng thái lịch sử": history.status === "working" ? "Đang làm" : "Đã nghỉ",
+      "Ghi chú": history.note || "",
+      "Ngân hàng": u?.bank_name || "",
+      "Số tài khoản": u?.bank_account_number || "",
+      "Tên chủ tài khoản": u?.bank_account_name || "",
+      "Lương cơ bản": u?.lcb ?? "",
+      "Chuyên cần": u?.chuyen_can ?? "",
+      "Đời sống": u?.doi_song ?? "",
+      "Thâm niên": u?.tham_nien ?? "",
+    };
+  });
+}
+
 export const Route = createFileRoute("/_authenticated/staff/export")({
   component: StaffExportPage,
 });
@@ -48,16 +118,17 @@ function StaffExportPage() {
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [factoryFilter, setFactoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [exportingAll, setExportingAll] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
     let alive = true;
 
     setLoading(true);
-    Promise.all([fetchStaffWorkspace(user as UserRecord), fetchFactories()])
+    Promise.all([fetchCachedStaffWorkspace(user as UserRecord), fetchFactories()])
       .then(([workspace, factoryRows]) => {
         if (!alive) return;
-        setWorkers(workspace.workers);
+        setWorkers(workspace?.workers ?? []);
         setFactories(factoryRows);
       })
       .finally(() => {
@@ -80,74 +151,16 @@ function StaffExportPage() {
   }, [factoryFilter, statusFilter, workers]);
 
   const tenureDaysByUserId = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const worker of workers) {
-      map.set(worker.user.id, computeTenureDays(worker.histories));
-    }
-    return map;
+    return buildTenureDaysByUserId(workers);
   }, [workers]);
 
   const basicRows = useMemo(() => {
-    return filteredHistories.map((history, index) => ({
-      STT: index + 1,
-      "Mã lịch sử": history.uid || "",
-      "Mã nhân viên": history.employee_code || "",
-      "Họ tên tại nhà máy": history.worker_name_snapshot,
-      CCCD: history.worker_cccd_snapshot,
-      "Mã số thuế": history.worker_tax_code_snapshot || "",
-      "Người tuyển":
-        history.expand?.recruiter_staff?.full_name ||
-        history.expand?.recruiter_staff?.username ||
-        "",
-      "Nhà máy": history.expand?.factory?.name || "",
-      "Nhà chính": history.expand?.main_house?.name || "",
-      "Ngày vào": formatDateOnly(history.join_date),
-      "Ngày nghỉ": formatDateOnly(history.leave_date),
-      "Trạng thái": history.status === "working" ? "Đang làm" : "Đã nghỉ",
-      "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
-      "Tài khoản gốc": history.expand?.user?.full_name || history.expand?.user?.username || "",
-      "Số điện thoại": history.expand?.user?.phone || "",
-    }));
+    return buildBasicRows(filteredHistories, tenureDaysByUserId);
   }, [filteredHistories, tenureDaysByUserId]);
 
   const fullRows = useMemo(() => {
-    return filteredHistories.map((history, index) => {
-      const u = history.expand?.user;
-      return {
-        STT: index + 1,
-        "Mã tài khoản (UID)": u?.uid || "",
-        "Mã lịch sử": history.uid || "",
-        "Họ tên gốc": u?.full_name || "",
-        "CCCD gốc": u?.cccd || "",
-        "Số điện thoại": u?.phone || "",
-        "Tên đăng nhập": u?.username || "",
-        "Vai trò": u?.role || "",
-        "Trạng thái tài khoản": u?.status || "",
-        "Mã nhân viên": history.employee_code || "",
-        "Nhà máy": history.expand?.factory?.name || "",
-        "Nhà chính": history.expand?.main_house?.name || "",
-        "Ngày vào": formatDateOnly(history.join_date),
-        "Ngày nghỉ": formatDateOnly(history.leave_date),
-        "Người tuyển":
-          history.expand?.recruiter_staff?.full_name ||
-          history.expand?.recruiter_staff?.username ||
-          "",
-        "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
-        "Họ tên tại nhà máy": history.worker_name_snapshot,
-        "CCCD tại nhà máy": history.worker_cccd_snapshot,
-        "Mã số thuế": history.worker_tax_code_snapshot || "",
-        "Trạng thái lịch sử": history.status === "working" ? "Đang làm" : "Đã nghỉ",
-        "Ghi chú": history.note || "",
-        "Ngân hàng": u?.bank_name || "",
-        "Số tài khoản": u?.bank_account_number || "",
-        "Tên chủ tài khoản": u?.bank_account_name || "",
-        "Lương cơ bản": u?.lcb ?? "",
-        "Chuyên cần": u?.chuyen_can ?? "",
-        "Đời sống": u?.doi_song ?? "",
-        "Thâm niên": u?.tham_nien ?? "",
-      };
-    });
-  }, [filteredHistories]);
+    return buildFullRows(filteredHistories, tenureDaysByUserId);
+  }, [filteredHistories, tenureDaysByUserId]);
 
   const doExportBasic = async () => {
     if (!basicRows.length) {
@@ -165,6 +178,28 @@ function StaffExportPage() {
     }
     exportToExcel(`jobconnect_export_day_du_${Date.now()}`, { "Lao động đầy đủ": fullRows });
     toast.success("Đã xuất Excel đầy đủ");
+  };
+
+  const doExportAllFromPocketBase = async () => {
+    if (!user?.id || exportingAll) return;
+    setExportingAll(true);
+    try {
+      const workspace = await fetchFreshStaffWorkspace(user as UserRecord);
+      const histories = workspace.workers.flatMap((worker) => worker.histories);
+      const rows = buildFullRows(histories, buildTenureDaysByUserId(workspace.workers));
+      if (!rows.length) {
+        toast.warning("Không có dữ liệu từ PocketBase để xuất");
+        return;
+      }
+      exportToExcel(`jobconnect_export_tat_ca_pocketbase_${Date.now()}`, {
+        "Tất cả lao động": rows,
+      });
+      toast.success("Đã xuất tất cả dữ liệu từ PocketBase");
+    } catch {
+      toast.error("Không thể xuất tất cả dữ liệu từ PocketBase");
+    } finally {
+      setExportingAll(false);
+    }
   };
 
   return (
@@ -203,14 +238,25 @@ function StaffExportPage() {
 
         <div className="rounded-2xl bg-muted/40 p-3 text-sm">
           Sẵn sàng xuất <strong>{basicRows.length}</strong> dòng dữ liệu.
+          <div className="mt-1 text-[11px] text-muted-foreground">
+            Dữ liệu đang xem lấy từ IndexedDB. Nút xuất tất cả sẽ tải trực tiếp từ PocketBase.
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <Button onClick={doExportBasic} variant="outline" className="w-full rounded-xl">
             <FileDown className="h-4 w-4" /> Xuất cơ bản
           </Button>
           <Button onClick={doExportFull} className="w-full rounded-xl">
             <FileDown className="h-4 w-4" /> Xuất đầy đủ
+          </Button>
+          <Button
+            onClick={doExportAllFromPocketBase}
+            disabled={exportingAll}
+            variant="secondary"
+            className="w-full rounded-xl"
+          >
+            <FileDown className="h-4 w-4" /> {exportingAll ? "Đang xuất..." : "Xuất tất cả"}
           </Button>
         </div>
         <p className="text-[11px] text-muted-foreground">

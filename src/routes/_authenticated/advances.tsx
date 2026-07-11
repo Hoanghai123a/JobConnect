@@ -60,6 +60,7 @@ import {
   Pencil,
   Send,
   ShieldCheck,
+  SlidersHorizontal,
   TriangleAlert,
   Wallet,
   X,
@@ -69,6 +70,19 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/advances")({
   component: AdvancesPage,
 });
+
+const TRANSFER_DESCRIPTION_STORAGE_KEY = "jobconnect.advanceTransferDescriptionTemplate";
+const ADVANCE_FILTERS_STORAGE_KEY = "jobconnect.advanceFilters";
+const DEFAULT_TRANSFER_DESCRIPTION_TEMPLATE = "Giải ngân ứng + tên";
+
+type StoredAdvanceFilters = {
+  search?: string;
+  tab?: AdminTab;
+  dateFrom?: string;
+  dateTo?: string;
+  factoryFilter?: string;
+  showFilters?: boolean;
+};
 
 type AdvanceSummary = {
   count: number;
@@ -95,6 +109,41 @@ function statValue(summary: AdvanceSummary) {
   );
 }
 
+function removeVietnameseTone(value: string) {
+  return value
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function buildTransferDescription(template: string, fullName?: string) {
+  const name = fullName?.trim() || "";
+  const withName = template.replace(/\+\s*(?:tên|ten)/gi, name);
+  const normalized = removeVietnameseTone(withName).replace(/\s+/g, " ").trim();
+  return normalized || "Giai ngan ung";
+}
+
+function readStoredAdvanceFilters(): StoredAdvanceFilters {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(ADVANCE_FILTERS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as StoredAdvanceFilters;
+    const validTab = parsed.tab && parsed.tab in ADVANCE_TAB_FILTERS ? parsed.tab : undefined;
+    return {
+      search: parsed.search || "",
+      tab: validTab,
+      dateFrom: parsed.dateFrom || "",
+      dateTo: parsed.dateTo || "",
+      factoryFilter: parsed.factoryFilter || "all",
+      showFilters: Boolean(parsed.showFilters),
+    };
+  } catch {
+    return {};
+  }
+}
+
 async function loadAdvanceSummary(filter: string): Promise<AdvanceSummary> {
   const rows = await pb.collection("advances").getFullList<Pick<AdvanceRecord, "amount">>({
     filter,
@@ -112,10 +161,11 @@ async function loadAdvanceSummary(filter: string): Promise<AdvanceSummary> {
 export function AdvancesPage() {
   const { user, isAdmin, isStaff } = useAuth();
   const { data: settings } = useAppSettings();
+  const [storedFilters] = useState(readStoredAdvanceFilters);
 
   const [items, setItems] = useState<AdvanceRecord[]>([]);
-  const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<AdminTab>("pending");
+  const [search, setSearch] = useState(storedFilters.search || "");
+  const [tab, setTab] = useState<AdminTab>(storedFilters.tab || "pending");
   const [showProfile, setShowProfile] = useState(false);
   const [sending, setSending] = useState(false);
   const [amountText, setAmountText] = useState("");
@@ -128,9 +178,9 @@ export function AdvancesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
   const [editAmountText, setEditAmountText] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [factoryFilter, setFactoryFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState(storedFilters.dateFrom || "");
+  const [dateTo, setDateTo] = useState(storedFilters.dateTo || "");
+  const [factoryFilter, setFactoryFilter] = useState(storedFilters.factoryFilter || "all");
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [advanceDetail, setAdvanceDetail] = useState<AdvanceRecord | null>(null);
@@ -140,6 +190,11 @@ export function AdvancesPage() {
   const [outstandingAmount, setOutstandingAmount] = useState(0);
   const [stats, setStats] = useState<Record<AdminTab, AdvanceSummary>>(emptyAdvanceSummaries);
   const [adminSegment, setAdminSegment] = useState<"workers" | "staff">("workers");
+  const [transferDescriptionTemplate, setTransferDescriptionTemplate] = useState(
+    DEFAULT_TRANSFER_DESCRIPTION_TEMPLATE,
+  );
+  const [showAllStats, setShowAllStats] = useState(false);
+  const [showFilters, setShowFilters] = useState(Boolean(storedFilters.showFilters));
 
   const selectedAdvanceUser = user as UserRecord | null;
   const selectedFactoryName = useMemo(
@@ -151,6 +206,42 @@ export function AdvancesPage() {
     setAdminNoteDraft(advanceDetail?.admin_note || "");
     setRecoveryNoteDraft(advanceDetail?.recovery_note || "");
   }, [advanceDetail?.id]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(TRANSFER_DESCRIPTION_STORAGE_KEY);
+      if (stored) setTransferDescriptionTemplate(stored);
+    } catch {
+      // localStorage can be unavailable in some browser modes; keep the default template.
+    }
+  }, []);
+
+  const updateTransferDescriptionTemplate = useCallback((value: string) => {
+    setTransferDescriptionTemplate(value);
+    try {
+      window.localStorage.setItem(TRANSFER_DESCRIPTION_STORAGE_KEY, value);
+    } catch {
+      // The current input state is still enough to build QR content.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        ADVANCE_FILTERS_STORAGE_KEY,
+        JSON.stringify({
+          search,
+          tab,
+          dateFrom,
+          dateTo,
+          factoryFilter,
+          showFilters,
+        } satisfies StoredAdvanceFilters),
+      );
+    } catch {
+      // Filters still work for the current session when localStorage is unavailable.
+    }
+  }, [dateFrom, dateTo, factoryFilter, search, showFilters, tab]);
 
   useEffect(() => {
     if (!selectedAdvanceUser) return;
@@ -732,6 +823,7 @@ export function AdvancesPage() {
           setAdminNoteDraft={setAdminNoteDraft}
           recoveryNoteDraft={recoveryNoteDraft}
           setRecoveryNoteDraft={setRecoveryNoteDraft}
+          transferDescriptionTemplate={transferDescriptionTemplate}
           savingNotes={savingNotes}
           setSavingNotes={setSavingNotes}
           updateRow={updateRow}
@@ -782,18 +874,43 @@ export function AdvancesPage() {
           Ứng Staff
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <StatCard label="Chờ duyệt" value={statValue(stats.recruiter_approved)} icon={Clock} tone="warning" />
-        <StatCard label="Đã tiếp nhận" value={statValue(stats.accepted)} icon={Check} tone="success" />
-        <StatCard label="Từ chối" value={statValue(stats.rejected)} icon={X} tone="danger" />
-        <StatCard label="Đã thu hồi" value={statValue(stats.recovered)} icon={ShieldCheck} tone="primary" />
-        <StatCard label="Không thu hồi" value={statValue(stats.unrecoverable)} icon={X} tone="danger" />
+      <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <StatCard label="Chờ duyệt" value={statValue(stats.recruiter_approved)} icon={Clock} tone="warning" />
+          <StatCard label="Đã tiếp nhận" value={statValue(stats.accepted)} icon={Check} tone="success" />
+          {showAllStats && (
+            <>
+              <StatCard label="Từ chối" value={statValue(stats.rejected)} icon={X} tone="danger" />
+              <StatCard label="Đã thu hồi" value={statValue(stats.recovered)} icon={ShieldCheck} tone="primary" />
+              <StatCard label="Không thu hồi" value={statValue(stats.unrecoverable)} icon={X} tone="danger" />
+            </>
+          )}
+        </div>
+        <div className="relative flex min-h-8 items-center justify-center">
+          <button
+            type="button"
+            className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+            onClick={() => setShowAllStats((value) => !value)}
+          >
+            {showAllStats ? "Thu gọn" : "Mở rộng"}
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "absolute right-0 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-soft transition",
+              showFilters
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card text-primary",
+            )}
+            onClick={() => setShowFilters((value) => !value)}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Bộ lọc
+          </button>
+        </div>
       </div>
 
       <FilterBar
-        search={search}
-        onSearchChange={setSearch}
-        placeholder="Tìm theo tên, mã NV, số tiền…"
         chips={[
           { key: "pending", label: `Chờ duyệt (${stats.recruiter_approved.count})` },
           { key: "accepted", label: `Đã tiếp nhận (${stats.accepted.count})` },
@@ -804,33 +921,60 @@ export function AdvancesPage() {
         ]}
         activeChip={tab}
         onChipChange={(v) => setTab(v as AdminTab)}
+        className="static -mx-1 bg-transparent px-0 py-0 backdrop-blur-0"
       />
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <div className="space-y-1 sm:col-span-1">
-          <Label className="text-xs">Nhà máy</Label>
-          <Select value={factoryFilter} onValueChange={setFactoryFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Tất cả nhà máy" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tất cả nhà máy</SelectItem>
-              {factories.map((factory) => (
-                <SelectItem key={factory.id} value={factory.id}>
-                  {[factory.code, factory.name].filter(Boolean).join(" - ")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Từ ngày</Label>
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Đến ngày</Label>
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        </div>
+      <div className="space-y-2">
+        {showFilters && (
+          <div className="space-y-3 rounded-xl border bg-card p-3">
+            <FilterBar
+              search={search}
+              onSearchChange={setSearch}
+              placeholder="Tìm theo tên, mã NV, số tiền…"
+              className="static -mx-0 bg-transparent px-0 py-0 backdrop-blur-0"
+            />
+
+            <div className="space-y-1">
+              <Label className="text-xs">Nội dung chuyển khoản</Label>
+              <Input
+                value={transferDescriptionTemplate}
+                onChange={(e) => updateTransferDescriptionTemplate(e.target.value)}
+                placeholder="Ví dụ: Giải ngân ứng + tên"
+                className="h-10"
+              />
+              <div className="text-[11px] text-muted-foreground">
+                Dùng + tên để tự lấy họ tên trong từng card.
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="space-y-1 sm:col-span-1">
+                <Label className="text-xs">Nhà máy</Label>
+                <Select value={factoryFilter} onValueChange={setFactoryFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tất cả nhà máy" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả nhà máy</SelectItem>
+                    {factories.map((factory) => (
+                      <SelectItem key={factory.id} value={factory.id}>
+                        {[factory.code, factory.name].filter(Boolean).join(" - ")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Từ ngày</Label>
+                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Đến ngày</Label>
+                <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {selectedActionableCount > 0 && (
@@ -1088,6 +1232,7 @@ export function AdvancesPage() {
         setAdminNoteDraft={setAdminNoteDraft}
         recoveryNoteDraft={recoveryNoteDraft}
         setRecoveryNoteDraft={setRecoveryNoteDraft}
+        transferDescriptionTemplate={transferDescriptionTemplate}
         savingNotes={savingNotes}
         setSavingNotes={setSavingNotes}
         updateRow={updateRow}
@@ -1106,6 +1251,7 @@ function AdvanceDetailDialog({
   setAdminNoteDraft,
   recoveryNoteDraft,
   setRecoveryNoteDraft,
+  transferDescriptionTemplate,
   savingNotes,
   setSavingNotes,
   updateRow,
@@ -1119,6 +1265,7 @@ function AdvanceDetailDialog({
   setAdminNoteDraft: (v: string) => void;
   recoveryNoteDraft: string;
   setRecoveryNoteDraft: (v: string) => void;
+  transferDescriptionTemplate: string;
   savingNotes: boolean;
   setSavingNotes: (v: boolean) => void;
   updateRow: (id: string, payload: Partial<AdvanceRecord>) => Promise<void>;
@@ -1298,7 +1445,10 @@ function AdvanceDetailDialog({
                   accountNumber: advanceDetail.bank_account_number || "",
                   accountName: advanceDetail.bank_account_name,
                   amount: advanceDetail.amount,
-                  description: `Ung luong ${advanceDetail.full_name}`,
+                  description: buildTransferDescription(
+                    transferDescriptionTemplate,
+                    advanceDetail.full_name,
+                  ),
                 });
                 if (!qrUrl) return null;
                 return (
