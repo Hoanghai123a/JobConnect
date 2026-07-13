@@ -44,6 +44,7 @@ import {
   maskCccd,
   syncLegacyUserWorkFields,
   updateEmploymentHistory,
+  updateUserAndCache,
 } from "@/lib/employment";
 import {
   findOrCreateCccdVersion,
@@ -407,7 +408,7 @@ export function WorkerQuickDrawer({
         ...bankForm,
         bank_name: resolveBankName(bankForm.bank_name.trim()),
       };
-      await pb.collection("users").update(worker.user.id, payload);
+      await updateUserAndCache(worker.user.id, payload);
       await createStaffActionLog({
         actor: viewer,
         targetUserId: worker.user.id,
@@ -435,7 +436,7 @@ export function WorkerQuickDrawer({
     }
     setSubmitting(true);
     try {
-      await pb.collection("users").update(worker.user.id, { employee_code: code });
+      await updateUserAndCache(worker.user.id, { employee_code: code });
       if (latest) {
         await updateEmploymentHistory(latest.id, { employee_code: code });
       }

@@ -65,10 +65,12 @@ import {
   maskCccd,
   syncLegacyUserWorkFields,
   updateEmploymentHistory,
+  updateUserAndCache,
   type EmploymentHistoryRecord,
 } from "@/lib/employment";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
+import { fetchStaffWorkspace } from "@/lib/staff-permissions";
 import { cn } from "@/lib/utils";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
@@ -187,18 +189,26 @@ function WorkforcePage() {
   const [selectedRecruiterIds, setSelectedRecruiterIds] = useState<string[]>([]);
 
   const load = async () => {
+    if (!currentUser) return;
     setLoading(true);
     try {
-      const [histList, userList, factoryList, mainHouseList] = await Promise.all([
-        fetchEmploymentHistories(),
-        pb
-          .collection("users")
-          .getFullList<UserRecord>({ sort: "full_name,username" }),
+      const [workspace, staffAdminUsers, factoryList, mainHouseList] = await Promise.all([
+        fetchStaffWorkspace(currentUser),
+        pb.collection("users").getFullList<UserRecord>({
+          filter: `role="staff" || role="admin"`,
+          sort: "full_name,username",
+        }),
         fetchFactories(),
         fetchMainHouses().catch(() => [] as MainHouseRecord[]),
       ]);
-      setHistories(histList);
-      setUsers(userList);
+      const workerUsers = workspace.workers.map((w) => w.user);
+      const workerIds = new Set(workerUsers.map((u) => u.id));
+      const mergedUsers = [
+        ...workerUsers,
+        ...staffAdminUsers.filter((u) => !workerIds.has(u.id)),
+      ];
+      setHistories(workspace.workers.flatMap((w) => w.histories));
+      setUsers(mergedUsers);
       setFactories(factoryList);
       setMainHouses(mainHouseList);
     } catch (error: unknown) {
@@ -1290,7 +1300,7 @@ function AdminWorkerDrawer({
     if (!user || !actor) return;
     setBankSaving(true);
     try {
-      await pb.collection("users").update(user.id, bankForm);
+      await updateUserAndCache(user.id, bankForm);
       await createStaffActionLog({
         actor,
         targetUserId: user.id,

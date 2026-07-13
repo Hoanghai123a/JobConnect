@@ -3,6 +3,7 @@ import type { FactoryRecord } from "./factories";
 import type { MainHouseRecord } from "./main-houses";
 import type { CccdVersionRecord } from "./cccd-versions";
 import { relationInFilter } from "./delegations";
+import { updateCachedHistory, updateCachedUser } from "./staff-cache";
 import { fetchAppSettings } from "./app-settings";
 
 export type EmploymentStatus = "working" | "left";
@@ -162,26 +163,40 @@ export async function createEmploymentHistory(
   opts?: { uid?: string },
 ) {
   const uid = opts?.uid || (await generateEmploymentHistoryUid());
-  return (await pb.collection("employment_histories").create(
+  const record = (await pb.collection("employment_histories").create(
     { ...draft, uid },
     { expand: "user,factory,recruiter_staff,main_house,cccd_version" },
   )) as unknown as EmploymentHistoryRecord;
+  await updateCachedHistory(record);
+  return record;
 }
 
 export async function updateEmploymentHistory(id: string, payload: Partial<EmploymentDraft>) {
-  return (await pb.collection("employment_histories").update(id, payload, {
+  const record = (await pb.collection("employment_histories").update(id, payload, {
     expand: "user,factory,recruiter_staff,cccd_version",
   })) as unknown as EmploymentHistoryRecord;
+  await updateCachedHistory(record);
+  return record;
+}
+
+export async function updateUserAndCache(
+  id: string,
+  payload: Record<string, unknown> | FormData,
+) {
+  const record = (await pb.collection("users").update(id, payload)) as unknown as UserRecord;
+  await updateCachedUser(record);
+  return record;
 }
 
 export async function syncLegacyUserWorkFields(
   userId: string,
   latestHistory: EmploymentHistoryRecord | null,
 ) {
-  await pb.collection("users").update(userId, {
+  const record = (await pb.collection("users").update(userId, {
     company: latestHistory?.expand?.factory?.name || "",
     employee_code: latestHistory?.employee_code || "",
-  });
+  })) as unknown as UserRecord;
+  await updateCachedUser(record);
 }
 
 export function maskCccd(cccd?: string | null) {

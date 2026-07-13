@@ -55,7 +55,7 @@ import type { FactoryRecord } from "@/lib/factories";
 import { compressImage } from "@/lib/image-compress";
 import type { MainHouseRecord } from "@/lib/main-houses";
 import { pb, type UserRecord } from "@/lib/pocketbase";
-import { updateCachedCccdVersion, updateCachedHistory, updateCachedUser } from "@/lib/staff-cache";
+import { updateCachedUser } from "@/lib/staff-cache";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { generateUid } from "@/lib/uid";
 import { cn } from "@/lib/utils";
@@ -354,7 +354,6 @@ export function QuickWorkerAccountDialog({
             compressedBack,
           );
           cccdVersionId = version.id;
-          await updateCachedCccdVersion(version);
         } catch {
           secondaryWarnings.push("chưa lưu được phiên bản CCCD");
         }
@@ -376,9 +375,7 @@ export function QuickWorkerAccountDialog({
           note: form.note.trim(),
         });
         historyId = history.id;
-        await updateCachedHistory(history);
         await syncLegacyUserWorkFields(createdUser.id, history);
-        await updateCachedUser(cacheUser);
       } catch {
         secondaryWarnings.push("chưa tạo được lịch sử đi làm");
       }

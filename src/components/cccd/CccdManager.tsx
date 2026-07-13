@@ -9,10 +9,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { pb, dataUrlToFile, fileUrl, type UserRecord } from "@/lib/pocketbase";
+import { dataUrlToFile, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import { createStaffActionLog, type StaffActionType } from "@/lib/staff-log";
 import { compressImage } from "@/lib/image-compress";
 import { getCurrentCccdVersion, updateCccdVersionImages } from "@/lib/cccd-versions";
+import { updateUserAndCache } from "@/lib/employment";
 
 interface CccdManagerProps {
   targetUser: UserRecord;
@@ -44,7 +45,7 @@ export function CccdManager({ targetUser, actor, onUpdated, readOnly }: CccdMana
 
       const versionField = side === "cccd_front" ? "front_image" : "back_image";
       const [, currentVersion] = await Promise.all([
-        pb.collection("users").update(targetUser.id, fd),
+        updateUserAndCache(targetUser.id, fd),
         getCurrentCccdVersion(targetUser.id),
       ]);
       if (currentVersion) {
@@ -79,7 +80,7 @@ export function CccdManager({ targetUser, actor, onUpdated, readOnly }: CccdMana
     if (!confirm(`Xoá ảnh ${side === "cccd_front" ? "mặt trước" : "mặt sau"}?`)) return;
     setUploading(true);
     try {
-      await pb.collection("users").update(targetUser.id, { [side]: null });
+      await updateUserAndCache(targetUser.id, { [side]: null });
       await createStaffActionLog({
         actor,
         targetUserId: targetUser.id,

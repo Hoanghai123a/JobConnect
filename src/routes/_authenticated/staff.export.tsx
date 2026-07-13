@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { fetchFactories } from "@/lib/factories";
-import { fetchCachedStaffWorkspace, fetchFreshStaffWorkspace } from "@/lib/staff-permissions";
+import { fetchStaffWorkspace, fetchFreshStaffWorkspace } from "@/lib/staff-permissions";
 import { useAuth } from "@/lib/auth";
 import type { FactoryRecord } from "@/lib/factories";
 import type { StaffWorkerRecord } from "@/lib/staff-permissions";
@@ -125,10 +125,10 @@ function StaffExportPage() {
     let alive = true;
 
     setLoading(true);
-    Promise.all([fetchCachedStaffWorkspace(user as UserRecord), fetchFactories()])
+    Promise.all([fetchStaffWorkspace(user as UserRecord), fetchFactories()])
       .then(([workspace, factoryRows]) => {
         if (!alive) return;
-        setWorkers(workspace?.workers ?? []);
+        setWorkers(workspace.workers ?? []);
         setFactories(factoryRows);
       })
       .finally(() => {
@@ -138,7 +138,7 @@ function StaffExportPage() {
     return () => {
       alive = false;
     };
-  }, [user?.id]);
+  }, [user]);
 
   const filteredHistories = useMemo(() => {
     return workers
@@ -184,7 +184,7 @@ function StaffExportPage() {
     if (!user?.id || exportingAll) return;
     setExportingAll(true);
     try {
-      const workspace = await fetchFreshStaffWorkspace(user as UserRecord);
+      const workspace = await fetchFreshStaffWorkspace(user as UserRecord, { bypassScope: true });
       const histories = workspace.workers.flatMap((worker) => worker.histories);
       const rows = buildFullRows(histories, buildTenureDaysByUserId(workspace.workers));
       if (!rows.length) {

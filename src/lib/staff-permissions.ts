@@ -69,18 +69,19 @@ function toDateOnly(value: Date) {
 }
 
 function buildScopedHistoryFilter(viewer: UserRecord, managedFactoryIds: Set<string>) {
-  if (viewer.role === "admin") return "";
+  const referenceDate = new Date();
+  const windowStart = new Date(referenceDate);
+  windowStart.setDate(windowStart.getDate() - 180);
+  const scopeFilter = [
+    `join_date <= "${toDateOnly(referenceDate)}"`,
+    `(status="working" || leave_date >= "${toDateOnly(windowStart)}")`,
+  ].join(" && ");
+
+  if (viewer.role === "admin") return scopeFilter;
 
   const qlnmFilters: string[] = [];
   if (managedFactoryIds.size > 0) {
-    const referenceDate = new Date();
-    const windowStart = new Date(referenceDate);
-    windowStart.setDate(windowStart.getDate() - 180);
-    const dateFilter = [
-      `join_date <= "${toDateOnly(referenceDate)}"`,
-      `(status="working" || leave_date >= "${toDateOnly(windowStart)}")`,
-    ].join(" && ");
-    qlnmFilters.push(`(${relationInFilter("factory", [...managedFactoryIds])}) && (${dateFilter})`);
+    qlnmFilters.push(`(${relationInFilter("factory", [...managedFactoryIds])}) && (${scopeFilter})`);
   }
 
   const recruiterFilter = `recruiter_staff="${escapePb(viewer.id)}"`;
@@ -184,12 +185,29 @@ export function canReportJoin(
   return managedFactoryIds.has(targetFactoryId);
 }
 
+function hasRecentEmployment(userHistories: EmploymentHistoryRecord[]): boolean {
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180);
+
+  for (const h of userHistories) {
+    if (h.status === "working" && !h.leave_date) return true;
+    if (h.leave_date) {
+      const leaveDate = new Date(h.leave_date);
+      if (!Number.isNaN(leaveDate.getTime()) && leaveDate >= sixMonthsAgo) return true;
+    }
+  }
+  return false;
+}
+
 function isWorkerInStaffScope(
   viewer: UserRecord,
   userHistories: EmploymentHistoryRecord[],
   managedFactoryIds: Set<string>,
+  bypassScope: boolean,
 ): boolean {
-  if (viewer.role === "admin") return true;
+  if (viewer.role === "admin") {
+    return bypassScope || hasRecentEmployment(userHistories);
+  }
   if (viewer.role !== "staff") return false;
 
   if (isRecentRecruiter(viewer, userHistories)) return true;
@@ -215,7 +233,9 @@ function buildWorkspace(
   histories: EmploymentHistoryRecord[],
   users: UserRecord[],
   managedFactoryIds: Set<string>,
+  opts?: { bypassScope?: boolean },
 ) {
+  const bypassScope = opts?.bypassScope ?? false;
   const grouped = new Map<string, EmploymentHistoryRecord[]>();
   for (const history of histories) {
     const bucket = grouped.get(history.user) || [];
@@ -230,7 +250,7 @@ function buildWorkspace(
       const user = workerMap.get(userId);
       if (!user) return null;
 
-      if (!isWorkerInStaffScope(viewer, userHistories, managedFactoryIds)) return null;
+      if (!isWorkerInStaffScope(viewer, userHistories, managedFactoryIds, bypassScope)) return null;
 
       const visibleHistories = userHistories;
 
@@ -296,10 +316,16 @@ export async function fetchCachedStaffWorkspace(viewer: UserRecord) {
   return cached ? buildWorkspace(viewer, cached.histories, cached.users, managedFactoryIds) : null;
 }
 
-export async function fetchFreshStaffWorkspace(viewer: UserRecord) {
+export async function fetchFreshStaffWorkspace(
+  viewer: UserRecord,
+  opts?: { bypassScope?: boolean },
+) {
   const managedFactoryIds = await getManagedFactoryIds(viewer);
+  const historyFilter = opts?.bypassScope
+    ? ""
+    : buildScopedHistoryFilter(viewer, managedFactoryIds);
   const synced = await syncStaffData({
-    historyFilter: buildScopedHistoryFilter(viewer, managedFactoryIds),
+    historyFilter,
     useCache: false,
     includeCccdVersions: false,
   });
@@ -312,7 +338,9 @@ export async function fetchFreshStaffWorkspace(viewer: UserRecord) {
     synced.users.push(...extra);
   }
 
-  return buildWorkspace(viewer, synced.histories, synced.users, managedFactoryIds);
+  return buildWorkspace(viewer, synced.histories, synced.users, managedFactoryIds, {
+    bypassScope: opts?.bypassScope,
+  });
 }
 
 export async function fetchStaffWorkspace(
@@ -345,7 +373,7 @@ export async function fetchStaffWorkspace(
   });
 
   // Fetch all remaining histories for users found in scope (first sync only)
-  if (useCache && !cacheValid && viewer.role === "staff") {
+  if (useCache && !cacheValid && (viewer.role === "staff" || viewer.role === "admin")) {
     const scopeUserIds = [...new Set(synced.histories.map((h) => h.user).filter(Boolean))];
     if (scopeUserIds.length) {
       const cachedHistoryIds = new Set(synced.histories.map((h) => h.id));
@@ -380,6 +408,20 @@ export async function fetchStaffWorkspace(
   }
 
   return buildWorkspace(viewer, synced.histories, synced.users, managedFactoryIds);
+}
+
+export async function fetchStaffWorkerWorkspace(viewer: UserRecord, workerId: string) {
+  const workspace = await fetchStaffWorkspace(viewer);
+  const worker = workspace.workers.find((item) => item.user.id === workerId) ?? null;
+  if (worker || viewer.role !== "admin") {
+    return { ...workspace, worker };
+  }
+
+  const fullWorkspace = await fetchFreshStaffWorkspace(viewer, { bypassScope: true });
+  return {
+    ...fullWorkspace,
+    worker: fullWorkspace.workers.find((item) => item.user.id === workerId) ?? null,
+  };
 }
 
 export type StaffWorkspaceResult = ReturnType<typeof buildWorkspace>;

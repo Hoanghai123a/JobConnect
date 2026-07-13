@@ -53,18 +53,16 @@ import { useAuth } from "@/lib/auth";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import {
   createEmploymentHistory,
-  fetchEmploymentHistories,
   findActiveEmploymentByUser,
   getLatestEmploymentHistory,
   maskCccd,
   syncLegacyUserWorkFields,
   updateEmploymentHistory,
+  updateUserAndCache,
   type EmploymentHistoryRecord,
 } from "@/lib/employment";
 import {
   fetchFactories,
-  fetchFactoryManagers,
-  isFactoryAssignmentActive,
   type FactoryRecord,
 } from "@/lib/factories";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
@@ -75,6 +73,7 @@ import { SalaryHoldCreateDialog } from "@/components/staff/SalaryHoldCreateDialo
 import { canCreateSalaryHold } from "@/lib/salary-holds";
 import {
   getCurrentCccdVersion,
+  updateCccdVersionAndCache,
   updateCccdVersionImages,
   findOrCreateCccdVersion,
   type CccdVersionRecord,
@@ -87,6 +86,7 @@ import {
   canReportJoin,
   canReportLeave,
   canViewPayroll,
+  fetchStaffWorkerWorkspace,
   filterHistoriesForStaffScope,
   isRecentRecruiter,
 } from "@/lib/staff-permissions";
@@ -173,13 +173,8 @@ function StaffWorkerDetailPage() {
     setLoading(true);
 
     Promise.all([
-      fetchEmploymentHistories([workerId]),
+      fetchStaffWorkerWorkspace(viewer as UserRecord, workerId),
       fetchFactories(),
-      fetchFactoryManagers(viewer.id),
-      pb
-        .collection("users")
-        .getOne(workerId)
-        .catch(() => null),
       pb
         .collection("users")
         .getList(1, 200, {
@@ -200,35 +195,34 @@ function StaffWorkerDetailPage() {
     ])
       .then(
         ([
-          historyRows,
+          workspace,
           factoryRows,
-          managerRows,
-          rawUser,
           staffRows,
           advanceRows,
           mainHouseRows,
         ]) => {
           if (!alive) return;
 
-          const managedFactoryIds = new Set(
-            managerRows
-              .filter((item) => isFactoryAssignmentActive(item))
-              .map((item) => item.factory),
-          );
+          const workspaceWorker = workspace.worker;
+          if (!workspaceWorker) {
+            setWorkerUser(null);
+            setHistories([]);
+            setAllWorkerHistories([]);
+            return;
+          }
+
+          const historyRows = workspaceWorker.histories;
+          const managedFactoryIds = workspace.managedFactoryIds;
           const visibleHistoryRows = filterHistoriesForStaffScope(
             viewer,
             historyRows,
             managedFactoryIds,
           );
-          const canAccessWorker = visibleHistoryRows.length > 0;
-
-          if (!canAccessWorker) {
-            setLoading(false);
+          if (!visibleHistoryRows.length) {
             return;
           }
 
-          const historyUser = visibleHistoryRows[0]?.expand?.user || historyRows[0]?.expand?.user;
-          const userRecord = (historyUser || rawUser) as UserRecord | null;
+          const userRecord = workspaceWorker.user;
           const latest = getLatestEmploymentHistory(visibleHistoryRows);
 
           setWorkerUser(userRecord);
@@ -313,7 +307,9 @@ function StaffWorkerDetailPage() {
   }, [factories, managedFactoryIds, recentRecruiter, viewer?.role]);
 
   const reloadHistories = async () => {
-    const nextRows = await fetchEmploymentHistories([workerId]);
+    if (!viewer?.id) return;
+    const workspace = await fetchStaffWorkerWorkspace(viewer as UserRecord, workerId);
+    const nextRows = workspace.worker?.histories ?? [];
     const nextVisibleRows = filterHistoriesForStaffScope(viewer, nextRows, managedFactoryIds);
     setAllWorkerHistories(nextRows);
     setHistories(nextVisibleRows);
@@ -557,7 +553,7 @@ function StaffWorkerDetailPage() {
       ...bankForm,
       bank_name: resolveBankName(bankForm.bank_name.trim()),
     };
-    await pb.collection("users").update(workerUser.id, payload);
+    const updatedUser = await updateUserAndCache(workerUser.id, payload);
     await createStaffActionLog({
       actor: viewer,
       targetUserId: workerUser.id,
@@ -569,7 +565,7 @@ function StaffWorkerDetailPage() {
       note: "Cập nhật tài khoản ngân hàng cho user",
     });
 
-    setWorkerUser((current) => (current ? { ...current, ...payload } : current));
+    setWorkerUser(updatedUser);
     setBankOpen(false);
     toast.success("Đã cập nhật tài khoản ngân hàng");
   };
@@ -1363,7 +1359,9 @@ function StaffWorkerDetailPage() {
                     actor={viewer as UserRecord}
                     onCreated={async (version) => {
                       setDetailCccdVersion(version);
-                      await pb.collection("employment_histories").update(detailHistory.id, { cccd_version: version.id });
+                      await updateEmploymentHistory(detailHistory.id, {
+                        cccd_version: version.id,
+                      });
                       await reloadHistories();
                     }}
                   />
@@ -1483,7 +1481,7 @@ function HistoryCccdImages({
     if (!confirm(`Xoá ảnh ${side === "front_image" ? "mặt trước" : "mặt sau"}?`)) return;
     setUploading(true);
     try {
-      await pb.collection("cccd_versions").update(version.id, { [side]: null });
+      await updateCccdVersionAndCache(version.id, { [side]: null });
       toast.success("Đã xoá ảnh CCCD");
       onUpdated();
     } catch (err: any) {

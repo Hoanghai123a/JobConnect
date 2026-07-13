@@ -1,4 +1,5 @@
 import { pb } from "./pocketbase";
+import { updateCachedCccdVersion } from "./staff-cache";
 
 export interface CccdVersionRecord {
   id: string;
@@ -48,13 +49,14 @@ export async function findOrCreateCccdVersion(
   backFile?: File | null,
 ): Promise<CccdVersionRecord> {
   const existing = await getCccdVersionByNumber(userId, cccdNumber);
-  if (existing) return existing;
+  if (existing) {
+    await updateCachedCccdVersion(existing);
+    return existing;
+  }
 
   const currentVersion = await getCurrentCccdVersion(userId);
   if (currentVersion) {
-    await pb
-      .collection("cccd_versions")
-      .update(currentVersion.id, { is_current: false });
+    await updateCccdVersionAndCache(currentVersion.id, { is_current: false });
   }
 
   const fd = new FormData();
@@ -64,9 +66,11 @@ export async function findOrCreateCccdVersion(
   if (frontFile) fd.append("front_image", frontFile);
   if (backFile) fd.append("back_image", backFile);
 
-  return (await pb
+  const created = (await pb
     .collection("cccd_versions")
     .create(fd)) as unknown as CccdVersionRecord;
+  await updateCachedCccdVersion(created);
+  return created;
 }
 
 export async function updateCccdVersionImages(
@@ -78,9 +82,18 @@ export async function updateCccdVersionImages(
   if (frontFile) fd.append("front_image", frontFile);
   if (backFile) fd.append("back_image", backFile);
 
-  return (await pb
+  return updateCccdVersionAndCache(versionId, fd);
+}
+
+export async function updateCccdVersionAndCache(
+  versionId: string,
+  payload: Record<string, unknown> | FormData,
+): Promise<CccdVersionRecord> {
+  const updated = (await pb
     .collection("cccd_versions")
-    .update(versionId, fd)) as unknown as CccdVersionRecord;
+    .update(versionId, payload)) as unknown as CccdVersionRecord;
+  await updateCachedCccdVersion(updated);
+  return updated;
 }
 
 export async function fetchCccdVersionsByUser(

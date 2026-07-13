@@ -24,8 +24,8 @@ import {
 import { cn } from "@/lib/utils";
 import { CalendarCheck, Moon, Sun, Wallet } from "lucide-react";
 import { toast } from "sonner";
-import { canViewPayroll } from "@/lib/staff-permissions";
-import { fetchFactoryManagers, isFactoryAssignmentActive } from "@/lib/factories";
+import { fetchStaffWorkerWorkspace } from "@/lib/staff-permissions";
+import type { UserRecord } from "@/lib/pocketbase";
 
 export const Route = createFileRoute(
   "/_authenticated/staff/workers/$workerId/payroll",
@@ -140,24 +140,17 @@ function StaffWorkerPayrollPage() {
     if (!user?.id || !workerId) return;
     setLoading(true);
     try {
-      const [workerUser, managers] = await Promise.all([
-        pb.collection("users").getOne(workerId),
-        fetchFactoryManagers(user.id),
-      ]);
-      setWorkerName(workerUser.full_name || workerUser.username || "");
-      setWorkerCompany(workerUser.company || "");
-
-      const managedFactoryIds = new Set(
-        managers.filter((m: any) => isFactoryAssignmentActive(m)).map((m: any) => m.factory),
-      );
-      const histories = await pb.collection("employment_histories").getFullList({
-        filter: `user="${escapePb(workerId)}"`,
-      });
-      if (!canViewPayroll(user, histories as any[], managedFactoryIds)) {
+      const workspace = await fetchStaffWorkerWorkspace(user as UserRecord, workerId);
+      const worker = workspace.worker;
+      if (!worker || !worker.canViewPayroll) {
         setAuthorized(false);
-        setLoading(false);
         return;
       }
+
+      setAuthorized(true);
+      const workerUser = worker.user;
+      setWorkerName(workerUser.full_name || workerUser.username || "");
+      setWorkerCompany(workerUser.company || "");
 
       const [attendanceRes, salaryRes] = await Promise.all([
         pb.collection("check_attendance_items").getList(1, 100, {
