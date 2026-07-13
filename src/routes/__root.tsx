@@ -17,6 +17,14 @@ import { RoamingPet } from "@/components/garden/RoamingPet";
 import { BrandHeadLinks } from "@/components/layout/BrandHeadLinks";
 import { PushPermissionPrompt } from "@/components/layout/PushPermissionPrompt";
 
+const CHUNK_RELOAD_KEY = "jobconnect.chunk-reload-path";
+
+function isChunkLoadError(error: Error) {
+  return /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Load failed for module/i.test(
+    error.message,
+  );
+}
+
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -36,6 +44,18 @@ function NotFoundComponent() {
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
+  const chunkLoadFailed = isChunkLoadError(error);
+
+  useEffect(() => {
+    if (!chunkLoadFailed) return;
+
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (sessionStorage.getItem(CHUNK_RELOAD_KEY) === currentPath) return;
+
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, currentPath);
+    window.location.reload();
+  }, [chunkLoadFailed]);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
@@ -43,6 +63,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
         <button
           onClick={() => {
+            if (chunkLoadFailed) {
+              window.location.reload();
+              return;
+            }
             router.invalidate();
             reset();
           }}
@@ -104,6 +128,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useEffect(() => {
+    sessionStorage.removeItem(CHUNK_RELOAD_KEY);
     const removePwaListeners = installPwaPromptListeners();
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);

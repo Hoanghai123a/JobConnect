@@ -59,7 +59,10 @@ export function BottomNav() {
           )}
         >
           {items.map((item) => {
-            const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+            const active = item.to === "/"
+              ? pathname === "/"
+              : pathname.startsWith(item.to) &&
+                !items.some(other => other.to !== item.to && pathname.startsWith(other.to) && other.to.length > item.to.length);
             const Icon = item.icon;
 
             return (
