@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Banknote, Check, Clock, Plus, QrCode, X } from "lucide-react";
+import { Banknote, Check, Clock, Filter, Plus, QrCode, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/lib/auth";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { fetchStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
@@ -33,6 +34,7 @@ function SalaryHoldsPage() {
   const [tab, setTab] = useState<Tab>(isAdmin ? "received" : "received");
   const [search, setSearch] = useState("");
   const [factoryIds, setFactoryIds] = useState<Set<string>>(new Set());
+  const [factorySearch, setFactorySearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detail, setDetail] = useState<SalaryHoldRecord | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -95,8 +97,10 @@ function SalaryHoldsPage() {
 
   return <PageContainer title="Giữ lương" subtitle={isAdmin ? "Tiếp nhận và giải ngân yêu cầu của Staff" : "Tạo và theo dõi yêu cầu giữ lương"} right={!isAdmin ? <Button size="sm" className="rounded-full px-3" onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" />Tạo mới</Button> : undefined}>
     <div className="flex gap-2 overflow-x-auto pb-1">{tabs.map(([key, label]) => <button key={key} onClick={() => { setTab(key); setSelectedIds(new Set()); }} className={`shrink-0 rounded-full px-3 py-2 text-xs font-medium ${tab === key ? "bg-primary text-primary-foreground" : "border bg-card"}`}>{label}{key !== "all" ? ` (${counts[key]})` : ""}</button>)}</div>
-    <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo họ tên NLĐ" />
-    {isAdmin && <details className="rounded-xl border bg-card p-3"><summary className="cursor-pointer text-sm font-medium">Lọc công ty ({factoryIds.size || "Tất cả"})</summary><div className="mt-3 grid gap-2 sm:grid-cols-2">{factories.map((factory) => <label key={factory.id} className="flex items-center gap-2 text-sm"><Checkbox checked={factoryIds.has(factory.id)} onCheckedChange={(checked) => setFactoryIds((old) => { const next = new Set(old); checked ? next.add(factory.id) : next.delete(factory.id); return next; })} />{factory.name}</label>)}</div></details>}
+    <div className="flex items-center gap-2">
+      <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo họ tên NLĐ" className="flex-1" />
+      {isAdmin && <Popover><PopoverTrigger asChild><button type="button" className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition ${factoryIds.size ? "border-primary bg-primary/10 text-primary" : "bg-card text-muted-foreground"}`} aria-label="Lọc công ty"><Filter className="h-4 w-4" /></button></PopoverTrigger><PopoverContent align="end" className="w-64 rounded-xl p-3"><div className="mb-2 text-sm font-medium">Lọc công ty {factoryIds.size ? `(${factoryIds.size})` : ""}</div><Input placeholder="Tìm công ty..." onChange={(e) => setFactorySearch(e.target.value)} value={factorySearch} className="mb-2 h-8 text-sm" /><div className="max-h-60 space-y-2 overflow-y-auto">{factories.filter((f) => !factorySearch.trim() || f.name.toLocaleLowerCase("vi").includes(factorySearch.trim().toLocaleLowerCase("vi"))).map((factory) => <label key={factory.id} className="flex items-center gap-2 text-sm"><Checkbox checked={factoryIds.has(factory.id)} onCheckedChange={(checked) => setFactoryIds((old) => { const next = new Set(old); checked ? next.add(factory.id) : next.delete(factory.id); return next; })} />{factory.name}</label>)}</div>{factoryIds.size > 0 && <button type="button" onClick={() => setFactoryIds(new Set())} className="mt-2 w-full rounded-lg border py-1.5 text-xs text-muted-foreground transition hover:bg-muted">Bỏ lọc</button>}</PopoverContent></Popover>}
+    </div>
     {isAdmin && tab === "received" && receivedRows.length > 0 && <div className="sticky top-2 z-10 flex items-center justify-between rounded-xl border bg-background/95 p-2 shadow-sm"><label className="flex items-center gap-2 text-sm"><Checkbox checked={receivedRows.every((row) => selectedIds.has(row.id))} onCheckedChange={(checked) => setSelectedIds(checked ? new Set(receivedRows.map((r) => r.id)) : new Set())} />Chọn tất cả</label><Button size="sm" disabled={!selectedIds.size} onClick={bulkApprove}><Check className="mr-1 h-4 w-4" />Duyệt ({selectedIds.size})</Button></div>}
     <div className="space-y-2">{loading ? <div className="p-4 text-center text-sm text-muted-foreground">Đang tải...</div> : filtered.map((row) => <Card key={row.id} onClick={() => setDetail(row)} className="cursor-pointer p-3 shadow-soft"><div className="flex items-start gap-3">{isAdmin && row.status === "received" && <Checkbox checked={selectedIds.has(row.id)} onClick={(e) => e.stopPropagation()} onCheckedChange={(checked) => setSelectedIds((old) => { const next = new Set(old); checked ? next.add(row.id) : next.delete(row.id); return next; })} />}<div className="min-w-0 flex-1"><div className="flex justify-between gap-2"><div className="font-semibold">{row.worker_name}</div><StatusChip tone={SALARY_HOLD_STATUS[row.status].tone}>{SALARY_HOLD_STATUS[row.status].label}</StatusChip></div><div className="mt-1 text-sm text-muted-foreground">{row.company_name}</div><div className="mt-2 text-lg font-bold text-primary">{Number(row.amount).toLocaleString("vi-VN")} đ</div><div className="line-clamp-2 text-xs text-muted-foreground">{row.content}</div></div></div></Card>)}</div>
 
