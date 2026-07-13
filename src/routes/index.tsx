@@ -302,6 +302,12 @@ function DashboardPage() {
                 badge={toBadge(pendingApprovalCount)}
               />
               <FeatureTile
+                to="/staff/salary-holds"
+                label="Giữ lương"
+                description="Duyệt và giải ngân yêu cầu"
+                icon={Wallet}
+              />
+              <FeatureTile
                 to="/admin/staff"
                 label="Quản lý staff"
                 description="Tạo, import tài khoản staff"

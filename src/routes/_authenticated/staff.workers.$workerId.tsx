@@ -7,6 +7,7 @@ import {
   Download,
   IdCard,
   ImagePlus,
+  Banknote,
   Landmark,
   NotebookPen,
   Pencil,
@@ -69,6 +70,9 @@ import {
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
+import { BankNameInput } from "@/components/staff/BankNameInput";
+import { SalaryHoldCreateDialog } from "@/components/staff/SalaryHoldCreateDialog";
+import { canCreateSalaryHold } from "@/lib/salary-holds";
 import {
   getCurrentCccdVersion,
   updateCccdVersionImages,
@@ -79,6 +83,7 @@ import { compressImage } from "@/lib/image-compress";
 import {
   canAccessStaffWorkspace,
   canReportAdvance,
+  canUpdateBank,
   canReportJoin,
   canReportLeave,
   canViewPayroll,
@@ -86,7 +91,7 @@ import {
   isRecentRecruiter,
 } from "@/lib/staff-permissions";
 import { pb, fileUrl, type UserRecord } from "@/lib/pocketbase";
-import { VN_BANKS } from "@/lib/vn-banks";
+import { resolveBankName } from "@/lib/vn-banks";
 
 export const Route = createFileRoute("/_authenticated/staff/workers/$workerId")({
   component: StaffWorkerDetailPage,
@@ -109,6 +114,7 @@ function StaffWorkerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [workerUser, setWorkerUser] = useState<UserRecord | null>(null);
   const [histories, setHistories] = useState<EmploymentHistoryRecord[]>([]);
+  const [allWorkerHistories, setAllWorkerHistories] = useState<EmploymentHistoryRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [managedFactoryIds, setManagedFactoryIds] = useState<Set<string>>(new Set());
   const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
@@ -118,6 +124,7 @@ function StaffWorkerDetailPage() {
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
+  const [salaryHoldOpen, setSalaryHoldOpen] = useState(false);
   const [editingHistory, setEditingHistory] = useState<EmploymentHistoryRecord | null>(null);
   const [detailHistory, setDetailHistory] = useState<EmploymentHistoryRecord | null>(null);
   const [detailCccdVersion, setDetailCccdVersion] = useState<CccdVersionRecord | null>(null);
@@ -226,6 +233,7 @@ function StaffWorkerDetailPage() {
 
           setWorkerUser(userRecord);
           setHistories(visibleHistoryRows);
+          setAllWorkerHistories(historyRows);
           setManagedFactoryIds(managedFactoryIds);
           setFactories(factoryRows);
           setMainHouses(mainHouseRows);
@@ -268,6 +276,10 @@ function StaffWorkerDetailPage() {
   }, [detailHistory]);
 
   const latestHistory = useMemo(() => getLatestEmploymentHistory(histories), [histories]);
+  const latestWorkerHistory = useMemo(
+    () => getLatestEmploymentHistory(allWorkerHistories),
+    [allWorkerHistories],
+  );
   const activeHistory = useMemo(
     () => histories.find((item) => item.status === "working" && !item.leave_date) || null,
     [histories],
@@ -288,7 +300,7 @@ function StaffWorkerDetailPage() {
     joinForm.factory,
   );
   const canOpenJoinForm = canReportJoin(viewer, histories, managedFactoryIds);
-  const canUpdateBankForWorker = canReportAdvanceForWorker;
+  const canUpdateBankForWorker = canUpdateBank(viewer, allWorkerHistories, managedFactoryIds);
   const canDoAnyAction =
     canReportAdvanceForWorker ||
     canViewPayrollForWorker ||
@@ -303,6 +315,7 @@ function StaffWorkerDetailPage() {
   const reloadHistories = async () => {
     const nextRows = await fetchEmploymentHistories([workerId]);
     const nextVisibleRows = filterHistoriesForStaffScope(viewer, nextRows, managedFactoryIds);
+    setAllWorkerHistories(nextRows);
     setHistories(nextVisibleRows);
     const nextLatest = getLatestEmploymentHistory(nextRows);
     await syncLegacyUserWorkFields(workerId, nextLatest);
@@ -540,7 +553,11 @@ function StaffWorkerDetailPage() {
       bank_account_name: workerUser.bank_account_name || "",
     };
 
-    await pb.collection("users").update(workerUser.id, bankForm);
+    const payload = {
+      ...bankForm,
+      bank_name: resolveBankName(bankForm.bank_name.trim()),
+    };
+    await pb.collection("users").update(workerUser.id, payload);
     await createStaffActionLog({
       actor: viewer,
       targetUserId: workerUser.id,
@@ -548,11 +565,11 @@ function StaffWorkerDetailPage() {
       targetRecord: workerUser.id,
       action: "update_bank",
       before,
-      after: bankForm,
+      after: payload,
       note: "Cập nhật tài khoản ngân hàng cho user",
     });
 
-    setWorkerUser((current) => (current ? { ...current, ...bankForm } : current));
+    setWorkerUser((current) => (current ? { ...current, ...payload } : current));
     setBankOpen(false);
     toast.success("Đã cập nhật tài khoản ngân hàng");
   };
@@ -713,6 +730,9 @@ function StaffWorkerDetailPage() {
           disabled={!canUpdateBankForWorker}
           onClick={() => setBankOpen(true)}
         />
+        {canCreateSalaryHold(viewer, latestWorkerHistory) && (
+          <ActionButton icon={Banknote} label="Giữ lương" onClick={() => setSalaryHoldOpen(true)} />
+        )}
       </div>
 
       {workerUser && (
@@ -1082,23 +1102,12 @@ function StaffWorkerDetailPage() {
           </DialogHeader>
           <div className="space-y-3">
             <FormField label="Ngân hàng">
-              <Select
+              <BankNameInput
                 value={bankForm.bank_name}
-                onValueChange={(value) =>
+                onChange={(value) =>
                   setBankForm((current) => ({ ...current, bank_name: value }))
                 }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn ngân hàng" />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {VN_BANKS.map((bank) => (
-                    <SelectItem key={bank.code} value={bank.name}>
-                      {bank.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </FormField>
             <FormField label="Số tài khoản">
               <Input
@@ -1132,6 +1141,16 @@ function StaffWorkerDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {viewer && (
+        <SalaryHoldCreateDialog
+          open={salaryHoldOpen}
+          onOpenChange={setSalaryHoldOpen}
+          viewer={viewer}
+          worker={workerUser}
+          history={latestWorkerHistory}
+        />
+      )}
 
       <Dialog open={!!editingHistory} onOpenChange={(open) => !open && setEditingHistory(null)}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">

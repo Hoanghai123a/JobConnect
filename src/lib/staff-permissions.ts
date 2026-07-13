@@ -27,6 +27,7 @@ export interface StaffWorkerRecord {
   reasons: StaffVisibilityReason[];
   isRecentRecruiter: boolean;
   canReportAdvance: boolean;
+  canUpdateBank: boolean;
   canViewPayroll: boolean;
   canReportLeave: boolean;
   canReportJoin: boolean;
@@ -134,6 +135,17 @@ export function canReportAdvance(
   histories: EmploymentHistoryRecord[],
 ) {
   return viewer?.role === "admin" || isRecentRecruiter(viewer, histories);
+}
+
+export function canUpdateBank(
+  viewer: Partial<UserRecord> | null | undefined,
+  histories: EmploymentHistoryRecord[],
+  managedFactoryIds: Set<string>,
+) {
+  if (viewer?.role === "admin") return true;
+  if (!viewer?.id || viewer.role !== "staff") return false;
+  if (isRecentRecruiter(viewer, histories)) return true;
+  return histories.some((history) => managedFactoryIds.has(history.factory));
 }
 
 export function canViewPayroll(
@@ -251,6 +263,7 @@ function buildWorkspace(
         reasons: [...reasons],
         isRecentRecruiter: recentRecruiter,
         canReportAdvance: canReportAdvance(viewer, visibleHistories),
+        canUpdateBank: canUpdateBank(viewer, visibleHistories, managedFactoryIds),
         canViewPayroll: canViewPayroll(viewer, visibleHistories, managedFactoryIds),
         canReportLeave: canReportLeave(viewer, activeHistory, visibleHistories, managedFactoryIds),
         canReportJoin: canReportJoin(viewer, visibleHistories, managedFactoryIds),

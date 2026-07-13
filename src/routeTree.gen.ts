@@ -40,6 +40,7 @@ import { Route as ApiPublicAppLogoRouteImport } from './routes/api/public/app-lo
 import { Route as ApiPublicAppIcon512RouteImport } from './routes/api/public/app-icon-512'
 import { Route as ApiPublicAppIcon192RouteImport } from './routes/api/public/app-icon-192'
 import { Route as ApiPublicAppIconRouteImport } from './routes/api/public/app-icon'
+import { Route as AuthenticatedStaffSalaryHoldsRouteImport } from './routes/_authenticated/staff.salary-holds'
 import { Route as AuthenticatedStaffRecruitedRouteImport } from './routes/_authenticated/staff.recruited'
 import { Route as AuthenticatedStaffExportRouteImport } from './routes/_authenticated/staff.export'
 import { Route as AuthenticatedStaffApprovalsRouteImport } from './routes/_authenticated/staff.approvals'
@@ -219,6 +220,12 @@ const ApiPublicAppIconRoute = ApiPublicAppIconRouteImport.update({
   path: '/api/public/app-icon',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedStaffSalaryHoldsRoute =
+  AuthenticatedStaffSalaryHoldsRouteImport.update({
+    id: '/salary-holds',
+    path: '/salary-holds',
+    getParentRoute: () => AuthenticatedStaffRoute,
+  } as any)
 const AuthenticatedStaffRecruitedRoute =
   AuthenticatedStaffRecruitedRouteImport.update({
     id: '/recruited',
@@ -370,6 +377,7 @@ export interface FileRoutesByFullPath {
   '/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
+  '/staff/salary-holds': typeof AuthenticatedStaffSalaryHoldsRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
   '/api/public/app-icon-512': typeof ApiPublicAppIcon512Route
@@ -419,6 +427,7 @@ export interface FileRoutesByTo {
   '/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
+  '/staff/salary-holds': typeof AuthenticatedStaffSalaryHoldsRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
   '/api/public/app-icon-512': typeof ApiPublicAppIcon512Route
@@ -473,6 +482,7 @@ export interface FileRoutesById {
   '/_authenticated/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
   '/_authenticated/staff/export': typeof AuthenticatedStaffExportRoute
   '/_authenticated/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
+  '/_authenticated/staff/salary-holds': typeof AuthenticatedStaffSalaryHoldsRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
   '/api/public/app-icon-512': typeof ApiPublicAppIcon512Route
@@ -527,6 +537,7 @@ export interface FileRouteTypes {
     | '/staff/approvals'
     | '/staff/export'
     | '/staff/recruited'
+    | '/staff/salary-holds'
     | '/api/public/app-icon'
     | '/api/public/app-icon-192'
     | '/api/public/app-icon-512'
@@ -576,6 +587,7 @@ export interface FileRouteTypes {
     | '/staff/approvals'
     | '/staff/export'
     | '/staff/recruited'
+    | '/staff/salary-holds'
     | '/api/public/app-icon'
     | '/api/public/app-icon-192'
     | '/api/public/app-icon-512'
@@ -629,6 +641,7 @@ export interface FileRouteTypes {
     | '/_authenticated/staff/approvals'
     | '/_authenticated/staff/export'
     | '/_authenticated/staff/recruited'
+    | '/_authenticated/staff/salary-holds'
     | '/api/public/app-icon'
     | '/api/public/app-icon-192'
     | '/api/public/app-icon-512'
@@ -888,6 +901,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicAppIconRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/staff/salary-holds': {
+      id: '/_authenticated/staff/salary-holds'
+      path: '/salary-holds'
+      fullPath: '/staff/salary-holds'
+      preLoaderRoute: typeof AuthenticatedStaffSalaryHoldsRouteImport
+      parentRoute: typeof AuthenticatedStaffRoute
+    }
     '/_authenticated/staff/recruited': {
       id: '/_authenticated/staff/recruited'
       path: '/recruited'
@@ -1051,6 +1071,7 @@ interface AuthenticatedStaffRouteChildren {
   AuthenticatedStaffApprovalsRoute: typeof AuthenticatedStaffApprovalsRoute
   AuthenticatedStaffExportRoute: typeof AuthenticatedStaffExportRoute
   AuthenticatedStaffRecruitedRoute: typeof AuthenticatedStaffRecruitedRoute
+  AuthenticatedStaffSalaryHoldsRoute: typeof AuthenticatedStaffSalaryHoldsRoute
   AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
   AuthenticatedStaffWorkersWorkerIdRoute: typeof AuthenticatedStaffWorkersWorkerIdRouteWithChildren
   AuthenticatedStaffWorkersIndexRoute: typeof AuthenticatedStaffWorkersIndexRoute
@@ -1061,6 +1082,7 @@ const AuthenticatedStaffRouteChildren: AuthenticatedStaffRouteChildren = {
   AuthenticatedStaffApprovalsRoute: AuthenticatedStaffApprovalsRoute,
   AuthenticatedStaffExportRoute: AuthenticatedStaffExportRoute,
   AuthenticatedStaffRecruitedRoute: AuthenticatedStaffRecruitedRoute,
+  AuthenticatedStaffSalaryHoldsRoute: AuthenticatedStaffSalaryHoldsRoute,
   AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
   AuthenticatedStaffWorkersWorkerIdRoute:
     AuthenticatedStaffWorkersWorkerIdRouteWithChildren,

@@ -122,6 +122,12 @@ function StaffDashboardPage() {
           description="Duyệt ứng NLĐ và tạo yêu cầu ứng của staff."
           icon={Banknote}
         />
+        <DashboardLink
+          to="/staff/salary-holds"
+          title="Giữ lương"
+          description="Tạo và theo dõi yêu cầu giữ lương cho NLĐ."
+          icon={Banknote}
+        />
         <button
           type="button"
           onClick={() => setUtilOpen(true)}

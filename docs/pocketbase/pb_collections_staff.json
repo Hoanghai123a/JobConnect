@@ -791,5 +791,48 @@
       "CREATE INDEX `idx_stafflog_action` ON `staff_action_logs` (`action`)",
       "CREATE INDEX `idx_stafflog_created` ON `staff_action_logs` (`created`)"
     ]
+  },
+  {
+    "id": "pbc_salaryhold001",
+    "name": "salary_holds",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.role = \"admin\" || staff = @request.auth.id",
+    "viewRule": "@request.auth.role = \"admin\" || staff = @request.auth.id",
+    "createRule": "@request.auth.role = \"staff\" && @request.body.staff = @request.auth.id && @request.body.status = \"received\" && employment_history.recruiter_staff = @request.auth.id",
+    "updateRule": "(@request.auth.role = \"admin\" && ((status = \"received\" && (@request.body.status = \"approved\" || @request.body.status = \"rejected\")) || (status = \"approved\" && @request.body.status = \"disbursed\"))) || (@request.auth.role = \"staff\" && staff = @request.auth.id && status = \"received\" && @request.body.status = \"cancelled\")",
+    "deleteRule": null,
+    "fields": [
+      { "autogeneratePattern": "[a-z0-9]{15}", "hidden": false, "id": "text_salaryhold_id", "max": 15, "min": 15, "name": "id", "pattern": "^[a-z0-9]+$", "presentable": false, "primaryKey": true, "required": true, "system": true, "type": "text" },
+      { "cascadeDelete": false, "collectionId": "_pb_users_auth_", "hidden": false, "id": "rel_salaryhold_worker", "maxSelect": 1, "minSelect": 0, "name": "worker", "presentable": false, "required": true, "system": false, "type": "relation" },
+      { "cascadeDelete": false, "collectionId": "pbc_emphist00001", "hidden": false, "id": "rel_salaryhold_history", "maxSelect": 1, "minSelect": 0, "name": "employment_history", "presentable": false, "required": true, "system": false, "type": "relation" },
+      { "cascadeDelete": false, "collectionId": "_pb_users_auth_", "hidden": false, "id": "rel_salaryhold_staff", "maxSelect": 1, "minSelect": 0, "name": "staff", "presentable": false, "required": true, "system": false, "type": "relation" },
+      { "cascadeDelete": false, "collectionId": "pbc_factories001", "hidden": false, "id": "rel_salaryhold_factory", "maxSelect": 1, "minSelect": 0, "name": "factory", "presentable": false, "required": true, "system": false, "type": "relation" },
+      { "autogeneratePattern": "", "hidden": false, "id": "text_salaryhold_workername", "max": 0, "min": 0, "name": "worker_name", "pattern": "", "presentable": true, "primaryKey": false, "required": true, "system": false, "type": "text" },
+      { "autogeneratePattern": "", "hidden": false, "id": "text_salaryhold_employeecode", "max": 0, "min": 0, "name": "employee_code", "pattern": "", "presentable": false, "primaryKey": false, "required": false, "system": false, "type": "text" },
+      { "autogeneratePattern": "", "hidden": false, "id": "text_salaryhold_company", "max": 0, "min": 0, "name": "company_name", "pattern": "", "presentable": false, "primaryKey": false, "required": true, "system": false, "type": "text" },
+      { "autogeneratePattern": "", "hidden": false, "id": "text_salaryhold_bank", "max": 0, "min": 0, "name": "staff_bank_name", "pattern": "", "presentable": false, "primaryKey": false, "required": true, "system": false, "type": "text" },
+      { "autogeneratePattern": "", "hidden": false, "id": "text_salaryhold_banknumber", "max": 0, "min": 0, "name": "staff_bank_account_number", "pattern": "", "presentable": false, "primaryKey": false, "required": true, "system": false, "type": "text" },
+      { "autogeneratePattern": "", "hidden": false, "id": "text_salaryhold_bankaccount", "max": 0, "min": 0, "name": "staff_bank_account_name", "pattern": "", "presentable": false, "primaryKey": false, "required": true, "system": false, "type": "text" },
+      { "hidden": false, "id": "number_salaryhold_amount", "max": null, "min": 1, "name": "amount", "onlyInt": true, "presentable": false, "required": true, "system": false, "type": "number" },
+      { "autogeneratePattern": "", "hidden": false, "id": "text_salaryhold_content", "max": 0, "min": 1, "name": "content", "pattern": "", "presentable": false, "primaryKey": false, "required": true, "system": false, "type": "text" },
+      { "hidden": false, "id": "select_salaryhold_status", "maxSelect": 1, "name": "status", "presentable": false, "required": true, "system": false, "type": "select", "values": ["received", "approved", "rejected", "disbursed", "cancelled"] },
+      { "cascadeDelete": false, "collectionId": "_pb_users_auth_", "hidden": false, "id": "rel_salaryhold_approvedby", "maxSelect": 1, "minSelect": 0, "name": "approved_by", "presentable": false, "required": false, "system": false, "type": "relation" },
+      { "hidden": false, "id": "date_salaryhold_approved", "max": "", "min": "", "name": "approved_at", "presentable": false, "required": false, "system": false, "type": "date" },
+      { "cascadeDelete": false, "collectionId": "_pb_users_auth_", "hidden": false, "id": "rel_salaryhold_rejectedby", "maxSelect": 1, "minSelect": 0, "name": "rejected_by", "presentable": false, "required": false, "system": false, "type": "relation" },
+      { "hidden": false, "id": "date_salaryhold_rejected", "max": "", "min": "", "name": "rejected_at", "presentable": false, "required": false, "system": false, "type": "date" },
+      { "cascadeDelete": false, "collectionId": "_pb_users_auth_", "hidden": false, "id": "rel_salaryhold_disbursedby", "maxSelect": 1, "minSelect": 0, "name": "disbursed_by", "presentable": false, "required": false, "system": false, "type": "relation" },
+      { "hidden": false, "id": "date_salaryhold_disbursed", "max": "", "min": "", "name": "disbursed_at", "presentable": false, "required": false, "system": false, "type": "date" },
+      { "hidden": false, "id": "date_salaryhold_cancelled", "max": "", "min": "", "name": "cancelled_at", "presentable": false, "required": false, "system": false, "type": "date" },
+      { "hidden": false, "id": "autodate_salaryhold_created", "name": "created", "onCreate": true, "onUpdate": false, "presentable": false, "system": false, "type": "autodate" },
+      { "hidden": false, "id": "autodate_salaryhold_updated", "name": "updated", "onCreate": true, "onUpdate": true, "presentable": false, "system": false, "type": "autodate" }
+    ],
+    "indexes": [
+      "CREATE INDEX `idx_salaryhold_staff` ON `salary_holds` (`staff`)",
+      "CREATE INDEX `idx_salaryhold_worker` ON `salary_holds` (`worker`)",
+      "CREATE INDEX `idx_salaryhold_factory` ON `salary_holds` (`factory`)",
+      "CREATE INDEX `idx_salaryhold_status` ON `salary_holds` (`status`)",
+      "CREATE INDEX `idx_salaryhold_created` ON `salary_holds` (`created`)"
+    ]
   }
 ]

@@ -56,6 +56,8 @@ import type { MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { useAppSettings } from "@/lib/app-settings";
 import { pb, type UserRecord } from "@/lib/pocketbase";
+import { resolveBankName } from "@/lib/vn-banks";
+import { BankNameInput } from "@/components/staff/BankNameInput";
 
 function todayDate() {
   const now = new Date();
@@ -395,9 +397,17 @@ export function WorkerQuickDrawer({
 
   const submitBank = async () => {
     if (!worker || !viewer?.id) return;
+    if (!worker.canUpdateBank) {
+      toast.error("Bạn không có quyền cập nhật ngân hàng cho hồ sơ này");
+      return;
+    }
     setSubmitting(true);
     try {
-      await pb.collection("users").update(worker.user.id, bankForm);
+      const payload = {
+        ...bankForm,
+        bank_name: resolveBankName(bankForm.bank_name.trim()),
+      };
+      await pb.collection("users").update(worker.user.id, payload);
       await createStaffActionLog({
         actor: viewer,
         targetUserId: worker.user.id,
@@ -525,7 +535,7 @@ export function WorkerQuickDrawer({
                     }}
                   />
                 )}
-                {worker.canReportAdvance && isWorking && (
+                {worker.canUpdateBank && (
                   <ActionButton
                     icon={Landmark}
                     label="Cập nhật ngân hàng"
@@ -785,10 +795,9 @@ export function WorkerQuickDrawer({
               <div className="text-sm font-semibold">Cập nhật tài khoản ngân hàng</div>
               <div className="space-y-1">
                 <Label className="text-xs">Ngân hàng</Label>
-                <Input
+                <BankNameInput
                   value={bankForm.bank_name}
-                  onChange={(e) => setBankForm((f) => ({ ...f, bank_name: e.target.value }))}
-                  placeholder="Tên ngân hàng"
+                  onChange={(value) => setBankForm((f) => ({ ...f, bank_name: value }))}
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
