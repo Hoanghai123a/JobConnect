@@ -1447,7 +1447,7 @@ function AdvanceDetailDialog({
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         if (canDisburse && advanceDetail) {
-          void setDisbursed(advanceDetail, true);
+          void setDisbursed(advanceDetail, true).then(goNext);
         } else {
           goNext();
         }
@@ -1504,9 +1504,13 @@ function AdvanceDetailDialog({
               <Button
                 size="icon"
                 className="h-9 w-9 rounded-full"
-                onClick={() => advanceDetail && setDisbursed(advanceDetail, true)}
-                aria-label="Đánh dấu đã giải ngân"
-                title="Đánh dấu đã giải ngân"
+                onClick={async () => {
+                  if (!advanceDetail) return;
+                  await setDisbursed(advanceDetail, true);
+                  goNext();
+                }}
+                aria-label="Đánh dấu đã giải ngân & sang card tiếp"
+                title="Đánh dấu đã giải ngân & sang card tiếp"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
