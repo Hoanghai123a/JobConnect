@@ -231,6 +231,7 @@ function MinesweeperPage() {
   const [bestTimes, setBestTimes] = useState<BestTimes>({ easy: null, medium: null, hard: null });
   const [rankAll, setRankAll] = useState<RankEntry[]>([]);
   const [showFullRank, setShowFullRank] = useState(false);
+  const [rankDifficulty, setRankDifficulty] = useState<Difficulty>("easy");
   const [cellSize, setCellSize] = useState(36);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -255,29 +256,54 @@ function MinesweeperPage() {
     fetchBalance(user.id).then((b) => {
       if (!alive) return;
       setBalance(b);
-      const serverBest = b.minesweeperBestTime ?? 0;
       const localBest = readBest(user.id);
-      if (serverBest > 0 && b.minesweeperBestDifficulty) {
+      const serverTimes = b.minesweeperBestTimes ?? {};
+      // Migrate old single-field data if new field is empty
+      if (!serverTimes.easy && !serverTimes.medium && !serverTimes.hard && b.minesweeperBestTime && b.minesweeperBestDifficulty) {
         const diff = b.minesweeperBestDifficulty as Difficulty;
-        if (localBest[diff] === null || serverBest < localBest[diff]!) {
-          localBest[diff] = serverBest;
-          setBestTimes({ ...localBest });
-          writeBest(user.id, localBest);
+        serverTimes[diff] = b.minesweeperBestTime;
+      }
+      // Bidirectional sync per-difficulty
+      let changed = false;
+      for (const d of DIFFICULTIES) {
+        const sv = serverTimes[d] ?? 0;
+        const lv = localBest[d];
+        if (sv > 0 && (lv === null || sv < lv)) {
+          localBest[d] = sv;
+          changed = true;
+        } else if (lv !== null && lv > 0 && (sv === 0 || lv < sv)) {
+          serverTimes[d] = lv;
+          changed = true;
         }
+      }
+      if (changed) {
+        setBestTimes({ ...localBest });
+        writeBest(user.id, localBest);
+        updateBalance(b.id, { minesweeperBestTimes: serverTimes }).catch(() => {});
       }
     }).catch(() => {});
     fetchAllBalances().then((balances) => {
       if (!alive) return;
-      const entries: RankEntry[] = balances
-        .filter((b) => (b.minesweeperBestTime ?? 0) > 0)
-        .sort((a, b) => (a.minesweeperBestTime ?? 9999) - (b.minesweeperBestTime ?? 9999))
-        .slice(0, LEADERBOARD_MAX)
-        .map((b) => ({
-          userId: b.user,
-          name: (b as any).expand?.user?.full_name || (b as any).expand?.user?.username || "---",
-          time: b.minesweeperBestTime ?? 0,
-          difficulty: (b.minesweeperBestDifficulty as Difficulty) || "easy",
-        }));
+      const entries: RankEntry[] = [];
+      for (const b of balances) {
+        const times = b.minesweeperBestTimes ?? {};
+        // Migrate old single-field data
+        if (!times.easy && !times.medium && !times.hard && b.minesweeperBestTime && b.minesweeperBestDifficulty) {
+          const d = b.minesweeperBestDifficulty as Difficulty;
+          times[d] = b.minesweeperBestTime;
+        }
+        for (const d of DIFFICULTIES) {
+          const t = times[d];
+          if (t && t > 0) {
+            entries.push({
+              userId: b.user,
+              name: (b as any).expand?.user?.full_name || (b as any).expand?.user?.username || "---",
+              time: t,
+              difficulty: d,
+            });
+          }
+        }
+      }
       setRankAll(entries);
     }).catch(() => {});
     return () => { alive = false; };
@@ -346,9 +372,11 @@ function MinesweeperPage() {
       writeBest(user.id, best);
       const bal = balanceRef.current;
       if (bal?.id) {
-        const serverBest = bal.minesweeperBestTime ?? 0;
-        if (serverBest === 0 || elapsed < serverBest) {
-          updateBalance(bal.id, { minesweeperBestTime: elapsed, minesweeperBestDifficulty: difficulty }).catch(() => {});
+        const serverTimes = bal.minesweeperBestTimes ?? {};
+        const currentBest = serverTimes[difficulty] ?? 0;
+        if (currentBest === 0 || elapsed < currentBest) {
+          const updated = { ...serverTimes, [difficulty]: elapsed };
+          updateBalance(bal.id, { minesweeperBestTimes: updated }).catch(() => {});
         }
       }
       toast.success("Kỷ lục mới: " + formatTime(elapsed) + "!");
@@ -462,13 +490,20 @@ function MinesweeperPage() {
 
   const handlePointerLeave = useCallback(() => {}, []);
 
+  const rankFiltered = useMemo(() => {
+    return rankAll
+      .filter((e) => e.difficulty === rankDifficulty)
+      .sort((a, b) => a.time - b.time)
+      .slice(0, LEADERBOARD_MAX);
+  }, [rankAll, rankDifficulty]);
+
   const myRank = useMemo(() => {
     if (!user?.id) return null;
-    const idx = rankAll.findIndex((e) => e.userId === user.id);
+    const idx = rankFiltered.findIndex((e) => e.userId === user.id);
     return idx >= 0 ? idx + 1 : null;
-  }, [rankAll, user?.id]);
+  }, [rankFiltered, user?.id]);
 
-  const rankTop = showFullRank ? rankAll : rankAll.slice(0, LEADERBOARD_TOP);
+  const rankTop = showFullRank ? rankFiltered : rankFiltered.slice(0, LEADERBOARD_TOP);
 
   const gap = 1;
   const boardPixelW = cellSize * config.cols + gap * (config.cols - 1);
@@ -639,14 +674,27 @@ function MinesweeperPage() {
                 <Trophy className="h-4 w-4 text-primary" />
                 <div className="text-sm font-semibold">Thời gian nhanh nhất</div>
               </div>
-              {rankAll.length > LEADERBOARD_TOP && (
+              {rankFiltered.length > LEADERBOARD_TOP && (
                 <Button size="sm" variant="ghost" onClick={() => setShowFullRank(!showFullRank)}>
                   {showFullRank ? "Thu gọn" : "Xem top " + LEADERBOARD_MAX}
                 </Button>
               )}
             </div>
+            <div className="flex gap-2">
+              {DIFFICULTIES.map((d) => (
+                <Button
+                  key={d}
+                  size="sm"
+                  variant={rankDifficulty === d ? "default" : "outline"}
+                  className="flex-1 text-xs"
+                  onClick={() => { setRankDifficulty(d); setShowFullRank(false); }}
+                >
+                  {DIFFICULTY_CONFIG[d].label}
+                </Button>
+              ))}
+            </div>
             {rankTop.length === 0 ? (
-              <div className="py-4 text-center text-xs text-muted-foreground">Chưa có ai hoàn thành</div>
+              <div className="py-4 text-center text-xs text-muted-foreground">Chưa có ai hoàn thành mức này</div>
             ) : (
               rankTop.map((item, index) => (
                 <div key={item.userId} className={cn("flex items-center justify-between rounded-2xl border p-3", item.userId === user?.id && "border-primary/40 bg-primary/5")}>
@@ -656,7 +704,6 @@ function MinesweeperPage() {
                     </div>
                     <div>
                       <div className="text-sm font-semibold">{item.name}</div>
-                      <div className="text-[10px] text-muted-foreground">{DIFFICULTY_CONFIG[item.difficulty]?.label || item.difficulty}</div>
                     </div>
                   </div>
                   <StatusChip tone="success">{formatTime(item.time)}</StatusChip>
@@ -666,7 +713,7 @@ function MinesweeperPage() {
             <div className="rounded-2xl border border-dashed p-3 text-center">
               <div className="text-[11px] text-muted-foreground">Thứ hạng của bạn</div>
               <div className="mt-1 text-sm font-semibold">
-                {myRank ? "#" + myRank + " - " + formatTime(bestTimes[difficulty] ?? 0) : "Chưa có hạng"}
+                {myRank ? "#" + myRank + " - " + formatTime(bestTimes[rankDifficulty] ?? 0) : "Chưa có hạng"}
               </div>
             </div>
           </Card>

@@ -39,6 +39,7 @@ export interface GardenBalance {
   gemsBestScore?: number;
   minesweeperBestTime?: number;
   minesweeperBestDifficulty?: string;
+  minesweeperBestTimes?: { easy?: number; medium?: number; hard?: number };
   created?: string;
   updated?: string;
 }
