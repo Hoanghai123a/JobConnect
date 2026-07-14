@@ -54,6 +54,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  RotateCcw,
   Clock,
   FileDown,
   History,
@@ -75,12 +76,15 @@ const TRANSFER_DESCRIPTION_STORAGE_KEY = "jobconnect.advanceTransferDescriptionT
 const ADVANCE_FILTERS_STORAGE_KEY = "jobconnect.advanceFilters";
 const DEFAULT_TRANSFER_DESCRIPTION_TEMPLATE = "Giải ngân ứng + tên";
 
+type DisbursementFilter = "all" | "yes" | "no";
+
 type StoredAdvanceFilters = {
   search?: string;
   tab?: AdminTab;
   dateFrom?: string;
   dateTo?: string;
   factoryFilter?: string;
+  disbursementFilter?: DisbursementFilter;
   showFilters?: boolean;
 };
 
@@ -131,12 +135,17 @@ function readStoredAdvanceFilters(): StoredAdvanceFilters {
     if (!raw) return {};
     const parsed = JSON.parse(raw) as StoredAdvanceFilters;
     const validTab = parsed.tab && parsed.tab in ADVANCE_TAB_FILTERS ? parsed.tab : undefined;
+    const validDisbursement: DisbursementFilter =
+      parsed.disbursementFilter === "yes" || parsed.disbursementFilter === "no"
+        ? parsed.disbursementFilter
+        : "all";
     return {
       search: parsed.search || "",
       tab: validTab,
       dateFrom: parsed.dateFrom || "",
       dateTo: parsed.dateTo || "",
       factoryFilter: parsed.factoryFilter || "all",
+      disbursementFilter: validDisbursement,
       showFilters: Boolean(parsed.showFilters),
     };
   } catch {
@@ -181,6 +190,9 @@ export function AdvancesPage() {
   const [dateFrom, setDateFrom] = useState(storedFilters.dateFrom || "");
   const [dateTo, setDateTo] = useState(storedFilters.dateTo || "");
   const [factoryFilter, setFactoryFilter] = useState(storedFilters.factoryFilter || "all");
+  const [disbursementFilter, setDisbursementFilter] = useState<DisbursementFilter>(
+    storedFilters.disbursementFilter || "all",
+  );
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [advanceDetail, setAdvanceDetail] = useState<AdvanceRecord | null>(null);
@@ -235,13 +247,14 @@ export function AdvancesPage() {
           dateFrom,
           dateTo,
           factoryFilter,
+          disbursementFilter,
           showFilters,
         } satisfies StoredAdvanceFilters),
       );
     } catch {
       // Filters still work for the current session when localStorage is unavailable.
     }
-  }, [dateFrom, dateTo, factoryFilter, search, showFilters, tab]);
+  }, [dateFrom, dateTo, disbursementFilter, factoryFilter, search, showFilters, tab]);
 
   useEffect(() => {
     if (!selectedAdvanceUser) return;
@@ -250,7 +263,12 @@ export function AdvancesPage() {
       bank_account_number: selectedAdvanceUser.bank_account_number || "",
       bank_account_name: selectedAdvanceUser.bank_account_name || "",
     });
-  }, [selectedAdvanceUser?.id, selectedAdvanceUser?.bank_name, selectedAdvanceUser?.bank_account_number, selectedAdvanceUser?.bank_account_name]);
+  }, [
+    selectedAdvanceUser?.id,
+    selectedAdvanceUser?.bank_name,
+    selectedAdvanceUser?.bank_account_number,
+    selectedAdvanceUser?.bank_account_name,
+  ]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -280,17 +298,19 @@ export function AdvancesPage() {
         isAdmin,
         isStaff,
         userId: user?.id,
-        tab: (isAdmin || isStaff) ? tab : undefined,
+        tab: isAdmin || isStaff ? tab : undefined,
         dateFrom,
         dateTo,
         search,
         factoryName: isAdmin ? selectedFactoryName : "",
+        disbursed: isAdmin ? disbursementFilter : "all",
       });
-      const segmentFilter = isAdmin && adminSegment === "staff"
-        ? joinPbFilters([baseFilter, 'recruiter_id=""', 'requested_by=user'])
-        : isAdmin && adminSegment === "workers"
-          ? joinPbFilters([baseFilter, 'recruiter_id!=""'])
-          : baseFilter;
+      const segmentFilter =
+        isAdmin && adminSegment === "staff"
+          ? joinPbFilters([baseFilter, 'recruiter_id=""', "requested_by=user"])
+          : isAdmin && adminSegment === "workers"
+            ? joinPbFilters([baseFilter, 'recruiter_id!=""'])
+            : baseFilter;
       const res = await pb.collection("advances").getList(1, 300, {
         filter: segmentFilter,
         sort: "-created",
@@ -310,7 +330,17 @@ export function AdvancesPage() {
     } finally {
       setLoading(false);
     }
-  }, [adminSegment, dateFrom, dateTo, isAdmin, isStaff, search, selectedFactoryName, tab, user?.id]);
+  }, [
+    adminSegment,
+    dateFrom,
+    dateTo,
+    isAdmin,
+    isStaff,
+    search,
+    selectedFactoryName,
+    tab,
+    user?.id,
+  ]);
 
   const loadStats = useCallback(async () => {
     const base = buildAdvanceFilter({
@@ -321,23 +351,28 @@ export function AdvancesPage() {
       dateTo,
       search,
       factoryName: isAdmin ? selectedFactoryName : "",
+      disbursed: isAdmin ? disbursementFilter : "all",
     });
-    const segmentBase = isAdmin && adminSegment === "staff"
-      ? joinPbFilters([base, 'recruiter_id=""', 'requested_by=user'])
-      : isAdmin && adminSegment === "workers"
-        ? joinPbFilters([base, 'recruiter_id!=""'])
-        : base;
+    const segmentBase =
+      isAdmin && adminSegment === "staff"
+        ? joinPbFilters([base, 'recruiter_id=""', "requested_by=user"])
+        : isAdmin && adminSegment === "workers"
+          ? joinPbFilters([base, 'recruiter_id!=""'])
+          : base;
     const withBase = (statusFilter: string) => joinPbFilters([segmentBase, statusFilter]);
     const adminPendingFilter = `(status="recruiter_approved" || ${LEGACY_STAFF_REQUESTED_PENDING_FILTER})`;
-    const [pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all] = await Promise.all([
-      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.pending)),
-      loadAdvanceSummary(withBase(isAdmin ? adminPendingFilter : ADVANCE_TAB_FILTERS.recruiter_approved)),
-      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.accepted)),
-      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.recovered)),
-      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.unrecoverable)),
-      loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.rejected)),
-      loadAdvanceSummary(segmentBase),
-    ]);
+    const [pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all] =
+      await Promise.all([
+        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.pending)),
+        loadAdvanceSummary(
+          withBase(isAdmin ? adminPendingFilter : ADVANCE_TAB_FILTERS.recruiter_approved),
+        ),
+        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.accepted)),
+        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.recovered)),
+        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.unrecoverable)),
+        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.rejected)),
+        loadAdvanceSummary(segmentBase),
+      ]);
     setStats({ pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all });
   }, [adminSegment, dateFrom, dateTo, isAdmin, isStaff, search, selectedFactoryName, user?.id]);
 
@@ -372,7 +407,7 @@ export function AdvancesPage() {
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [dateFrom, dateTo, factoryFilter, search, tab]);
+  }, [dateFrom, dateTo, disbursementFilter, factoryFilter, search, tab]);
 
   const limit = Number(settings.advance_limit || 0);
   const outstanding = isAdmin ? 0 : outstandingAmount;
@@ -383,7 +418,11 @@ export function AdvancesPage() {
     const status = row.status || "pending";
     const recovery = row.recovery_status || "none";
     if (isAdmin) {
-      return status === "pending" || status === "recruiter_approved" || (status === "accepted" && recovery === "none");
+      return (
+        status === "pending" ||
+        status === "recruiter_approved" ||
+        (status === "accepted" && recovery === "none")
+      );
     }
     return status === "pending" || (status === "accepted" && recovery === "none");
   };
@@ -580,6 +619,33 @@ export function AdvancesPage() {
     }
   };
 
+  const setDisbursed = async (row: AdvanceRecord, disbursed: boolean) => {
+    try {
+      const after = {
+        disbursed,
+        disbursed_at: disbursed ? new Date().toISOString() : "",
+      };
+      await updateRow(row.id, after);
+      await createStaffActionLog({
+        actor: user,
+        targetUserId: row.user,
+        targetCollection: "advances",
+        targetRecord: row.id,
+        action: "update",
+        before: { disbursed: Boolean(row.disbursed) },
+        after,
+        note: disbursed ? "Admin đánh dấu đã giải ngân" : "Admin hoàn tác giải ngân",
+      });
+      setAdvanceDetail((current) =>
+        current && current.id === row.id ? { ...current, ...after } : current,
+      );
+      toast.success(disbursed ? "Đã đánh dấu giải ngân" : "Đã hoàn tác giải ngân");
+      load();
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi");
+    }
+  };
+
   const saveEditedAmount = async (row: AdvanceRecord) => {
     const newAmount = parseMoneyInput(editAmountText);
     if (!newAmount || newAmount <= 0) {
@@ -653,15 +719,18 @@ export function AdvancesPage() {
       "Số tài khoản": row.bank_account_number || "",
       "Tên chủ tài khoản": row.bank_account_name || "",
       "Số tiền": row.amount,
-      "Số tiền ban đầu": row.original_amount && row.original_amount !== row.amount ? row.original_amount : "",
+      "Số tiền ban đầu":
+        row.original_amount && row.original_amount !== row.amount ? row.original_amount : "",
       "Lý do": row.reason,
       "Trạng thái": STATUS_META[(row.status || "pending") as AdvanceStatus].label,
+      "Đã giải ngân": row.status === "accepted" ? (row.disbursed ? "Có" : "Không") : "",
       "Thu hồi": RECOVERY_META[(row.recovery_status || "none") as RecoveryStatus].label,
       "Ghi chú admin": row.admin_note || "",
       "Ghi chú người tuyển": row.recruiter_note || "",
       "Ghi chú thu hồi": row.recovery_note || "",
       "Ngày gửi": formatDateOnly(row.created),
       "Ngày duyệt": formatDateOnly(row.resolved_at),
+      "Ngày giải ngân": formatDateOnly(row.disbursed_at),
       "Ngày thu hồi": formatDateOnly(row.recovered_at),
     }));
     exportToExcel(`ung_luong_${Date.now()}`, { "Ứng lương": rows });
@@ -682,7 +751,13 @@ export function AdvancesPage() {
               <DialogTitle>Báo ứng mới</DialogTitle>
               <DialogDescription>Nhập thông tin và gửi yêu cầu ứng lương.</DialogDescription>
             </DialogHeader>
-            <form onSubmit={async (e) => { const ok = await submit(e); if (ok) setShowProfile(false); }} className="min-w-0 space-y-3">
+            <form
+              onSubmit={async (e) => {
+                const ok = await submit(e);
+                if (ok) setShowProfile(false);
+              }}
+              className="min-w-0 space-y-3"
+            >
               <div className="min-w-0 space-y-3">
                 <UserProfileCollapsible user={selectedAdvanceUser} />
 
@@ -708,7 +783,9 @@ export function AdvancesPage() {
                 </div>
 
                 <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
-                  <div className="text-xs font-semibold text-muted-foreground">Tài khoản nhận tiền</div>
+                  <div className="text-xs font-semibold text-muted-foreground">
+                    Tài khoản nhận tiền
+                  </div>
                   <div className="space-y-1">
                     <Label>Ngân hàng</Label>
                     <Select
@@ -791,7 +868,12 @@ export function AdvancesPage() {
               role="button"
               tabIndex={0}
               onClick={() => setAdvanceDetail(row)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setAdvanceDetail(row); } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setAdvanceDetail(row);
+                }
+              }}
               className={cn(
                 "list-card cursor-pointer",
                 toneBorder[STATUS_META[(row.status || "pending") as AdvanceStatus].tone],
@@ -827,6 +909,7 @@ export function AdvancesPage() {
           savingNotes={savingNotes}
           setSavingNotes={setSavingNotes}
           updateRow={updateRow}
+          setDisbursed={setDisbursed}
           load={load}
         />
       </PageContainer>
@@ -857,7 +940,9 @@ export function AdvancesPage() {
           type="button"
           className={cn(
             "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-            adminSegment === "workers" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground",
+            adminSegment === "workers"
+              ? "bg-background shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
           )}
           onClick={() => setAdminSegment("workers")}
         >
@@ -867,7 +952,9 @@ export function AdvancesPage() {
           type="button"
           className={cn(
             "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-            adminSegment === "staff" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground",
+            adminSegment === "staff"
+              ? "bg-background shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
           )}
           onClick={() => setAdminSegment("staff")}
         >
@@ -876,13 +963,33 @@ export function AdvancesPage() {
       </div>
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-2">
-          <StatCard label="Chờ duyệt" value={statValue(stats.recruiter_approved)} icon={Clock} tone="warning" />
-          <StatCard label="Đã tiếp nhận" value={statValue(stats.accepted)} icon={Check} tone="success" />
+          <StatCard
+            label="Chờ duyệt"
+            value={statValue(stats.recruiter_approved)}
+            icon={Clock}
+            tone="warning"
+          />
+          <StatCard
+            label="Đã tiếp nhận"
+            value={statValue(stats.accepted)}
+            icon={Check}
+            tone="success"
+          />
           {showAllStats && (
             <>
               <StatCard label="Từ chối" value={statValue(stats.rejected)} icon={X} tone="danger" />
-              <StatCard label="Đã thu hồi" value={statValue(stats.recovered)} icon={ShieldCheck} tone="primary" />
-              <StatCard label="Không thu hồi" value={statValue(stats.unrecoverable)} icon={X} tone="danger" />
+              <StatCard
+                label="Đã thu hồi"
+                value={statValue(stats.recovered)}
+                icon={ShieldCheck}
+                tone="primary"
+              />
+              <StatCard
+                label="Không thu hồi"
+                value={statValue(stats.unrecoverable)}
+                icon={X}
+                tone="danger"
+              />
             </>
           )}
         </div>
@@ -961,6 +1068,22 @@ export function AdvancesPage() {
                         {[factory.code, factory.name].filter(Boolean).join(" - ")}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Trạng thái giải ngân</Label>
+                <Select
+                  value={disbursementFilter}
+                  onValueChange={(v) => setDisbursementFilter(v as DisbursementFilter)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tất cả" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả</SelectItem>
+                    <SelectItem value="yes">Đã giải ngân</SelectItem>
+                    <SelectItem value="no">Chưa giải ngân</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1151,6 +1274,11 @@ export function AdvancesPage() {
                   <StatusChip tone={STATUS_META[status].tone}>
                     {STATUS_META[status].label}
                   </StatusChip>
+                  {status === "accepted" && (
+                    <StatusChip tone={row.disbursed ? "success" : "warning"}>
+                      {row.disbursed ? "Đã giải ngân" : "Chưa giải ngân"}
+                    </StatusChip>
+                  )}
                   {recovery !== "none" && (
                     <StatusChip tone={RECOVERY_META[recovery].tone as any}>
                       {RECOVERY_META[recovery].label}
@@ -1236,6 +1364,7 @@ export function AdvancesPage() {
         savingNotes={savingNotes}
         setSavingNotes={setSavingNotes}
         updateRow={updateRow}
+        setDisbursed={setDisbursed}
         load={load}
       />
     </PageContainer>
@@ -1255,6 +1384,7 @@ function AdvanceDetailDialog({
   savingNotes,
   setSavingNotes,
   updateRow,
+  setDisbursed,
   load,
 }: {
   advanceDetail: AdvanceRecord | null;
@@ -1269,10 +1399,20 @@ function AdvanceDetailDialog({
   savingNotes: boolean;
   setSavingNotes: (v: boolean) => void;
   updateRow: (id: string, payload: Partial<AdvanceRecord>) => Promise<void>;
+  setDisbursed: (row: AdvanceRecord, disbursed: boolean) => Promise<void>;
   load: () => void;
 }) {
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
+  const [showQr, setShowQr] = useState(false);
+
+  useEffect(() => {
+    setShowQr(false);
+  }, [advanceDetail?.id]);
+
+  const status = advanceDetail?.status;
+  const disbursed = Boolean(advanceDetail?.disbursed);
+  const canDisburse = isAdmin && status === "accepted" && !disbursed;
 
   const currentIndex = useMemo(() => {
     if (!advanceDetail) return -1;
@@ -1306,12 +1446,16 @@ function AdvanceDetailDialog({
         goPrev();
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        goNext();
+        if (canDisburse && advanceDetail) {
+          void setDisbursed(advanceDetail, true);
+        } else {
+          goNext();
+        }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [advanceDetail, goPrev, goNext]);
+  }, [advanceDetail, canDisburse, setDisbursed, goPrev, goNext]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -1341,7 +1485,7 @@ function AdvanceDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {items.length > 1 && (
+        {(items.length > 1 || canDisburse) && (
           <div className="flex items-center justify-between">
             <Button
               size="icon"
@@ -1354,18 +1498,30 @@ function AdvanceDetailDialog({
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="text-xs text-muted-foreground">
-              Vuốt hoặc bấm mũi tên để chuyển
+              {canDisburse ? "Bấm → để đánh dấu đã giải ngân" : "Vuốt hoặc bấm mũi tên để chuyển"}
             </span>
-            <Button
-              size="icon"
-              variant="outline"
-              className="h-9 w-9 rounded-full"
-              disabled={!hasNext}
-              onClick={goNext}
-              aria-label="Card tiếp theo"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            {canDisburse ? (
+              <Button
+                size="icon"
+                className="h-9 w-9 rounded-full"
+                onClick={() => advanceDetail && setDisbursed(advanceDetail, true)}
+                aria-label="Đánh dấu đã giải ngân"
+                title="Đánh dấu đã giải ngân"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-9 w-9 rounded-full"
+                disabled={!hasNext}
+                onClick={goNext}
+                aria-label="Card tiếp theo"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         )}
 
@@ -1379,7 +1535,8 @@ function AdvanceDetailDialog({
             <div className="rounded-xl border bg-muted/30 p-3">
               <div className="text-sm font-semibold">{advanceDetail.full_name || "-"}</div>
               <div className="text-[11px] text-muted-foreground">
-                {[advanceDetail.employee_code, advanceDetail.company].filter(Boolean).join(" - ") || "-"}
+                {[advanceDetail.employee_code, advanceDetail.company].filter(Boolean).join(" - ") ||
+                  "-"}
                 {advanceDetail.phone && (
                   <>
                     {" - "}
@@ -1394,11 +1551,12 @@ function AdvanceDetailDialog({
               </div>
               <div className="mt-2 text-2xl font-bold text-primary">
                 {formatMoney(advanceDetail.amount)}
-                {advanceDetail.original_amount && advanceDetail.original_amount !== advanceDetail.amount && (
-                  <span className="ml-2 text-sm font-normal text-muted-foreground line-through">
-                    {formatMoney(advanceDetail.original_amount)}
-                  </span>
-                )}
+                {advanceDetail.original_amount &&
+                  advanceDetail.original_amount !== advanceDetail.amount && (
+                    <span className="ml-2 text-sm font-normal text-muted-foreground line-through">
+                      {formatMoney(advanceDetail.original_amount)}
+                    </span>
+                  )}
               </div>
             </div>
 
@@ -1426,6 +1584,12 @@ function AdvanceDetailDialog({
                 label="Ngày xử lý"
                 value={formatDateTime(advanceDetail.resolved_at)}
               />
+              {advanceDetail.status === "accepted" && (
+                <AdvanceDetailCell
+                  label="Ngày giải ngân"
+                  value={formatDateTime(advanceDetail.disbursed_at)}
+                />
+              )}
               <AdvanceDetailCell
                 label="Ngày thu hồi"
                 value={formatDateTime(advanceDetail.recovered_at)}
@@ -1439,33 +1603,64 @@ function AdvanceDetailDialog({
                 {advanceDetail.bank_account_number || "-"} -{" "}
                 {advanceDetail.bank_account_name || "-"}
               </div>
-              {advanceDetail.status === "accepted" && (() => {
-                const qrUrl = buildVietQrUrl({
-                  bankName: advanceDetail.bank_name || "",
-                  accountNumber: advanceDetail.bank_account_number || "",
-                  accountName: advanceDetail.bank_account_name,
-                  amount: advanceDetail.amount,
-                  description: buildTransferDescription(
-                    transferDescriptionTemplate,
-                    advanceDetail.full_name,
-                  ),
-                });
-                if (!qrUrl) return null;
-                return (
-                  <div className="mt-3 flex flex-col items-center gap-2 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3">
-                    <div className="text-[11px] font-semibold text-primary">Mã QR chuyển khoản</div>
-                    <img
-                      src={qrUrl}
-                      alt="QR chuyển khoản"
-                      className="h-52 w-52 rounded-lg"
-                      loading="lazy"
-                    />
-                    <div className="text-center text-[11px] text-muted-foreground">
-                      Quét mã để chuyển {formatMoney(advanceDetail.amount)} VND
+              {advanceDetail.status === "accepted" &&
+                (() => {
+                  const qrUrl = buildVietQrUrl({
+                    bankName: advanceDetail.bank_name || "",
+                    accountNumber: advanceDetail.bank_account_number || "",
+                    accountName: advanceDetail.bank_account_name,
+                    amount: advanceDetail.amount,
+                    description: buildTransferDescription(
+                      transferDescriptionTemplate,
+                      advanceDetail.full_name,
+                    ),
+                  });
+                  if (!qrUrl) return null;
+                  const qrBlock = (
+                    <div className="mt-3 flex flex-col items-center gap-2 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3">
+                      <div className="text-[11px] font-semibold text-primary">
+                        Mã QR chuyển khoản
+                      </div>
+                      <img
+                        src={qrUrl}
+                        alt="QR chuyển khoản"
+                        className="h-52 w-52 rounded-lg"
+                        loading="lazy"
+                      />
+                      <div className="text-center text-[11px] text-muted-foreground">
+                        Quét mã để chuyển {formatMoney(advanceDetail.amount)} VND
+                      </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                  if (!disbursed) return qrBlock;
+                  return (
+                    <>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setShowQr((v) => !v)}>
+                          {showQr ? "Ẩn mã QR" : "Xem mã QR"}
+                        </Button>
+                        {isAdmin && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-amber-600 hover:text-amber-700"
+                            onClick={async () => {
+                              await setDisbursed(advanceDetail, false);
+                              setAdvanceDetail({
+                                ...advanceDetail,
+                                disbursed: false,
+                                disbursed_at: "",
+                              });
+                            }}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" /> Hoàn tác giải ngân
+                          </Button>
+                        )}
+                      </div>
+                      {showQr && qrBlock}
+                    </>
+                  );
+                })()}
             </div>
 
             <AdvanceTextBlock label="Lý do ứng" value={advanceDetail.reason} />

@@ -4,7 +4,14 @@ import type { UserRecord } from "@/lib/pocketbase";
 
 export type AdvanceStatus = "pending" | "recruiter_approved" | "accepted" | "rejected";
 export type RecoveryStatus = "none" | "recovered" | "unrecoverable";
-export type AdminTab = "pending" | "recruiter_approved" | "accepted" | "recovered" | "unrecoverable" | "rejected" | "all";
+export type AdminTab =
+  | "pending"
+  | "recruiter_approved"
+  | "accepted"
+  | "recovered"
+  | "unrecoverable"
+  | "rejected"
+  | "all";
 
 export type AdvanceRecord = {
   id: string;
@@ -33,6 +40,8 @@ export type AdvanceRecord = {
   recovery_note?: string;
   resolved_at?: string;
   recovered_at?: string;
+  disbursed?: boolean;
+  disbursed_at?: string;
   created: string;
 };
 
@@ -88,6 +97,7 @@ export function buildAdvanceFilter(input: {
   search?: string;
   factoryName?: string;
   staffSelfOnly?: boolean;
+  disbursed?: "all" | "yes" | "no";
 }) {
   if (!input.isAdmin && !input.userId) return 'id=""';
 
@@ -127,12 +137,20 @@ export function buildAdvanceFilter(input: {
     }
   }
 
+  const disbursedFilter =
+    input.disbursed === "yes"
+      ? "disbursed=true"
+      : input.disbursed === "no"
+        ? "disbursed!=true"
+        : "";
+
   return joinPbFilters([
     roleFilter,
     tabFilter,
     input.factoryName ? `company="${escapePb(input.factoryName)}"` : "",
     input.dateFrom ? `created>="${input.dateFrom} 00:00:00"` : "",
     input.dateTo ? `created<="${input.dateTo} 23:59:59"` : "",
+    disbursedFilter,
     searchFilter,
   ]);
 }
