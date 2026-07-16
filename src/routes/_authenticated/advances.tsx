@@ -499,6 +499,7 @@ export function AdvancesPage() {
       setAmountText("");
       setReason("");
       load();
+      loadOutstanding().catch(() => {});
       return true;
     } catch (error: unknown) {
       toast.error((error as any)?.message || "Lỗi gửi Ứng lương");
@@ -769,14 +770,14 @@ export function AdvancesPage() {
                     tone="primary"
                   />
                   <StatCard
-                    label="Đang dùng"
+                    label="Đã báo ứng chưa thu hồi"
                     value={formatMoney(outstanding)}
                     icon={Banknote}
                     tone="warning"
                   />
                 </div>
                 <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2 text-xs text-muted-foreground">
-                  Còn lại:{" "}
+                  Còn có thể báo ứng:{" "}
                   <span className="font-semibold text-foreground">
                     {limit > 0 ? formatMoney(available) : "—"}
                   </span>
