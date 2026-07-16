@@ -32,6 +32,8 @@ cho admin/staff và các field ảnh CCCD/ngân hàng/ngày sinh như hướng d
 - `advances`, `check_attendance_items`, `check_salary_items`
   - Cần cho staff đọc/tạo theo luồng app đang dùng.
   - PocketBase rule không biểu đạt gọn được điều kiện "người tuyển trong 3 lịch sử gần nhất", nên app bắt buộc kiểm tra quyền trước khi gọi API.
+  - Để staff thu hồi đơn ứng trước khi admin duyệt, cập nhật `deleteRule` theo
+    [`advances-withdraw-rule.md`](./advances-withdraw-rule.md).
 
 ## Sau khi import
 
