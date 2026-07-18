@@ -70,7 +70,7 @@ import {
 } from "@/lib/employment";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
-import { fetchStaffWorkspace } from "@/lib/staff-permissions";
+import { fetchStaffWorkspace, hasActiveOrRecentlyLeftEmployment } from "@/lib/staff-permissions";
 import { cn } from "@/lib/utils";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
@@ -82,6 +82,7 @@ import { saveAs } from "file-saver";
 
 export const Route = createFileRoute("/_authenticated/admin/workforce")({
   beforeLoad: () => {
+    if (typeof window === "undefined") return;
     const currentUser = pb.authStore.record as UserRecord | null;
     if (!currentUser || currentUser.role !== "admin") throw redirect({ to: "/" });
   },
@@ -91,6 +92,7 @@ export const Route = createFileRoute("/_authenticated/admin/workforce")({
 type ActiveTab = "list" | "stats" | "my-recruited";
 type RecruitSubTab = "factory" | "recruiter";
 type ListScope = "all" | "working" | "left";
+const RECRUITED_PAGE_SIZE = 20;
 
 function todayIso() {
   const now = new Date();
@@ -2434,6 +2436,16 @@ function RegisterDialog({
   );
 }
 
+function normalizeUserPickerSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/đ/g, "d")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function UserPicker({
   label,
   users,
@@ -2470,7 +2482,11 @@ function UserPicker({
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-          <Command>
+          <Command
+            filter={(itemValue, search) =>
+              normalizeUserPickerSearch(itemValue).includes(normalizeUserPickerSearch(search)) ? 1 : 0
+            }
+          >
             <CommandInput placeholder="Tìm kiếm..." />
             <CommandList>
               <CommandEmpty>Không tìm thấy.</CommandEmpty>
@@ -2489,7 +2505,7 @@ function UserPicker({
                 {users.map((u) => (
                   <CommandItem
                     key={u.id}
-                    value={`${u.full_name || ""} ${u.username || ""} ${u.phone || ""} ${u.employee_code || ""}`}
+                    value={`${u.full_name || ""} ${u.username || ""} ${u.phone || ""} ${u.uid || ""} ${u.employee_code || ""} ${u.cccd || ""}`}
                     onSelect={() => {
                       onChange(u.id);
                       setOpen(false);
@@ -2500,7 +2516,9 @@ function UserPicker({
                         {u.full_name || u.username || "—"}
                       </span>
                       <span className="truncate text-[11px] text-muted-foreground">
-                        {[u.username, u.phone, u.employee_code].filter(Boolean).join(" · ")}
+                        {[u.username, u.phone, u.uid, u.employee_code, u.cccd]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </span>
                     </div>
                   </CommandItem>
@@ -3010,34 +3028,63 @@ function MyRecruitedTab({
   const currentUser = pb.authStore.record as UserRecord | null;
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<"all" | "working" | "left">("all");
+  const [visibleCount, setVisibleCount] = useState(RECRUITED_PAGE_SIZE);
 
-  const since = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 90);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  }, []);
-
-  const myHistories = useMemo(() => {
+  const recruitedWorkers = useMemo(() => {
     if (!currentUser?.id) return [];
-    return histories.filter((h) => h.recruiter_staff === currentUser.id && h.join_date >= since);
-  }, [histories, currentUser?.id, since]);
+
+    const historiesByUser = new Map<string, EmploymentHistoryRecord[]>();
+    for (const history of histories) {
+      const workerHistories = historiesByUser.get(history.user) || [];
+      workerHistories.push(history);
+      historiesByUser.set(history.user, workerHistories);
+    }
+
+    return [...historiesByUser.entries()]
+      .filter(([, workerHistories]) => {
+        const recruitedByCurrentAdmin = workerHistories.some(
+          (history) => history.recruiter_staff === currentUser.id,
+        );
+        return recruitedByCurrentAdmin && hasActiveOrRecentlyLeftEmployment(workerHistories);
+      })
+      .map(([userId, workerHistories]) => ({
+        userId,
+        histories: workerHistories,
+        latest: getLatestEmploymentHistory(workerHistories),
+      }))
+      .filter((item) => item.latest && userById.has(item.userId))
+      .sort((a, b) => {
+        const aTime = latestJoinTime(a.latest);
+        const bTime = latestJoinTime(b.latest);
+        if (aTime !== null && bTime !== null && aTime !== bTime) return bTime - aTime;
+        if (aTime === null && bTime !== null) return 1;
+        if (aTime !== null && bTime === null) return -1;
+        return a.userId.localeCompare(b.userId);
+      });
+  }, [histories, currentUser?.id, userById]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return myHistories.filter((h) => {
-      if (scope === "working" && h.status !== "working") return false;
-      if (scope === "left" && h.status !== "left") return false;
+    return recruitedWorkers.filter(({ userId, histories: workerHistories, latest }) => {
+      const isWorking = latest?.status === "working" && !latest.leave_date;
+      if (scope === "working" && !isWorking) return false;
+      if (scope === "left" && isWorking) return false;
       if (query) {
-        const u = userById.get(h.user);
-        const f = factoryById.get(h.factory);
+        const user = userById.get(userId);
         const haystack = [
-          h.worker_name_snapshot,
-          h.worker_cccd_snapshot,
-          h.employee_code,
-          u?.full_name,
-          u?.username,
-          u?.phone,
-          f?.name,
+          user?.full_name,
+          user?.username,
+          user?.phone,
+          user?.cccd,
+          user?.employee_code,
+          ...workerHistories.flatMap((history) => [
+            history.worker_name_snapshot,
+            history.worker_cccd_snapshot,
+            history.worker_tax_code_snapshot,
+            history.employee_code,
+            history.expand?.factory?.name,
+            factoryById.get(history.factory)?.name,
+          ]),
         ]
           .filter(Boolean)
           .join(" ")
@@ -3046,7 +3093,19 @@ function MyRecruitedTab({
       }
       return true;
     });
-  }, [myHistories, search, scope, userById, factoryById]);
+  }, [recruitedWorkers, search, scope, userById, factoryById]);
+
+  const visibleWorkers = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
+
+  const updateSearch = (value: string) => {
+    setSearch(value);
+    setVisibleCount(RECRUITED_PAGE_SIZE);
+  };
+
+  const updateScope = (value: "all" | "working" | "left") => {
+    setScope(value);
+    setVisibleCount(RECRUITED_PAGE_SIZE);
+  };
 
   return (
     <div className="space-y-3">
@@ -3055,7 +3114,7 @@ function MyRecruitedTab({
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => updateSearch(e.target.value)}
             placeholder="Tìm tên, mã NV, CCCD, nhà máy..."
             className="rounded-full pl-9"
           />
@@ -3064,7 +3123,7 @@ function MyRecruitedTab({
         <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
           <button
             type="button"
-            onClick={() => setScope("all")}
+            onClick={() => updateScope("all")}
             className={cn(
               "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
               scope === "all"
@@ -3076,7 +3135,7 @@ function MyRecruitedTab({
           </button>
           <button
             type="button"
-            onClick={() => setScope("working")}
+            onClick={() => updateScope("working")}
             className={cn(
               "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
               scope === "working"
@@ -3088,7 +3147,7 @@ function MyRecruitedTab({
           </button>
           <button
             type="button"
-            onClick={() => setScope("left")}
+            onClick={() => updateScope("left")}
             className={cn(
               "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
               scope === "left"
@@ -3102,46 +3161,48 @@ function MyRecruitedTab({
       </div>
 
       <div className="text-xs text-muted-foreground">
-        Tổng {filtered.length} hồ sơ bạn tuyển trong 90 ngày.
+        Đang hiển thị {Math.min(visibleCount, filtered.length)}/{filtered.length} lao động bạn
+        tuyển.
       </div>
 
       {filtered.length === 0 ? (
         <EmptyState
           icon={Users}
           title="Không có hồ sơ phù hợp"
-          description="Chưa có lao động nào do bạn tuyển trong 90 ngày gần đây."
+          description="Không có lao động đang làm hoặc đã nghỉ trong 90 ngày gần đây do bạn tuyển."
         />
       ) : (
         <div className="space-y-2">
-          {filtered.map((h) => {
-            const u = userById.get(h.user);
-            const f = factoryById.get(h.factory);
+          {visibleWorkers.map(({ userId, latest }) => {
+            if (!latest) return null;
+            const user = userById.get(userId);
+            const factory = factoryById.get(latest.factory);
+            const isWorking = latest.status === "working" && !latest.leave_date;
             return (
               <button
-                key={h.id}
+                key={userId}
                 type="button"
-                onClick={() => onSelectWorker(h.user)}
+                onClick={() => onSelectWorker(userId)}
                 className="w-full rounded-2xl border border-border/60 bg-card p-3 text-left shadow-soft transition-colors hover:bg-muted/30 active:scale-[0.99]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-semibold">
-                      {h.worker_name_snapshot || u?.full_name || "Người lao động"}
+                      {latest.worker_name_snapshot || user?.full_name || "Người lao động"}
                     </div>
                     <div className="mt-0.5 text-[11px] text-muted-foreground">
-                      Mã NV: {h.employee_code || "Chưa có"} · CCCD:{" "}
-                      {maskCccd(h.worker_cccd_snapshot)}
+                      Mã NV: {latest.employee_code || user?.employee_code || "Chưa có"} · CCCD:{" "}
+                      {maskCccd(latest.worker_cccd_snapshot || user?.cccd)}
                     </div>
                     <div className="mt-0.5 text-[11px] text-muted-foreground">
-                      {f?.name || "Chưa có nhà máy"} · Vào: {formatDate(h.join_date)}
-                      {h.leave_date ? ` · Nghỉ: ${formatDate(h.leave_date)}` : ""}
+                      {latest.expand?.factory?.name || factory?.name || "Chưa có nhà máy"} · Vào:{" "}
+                      {formatDate(latest.join_date)}
+                      {latest.leave_date ? ` · Nghỉ: ${formatDate(latest.leave_date)}` : ""}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
-                    <StatusChip
-                      tone={h.status === "working" && !h.leave_date ? "success" : "neutral"}
-                    >
-                      {h.status === "working" && !h.leave_date ? "Đang làm" : "Đã nghỉ"}
+                    <StatusChip tone={isWorking ? "success" : "neutral"}>
+                      {isWorking ? "Đang làm" : "Đã nghỉ"}
                     </StatusChip>
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </div>
@@ -3149,6 +3210,16 @@ function MyRecruitedTab({
               </button>
             );
           })}
+          {visibleCount < filtered.length && (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              onClick={() => setVisibleCount((count) => count + RECRUITED_PAGE_SIZE)}
+            >
+              Tải thêm người lao động
+            </Button>
+          )}
         </div>
       )}
     </div>

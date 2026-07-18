@@ -102,6 +102,37 @@ export function isRecentRecruiter(
   );
 }
 
+export function hasActiveOrRecentlyLeftEmployment(
+  histories: EmploymentHistoryRecord[],
+  referenceDate = new Date(),
+) {
+  if (histories.some((history) => history.status === "working" && !history.leave_date)) {
+    return true;
+  }
+
+  const latestHistory = getLatestEmploymentHistory(histories);
+  if (!latestHistory?.leave_date) return false;
+
+  const datePart = latestHistory.leave_date.slice(0, 10);
+  const match = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+
+  const leaveDate = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (
+    Number.isNaN(leaveDate.getTime()) ||
+    leaveDate.getFullYear() !== Number(match[1]) ||
+    leaveDate.getMonth() !== Number(match[2]) - 1 ||
+    leaveDate.getDate() !== Number(match[3])
+  ) {
+    return false;
+  }
+
+  const cutoff = new Date(referenceDate);
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - 90);
+  return leaveDate >= cutoff;
+}
+
 export function canViewHistoryInStaffScope(
   viewer: Partial<UserRecord> | null | undefined,
   history: EmploymentHistoryRecord,

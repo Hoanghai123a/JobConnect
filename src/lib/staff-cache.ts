@@ -6,7 +6,7 @@ import type { FactoryRecord } from "./factories";
 import type { MainHouseRecord } from "./main-houses";
 
 const DB_NAME = "jobconnect-staff-cache";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const STORE_HISTORIES = "employment_histories";
 const STORE_USERS = "users";
 const STORE_CCCD_VERSIONS = "cccd_versions";
@@ -42,7 +42,7 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_META)) {
         db.createObjectStore(STORE_META);
       }
-      if (request.oldVersion < 4) {
+      if (request.oldVersion < 5) {
         for (const store of [
           STORE_HISTORIES, STORE_USERS, STORE_CCCD_VERSIONS,
           STORE_FACTORIES, STORE_MAIN_HOUSES, STORE_STAFF_USERS, STORE_META,
@@ -136,6 +136,16 @@ async function setLastSyncAt(db: IDBDatabase, timestamp: string): Promise<void> 
   await idbPut(db, STORE_META, timestamp, "lastSyncAt");
 }
 
+function getLatestUpdatedAt(
+  records: Array<{ updated?: string }>,
+  fallback = "",
+): string {
+  return records.reduce((latest, record) => {
+    const updated = record.updated || "";
+    return updated > latest ? updated : latest;
+  }, fallback);
+}
+
 export async function readCachedStaffData(): Promise<{
   histories: EmploymentHistoryRecord[];
   users: UserRecord[];
@@ -167,7 +177,7 @@ export async function syncStaffData(opts?: {
   const includeCccdVersions = opts?.includeCccdVersions ?? true;
   const lastSync = useCache ? await getLastSyncAt(db) : "";
 
-  const filters = [opts?.historyFilter, lastSync ? `updated>"${lastSync}"` : ""].filter(Boolean);
+  const filters = [opts?.historyFilter, lastSync ? `updated>="${lastSync}"` : ""].filter(Boolean);
   const historyFilter = filters.length ? filters.map((item) => `(${item})`).join(" && ") : "";
   const freshHistories = (await pb.collection("employment_histories").getFullList({
     filter: historyFilter,
@@ -237,8 +247,10 @@ export async function syncStaffData(opts?: {
   }
 
   const allUsers = await idbGetAll<UserRecord>(db, STORE_USERS);
-  const now = new Date().toISOString().replace("T", " ");
-  await setLastSyncAt(db, now);
+  const latestHistoryUpdate = getLatestUpdatedAt(freshHistories, lastSync);
+  if (latestHistoryUpdate) {
+    await setLastSyncAt(db, latestHistoryUpdate);
+  }
 
   return { histories: allHistories, users: allUsers };
 }
