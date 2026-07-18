@@ -1,6 +1,6 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Loader2, LogIn } from "lucide-react";
+import { Eye, EyeOff, Loader2, LogIn } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { normalizeAccountIdentity } from "@/lib/account-identity";
@@ -25,6 +25,7 @@ function LoginPage() {
   const nav = useNavigate();
   const [identity, setIdentity] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (event: React.FormEvent) => {
@@ -154,14 +155,32 @@ function LoginPage() {
 
         <div className="space-y-1.5">
           <Label htmlFor="password">Mật khẩu</Label>
-          <Input
-            id="password"
-            type="password"
-            value={password}
-            disabled={loading}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-          />
+          <div className="relative">
+            <Input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              disabled={loading}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              className="pr-12"
+            />
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => setShowPassword((visible) => !visible)}
+              aria-label={showPassword ? "Ẩn mật khẩu" : "Hiển thị mật khẩu"}
+              aria-pressed={showPassword}
+              title={showPassword ? "Ẩn mật khẩu" : "Hiển thị mật khẩu"}
+              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+            >
+              {showPassword ? (
+                <EyeOff className="h-5 w-5" aria-hidden="true" />
+              ) : (
+                <Eye className="h-5 w-5" aria-hidden="true" />
+              )}
+            </button>
+          </div>
         </div>
 
         <Button type="submit" className="w-full rounded-xl" disabled={loading}>

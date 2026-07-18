@@ -121,6 +121,11 @@ function historySortTime(history: EmploymentHistoryRecord) {
   return new Date(history.join_date || history.created || 0).getTime();
 }
 
+function latestJoinTime(history: EmploymentHistoryRecord | null) {
+  const time = new Date(history?.join_date || "").getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
 function getLatestHistoryAtEndDate(histories: EmploymentHistoryRecord[], to: string) {
   const toT = endOfDayTime(to);
   let latest: EmploymentHistoryRecord | null = null;
@@ -203,10 +208,7 @@ function WorkforcePage() {
       ]);
       const workerUsers = workspace.workers.map((w) => w.user);
       const workerIds = new Set(workerUsers.map((u) => u.id));
-      const mergedUsers = [
-        ...workerUsers,
-        ...staffAdminUsers.filter((u) => !workerIds.has(u.id)),
-      ];
+      const mergedUsers = [...workerUsers, ...staffAdminUsers.filter((u) => !workerIds.has(u.id))];
       setHistories(workspace.workers.flatMap((w) => w.histories));
       setUsers(mergedUsers);
       setFactories(factoryList);
@@ -261,7 +263,9 @@ function WorkforcePage() {
 
   const filteredHistoriesByDate = useMemo(() => {
     return histories.filter(
-      (h) => inDateRange(h.join_date, from, to) || (h.status === "left" && inDateRange(h.leave_date, from, to)),
+      (h) =>
+        inDateRange(h.join_date, from, to) ||
+        (h.status === "left" && inDateRange(h.leave_date, from, to)),
     );
   }, [histories, from, to]);
 
@@ -282,7 +286,10 @@ function WorkforcePage() {
     const map = new Map<string, EmploymentHistoryRecord[]>();
     for (const h of histories) {
       if (selectedFactoryIds.length > 0 && !selectedFactoryIds.includes(h.factory)) continue;
-      if (selectedRecruiterIds.length > 0 && (!h.recruiter_staff || !selectedRecruiterIds.includes(h.recruiter_staff))) {
+      if (
+        selectedRecruiterIds.length > 0 &&
+        (!h.recruiter_staff || !selectedRecruiterIds.includes(h.recruiter_staff))
+      ) {
         continue;
       }
       const arr = map.get(h.user) || [];
@@ -500,7 +507,12 @@ function WorkforcePage() {
               tone="success"
             />
             <StatCard label="Tuyển mới" value={filteredStats.joined} icon={Plus} tone="primary" />
-            <StatCard label="Đã nghỉ" value={filteredStats.left} icon={UserRoundMinus} tone="warning" />
+            <StatCard
+              label="Đã nghỉ"
+              value={filteredStats.left}
+              icon={UserRoundMinus}
+              tone="warning"
+            />
           </div>
 
           <RecruitGroups
@@ -541,9 +553,7 @@ function WorkforcePage() {
         actor={currentUser}
         factories={factories}
         mainHouses={mainHouses}
-        staffUsers={users.filter(
-          (item) => item.role === "staff" || item.role === "admin",
-        )}
+        staffUsers={users.filter((item) => item.role === "staff" || item.role === "admin")}
         onCreated={async (userId) => {
           await load();
           setSelectedUserId(userId);
@@ -977,29 +987,42 @@ function WorkerList({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return rows.filter(({ user, latest }) => {
-      if (!user) return false;
-      const status = latest?.status === "working" && !latest.leave_date ? "working" : "left";
-      if (scope === "working" && status !== "working") return false;
-      if (scope === "left" && status !== "left") return false;
-      if (!q) return true;
-      const haystack = [
-        user.full_name,
-        user.username,
-        user.phone,
-        user.cccd,
-        latest?.employee_code,
-        latest?.worker_name_snapshot,
-        latest?.worker_cccd_snapshot,
-        latest?.worker_tax_code_snapshot,
-        factoryById.get(latest?.factory || "")?.name,
-        latest?.expand?.factory?.name,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
+    return rows
+      .filter(({ user, latest }) => {
+        if (!user) return false;
+        const status = latest?.status === "working" && !latest.leave_date ? "working" : "left";
+        if (scope === "working" && status !== "working") return false;
+        if (scope === "left" && status !== "left") return false;
+        if (!q) return true;
+        const haystack = [
+          user.full_name,
+          user.username,
+          user.phone,
+          user.cccd,
+          latest?.employee_code,
+          latest?.worker_name_snapshot,
+          latest?.worker_cccd_snapshot,
+          latest?.worker_tax_code_snapshot,
+          factoryById.get(latest?.factory || "")?.name,
+          latest?.expand?.factory?.name,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(q);
+      })
+      .sort((a, b) => {
+        const aTime = latestJoinTime(a.latest);
+        const bTime = latestJoinTime(b.latest);
+        if (aTime !== null && bTime !== null && aTime !== bTime) return bTime - aTime;
+        if (aTime === null && bTime !== null) return 1;
+        if (aTime !== null && bTime === null) return -1;
+
+        const aName = a.user?.full_name || a.user?.username || "";
+        const bName = b.user?.full_name || b.user?.username || "";
+        const nameOrder = aName.localeCompare(bName, "vi", { sensitivity: "base" });
+        return nameOrder || (a.user?.id || "").localeCompare(b.user?.id || "");
+      });
   }, [rows, search, scope, factoryById]);
 
   return (
@@ -1104,6 +1127,8 @@ function AdminWorkerDrawer({
 }) {
   const { data: settings } = useAppSettings();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [oldHistoryOpen, setOldHistoryOpen] = useState(false);
+  const [oldHistorySaving, setOldHistorySaving] = useState(false);
   const [advanceOpen, setAdvanceOpen] = useState(false);
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [advanceReason, setAdvanceReason] = useState("");
@@ -1118,6 +1143,18 @@ function AdminWorkerDrawer({
     join_date: "",
     leave_date: "",
     status: "working",
+    note: "",
+  });
+  const [oldHistoryForm, setOldHistoryForm] = useState({
+    factory: "",
+    main_house: "",
+    employee_code: "",
+    worker_name_snapshot: "",
+    worker_cccd_snapshot: "",
+    worker_tax_code_snapshot: "",
+    recruiter_staff: "",
+    join_date: "",
+    leave_date: "",
     note: "",
   });
   const [saving, setSaving] = useState(false);
@@ -1162,6 +1199,95 @@ function AdminWorkerDrawer({
     });
   };
 
+  const openOldHistory = () => {
+    if (!user || actor?.role !== "admin") return;
+    const latest = getLatestEmploymentHistory(histories);
+    setOldHistoryForm({
+      factory: "",
+      main_house: latest?.main_house || "",
+      employee_code: latest?.employee_code || user.employee_code || "",
+      worker_name_snapshot: latest?.worker_name_snapshot || user.full_name || user.username || "",
+      worker_cccd_snapshot: latest?.worker_cccd_snapshot || user.cccd || "",
+      worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
+      recruiter_staff: latest?.recruiter_staff || actor.id,
+      join_date: "",
+      leave_date: "",
+      note: "",
+    });
+    setOldHistoryOpen(true);
+  };
+
+  const saveOldHistory = async () => {
+    if (!user || actor?.role !== "admin") {
+      toast.error("Chỉ admin được bổ sung lịch sử cũ");
+      return;
+    }
+    if (!oldHistoryForm.factory) return toast.warning("Chọn nhà máy");
+    if (!oldHistoryForm.main_house) return toast.warning("Chọn nhà chính");
+    if (!oldHistoryForm.recruiter_staff) return toast.warning("Chọn người tuyển");
+    if (!oldHistoryForm.join_date) return toast.warning("Chọn ngày vào");
+    if (!oldHistoryForm.leave_date) return toast.warning("Chọn ngày nghỉ");
+    if (oldHistoryForm.leave_date < oldHistoryForm.join_date) {
+      return toast.warning("Ngày nghỉ không được trước ngày vào");
+    }
+    if (oldHistoryForm.leave_date > todayIso()) {
+      return toast.warning("Ngày nghỉ không được lớn hơn ngày hiện tại");
+    }
+
+    setOldHistorySaving(true);
+    try {
+      const latestRows = await fetchEmploymentHistories([user.id]);
+      const overlaps = latestRows.some((history) => {
+        const existingStart = history.join_date?.slice(0, 10);
+        const existingEnd = history.leave_date?.slice(0, 10) || "9999-12-31";
+        if (!existingStart) return false;
+        return (
+          oldHistoryForm.join_date <= existingEnd && oldHistoryForm.leave_date >= existingStart
+        );
+      });
+      if (overlaps) {
+        toast.error("Khoảng thời gian này bị trùng với một lịch sử đã có");
+        return;
+      }
+
+      const created = await createEmploymentHistory({
+        user: user.id,
+        factory: oldHistoryForm.factory,
+        main_house: oldHistoryForm.main_house,
+        employee_code: oldHistoryForm.employee_code.trim(),
+        worker_name_snapshot:
+          oldHistoryForm.worker_name_snapshot.trim() || user.full_name || user.username || "",
+        worker_cccd_snapshot: oldHistoryForm.worker_cccd_snapshot.trim() || user.cccd || "",
+        worker_tax_code_snapshot: oldHistoryForm.worker_tax_code_snapshot.trim(),
+        recruiter_staff: oldHistoryForm.recruiter_staff,
+        join_date: oldHistoryForm.join_date,
+        leave_date: oldHistoryForm.leave_date,
+        status: "left",
+        note: oldHistoryForm.note.trim(),
+      });
+
+      const updatedRows = await fetchEmploymentHistories([user.id]);
+      await syncLegacyUserWorkFields(user.id, getLatestEmploymentHistory(updatedRows));
+      await createStaffActionLog({
+        actor,
+        targetUserId: user.id,
+        targetCollection: "employment_histories",
+        targetRecord: created.id,
+        action: "create",
+        after: created,
+        note: "Admin bổ sung lịch sử đi làm cũ",
+      });
+      setOldHistoryOpen(false);
+      await onDataChanged();
+      toast.success("Đã bổ sung lịch sử đi làm cũ");
+    } catch (error: unknown) {
+      const fieldErrors = getPocketBaseFieldErrors(error);
+      toast.error(fieldErrors || getErrorMessage(error, "Không thể bổ sung lịch sử cũ"));
+    } finally {
+      setOldHistorySaving(false);
+    }
+  };
+
   const saveEdit = async () => {
     if (!editingId) return;
     setSaving(true);
@@ -1176,7 +1302,7 @@ function AdminWorkerDrawer({
         main_house: form.main_house || undefined,
         join_date: form.join_date || undefined,
         leave_date: form.leave_date || undefined,
-        status: form.status as "working" | "left",
+        status: form.leave_date ? "left" : (form.status as "working" | "left"),
         note: form.note.trim(),
       });
       if (user) {
@@ -1344,454 +1470,676 @@ function AdminWorkerDrawer({
   };
 
   return (
-  <>
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{user.full_name || user.username || "Người lao động"}</DialogTitle>
-          <DialogDescription>
-            {isWorking ? "Đang đi làm" : "Đã nghỉ"} · Quản trị viên có toàn quyền chỉnh sửa
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{user.full_name || user.username || "Người lao động"}</DialogTitle>
+            <DialogDescription>
+              {isWorking ? "Đang đi làm" : "Đã nghỉ"} · Quản trị viên có toàn quyền chỉnh sửa
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            {user.uid && (
-              <div className="col-span-2 rounded-xl bg-primary/10 p-2.5">
-                <div className="text-[10px] text-muted-foreground">Mã tài khoản</div>
-                <div className="mt-0.5 text-sm font-semibold text-primary">{user.uid}</div>
-              </div>
-            )}
-            <div className="rounded-xl bg-muted/35 p-2.5">
-              <div className="text-[10px] text-muted-foreground">Họ tên tài khoản</div>
-              <div className="mt-0.5 text-sm font-semibold">{user.full_name || "—"}</div>
-            </div>
-            <div className="rounded-xl bg-muted/35 p-2.5">
-              <div className="text-[10px] text-muted-foreground">CCCD tài khoản</div>
-              <div className="mt-0.5 text-sm font-semibold">{maskCccd(user.cccd)}</div>
-            </div>
-            <div className="rounded-xl bg-muted/35 p-2.5">
-              <div className="text-[10px] text-muted-foreground">SĐT</div>
-              <div className="mt-0.5 text-sm font-semibold">{user.phone || "—"}</div>
-            </div>
-            <div className="rounded-xl bg-muted/35 p-2.5">
-              <div className="text-[10px] text-muted-foreground">Tên đăng nhập</div>
-              <div className="mt-0.5 text-sm font-semibold">{user.username || "—"}</div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <Landmark className="h-3.5 w-3.5" />
-                Tài khoản ngân hàng
-              </div>
-              {!bankEditing && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => setBankEditing(true)}
-                >
-                  Sửa STK
-                </Button>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              {user.uid && (
+                <div className="col-span-2 rounded-xl bg-primary/10 p-2.5">
+                  <div className="text-[10px] text-muted-foreground">Mã tài khoản</div>
+                  <div className="mt-0.5 text-sm font-semibold text-primary">{user.uid}</div>
+                </div>
               )}
+              <div className="rounded-xl bg-muted/35 p-2.5">
+                <div className="text-[10px] text-muted-foreground">Họ tên tài khoản</div>
+                <div className="mt-0.5 text-sm font-semibold">{user.full_name || "—"}</div>
+              </div>
+              <div className="rounded-xl bg-muted/35 p-2.5">
+                <div className="text-[10px] text-muted-foreground">CCCD tài khoản</div>
+                <div className="mt-0.5 text-sm font-semibold">{maskCccd(user.cccd)}</div>
+              </div>
+              <div className="rounded-xl bg-muted/35 p-2.5">
+                <div className="text-[10px] text-muted-foreground">SĐT</div>
+                <div className="mt-0.5 text-sm font-semibold">{user.phone || "—"}</div>
+              </div>
+              <div className="rounded-xl bg-muted/35 p-2.5">
+                <div className="text-[10px] text-muted-foreground">Tên đăng nhập</div>
+                <div className="mt-0.5 text-sm font-semibold">{user.username || "—"}</div>
+              </div>
             </div>
-            {bankEditing ? (
-              <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Ngân hàng</Label>
-                  <Select
-                    value={bankForm.bank_name}
-                    onValueChange={(v) => setBankForm((c) => ({ ...c, bank_name: v }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn ngân hàng" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-72">
-                      {VN_BANKS.map((bank) => (
-                        <SelectItem key={bank.code} value={bank.name}>
-                          {bank.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <Landmark className="h-3.5 w-3.5" />
+                  Tài khoản ngân hàng
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Số tài khoản</Label>
-                  <Input
-                    value={bankForm.bank_account_number}
-                    onChange={(e) =>
-                      setBankForm((c) => ({
-                        ...c,
-                        bank_account_number: e.target.value.replace(/\D/g, ""),
-                      }))
-                    }
-                    inputMode="numeric"
-                    placeholder="Nhập số tài khoản"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Tên chủ tài khoản</Label>
-                  <Input
-                    value={bankForm.bank_account_name}
-                    onChange={(e) =>
-                      setBankForm((c) => ({ ...c, bank_account_name: e.target.value }))
-                    }
-                    placeholder="Nhập tên chủ tài khoản"
-                  />
-                </div>
-                <div className="flex gap-2 pt-1">
+                {!bankEditing && (
                   <Button
                     size="sm"
                     variant="outline"
-                    className="flex-1"
-                    onClick={() => setBankEditing(false)}
+                    className="h-7 text-xs"
+                    onClick={() => setBankEditing(true)}
                   >
-                    Hủy
+                    Sửa STK
                   </Button>
-                  <Button
-                    size="sm"
-                    className="flex-1"
-                    disabled={bankSaving}
-                    onClick={saveBankInfo}
-                  >
-                    {bankSaving ? "Đang lưu..." : "Lưu STK"}
-                  </Button>
+                )}
+              </div>
+              {bankEditing ? (
+                <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Ngân hàng</Label>
+                    <Select
+                      value={bankForm.bank_name}
+                      onValueChange={(v) => setBankForm((c) => ({ ...c, bank_name: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Chọn ngân hàng" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {VN_BANKS.map((bank) => (
+                          <SelectItem key={bank.code} value={bank.name}>
+                            {bank.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Số tài khoản</Label>
+                    <Input
+                      value={bankForm.bank_account_number}
+                      onChange={(e) =>
+                        setBankForm((c) => ({
+                          ...c,
+                          bank_account_number: e.target.value.replace(/\D/g, ""),
+                        }))
+                      }
+                      inputMode="numeric"
+                      placeholder="Nhập số tài khoản"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Tên chủ tài khoản</Label>
+                    <Input
+                      value={bankForm.bank_account_name}
+                      onChange={(e) =>
+                        setBankForm((c) => ({ ...c, bank_account_name: e.target.value }))
+                      }
+                      placeholder="Nhập tên chủ tài khoản"
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setBankEditing(false)}
+                    >
+                      Hủy
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="flex-1"
+                      disabled={bankSaving}
+                      onClick={saveBankInfo}
+                    >
+                      {bankSaving ? "Đang lưu..." : "Lưu STK"}
+                    </Button>
+                  </div>
                 </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-1.5 text-sm">
+                  <div className="rounded-xl bg-muted/35 p-2.5">
+                    <div className="text-[10px] text-muted-foreground">Ngân hàng</div>
+                    <div className="mt-0.5 text-sm font-semibold">{user.bank_name || "—"}</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div className="rounded-xl bg-muted/35 p-2.5">
+                      <div className="text-[10px] text-muted-foreground">Số tài khoản</div>
+                      <div className="mt-0.5 text-sm font-semibold">
+                        {user.bank_account_number || "—"}
+                      </div>
+                    </div>
+                    <div className="rounded-xl bg-muted/35 p-2.5">
+                      <div className="text-[10px] text-muted-foreground">Tên chủ TK</div>
+                      <div className="mt-0.5 text-sm font-semibold">
+                        {user.bank_account_name || "—"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Ảnh CCCD
+            </div>
+            <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} readOnly />
+
+            {isWorking && (
+              <button
+                type="button"
+                onClick={openAdvanceDialog}
+                className="flex w-full items-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-3 text-left shadow-soft active:scale-[0.99]"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Wallet className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold">Báo ứng lương</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    Tạo yêu cầu ứng cho lao động đang đi làm
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </button>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Lịch sử đi làm ({histories.length})
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 rounded-xl text-xs"
+                onClick={openOldHistory}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+
+            {histories.length === 0 ? (
+              <div className="rounded-xl border bg-card p-3 text-center text-xs text-muted-foreground">
+                Chưa có lịch sử
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-1.5 text-sm">
-                <div className="rounded-xl bg-muted/35 p-2.5">
-                  <div className="text-[10px] text-muted-foreground">Ngân hàng</div>
-                  <div className="mt-0.5 text-sm font-semibold">{user.bank_name || "—"}</div>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <div className="rounded-xl bg-muted/35 p-2.5">
-                    <div className="text-[10px] text-muted-foreground">Số tài khoản</div>
-                    <div className="mt-0.5 text-sm font-semibold">{user.bank_account_number || "—"}</div>
+              histories.map((h) => (
+                <Card
+                  key={h.id}
+                  className="cursor-pointer space-y-2 rounded-2xl p-3 transition-colors hover:bg-muted/30"
+                  onClick={() => startEdit(h)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold">
+                        {h.expand?.factory?.name || "Nhà máy"}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {h.worker_name_snapshot} · {maskCccd(h.worker_cccd_snapshot)} · Mã:{" "}
+                        {h.employee_code || "—"}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Mã số thuế: {h.worker_tax_code_snapshot || "—"}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <StatusChip
+                        tone={h.status === "working" && !h.leave_date ? "success" : "neutral"}
+                      >
+                        {h.status === "working" && !h.leave_date ? "Đang làm" : "Đã nghỉ"}
+                      </StatusChip>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </div>
                   </div>
-                  <div className="rounded-xl bg-muted/35 p-2.5">
-                    <div className="text-[10px] text-muted-foreground">Tên chủ TK</div>
-                    <div className="mt-0.5 text-sm font-semibold">{user.bank_account_name || "—"}</div>
+                  <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                    <div>Vào: {formatDate(h.join_date)}</div>
+                    <div>Nghỉ: {formatDate(h.leave_date) || "—"}</div>
+                    <div>
+                      Người tuyển:{" "}
+                      {h.expand?.recruiter_staff?.full_name ||
+                        h.expand?.recruiter_staff?.username ||
+                        "—"}
+                    </div>
+                    <div>Nhà chính: {h.expand?.main_house?.name || "—"}</div>
+                    {h.note && <div className="col-span-2 text-muted-foreground">{h.note}</div>}
                   </div>
-                </div>
-              </div>
+                </Card>
+              ))
             )}
           </div>
 
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Ảnh CCCD
-          </div>
-          <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} readOnly />
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Đóng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-          {isWorking && (
-            <button
-              type="button"
-              onClick={openAdvanceDialog}
-              className="flex w-full items-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-3 text-left shadow-soft active:scale-[0.99]"
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Wallet className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold">Báo ứng lương</span>
-                <span className="block truncate text-[11px] text-muted-foreground">
-                  Tạo yêu cầu ứng cho lao động đang đi làm
-                </span>
-              </span>
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-            </button>
-          )}
-
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Lịch sử đi làm ({histories.length})
-          </div>
-
-          {histories.length === 0 ? (
-            <div className="rounded-xl border bg-card p-3 text-center text-xs text-muted-foreground">
-              Chưa có lịch sử
-            </div>
-          ) : (
-            histories.map((h) => (
-              <Card
-                key={h.id}
-                className="cursor-pointer space-y-2 rounded-2xl p-3 transition-colors hover:bg-muted/30"
-                onClick={() => startEdit(h)}
+      <Dialog
+        open={oldHistoryOpen}
+        onOpenChange={(value) => !oldHistorySaving && setOldHistoryOpen(value)}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Bổ sung lịch sử đi làm cũ</DialogTitle>
+            <DialogDescription>
+              Bản ghi luôn ở trạng thái Đã nghỉ và không được trùng thời gian với lịch sử khác.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Nhà máy *</Label>
+              <Select
+                value={oldHistoryForm.factory}
+                onValueChange={(value) =>
+                  setOldHistoryForm((current) => ({ ...current, factory: value }))
+                }
               >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold">
-                      {h.expand?.factory?.name || "Nhà máy"}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {h.worker_name_snapshot} · {maskCccd(h.worker_cccd_snapshot)} · Mã:{" "}
-                      {h.employee_code || "—"}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      Mã số thuế: {h.worker_tax_code_snapshot || "—"}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <StatusChip tone={h.status === "working" ? "success" : "neutral"}>
-                      {h.status === "working" ? "Đang làm" : "Đã nghỉ"}
-                    </StatusChip>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                  <div>Vào: {formatDate(h.join_date)}</div>
-                  <div>Nghỉ: {formatDate(h.leave_date) || "—"}</div>
-                  <div>
-                    Người tuyển:{" "}
-                    {h.expand?.recruiter_staff?.full_name ||
-                      h.expand?.recruiter_staff?.username ||
-                      "—"}
-                  </div>
-                  <div>Nhà chính: {h.expand?.main_house?.name || "—"}</div>
-                  {h.note && <div className="col-span-2 text-muted-foreground">{h.note}</div>}
-                </div>
-              </Card>
-            ))
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Đóng
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <Dialog open={!!editingId} onOpenChange={(v) => !v && setEditingId(null)}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Sửa lịch sử đi làm</DialogTitle>
-          <DialogDescription>Chỉnh sửa thông tin lịch sử đi làm của người lao động.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label className="text-xs">Họ tên (NM)</Label>
-              <Input
-                value={form.worker_name_snapshot}
-                onChange={(e) => setForm((f) => ({ ...f, worker_name_snapshot: e.target.value }))}
-              />
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn nhà máy" />
+                </SelectTrigger>
+                <SelectContent>
+                  {factories.map((factory) => (
+                    <SelectItem key={factory.id} value={factory.id}>
+                      {factory.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Nhà chính *</Label>
+                <Select
+                  value={oldHistoryForm.main_house}
+                  onValueChange={(value) =>
+                    setOldHistoryForm((current) => ({ ...current, main_house: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn nhà chính" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mainHouses.map((house) => (
+                      <SelectItem key={house.id} value={house.id}>
+                        {house.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Người tuyển *</Label>
+                <Select
+                  value={oldHistoryForm.recruiter_staff}
+                  onValueChange={(value) =>
+                    setOldHistoryForm((current) => ({ ...current, recruiter_staff: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn người tuyển" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {staffUsers.map((staff) => (
+                      <SelectItem key={staff.id} value={staff.id}>
+                        {staff.full_name || staff.username || staff.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Mã NV</Label>
+                <Input
+                  value={oldHistoryForm.employee_code}
+                  onChange={(event) =>
+                    setOldHistoryForm((current) => ({
+                      ...current,
+                      employee_code: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Mã số thuế</Label>
+                <Input
+                  value={oldHistoryForm.worker_tax_code_snapshot}
+                  onChange={(event) =>
+                    setOldHistoryForm((current) => ({
+                      ...current,
+                      worker_tax_code_snapshot: event.target.value.replace(/[^\d]/g, ""),
+                    }))
+                  }
+                  inputMode="numeric"
+                />
+              </div>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">CCCD (NM)</Label>
+              <Label className="text-xs">Họ tên tại nhà máy</Label>
               <Input
-                value={form.worker_cccd_snapshot}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, worker_cccd_snapshot: e.target.value.replace(/[^\d]/g, "") }))
+                value={oldHistoryForm.worker_name_snapshot}
+                onChange={(event) =>
+                  setOldHistoryForm((current) => ({
+                    ...current,
+                    worker_name_snapshot: event.target.value,
+                  }))
                 }
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Mã NV</Label>
+              <Label className="text-xs">CCCD tại nhà máy</Label>
               <Input
-                value={form.employee_code}
-                onChange={(e) => setForm((f) => ({ ...f, employee_code: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Mã số thuế</Label>
-              <Input
-                value={form.worker_tax_code_snapshot}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, worker_tax_code_snapshot: e.target.value.replace(/[^\d]/g, "") }))
+                value={oldHistoryForm.worker_cccd_snapshot}
+                onChange={(event) =>
+                  setOldHistoryForm((current) => ({
+                    ...current,
+                    worker_cccd_snapshot: event.target.value.replace(/[^\d]/g, ""),
+                  }))
                 }
                 inputMode="numeric"
               />
             </div>
+            <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Ngày vào *</Label>
+                <Input
+                  type="date"
+                  value={oldHistoryForm.join_date}
+                  max={oldHistoryForm.leave_date || todayIso()}
+                  onChange={(event) =>
+                    setOldHistoryForm((current) => ({ ...current, join_date: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Ngày nghỉ *</Label>
+                <Input
+                  type="date"
+                  value={oldHistoryForm.leave_date}
+                  min={oldHistoryForm.join_date}
+                  max={todayIso()}
+                  onChange={(event) =>
+                    setOldHistoryForm((current) => ({ ...current, leave_date: event.target.value }))
+                  }
+                />
+              </div>
+            </div>
             <div className="space-y-1">
-              <Label className="text-xs">Trạng thái</Label>
-              <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
+              <Label className="text-xs">Ghi chú</Label>
+              <Textarea
+                value={oldHistoryForm.note}
+                onChange={(event) =>
+                  setOldHistoryForm((current) => ({ ...current, note: event.target.value }))
+                }
+                rows={3}
+                placeholder="Ví dụ: bổ sung hồ sơ làm việc trước đây..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setOldHistoryOpen(false)}
+              disabled={oldHistorySaving}
+            >
+              Đóng
+            </Button>
+            <Button onClick={saveOldHistory} disabled={oldHistorySaving}>
+              {oldHistorySaving ? "Đang lưu..." : "Lưu lịch sử cũ"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingId} onOpenChange={(v) => !v && setEditingId(null)}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Sửa lịch sử đi làm</DialogTitle>
+            <DialogDescription>
+              Chỉnh sửa thông tin lịch sử đi làm của người lao động.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Họ tên (NM)</Label>
+                <Input
+                  value={form.worker_name_snapshot}
+                  onChange={(e) => setForm((f) => ({ ...f, worker_name_snapshot: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">CCCD (NM)</Label>
+                <Input
+                  value={form.worker_cccd_snapshot}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      worker_cccd_snapshot: e.target.value.replace(/[^\d]/g, ""),
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Mã NV</Label>
+                <Input
+                  value={form.employee_code}
+                  onChange={(e) => setForm((f) => ({ ...f, employee_code: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Mã số thuế</Label>
+                <Input
+                  value={form.worker_tax_code_snapshot}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      worker_tax_code_snapshot: e.target.value.replace(/[^\d]/g, ""),
+                    }))
+                  }
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Trạng thái</Label>
+                <Select
+                  value={form.status}
+                  onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="working">Đang làm</SelectItem>
+                    <SelectItem value="left">Đã nghỉ</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Ngày vào</Label>
+                <Input
+                  type="date"
+                  value={form.join_date}
+                  onChange={(e) => setForm((f) => ({ ...f, join_date: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Ngày nghỉ</Label>
+                <Input
+                  type="date"
+                  value={form.leave_date}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      leave_date: e.target.value,
+                      status: e.target.value ? "left" : f.status,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Người tuyển</Label>
+              <Select
+                value={form.recruiter_staff}
+                onValueChange={(v) => setForm((f) => ({ ...f, recruiter_staff: v }))}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Chọn người tuyển" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="working">Đang làm</SelectItem>
-                  <SelectItem value="left">Đã nghỉ</SelectItem>
+                  {staffUsers.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.full_name || s.username || s.id}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Ngày vào</Label>
-              <Input
-                type="date"
-                value={form.join_date}
-                onChange={(e) => setForm((f) => ({ ...f, join_date: e.target.value }))}
-              />
+              <Label className="text-xs">Nhà chính</Label>
+              <Select
+                value={form.main_house}
+                onValueChange={(v) => setForm((f) => ({ ...f, main_house: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn nhà chính" />
+                </SelectTrigger>
+                <SelectContent>
+                  {mainHouses.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Ngày nghỉ</Label>
+              <Label className="text-xs">Ghi chú</Label>
               <Input
-                type="date"
-                value={form.leave_date}
-                onChange={(e) => setForm((f) => ({ ...f, leave_date: e.target.value }))}
+                value={form.note}
+                onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+                placeholder="Tuỳ chọn"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Ảnh CCCD
+              </Label>
+              <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingId(null)}>
+              Huỷ
+            </Button>
+            <Button onClick={saveEdit} disabled={saving}>
+              {saving ? "Đang lưu..." : "Lưu"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={advanceOpen} onOpenChange={setAdvanceOpen}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Báo ứng lương</DialogTitle>
+            <DialogDescription>
+              Chỉ áp dụng cho người lao động đang có trạng thái đi làm.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="rounded-xl border bg-muted/30 p-3 text-sm">
+              <div className="font-semibold">
+                {user.full_name || user.username || "Người lao động"}
+              </div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">
+                {activeHistory?.expand?.factory?.name || user.company || "Chưa có nhà máy"} · Mã NV:{" "}
+                {activeHistory?.employee_code || user.employee_code || "—"}
+              </div>
+            </div>
+
+            {advanceLimit > 0 && (
+              <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+                Hạn mức ứng lương:{" "}
+                <span className="font-semibold text-foreground">
+                  {advanceLimit.toLocaleString("vi-VN")} đ
+                </span>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <Label className="text-xs">Tài khoản nhận tiền</Label>
+              <div className="space-y-1.5">
+                {workerBank && (
+                  <button
+                    type="button"
+                    onClick={() => setAdvanceBankChoice("worker")}
+                    className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${advanceBankChoice === "worker" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+                  >
+                    <div
+                      className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${advanceBankChoice === "worker" ? "border-primary bg-primary" : "border-muted-foreground"}`}
+                    />
+                    <div>
+                      <div className="font-medium">STK của NLĐ</div>
+                      <div className="text-muted-foreground">{workerBank}</div>
+                    </div>
+                  </button>
+                )}
+                {actorBank && (
+                  <button
+                    type="button"
+                    onClick={() => setAdvanceBankChoice("actor")}
+                    className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${advanceBankChoice === "actor" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+                  >
+                    <div
+                      className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${advanceBankChoice === "actor" ? "border-primary bg-primary" : "border-muted-foreground"}`}
+                    />
+                    <div>
+                      <div className="font-medium">STK của tôi ({actorBankRoleLabel})</div>
+                      <div className="text-muted-foreground">{actorBank}</div>
+                    </div>
+                  </button>
+                )}
+                {!workerBank && !actorBank && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+                    Chưa có STK nào. Cập nhật ngân hàng trước khi báo ứng.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Số tiền</Label>
+              <Input
+                value={advanceAmount}
+                onChange={(e) => setAdvanceAmount(formatMoneyInput(e.target.value))}
+                inputMode="numeric"
+                placeholder="Nhập số tiền ứng"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Lý do</Label>
+              <Textarea
+                rows={3}
+                value={advanceReason}
+                onChange={(e) => setAdvanceReason(e.target.value)}
+                placeholder="Ví dụ: ứng tiền sinh hoạt..."
               />
             </div>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Người tuyển</Label>
-            <Select value={form.recruiter_staff} onValueChange={(v) => setForm((f) => ({ ...f, recruiter_staff: v }))}>
-              <SelectTrigger>
-                <SelectValue placeholder="Chọn người tuyển" />
-              </SelectTrigger>
-              <SelectContent>
-                {staffUsers.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.full_name || s.username || s.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Nhà chính</Label>
-            <Select value={form.main_house} onValueChange={(v) => setForm((f) => ({ ...f, main_house: v }))}>
-              <SelectTrigger>
-                <SelectValue placeholder="Chọn nhà chính" />
-              </SelectTrigger>
-              <SelectContent>
-                {mainHouses.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Ghi chú</Label>
-            <Input
-              value={form.note}
-              onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
-              placeholder="Tuỳ chọn"
-            />
-          </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ảnh CCCD</Label>
-            <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setEditingId(null)}>
-            Huỷ
-          </Button>
-          <Button onClick={saveEdit} disabled={saving}>
-            {saving ? "Đang lưu..." : "Lưu"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <Dialog open={advanceOpen} onOpenChange={setAdvanceOpen}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
-        <DialogHeader>
-          <DialogTitle>Báo ứng lương</DialogTitle>
-          <DialogDescription>
-            Chỉ áp dụng cho người lao động đang có trạng thái đi làm.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-3">
-          <div className="rounded-xl border bg-muted/30 p-3 text-sm">
-            <div className="font-semibold">{user.full_name || user.username || "Người lao động"}</div>
-            <div className="mt-0.5 text-[11px] text-muted-foreground">
-              {activeHistory?.expand?.factory?.name || user.company || "Chưa có nhà máy"} · Mã NV:{" "}
-              {activeHistory?.employee_code || user.employee_code || "—"}
-            </div>
-          </div>
-
-          {advanceLimit > 0 && (
-            <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
-              Hạn mức ứng lương:{" "}
-              <span className="font-semibold text-foreground">
-                {advanceLimit.toLocaleString("vi-VN")} đ
-              </span>
-            </div>
-          )}
-
-          <div className="space-y-1">
-            <Label className="text-xs">Tài khoản nhận tiền</Label>
-            <div className="space-y-1.5">
-              {workerBank && (
-                <button
-                  type="button"
-                  onClick={() => setAdvanceBankChoice("worker")}
-                  className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${advanceBankChoice === "worker" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
-                >
-                  <div
-                    className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${advanceBankChoice === "worker" ? "border-primary bg-primary" : "border-muted-foreground"}`}
-                  />
-                  <div>
-                    <div className="font-medium">STK của NLĐ</div>
-                    <div className="text-muted-foreground">{workerBank}</div>
-                  </div>
-                </button>
-              )}
-              {actorBank && (
-                <button
-                  type="button"
-                  onClick={() => setAdvanceBankChoice("actor")}
-                  className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${advanceBankChoice === "actor" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
-                >
-                  <div
-                    className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${advanceBankChoice === "actor" ? "border-primary bg-primary" : "border-muted-foreground"}`}
-                  />
-                  <div>
-                    <div className="font-medium">STK của tôi ({actorBankRoleLabel})</div>
-                    <div className="text-muted-foreground">{actorBank}</div>
-                  </div>
-                </button>
-              )}
-              {!workerBank && !actorBank && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
-                  Chưa có STK nào. Cập nhật ngân hàng trước khi báo ứng.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">Số tiền</Label>
-            <Input
-              value={advanceAmount}
-              onChange={(e) => setAdvanceAmount(formatMoneyInput(e.target.value))}
-              inputMode="numeric"
-              placeholder="Nhập số tiền ứng"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">Lý do</Label>
-            <Textarea
-              rows={3}
-              value={advanceReason}
-              onChange={(e) => setAdvanceReason(e.target.value)}
-              placeholder="Ví dụ: ứng tiền sinh hoạt..."
-            />
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setAdvanceOpen(false)}>
-            Huỷ
-          </Button>
-          <Button
-            onClick={submitAdvance}
-            disabled={submittingAdvance || !isWorking || (!workerBank && !actorBank)}
-          >
-            {submittingAdvance ? "Đang gửi..." : "Gửi yêu cầu"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  </>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdvanceOpen(false)}>
+              Huỷ
+            </Button>
+            <Button
+              onClick={submitAdvance}
+              disabled={submittingAdvance || !isWorking || (!workerBank && !actorBank)}
+            >
+              {submittingAdvance ? "Đang gửi..." : "Gửi yêu cầu"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -1873,6 +2221,35 @@ function RegisterDialog({
 
     setSubmitting(true);
     try {
+      const latestHistories = await fetchEmploymentHistories([userId]);
+      const staleWorkingHistories = latestHistories.filter(
+        (history) => history.status === "working" && Boolean(history.leave_date),
+      );
+
+      for (const history of staleWorkingHistories) {
+        const updated = await updateEmploymentHistory(history.id, { status: "left" });
+        await createStaffActionLog({
+          actor,
+          targetUserId: userId,
+          targetCollection: "employment_histories",
+          targetRecord: history.id,
+          action: "update",
+          before: history,
+          after: updated,
+          note: "Admin đăng ký đi làm mới: đồng bộ lịch sử đã có ngày nghỉ",
+        });
+      }
+
+      const activeHistory = latestHistories.find(
+        (history) => history.status === "working" && !history.leave_date,
+      );
+      if (activeHistory) {
+        toast.error(
+          "Người lao động này đang có một lịch sử đi làm chưa kết thúc. Hãy cập nhật ngày nghỉ trước khi đăng ký mới.",
+        );
+        return;
+      }
+
       const created = await createEmploymentHistory({
         user: userId,
         factory: factoryId,
@@ -1987,10 +2364,7 @@ function RegisterDialog({
 
           <div className="space-y-1">
             <Label className="text-xs">Nhà chính</Label>
-            <Select
-              value={mainHouseId}
-              onValueChange={setMainHouseId}
-            >
+            <Select value={mainHouseId} onValueChange={setMainHouseId}>
               <SelectTrigger>
                 <SelectValue placeholder="Chọn nhà chính" />
               </SelectTrigger>
@@ -2434,7 +2808,9 @@ function CccdExportDialog({
       const userMap = new Map(users.map((u) => [u.id, u]));
       const factoryMap = new Map(factories.map((f) => [f.id, f]));
 
-      const versionIds = [...new Set(matchingWithCccd.map((h) => h.cccd_version).filter(Boolean))] as string[];
+      const versionIds = [
+        ...new Set(matchingWithCccd.map((h) => h.cccd_version).filter(Boolean)),
+      ] as string[];
       let versionMap = new Map<string, CccdVersionRecord>();
       if (versionIds.length) {
         setProgressText("Đang tải thông tin CCCD...");
@@ -2454,7 +2830,10 @@ function CccdExportDialog({
 
       for (const h of matchingWithCccd) {
         const workerName = (h.worker_name_snapshot || "worker").replace(/[/\\:*?"<>|]/g, "_");
-        const factoryName = (factoryMap.get(h.factory)?.name || "factory").replace(/[/\\:*?"<>|]/g, "_");
+        const factoryName = (factoryMap.get(h.factory)?.name || "factory").replace(
+          /[/\\:*?"<>|]/g,
+          "_",
+        );
         const dateStr = h.join_date ? h.join_date.slice(0, 10) : "";
         const prefix = `${workerName}_${factoryName}${dateStr ? `_${dateStr}` : ""}`;
 
@@ -2583,8 +2962,8 @@ function CccdExportDialog({
           </div>
 
           <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-center text-sm">
-            <span className="font-semibold text-primary">{matchingWithCccd.length}</span> lịch sử
-            có ảnh CCCD phù hợp
+            <span className="font-semibold text-primary">{matchingWithCccd.length}</span> lịch sử có
+            ảnh CCCD phù hợp
           </div>
 
           {progressText && (
@@ -2640,9 +3019,7 @@ function MyRecruitedTab({
 
   const myHistories = useMemo(() => {
     if (!currentUser?.id) return [];
-    return histories.filter(
-      (h) => h.recruiter_staff === currentUser.id && h.join_date >= since,
-    );
+    return histories.filter((h) => h.recruiter_staff === currentUser.id && h.join_date >= since);
   }, [histories, currentUser?.id, since]);
 
   const filtered = useMemo(() => {
@@ -2752,7 +3129,8 @@ function MyRecruitedTab({
                       {h.worker_name_snapshot || u?.full_name || "Người lao động"}
                     </div>
                     <div className="mt-0.5 text-[11px] text-muted-foreground">
-                      Mã NV: {h.employee_code || "Chưa có"} · CCCD: {maskCccd(h.worker_cccd_snapshot)}
+                      Mã NV: {h.employee_code || "Chưa có"} · CCCD:{" "}
+                      {maskCccd(h.worker_cccd_snapshot)}
                     </div>
                     <div className="mt-0.5 text-[11px] text-muted-foreground">
                       {f?.name || "Chưa có nhà máy"} · Vào: {formatDate(h.join_date)}
@@ -2760,8 +3138,10 @@ function MyRecruitedTab({
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
-                    <StatusChip tone={h.status === "working" ? "success" : "neutral"}>
-                      {h.status === "working" ? "Đang làm" : "Đã nghỉ"}
+                    <StatusChip
+                      tone={h.status === "working" && !h.leave_date ? "success" : "neutral"}
+                    >
+                      {h.status === "working" && !h.leave_date ? "Đang làm" : "Đã nghỉ"}
                     </StatusChip>
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </div>

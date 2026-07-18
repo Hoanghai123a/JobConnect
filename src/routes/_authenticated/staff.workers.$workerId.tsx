@@ -53,6 +53,7 @@ import { useAuth } from "@/lib/auth";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import {
   createEmploymentHistory,
+  fetchEmploymentHistories,
   findActiveEmploymentByUser,
   getLatestEmploymentHistory,
   maskCccd,
@@ -61,10 +62,7 @@ import {
   updateUserAndCache,
   type EmploymentHistoryRecord,
 } from "@/lib/employment";
-import {
-  fetchFactories,
-  type FactoryRecord,
-} from "@/lib/factories";
+import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
@@ -125,6 +123,8 @@ function StaffWorkerDetailPage() {
   const [joinOpen, setJoinOpen] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
   const [salaryHoldOpen, setSalaryHoldOpen] = useState(false);
+  const [oldHistoryOpen, setOldHistoryOpen] = useState(false);
+  const [oldHistorySubmitting, setOldHistorySubmitting] = useState(false);
   const [editingHistory, setEditingHistory] = useState<EmploymentHistoryRecord | null>(null);
   const [detailHistory, setDetailHistory] = useState<EmploymentHistoryRecord | null>(null);
   const [detailCccdVersion, setDetailCccdVersion] = useState<CccdVersionRecord | null>(null);
@@ -164,6 +164,18 @@ function StaffWorkerDetailPage() {
     status: "working",
     note: "",
   });
+  const [oldHistoryForm, setOldHistoryForm] = useState({
+    factory: "",
+    main_house: "",
+    employee_code: "",
+    worker_name_snapshot: "",
+    worker_cccd_snapshot: "",
+    worker_tax_code_snapshot: "",
+    recruiter_staff: "",
+    join_date: "",
+    leave_date: "",
+    note: "",
+  });
   const [mainHouses, setMainHouses] = useState<MainHouseRecord[]>([]);
 
   useEffect(() => {
@@ -193,62 +205,54 @@ function StaffWorkerDetailPage() {
         .catch(() => []),
       fetchMainHouses().catch(() => [] as MainHouseRecord[]),
     ])
-      .then(
-        ([
-          workspace,
-          factoryRows,
-          staffRows,
-          advanceRows,
-          mainHouseRows,
-        ]) => {
-          if (!alive) return;
+      .then(([workspace, factoryRows, staffRows, advanceRows, mainHouseRows]) => {
+        if (!alive) return;
 
-          const workspaceWorker = workspace.worker;
-          if (!workspaceWorker) {
-            setWorkerUser(null);
-            setHistories([]);
-            setAllWorkerHistories([]);
-            return;
-          }
+        const workspaceWorker = workspace.worker;
+        if (!workspaceWorker) {
+          setWorkerUser(null);
+          setHistories([]);
+          setAllWorkerHistories([]);
+          return;
+        }
 
-          const historyRows = workspaceWorker.histories;
-          const managedFactoryIds = workspace.managedFactoryIds;
-          const visibleHistoryRows = filterHistoriesForStaffScope(
-            viewer,
-            historyRows,
-            managedFactoryIds,
-          );
-          if (!visibleHistoryRows.length) {
-            return;
-          }
+        const historyRows = workspaceWorker.histories;
+        const managedFactoryIds = workspace.managedFactoryIds;
+        const visibleHistoryRows = filterHistoriesForStaffScope(
+          viewer,
+          historyRows,
+          managedFactoryIds,
+        );
+        if (!visibleHistoryRows.length && viewer.role !== "admin") {
+          return;
+        }
 
-          const userRecord = workspaceWorker.user;
-          const latest = getLatestEmploymentHistory(visibleHistoryRows);
+        const userRecord = workspaceWorker.user;
+        const latest = getLatestEmploymentHistory(visibleHistoryRows);
 
-          setWorkerUser(userRecord);
-          setHistories(visibleHistoryRows);
-          setAllWorkerHistories(historyRows);
-          setManagedFactoryIds(managedFactoryIds);
-          setFactories(factoryRows);
-          setMainHouses(mainHouseRows);
-          setStaffUsers(staffRows as UserRecord[]);
-          setAdvances(advanceRows as AdvanceItem[]);
-          setJoinForm((prev) => ({
-            ...prev,
-            employee_code: latest?.employee_code || userRecord?.employee_code || "",
-            worker_name_snapshot: latest?.worker_name_snapshot || userRecord?.full_name || "",
-            worker_cccd_snapshot: latest?.worker_cccd_snapshot || userRecord?.cccd || "",
-            worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
-            recruiter_staff: latest?.recruiter_staff || viewer.id,
-            main_house: latest?.main_house || "",
-          }));
-          setBankForm({
-            bank_name: userRecord?.bank_name || "",
-            bank_account_number: userRecord?.bank_account_number || "",
-            bank_account_name: userRecord?.bank_account_name || "",
-          });
-        },
-      )
+        setWorkerUser(userRecord);
+        setHistories(visibleHistoryRows);
+        setAllWorkerHistories(historyRows);
+        setManagedFactoryIds(managedFactoryIds);
+        setFactories(factoryRows);
+        setMainHouses(mainHouseRows);
+        setStaffUsers(staffRows as UserRecord[]);
+        setAdvances(advanceRows as AdvanceItem[]);
+        setJoinForm((prev) => ({
+          ...prev,
+          employee_code: latest?.employee_code || userRecord?.employee_code || "",
+          worker_name_snapshot: latest?.worker_name_snapshot || userRecord?.full_name || "",
+          worker_cccd_snapshot: latest?.worker_cccd_snapshot || userRecord?.cccd || "",
+          worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
+          recruiter_staff: latest?.recruiter_staff || viewer.id,
+          main_house: latest?.main_house || "",
+        }));
+        setBankForm({
+          bank_name: userRecord?.bank_name || "",
+          bank_account_number: userRecord?.bank_account_number || "",
+          bank_account_name: userRecord?.bank_account_name || "",
+        });
+      })
       .finally(() => {
         if (alive) setLoading(false);
       });
@@ -494,7 +498,11 @@ function StaffWorkerDetailPage() {
       );
       const isExisting = !!(version.front_image || version.back_image);
       if (isExisting && (compressedFront || compressedBack)) {
-        await updateCccdVersionImages(version.id, compressedFront || undefined, compressedBack || undefined);
+        await updateCccdVersionImages(
+          version.id,
+          compressedFront || undefined,
+          compressedBack || undefined,
+        );
       }
       cccdVersionId = version.id;
     } else {
@@ -586,6 +594,98 @@ function StaffWorkerDetailPage() {
     });
   };
 
+  const openOldHistory = () => {
+    if (!workerUser || viewer?.role !== "admin") return;
+    const latest = getLatestEmploymentHistory(allWorkerHistories);
+    setOldHistoryForm({
+      factory: "",
+      main_house: latest?.main_house || "",
+      employee_code: latest?.employee_code || workerUser.employee_code || "",
+      worker_name_snapshot:
+        latest?.worker_name_snapshot || workerUser.full_name || workerUser.username || "",
+      worker_cccd_snapshot: latest?.worker_cccd_snapshot || workerUser.cccd || "",
+      worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
+      recruiter_staff: latest?.recruiter_staff || viewer.id,
+      join_date: "",
+      leave_date: "",
+      note: "",
+    });
+    setOldHistoryOpen(true);
+  };
+
+  const submitOldHistory = async () => {
+    if (!workerUser || viewer?.role !== "admin") {
+      toast.error("Chỉ admin được bổ sung lịch sử cũ");
+      return;
+    }
+    if (!oldHistoryForm.factory) return toast.warning("Chọn nhà máy");
+    if (!oldHistoryForm.main_house) return toast.warning("Chọn nhà chính");
+    if (!oldHistoryForm.recruiter_staff) return toast.warning("Chọn người tuyển");
+    if (!oldHistoryForm.join_date) return toast.warning("Chọn ngày vào");
+    if (!oldHistoryForm.leave_date) return toast.warning("Chọn ngày nghỉ");
+    if (oldHistoryForm.leave_date < oldHistoryForm.join_date) {
+      toast.warning("Ngày nghỉ không được trước ngày vào");
+      return;
+    }
+    if (oldHistoryForm.leave_date > todayDate()) {
+      toast.warning("Ngày nghỉ không được lớn hơn ngày hiện tại");
+      return;
+    }
+
+    setOldHistorySubmitting(true);
+    try {
+      const latestRows = await fetchEmploymentHistories([workerUser.id]);
+      const overlaps = latestRows.some((history) => {
+        const existingStart = history.join_date?.slice(0, 10);
+        const existingEnd = history.leave_date?.slice(0, 10) || "9999-12-31";
+        if (!existingStart) return false;
+        return (
+          oldHistoryForm.join_date <= existingEnd && oldHistoryForm.leave_date >= existingStart
+        );
+      });
+      if (overlaps) {
+        toast.error("Khoảng thời gian này bị trùng với một lịch sử đã có");
+        return;
+      }
+
+      const created = await createEmploymentHistory({
+        user: workerUser.id,
+        factory: oldHistoryForm.factory,
+        main_house: oldHistoryForm.main_house,
+        employee_code: oldHistoryForm.employee_code.trim(),
+        worker_name_snapshot:
+          oldHistoryForm.worker_name_snapshot.trim() ||
+          workerUser.full_name ||
+          workerUser.username ||
+          "",
+        worker_cccd_snapshot: oldHistoryForm.worker_cccd_snapshot.trim() || workerUser.cccd || "",
+        worker_tax_code_snapshot: oldHistoryForm.worker_tax_code_snapshot.trim(),
+        recruiter_staff: oldHistoryForm.recruiter_staff,
+        join_date: oldHistoryForm.join_date,
+        leave_date: oldHistoryForm.leave_date,
+        status: "left",
+        note: oldHistoryForm.note.trim(),
+      });
+
+      await reloadHistories();
+      await createStaffActionLog({
+        actor: viewer,
+        targetUserId: workerUser.id,
+        targetCollection: "employment_histories",
+        targetRecord: created.id,
+        action: "create",
+        after: created,
+        note: "Admin bổ sung lịch sử đi làm cũ",
+      });
+      setOldHistoryOpen(false);
+      toast.success("Đã bổ sung lịch sử đi làm cũ");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Không thể bổ sung lịch sử cũ");
+    } finally {
+      setOldHistorySubmitting(false);
+    }
+  };
+
   const saveEditedHistory = async () => {
     if (!editingHistory || !viewer?.id) return;
     const before = { ...editingHistory };
@@ -644,6 +744,7 @@ function StaffWorkerDetailPage() {
     <PageContainer
       title={workerUser.full_name || workerUser.username || "Chi tiết lao động"}
       subtitle={latestHistory?.expand?.factory?.name || "Chưa có nhà máy gần nhất"}
+      className="min-w-0 overflow-x-hidden"
       right={
         <button
           type="button"
@@ -671,7 +772,7 @@ function StaffWorkerDetailPage() {
           </StatusChip>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="grid min-w-0 grid-cols-1 gap-2 text-sm min-[360px]:grid-cols-2">
           <InfoCell label="Họ tên gốc" value={workerUser.full_name || "Chưa có"} />
           <InfoCell label="CCCD gốc" value={workerUser.cccd || "Chưa có"} />
           <InfoCell label="Điện thoại" value={workerUser.phone || "Chưa có"} />
@@ -753,12 +854,17 @@ function StaffWorkerDetailPage() {
         <div className="space-y-2">
           <div className="text-sm font-semibold">Tình trạng báo ứng</div>
           {advances.slice(0, 10).map((adv) => (
-            <Card key={adv.id} className="space-y-1 rounded-2xl border-border/60 p-4 shadow-soft">
+            <Card
+              key={adv.id}
+              className="min-w-0 space-y-1 overflow-hidden rounded-2xl border-border/60 p-4 shadow-soft"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold">{formatMoney(adv.amount || 0)}</div>
                   {adv.reason && (
-                    <div className="mt-0.5 text-[11px] text-muted-foreground">{adv.reason}</div>
+                    <div className="mt-0.5 break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+                      {adv.reason}
+                    </div>
                   )}
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {formatDate(adv.created)}
@@ -772,7 +878,20 @@ function StaffWorkerDetailPage() {
       )}
 
       <div className="space-y-2">
-        <div className="text-sm font-semibold">Lịch sử đi làm theo nhà máy</div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-sm font-semibold">Lịch sử đi làm theo nhà máy</div>
+          {viewer?.role === "admin" && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="rounded-xl"
+              onClick={openOldHistory}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
         {histories.length === 0 ? (
           <EmptyState
             icon={NotebookPen}
@@ -783,15 +902,15 @@ function StaffWorkerDetailPage() {
           histories.map((history) => (
             <Card
               key={history.id}
-              className="cursor-pointer space-y-3 rounded-2xl border-border/60 p-4 shadow-soft transition-colors hover:bg-muted/30"
+              className="min-w-0 cursor-pointer space-y-3 overflow-hidden rounded-2xl border-border/60 p-4 shadow-soft transition-colors hover:bg-muted/30"
               onClick={() => setDetailHistory(history)}
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 flex-col items-stretch gap-3 min-[360px]:flex-row min-[360px]:items-start min-[360px]:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">
                     {history.expand?.factory?.name || "Nhà máy"}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  <div className="mt-0.5 break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
                     {history.worker_name_snapshot} · CCCD: {maskCccd(history.worker_cccd_snapshot)}
                     {history.cccd_version && (
                       <span className="ml-1 inline-flex items-center gap-0.5 text-primary">
@@ -800,28 +919,31 @@ function StaffWorkerDetailPage() {
                       </span>
                     )}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  <div className="mt-0.5 break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
                     Mã số thuế: {history.worker_tax_code_snapshot || "Chưa có"}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  <div className="mt-0.5 break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
                     Mã NV: {history.employee_code || "Chưa có"} · Người tuyển:{" "}
                     {history.expand?.recruiter_staff?.full_name ||
                       history.expand?.recruiter_staff?.username ||
                       "Chưa gán"}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  <div className="mt-0.5 break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
                     Nhà chính: {history.expand?.main_house?.name || "Chưa gán"}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 flex-wrap items-center gap-2 self-start">
                   <StatusChip tone={history.status === "working" ? "success" : "neutral"}>
                     {history.status === "working" ? "Đang làm" : "Đã nghỉ"}
                   </StatusChip>
                   {viewer?.role === "admin" && (
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); openEditHistory(history); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditHistory(history);
+                      }}
                       className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground"
                       aria-label="Sửa lịch sử"
                     >
@@ -831,13 +953,13 @@ function StaffWorkerDetailPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="grid min-w-0 grid-cols-1 gap-2 text-sm min-[360px]:grid-cols-2">
                 <InfoCell label="Ngày vào" value={formatDate(history.join_date)} />
                 <InfoCell label="Ngày nghỉ" value={formatDate(history.leave_date)} />
               </div>
 
               {history.note && (
-                <div className="rounded-xl bg-muted/40 p-3 text-sm text-muted-foreground">
+                <div className="break-words rounded-xl bg-muted/40 p-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">
                   {history.note}
                 </div>
               )}
@@ -1100,9 +1222,7 @@ function StaffWorkerDetailPage() {
             <FormField label="Ngân hàng">
               <BankNameInput
                 value={bankForm.bank_name}
-                onChange={(value) =>
-                  setBankForm((current) => ({ ...current, bank_name: value }))
-                }
+                onChange={(value) => setBankForm((current) => ({ ...current, bank_name: value }))}
               />
             </FormField>
             <FormField label="Số tài khoản">
@@ -1147,6 +1267,184 @@ function StaffWorkerDetailPage() {
           history={latestWorkerHistory}
         />
       )}
+
+      <Dialog open={oldHistoryOpen} onOpenChange={setOldHistoryOpen}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Bổ sung lịch sử đi làm cũ</DialogTitle>
+            <DialogDescription>
+              Bản ghi này luôn có trạng thái Đã nghỉ và không được trùng thời gian với lịch sử khác.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <FormField label="Nhà máy *">
+              <Select
+                value={oldHistoryForm.factory}
+                onValueChange={(value) =>
+                  setOldHistoryForm((current) => ({ ...current, factory: value }))
+                }
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Chọn nhà máy" />
+                </SelectTrigger>
+                <SelectContent>
+                  {factories.map((factory) => (
+                    <SelectItem key={factory.id} value={factory.id}>
+                      {factory.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Nhà chính *">
+              <Select
+                value={oldHistoryForm.main_house}
+                onValueChange={(value) =>
+                  setOldHistoryForm((current) => ({ ...current, main_house: value }))
+                }
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Chọn nhà chính" />
+                </SelectTrigger>
+                <SelectContent>
+                  {mainHouses.map((house) => (
+                    <SelectItem key={house.id} value={house.id}>
+                      {house.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Người tuyển *">
+              <Select
+                value={oldHistoryForm.recruiter_staff}
+                onValueChange={(value) =>
+                  setOldHistoryForm((current) => ({ ...current, recruiter_staff: value }))
+                }
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Chọn người tuyển" />
+                </SelectTrigger>
+                <SelectContent>
+                  {staffUsers.map((staffUser) => (
+                    <SelectItem key={staffUser.id} value={staffUser.id}>
+                      {staffUser.full_name || staffUser.username || staffUser.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Mã NV">
+              <Input
+                value={oldHistoryForm.employee_code}
+                onChange={(event) =>
+                  setOldHistoryForm((current) => ({
+                    ...current,
+                    employee_code: event.target.value,
+                  }))
+                }
+                className="rounded-xl"
+              />
+            </FormField>
+            <FormField label="Họ tên tại nhà máy">
+              <Input
+                value={oldHistoryForm.worker_name_snapshot}
+                onChange={(event) =>
+                  setOldHistoryForm((current) => ({
+                    ...current,
+                    worker_name_snapshot: event.target.value,
+                  }))
+                }
+                className="rounded-xl"
+              />
+            </FormField>
+            <FormField label="CCCD tại nhà máy">
+              <Input
+                value={oldHistoryForm.worker_cccd_snapshot}
+                onChange={(event) =>
+                  setOldHistoryForm((current) => ({
+                    ...current,
+                    worker_cccd_snapshot: event.target.value,
+                  }))
+                }
+                className="rounded-xl"
+              />
+            </FormField>
+            <FormField label="Mã số thuế">
+              <Input
+                value={oldHistoryForm.worker_tax_code_snapshot}
+                onChange={(event) =>
+                  setOldHistoryForm((current) => ({
+                    ...current,
+                    worker_tax_code_snapshot: event.target.value.replace(/[^\d]/g, ""),
+                  }))
+                }
+                inputMode="numeric"
+                className="rounded-xl"
+              />
+            </FormField>
+            <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
+              <FormField label="Ngày vào *">
+                <Input
+                  type="date"
+                  value={oldHistoryForm.join_date}
+                  max={oldHistoryForm.leave_date || todayDate()}
+                  onChange={(event) =>
+                    setOldHistoryForm((current) => ({
+                      ...current,
+                      join_date: event.target.value,
+                    }))
+                  }
+                  className="rounded-xl"
+                />
+              </FormField>
+              <FormField label="Ngày nghỉ *">
+                <Input
+                  type="date"
+                  value={oldHistoryForm.leave_date}
+                  min={oldHistoryForm.join_date}
+                  max={todayDate()}
+                  onChange={(event) =>
+                    setOldHistoryForm((current) => ({
+                      ...current,
+                      leave_date: event.target.value,
+                    }))
+                  }
+                  className="rounded-xl"
+                />
+              </FormField>
+            </div>
+            <FormField label="Ghi chú">
+              <Textarea
+                value={oldHistoryForm.note}
+                onChange={(event) =>
+                  setOldHistoryForm((current) => ({ ...current, note: event.target.value }))
+                }
+                rows={3}
+                placeholder="Ví dụ: bổ sung hồ sơ làm việc trước đây..."
+                className="rounded-xl"
+              />
+            </FormField>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setOldHistoryOpen(false)}
+              disabled={oldHistorySubmitting}
+              className="rounded-xl"
+            >
+              Đóng
+            </Button>
+            <Button
+              onClick={submitOldHistory}
+              disabled={oldHistorySubmitting}
+              className="rounded-xl"
+            >
+              {oldHistorySubmitting ? "Đang lưu..." : "Lưu lịch sử cũ"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!editingHistory} onOpenChange={(open) => !open && setEditingHistory(null)}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
@@ -1244,7 +1542,7 @@ function StaffWorkerDetailPage() {
                 </SelectContent>
               </Select>
             </FormField>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid min-w-0 grid-cols-1 gap-3 min-[360px]:grid-cols-2">
               <FormField label="Ngày vào">
                 <Input
                   type="date"
@@ -1309,30 +1607,48 @@ function StaffWorkerDetailPage() {
       </Dialog>
 
       <Drawer open={!!detailHistory} onOpenChange={(open) => !open && setDetailHistory(null)}>
-        <DrawerContent className="max-h-[85vh]">
-          <DrawerHeader>
-            <DrawerTitle>Chi tiết lịch sử đi làm</DrawerTitle>
-            <DrawerDescription>
+        <DrawerContent className="max-h-[85vh] w-full max-w-full overflow-hidden">
+          <DrawerHeader className="min-w-0">
+            <DrawerTitle className="break-words [overflow-wrap:anywhere]">
+              Chi tiết lịch sử đi làm
+            </DrawerTitle>
+            <DrawerDescription className="break-words [overflow-wrap:anywhere]">
               {detailHistory?.expand?.factory?.name || "Nhà máy"} ·{" "}
               {detailHistory?.worker_name_snapshot}
             </DrawerDescription>
           </DrawerHeader>
           {detailHistory && (
-            <div className="space-y-4 overflow-y-auto px-4 pb-6">
-              <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="min-w-0 space-y-4 overflow-x-hidden overflow-y-auto px-4 pb-6">
+              <div className="grid min-w-0 grid-cols-1 gap-2 text-sm min-[360px]:grid-cols-2">
                 <InfoCell label="Nhà máy" value={detailHistory.expand?.factory?.name || "—"} />
-                <InfoCell label="Trạng thái" value={detailHistory.status === "working" ? "Đang làm" : "Đã nghỉ"} />
+                <InfoCell
+                  label="Trạng thái"
+                  value={detailHistory.status === "working" ? "Đang làm" : "Đã nghỉ"}
+                />
                 <InfoCell label="Ngày vào" value={formatDate(detailHistory.join_date)} />
                 <InfoCell label="Ngày nghỉ" value={formatDate(detailHistory.leave_date)} />
                 <InfoCell label="Mã NV" value={detailHistory.employee_code || "Chưa có"} />
                 <InfoCell label="CCCD" value={detailHistory.worker_cccd_snapshot || "—"} />
-                <InfoCell label="Mã số thuế" value={detailHistory.worker_tax_code_snapshot || "Chưa có"} />
-                <InfoCell label="Người tuyển" value={detailHistory.expand?.recruiter_staff?.full_name || detailHistory.expand?.recruiter_staff?.username || "Chưa gán"} />
-                <InfoCell label="Nhà chính" value={detailHistory.expand?.main_house?.name || "Chưa gán"} />
+                <InfoCell
+                  label="Mã số thuế"
+                  value={detailHistory.worker_tax_code_snapshot || "Chưa có"}
+                />
+                <InfoCell
+                  label="Người tuyển"
+                  value={
+                    detailHistory.expand?.recruiter_staff?.full_name ||
+                    detailHistory.expand?.recruiter_staff?.username ||
+                    "Chưa gán"
+                  }
+                />
+                <InfoCell
+                  label="Nhà chính"
+                  value={detailHistory.expand?.main_house?.name || "Chưa gán"}
+                />
               </div>
 
               {detailHistory.note && (
-                <div className="rounded-xl bg-muted/40 p-3 text-sm text-muted-foreground">
+                <div className="break-words rounded-xl bg-muted/40 p-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">
                   {detailHistory.note}
                 </div>
               )}
@@ -1348,8 +1664,12 @@ function StaffWorkerDetailPage() {
                     actor={viewer as UserRecord}
                     onUpdated={async () => {
                       if (!detailHistory.cccd_version) return;
-                      const refreshed = await pb.collection("cccd_versions").getOne(detailHistory.cccd_version).catch(() => null);
-                      if (refreshed) setDetailCccdVersion(refreshed as unknown as CccdVersionRecord);
+                      const refreshed = await pb
+                        .collection("cccd_versions")
+                        .getOne(detailHistory.cccd_version)
+                        .catch(() => null);
+                      if (refreshed)
+                        setDetailCccdVersion(refreshed as unknown as CccdVersionRecord);
                     }}
                   />
                 ) : (
@@ -1391,28 +1711,28 @@ function ActionButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="flex min-h-[88px] flex-col items-start gap-2 rounded-2xl border border-border/60 bg-card p-4 text-left shadow-soft disabled:cursor-not-allowed disabled:opacity-45"
+      className="flex min-h-[88px] min-w-0 flex-col items-start gap-2 overflow-hidden rounded-2xl border border-border/60 bg-card p-4 text-left shadow-soft disabled:cursor-not-allowed disabled:opacity-45"
     >
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
         <Icon className="h-5 w-5" />
       </div>
-      <div className="text-sm font-semibold">{label}</div>
+      <div className="break-words text-sm font-semibold [overflow-wrap:anywhere]">{label}</div>
     </button>
   );
 }
 
 function InfoCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-muted/35 p-3">
+    <div className="min-w-0 overflow-hidden rounded-2xl bg-muted/35 p-3">
       <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className="mt-1 text-sm font-semibold">{value}</div>
+      <div className="mt-1 break-words text-sm font-semibold [overflow-wrap:anywhere]">{value}</div>
     </div>
   );
 }
 
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1.5">
+    <div className="min-w-0 space-y-1.5">
       <Label className="text-xs">{label}</Label>
       {children}
     </div>
@@ -1456,26 +1776,27 @@ function HistoryCccdImages({
   const frontUrl = version.front_image ? fileUrl(version, version.front_image) : "";
   const backUrl = version.back_image ? fileUrl(version, version.back_image) : "";
 
-  const upload = (side: "front_image" | "back_image") => async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !file.type.startsWith("image/")) return;
-    setUploading(true);
-    try {
-      const compressed = await compressImage(file);
-      await updateCccdVersionImages(
-        version.id,
-        side === "front_image" ? compressed : undefined,
-        side === "back_image" ? compressed : undefined,
-      );
-      toast.success("Đã cập nhật ảnh CCCD");
-      onUpdated();
-    } catch (err: any) {
-      toast.error(err?.message || "Lỗi upload ảnh");
-    } finally {
-      setUploading(false);
-      e.target.value = "";
-    }
-  };
+  const upload =
+    (side: "front_image" | "back_image") => async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file || !file.type.startsWith("image/")) return;
+      setUploading(true);
+      try {
+        const compressed = await compressImage(file);
+        await updateCccdVersionImages(
+          version.id,
+          side === "front_image" ? compressed : undefined,
+          side === "back_image" ? compressed : undefined,
+        );
+        toast.success("Đã cập nhật ảnh CCCD");
+        onUpdated();
+      } catch (err: any) {
+        toast.error(err?.message || "Lỗi upload ảnh");
+      } finally {
+        setUploading(false);
+        e.target.value = "";
+      }
+    };
 
   const remove = async (side: "front_image" | "back_image") => {
     if (!confirm(`Xoá ảnh ${side === "front_image" ? "mặt trước" : "mặt sau"}?`)) return;
@@ -1566,13 +1887,29 @@ function CccdImageSlot({
           <>
             <img src={url} alt={label} className="h-full w-full object-cover" />
             <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1.5 bg-gradient-to-t from-black/50 to-transparent px-2 pb-1.5 pt-4">
-              <button type="button" onClick={onZoom} className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-foreground shadow" aria-label="Phóng to">
+              <button
+                type="button"
+                onClick={onZoom}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-foreground shadow"
+                aria-label="Phóng to"
+              >
                 <ZoomIn className="h-3.5 w-3.5" />
               </button>
-              <button type="button" onClick={onDownload} className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-foreground shadow" aria-label="Tải xuống">
+              <button
+                type="button"
+                onClick={onDownload}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-foreground shadow"
+                aria-label="Tải xuống"
+              >
                 <Download className="h-3.5 w-3.5" />
               </button>
-              <button type="button" onClick={onDelete} disabled={uploading} className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-destructive shadow" aria-label="Xoá">
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={uploading}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-destructive shadow"
+                aria-label="Xoá"
+              >
                 <Trash className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -1610,40 +1947,47 @@ function HistoryCccdUpload({
 }) {
   const [uploading, setUploading] = useState(false);
 
-  const handleUpload = (side: "front" | "back") => async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !file.type.startsWith("image/")) return;
-    const userId = history.user;
-    const cccdNumber = history.worker_cccd_snapshot || workerUser?.cccd || "";
-    if (!cccdNumber) {
-      toast.error("Không có số CCCD để tạo phiên bản");
-      return;
-    }
-    setUploading(true);
-    try {
-      const compressed = await compressImage(file);
-      const version = await findOrCreateCccdVersion(
-        userId,
-        cccdNumber,
-        side === "front" ? compressed : undefined,
-        side === "back" ? compressed : undefined,
-      );
-      toast.success("Đã thêm ảnh CCCD");
-      onCreated(version);
-    } catch (err: any) {
-      toast.error(err?.message || "Lỗi upload ảnh");
-    } finally {
-      setUploading(false);
-      e.target.value = "";
-    }
-  };
+  const handleUpload =
+    (side: "front" | "back") => async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file || !file.type.startsWith("image/")) return;
+      const userId = history.user;
+      const cccdNumber = history.worker_cccd_snapshot || workerUser?.cccd || "";
+      if (!cccdNumber) {
+        toast.error("Không có số CCCD để tạo phiên bản");
+        return;
+      }
+      setUploading(true);
+      try {
+        const compressed = await compressImage(file);
+        const version = await findOrCreateCccdVersion(
+          userId,
+          cccdNumber,
+          side === "front" ? compressed : undefined,
+          side === "back" ? compressed : undefined,
+        );
+        toast.success("Đã thêm ảnh CCCD");
+        onCreated(version);
+      } catch (err: any) {
+        toast.error(err?.message || "Lỗi upload ảnh");
+      } finally {
+        setUploading(false);
+        e.target.value = "";
+      }
+    };
 
   return (
     <div className="grid grid-cols-2 gap-3">
       <div className="space-y-1.5">
         <Label className="text-xs">Mặt trước</Label>
         <label className="flex aspect-[1.586/1] cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/30 text-muted-foreground">
-          <input type="file" accept="image/*" hidden onChange={handleUpload("front")} disabled={uploading} />
+          <input
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={handleUpload("front")}
+            disabled={uploading}
+          />
           <IdCard className="h-6 w-6" />
           <span className="text-[11px] font-medium">Bấm để chọn ảnh</span>
         </label>
@@ -1651,7 +1995,13 @@ function HistoryCccdUpload({
       <div className="space-y-1.5">
         <Label className="text-xs">Mặt sau</Label>
         <label className="flex aspect-[1.586/1] cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/30 text-muted-foreground">
-          <input type="file" accept="image/*" hidden onChange={handleUpload("back")} disabled={uploading} />
+          <input
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={handleUpload("back")}
+            disabled={uploading}
+          />
           <IdCard className="h-6 w-6" />
           <span className="text-[11px] font-medium">Bấm để chọn ảnh</span>
         </label>

@@ -22,6 +22,11 @@ export const Route = createFileRoute("/_authenticated/staff/workers/")({
 
 type WorkerScope = "all" | "qlnm" | "nvtd" | "working" | "left";
 
+function latestJoinTime(worker: StaffWorkerRecord) {
+  const time = new Date(worker.latestHistory?.join_date || "").getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
 function StaffWorkersPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -104,33 +109,46 @@ function StaffWorkersPage() {
   const filteredWorkers = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return workers.filter((worker) => {
-      const latest = worker.latestHistory;
-      const haystack = [
-        worker.user.full_name,
-        worker.user.username,
-        worker.user.phone,
-        worker.user.employee_code,
-        worker.user.cccd,
-        latest?.employee_code,
-        latest?.worker_name_snapshot,
-        latest?.worker_cccd_snapshot,
-        latest?.worker_tax_code_snapshot,
-        latest?.expand?.factory?.name,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+    return workers
+      .filter((worker) => {
+        const latest = worker.latestHistory;
+        const haystack = [
+          worker.user.full_name,
+          worker.user.username,
+          worker.user.phone,
+          worker.user.employee_code,
+          worker.user.cccd,
+          latest?.employee_code,
+          latest?.worker_name_snapshot,
+          latest?.worker_cccd_snapshot,
+          latest?.worker_tax_code_snapshot,
+          latest?.expand?.factory?.name,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
 
-      if (query && !haystack.includes(query)) return false;
+        if (query && !haystack.includes(query)) return false;
 
-      if (scope === "qlnm" && !worker.reasons.includes("qlnm")) return false;
-      if (scope === "nvtd" && !worker.reasons.includes("nvtd")) return false;
-      if (scope === "working" && latest?.status !== "working") return false;
-      if (scope === "left" && latest?.status !== "left") return false;
+        if (scope === "qlnm" && !worker.reasons.includes("qlnm")) return false;
+        if (scope === "nvtd" && !worker.reasons.includes("nvtd")) return false;
+        if (scope === "working" && latest?.status !== "working") return false;
+        if (scope === "left" && latest?.status !== "left") return false;
 
-      return true;
-    });
+        return true;
+      })
+      .sort((a, b) => {
+        const aTime = latestJoinTime(a);
+        const bTime = latestJoinTime(b);
+        if (aTime !== null && bTime !== null && aTime !== bTime) return bTime - aTime;
+        if (aTime === null && bTime !== null) return 1;
+        if (aTime !== null && bTime === null) return -1;
+
+        const aName = a.user.full_name || a.user.username || "";
+        const bName = b.user.full_name || b.user.username || "";
+        const nameOrder = aName.localeCompare(bName, "vi", { sensitivity: "base" });
+        return nameOrder || a.user.id.localeCompare(b.user.id);
+      });
   }, [scope, search, workers]);
 
   return (
