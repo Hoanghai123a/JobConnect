@@ -354,8 +354,10 @@ export function QuickWorkerAccountDialog({
             compressedBack,
           );
           cccdVersionId = version.id;
-        } catch {
-          secondaryWarnings.push("chưa lưu được phiên bản CCCD");
+        } catch (error) {
+          secondaryWarnings.push(
+            `chưa lưu được phiên bản CCCD (${getErrorMessage(error, "lỗi không rõ")})`,
+          );
         }
       }
 
@@ -376,8 +378,10 @@ export function QuickWorkerAccountDialog({
         });
         historyId = history.id;
         await syncLegacyUserWorkFields(createdUser.id, history);
-      } catch {
-        secondaryWarnings.push("chưa tạo được lịch sử đi làm");
+      } catch (error) {
+        secondaryWarnings.push(
+          `chưa tạo được lịch sử đi làm (${getErrorMessage(error, "lỗi không rõ")})`,
+        );
       }
 
       try {

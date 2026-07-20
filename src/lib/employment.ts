@@ -52,13 +52,13 @@ export interface EmploymentDraft {
 }
 
 export function buildHistoryUid(prefix: string, year: number, month: number, seq: number): string {
-  if (seq < 1 || seq > 999) {
-    throw new Error(`Employment history UID sequence overflow: ${seq} (max 999 per month)`);
+  if (seq < 1 || seq > 9999) {
+    throw new Error(`Employment history UID sequence overflow: ${seq} (max 9999 per month)`);
   }
   const yy = String(year % 100).padStart(2, "0");
   const mm = String(month).padStart(2, "0");
-  const nnn = String(seq).padStart(3, "0");
-  return `${prefix}${yy}${mm}${nnn}`;
+  const nnnn = String(seq).padStart(4, "0");
+  return `${prefix}${yy}${mm}${nnnn}`;
 }
 
 export function extractHistoryUidSeq(
@@ -71,7 +71,7 @@ export function extractHistoryUidSeq(
   const yy = String(year % 100).padStart(2, "0");
   const mm = String(month).padStart(2, "0");
   const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = uid.match(new RegExp(`^${escapedPrefix}${yy}${mm}(\\d{3})$`));
+  const match = uid.match(new RegExp(`^${escapedPrefix}${yy}${mm}(\\d{3,4})$`));
   return match ? parseInt(match[1], 10) : 0;
 }
 

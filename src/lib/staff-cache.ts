@@ -255,18 +255,26 @@ export async function syncStaffData(opts?: {
   return { histories: allHistories, users: allUsers };
 }
 
-export async function updateCachedHistory(record: EmploymentHistoryRecord): Promise<void> {
+export async function updateCachedHistory(record: EmploymentHistoryRecord): Promise<boolean> {
   try {
     const db = await openDB();
     await idbPut(db, STORE_HISTORIES, record);
-  } catch {}
+    return true;
+  } catch (error) {
+    console.warn("[staff-cache] updateCachedHistory failed", error);
+    return false;
+  }
 }
 
-export async function updateCachedUser(record: UserRecord): Promise<void> {
+export async function updateCachedUser(record: UserRecord): Promise<boolean> {
   try {
     const db = await openDB();
     await idbPut(db, STORE_USERS, record);
-  } catch {}
+    return true;
+  } catch (error) {
+    console.warn("[staff-cache] updateCachedUser failed", error);
+    return false;
+  }
 }
 
 export async function updateCachedCccdVersion(record: CccdVersionRecord): Promise<void> {

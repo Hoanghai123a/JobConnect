@@ -2201,10 +2201,21 @@ function RegisterDialog({
     if (!open) reset();
   }, [open]);
 
-  const candidateUsers = useMemo(() => users.filter((u) => u.role === "user" || !u.role), [users]);
+  const [candidateUsers, setCandidateUsers] = useState<UserRecord[]>([]);
   const staffUsers = useMemo(() => users.filter((u) => u.role === "staff"), [users]);
 
-  const selectedUser = users.find((u) => u.id === userId);
+  const selectedUser = candidateUsers.find((u) => u.id === userId);
+
+  useEffect(() => {
+    if (!open) return;
+    pb.collection("users")
+      .getFullList<UserRecord>({
+        filter: 'role="user" || role=""',
+        sort: "full_name,username",
+      })
+      .then(setCandidateUsers)
+      .catch(() => setCandidateUsers([]));
+  }, [open]);
 
   useEffect(() => {
     if (!selectedUser) return;
