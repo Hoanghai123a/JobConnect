@@ -98,7 +98,12 @@ export async function generateEmploymentHistoryUid(referenceDate = new Date()): 
   const res = await pb.collection("employment_histories").getFullList<{ uid?: string }>({
     fields: "uid",
   });
-  return buildHistoryUid(prefix, year, month, computeMaxHistoryUidSeq(res, prefix, year, month) + 1);
+  return buildHistoryUid(
+    prefix,
+    year,
+    month,
+    computeMaxHistoryUidSeq(res, prefix, year, month) + 1,
+  );
 }
 
 export async function fetchEmploymentHistories(userIds?: string[]) {
@@ -158,15 +163,14 @@ export async function findActiveEmploymentByUser(userId: string) {
   return list.items[0] || null;
 }
 
-export async function createEmploymentHistory(
-  draft: EmploymentDraft,
-  opts?: { uid?: string },
-) {
+export async function createEmploymentHistory(draft: EmploymentDraft, opts?: { uid?: string }) {
   const uid = opts?.uid || (await generateEmploymentHistoryUid());
-  const record = (await pb.collection("employment_histories").create(
-    { ...draft, uid },
-    { expand: "user,factory,recruiter_staff,main_house,cccd_version" },
-  )) as unknown as EmploymentHistoryRecord;
+  const record = (await pb
+    .collection("employment_histories")
+    .create(
+      { ...draft, uid },
+      { expand: "user,factory,recruiter_staff,main_house,cccd_version" },
+    )) as unknown as EmploymentHistoryRecord;
   await updateCachedHistory(record);
   return record;
 }
@@ -179,10 +183,7 @@ export async function updateEmploymentHistory(id: string, payload: Partial<Emplo
   return record;
 }
 
-export async function updateUserAndCache(
-  id: string,
-  payload: Record<string, unknown> | FormData,
-) {
+export async function updateUserAndCache(id: string, payload: Record<string, unknown> | FormData) {
   const record = (await pb.collection("users").update(id, payload)) as unknown as UserRecord;
   await updateCachedUser(record);
   return record;
@@ -204,4 +205,49 @@ export function maskCccd(cccd?: string | null) {
   if (!raw) return "Chưa có";
   if (raw.length <= 4) return raw;
   return `${"*".repeat(Math.max(0, raw.length - 4))}${raw.slice(-4)}`;
+}
+
+export interface RegisterableUserHistory {
+  user: string;
+  status?: string;
+  leave_date?: string;
+}
+
+export async function fetchRegisterableUsers(opts: { includeLongLeft?: boolean } = {}) {
+  const [users, histories] = await Promise.all([
+    pb.collection("users").getFullList<UserRecord>({
+      filter: 'role="user" || role=""',
+      sort: "full_name,username",
+    }),
+    pb.collection("employment_histories").getFullList<RegisterableUserHistory>({
+      fields: "user,status,leave_date",
+    }),
+  ]);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const cutoff90 = new Date(today);
+  cutoff90.setDate(cutoff90.getDate() - 90);
+
+  const activeUserIds = new Set(
+    histories.filter((h) => h.status === "working" && !h.leave_date).map((h) => h.user),
+  );
+  const recentUserIds = new Set(
+    histories
+      .filter((h) => {
+        if (h.status === "working") return true;
+        if (!h.leave_date) return false;
+        const d = new Date(h.leave_date);
+        return !Number.isNaN(d.getTime()) && d >= cutoff90;
+      })
+      .map((h) => h.user),
+  );
+  const hasHistoryUserIds = new Set(histories.map((h) => h.user));
+
+  return users.filter((u) => {
+    if (activeUserIds.has(u.id)) return false;
+    if (!hasHistoryUserIds.has(u.id)) return true;
+    if (recentUserIds.has(u.id)) return false;
+    return Boolean(opts.includeLongLeft);
+  });
 }

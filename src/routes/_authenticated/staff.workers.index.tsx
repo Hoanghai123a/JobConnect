@@ -1,12 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Search, ShieldCheck, UserRoundSearch } from "lucide-react";
+import { BriefcaseBusiness, Plus, Search, ShieldCheck, UserRoundSearch } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/ui/status-chip";
 import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
 import { ScopeChip, WorkerQuickDrawer } from "@/components/staff/WorkerQuickDrawer";
+import { RegisterDialog } from "@/components/workforce/RegisterDialog";
 import { fetchStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
 import { fetchFactoryManagers, isFactoryAssignmentActive } from "@/lib/factories";
 import { maskCccd } from "@/lib/employment";
@@ -41,6 +42,7 @@ function StaffWorkersPage() {
   const [selected, setSelected] = useState<StaffWorkerRecord | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [registerOpen, setRegisterOpen] = useState(false);
 
   const openWorker = (w: StaffWorkerRecord) => {
     setSelected(w);
@@ -156,15 +158,26 @@ function StaffWorkersPage() {
       title="Lao động trong quyền"
       subtitle="Tìm theo mã NV, họ tên, CCCD và nhà máy gần nhất"
       right={
-        <button
-          type="button"
-          onClick={() => setQuickCreateOpen(true)}
-          className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground shadow active:scale-[0.98]"
-          aria-label="Tạo nhanh tài khoản NLĐ"
-        >
-          <Plus className="h-4 w-4" />
-          Tạo nhanh
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setRegisterOpen(true)}
+            className="flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm active:scale-[0.98]"
+            aria-label="Đăng ký đi làm"
+          >
+            <BriefcaseBusiness className="h-4 w-4" />
+            Đăng ký
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuickCreateOpen(true)}
+            className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground shadow active:scale-[0.98]"
+            aria-label="Tạo nhanh tài khoản NLĐ"
+          >
+            <Plus className="h-4 w-4" />
+            Tạo nhanh
+          </button>
+        </div>
       }
     >
       <div className="relative">
@@ -297,6 +310,18 @@ function StaffWorkersPage() {
           await loadWorkers();
           navigate({ to: "/staff/workers/$workerId", params: { workerId: userId } });
         }}
+      />
+
+      <RegisterDialog
+        open={registerOpen}
+        actor={user as UserRecord}
+        onClose={() => setRegisterOpen(false)}
+        users={staffUsers}
+        factories={factories.filter((f) => managedFactoryIds.has(f.id))}
+        mainHouses={mainHouses}
+        onCreated={loadWorkers}
+        defaultRecruiterId={user?.id || ""}
+        actorRoleLabel="Nhân sự"
       />
     </PageContainer>
   );
