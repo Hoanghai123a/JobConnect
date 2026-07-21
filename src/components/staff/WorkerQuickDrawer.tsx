@@ -31,11 +31,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import {
-  canReportJoin,
-  isRecentRecruiter,
-  type StaffWorkerRecord,
-} from "@/lib/staff-permissions";
+import { canReportJoin, isRecentRecruiter, type StaffWorkerRecord } from "@/lib/staff-permissions";
 import {
   createEmploymentHistory,
   fetchEmploymentHistories,
@@ -170,9 +166,7 @@ export function WorkerQuickDrawer({
       bank_account_number: worker.user.bank_account_number || "",
       bank_account_name: worker.user.bank_account_name || "",
     });
-    setEmployeeCodeForm(
-      latest?.employee_code || worker.user.employee_code || "",
-    );
+    setEmployeeCodeForm(latest?.employee_code || worker.user.employee_code || "");
   }, [worker, viewer?.id]);
 
   const joinableFactories = useMemo(() => {
@@ -271,7 +265,11 @@ export function WorkerQuickDrawer({
         );
         if (version.front_image || version.back_image) {
           if (compressedFront || compressedBack) {
-            await updateCccdVersionImages(version.id, compressedFront || undefined, compressedBack || undefined);
+            await updateCccdVersionImages(
+              version.id,
+              compressedFront || undefined,
+              compressedBack || undefined,
+            );
           }
         }
         cccdVersionId = version.id;
@@ -471,10 +469,10 @@ export function WorkerQuickDrawer({
           </DrawerDescription>
         </DrawerHeader>
 
-        <div className="space-y-4 overflow-y-auto px-4 pb-6">
+        <div className="min-w-0 space-y-4 overflow-y-auto px-4 pb-6">
           {view === "summary" && worker && (
             <>
-              <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="grid min-w-0 grid-cols-2 gap-2 text-sm">
                 <InfoCell
                   label="Họ tên (NM)"
                   value={latest?.worker_name_snapshot || worker.user.full_name || "—"}
@@ -483,10 +481,7 @@ export function WorkerQuickDrawer({
                   label="CCCD (NM)"
                   value={maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)}
                 />
-                <InfoCell
-                  label="Mã số thuế"
-                  value={latest?.worker_tax_code_snapshot || "—"}
-                />
+                <InfoCell label="Mã số thuế" value={latest?.worker_tax_code_snapshot || "—"} />
                 <InfoCell
                   label="Mã NV"
                   value={latest?.employee_code || worker.user.employee_code || "—"}
@@ -530,7 +525,11 @@ export function WorkerQuickDrawer({
                       const id = worker.user.id;
                       onClose();
                       setTimeout(
-                        () => navigate({ to: "/staff/workers/$workerId/payroll", params: { workerId: id } }),
+                        () =>
+                          navigate({
+                            to: "/staff/workers/$workerId/payroll",
+                            params: { workerId: id },
+                          }),
                         150,
                       );
                     }}
@@ -543,7 +542,9 @@ export function WorkerQuickDrawer({
                     onClick={() => setView("bank")}
                   />
                 )}
-                {(worker.canReportLeave || worker.canReportJoin || (worker.canReportAdvance && isWorking)) && (
+                {(worker.canReportLeave ||
+                  worker.canReportJoin ||
+                  (worker.canReportAdvance && isWorking)) && (
                   <ActionButton
                     icon={Hash}
                     label="Cập nhật mã NV"
@@ -863,7 +864,6 @@ export function WorkerQuickDrawer({
               </div>
             </div>
           )}
-
         </div>
 
         <DrawerFooter>
@@ -903,9 +903,11 @@ function ActionButton({
 
 function InfoCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-muted/35 p-2.5">
+    <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
       <div className="text-[10px] text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-sm font-semibold">{value}</div>
+      <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+        {value}
+      </div>
     </div>
   );
 }

@@ -1475,37 +1475,49 @@ function AdminWorkerDrawer({
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{user.full_name || user.username || "Người lao động"}</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="flex max-h-[90dvh] min-w-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <DialogHeader className="min-w-0 shrink-0 border-b px-5 py-4 pr-14">
+            <DialogTitle className="break-words [overflow-wrap:anywhere]">
+              {user.full_name || user.username || "Người lao động"}
+            </DialogTitle>
+            <DialogDescription className="break-words [overflow-wrap:anywhere]">
               {isWorking ? "Đang đi làm" : "Đã nghỉ"} · Quản trị viên có toàn quyền chỉnh sửa
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            <div className="grid min-w-0 grid-cols-2 gap-2 text-sm">
               {user.uid && (
-                <div className="col-span-2 rounded-xl bg-primary/10 p-2.5">
+                <div className="col-span-2 min-w-0 overflow-hidden rounded-xl bg-primary/10 p-2.5">
                   <div className="text-[10px] text-muted-foreground">Mã tài khoản</div>
-                  <div className="mt-0.5 text-sm font-semibold text-primary">{user.uid}</div>
+                  <div className="mt-0.5 break-words text-sm font-semibold text-primary [overflow-wrap:anywhere]">
+                    {user.uid}
+                  </div>
                 </div>
               )}
-              <div className="rounded-xl bg-muted/35 p-2.5">
+              <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
                 <div className="text-[10px] text-muted-foreground">Họ tên tài khoản</div>
-                <div className="mt-0.5 text-sm font-semibold">{user.full_name || "—"}</div>
+                <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                  {user.full_name || "—"}
+                </div>
               </div>
-              <div className="rounded-xl bg-muted/35 p-2.5">
+              <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
                 <div className="text-[10px] text-muted-foreground">CCCD tài khoản</div>
-                <div className="mt-0.5 text-sm font-semibold">{maskCccd(user.cccd)}</div>
+                <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                  {maskCccd(user.cccd)}
+                </div>
               </div>
-              <div className="rounded-xl bg-muted/35 p-2.5">
+              <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
                 <div className="text-[10px] text-muted-foreground">SĐT</div>
-                <div className="mt-0.5 text-sm font-semibold">{user.phone || "—"}</div>
+                <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                  {user.phone || "—"}
+                </div>
               </div>
-              <div className="rounded-xl bg-muted/35 p-2.5">
+              <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
                 <div className="text-[10px] text-muted-foreground">Tên đăng nhập</div>
-                <div className="mt-0.5 text-sm font-semibold">{user.username || "—"}</div>
+                <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                  {user.username || "—"}
+                </div>
               </div>
             </div>
 
@@ -1590,21 +1602,23 @@ function AdminWorkerDrawer({
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-1.5 text-sm">
-                  <div className="rounded-xl bg-muted/35 p-2.5">
+                <div className="grid min-w-0 grid-cols-1 gap-1.5 text-sm">
+                  <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
                     <div className="text-[10px] text-muted-foreground">Ngân hàng</div>
-                    <div className="mt-0.5 text-sm font-semibold">{user.bank_name || "—"}</div>
+                    <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                      {user.bank_name || "—"}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <div className="rounded-xl bg-muted/35 p-2.5">
+                  <div className="grid min-w-0 grid-cols-2 gap-1.5">
+                    <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
                       <div className="text-[10px] text-muted-foreground">Số tài khoản</div>
-                      <div className="mt-0.5 text-sm font-semibold">
+                      <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
                         {user.bank_account_number || "—"}
                       </div>
                     </div>
-                    <div className="rounded-xl bg-muted/35 p-2.5">
+                    <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
                       <div className="text-[10px] text-muted-foreground">Tên chủ TK</div>
-                      <div className="mt-0.5 text-sm font-semibold">
+                      <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
                         {user.bank_account_name || "—"}
                       </div>
                     </div>
@@ -1660,23 +1674,23 @@ function AdminWorkerDrawer({
               histories.map((h) => (
                 <Card
                   key={h.id}
-                  className="cursor-pointer space-y-2 rounded-2xl p-3 transition-colors hover:bg-muted/30"
+                  className="min-w-0 cursor-pointer space-y-2 overflow-hidden rounded-2xl p-3 transition-colors hover:bg-muted/30"
                   onClick={() => startEdit(h)}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="break-words text-sm font-semibold [overflow-wrap:anywhere]">
                         {h.expand?.factory?.name || "Nhà máy"}
                       </div>
-                      <div className="text-[11px] text-muted-foreground">
+                      <div className="break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
                         {h.worker_name_snapshot} · {maskCccd(h.worker_cccd_snapshot)} · Mã:{" "}
                         {h.employee_code || "—"}
                       </div>
-                      <div className="text-[11px] text-muted-foreground">
+                      <div className="break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
                         Mã số thuế: {h.worker_tax_code_snapshot || "—"}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex shrink-0 items-center gap-1.5">
                       <StatusChip
                         tone={h.status === "working" && !h.leave_date ? "success" : "neutral"}
                       >
@@ -1685,17 +1699,27 @@ function AdminWorkerDrawer({
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                    <div>Vào: {formatDate(h.join_date)}</div>
-                    <div>Nghỉ: {formatDate(h.leave_date) || "—"}</div>
-                    <div>
+                  <div className="grid min-w-0 grid-cols-2 gap-1.5 text-[11px]">
+                    <div className="min-w-0 break-words [overflow-wrap:anywhere]">
+                      Vào: {formatDate(h.join_date)}
+                    </div>
+                    <div className="min-w-0 break-words [overflow-wrap:anywhere]">
+                      Nghỉ: {formatDate(h.leave_date) || "—"}
+                    </div>
+                    <div className="min-w-0 break-words [overflow-wrap:anywhere]">
                       Người tuyển:{" "}
                       {h.expand?.recruiter_staff?.full_name ||
                         h.expand?.recruiter_staff?.username ||
                         "—"}
                     </div>
-                    <div>Nhà chính: {h.expand?.main_house?.name || "—"}</div>
-                    {h.note && <div className="col-span-2 text-muted-foreground">{h.note}</div>}
+                    <div className="min-w-0 break-words [overflow-wrap:anywhere]">
+                      Nhà chính: {h.expand?.main_house?.name || "—"}
+                    </div>
+                    {h.note && (
+                      <div className="col-span-2 min-w-0 break-words text-muted-foreground [overflow-wrap:anywhere]">
+                        {h.note}
+                      </div>
+                    )}
                   </div>
                 </Card>
               ))
