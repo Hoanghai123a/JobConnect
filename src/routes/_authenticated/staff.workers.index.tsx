@@ -6,7 +6,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/ui/status-chip";
 import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
-import { ScopeChip, WorkerQuickDrawer } from "@/components/staff/WorkerQuickDrawer";
+import { ScopeChip } from "@/components/staff/WorkerQuickDrawer";
+import { WorkerEmploymentDrawer } from "@/components/employment/WorkerEmploymentDrawer";
 import { RegisterDialog } from "@/components/workforce/RegisterDialog";
 import {
   fetchCachedStaffWorkspace,
@@ -15,7 +16,7 @@ import {
 } from "@/lib/staff-permissions";
 import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { fetchFactoryManagers, isFactoryAssignmentActive } from "@/lib/factories";
-import { maskCccd } from "@/lib/employment";
+import { isCurrentlyWorking, maskCccd } from "@/lib/employment";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { useAuth } from "@/lib/auth";
@@ -31,6 +32,12 @@ type WorkerScope = "all" | "qlnm" | "nvtd" | "working" | "left";
 function latestJoinTime(worker: StaffWorkerRecord) {
   const time = new Date(worker.latestHistory?.join_date || "").getTime();
   return Number.isNaN(time) ? null : time;
+}
+
+function formatDate(value?: string) {
+  if (!value) return "—";
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : value;
 }
 
 function StaffWorkersPage() {
@@ -300,19 +307,26 @@ function StaffWorkersPage() {
                   <StatusChip tone="success">Có thể thao tác</StatusChip>
                 )}
               </div>
+
             </button>
           );
         })
       )}
 
-      <WorkerQuickDrawer
-        worker={selected}
-        open={drawerOpen}
-        viewer={user as UserRecord}
+      <WorkerEmploymentDrawer
+        user={selected?.user ?? null}
+        actor={user as UserRecord}
+        histories={selected?.histories ?? []}
         factories={factories}
         mainHouses={mainHouses}
-        managedFactoryIds={managedFactoryIds}
-        staffUsers={staffUsers}
+        users={staffUsers}
+        permissions={{
+          canEditHistory: selected?.canEditHistory ?? false,
+          canAddOldHistory: user?.role === "admin",
+          canReportAdvance: selected?.canReportAdvance ?? false,
+          canUpdateBank: selected?.canUpdateBank ?? false,
+        }}
+        open={drawerOpen}
         onClose={closeDrawer}
         onDataChanged={loadWorkers}
       />

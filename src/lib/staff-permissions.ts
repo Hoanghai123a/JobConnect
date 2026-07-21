@@ -31,6 +31,7 @@ export interface StaffWorkerRecord {
   canViewPayroll: boolean;
   canReportLeave: boolean;
   canReportJoin: boolean;
+  canEditHistory: boolean;
 }
 
 const RECENT_RECRUITER_HISTORY_LIMIT = 3;
@@ -216,6 +217,18 @@ export function canReportJoin(
   return managedFactoryIds.has(targetFactoryId);
 }
 
+export function canEditHistory(
+  viewer: Partial<UserRecord> | null | undefined,
+  histories: EmploymentHistoryRecord[],
+  managedFactoryIds: Set<string>,
+) {
+  if (!viewer?.id) return false;
+  if (viewer.role === "admin") return true;
+  if (viewer.role !== "staff") return false;
+  if (isRecentRecruiter(viewer, histories)) return true;
+  return histories.some((history) => managedFactoryIds.has(history.factory));
+}
+
 function hasRecentEmployment(userHistories: EmploymentHistoryRecord[]): boolean {
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180);
@@ -318,6 +331,7 @@ function buildWorkspace(
         canViewPayroll: canViewPayroll(viewer, visibleHistories, managedFactoryIds),
         canReportLeave: canReportLeave(viewer, activeHistory, visibleHistories, managedFactoryIds),
         canReportJoin: canReportJoin(viewer, visibleHistories, managedFactoryIds),
+        canEditHistory: canEditHistory(viewer, visibleHistories, managedFactoryIds),
       } satisfies StaffWorkerRecord;
     })
     .filter(Boolean)

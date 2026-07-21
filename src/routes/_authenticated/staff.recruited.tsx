@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/ui/status-chip";
-import { ScopeChip, WorkerQuickDrawer } from "@/components/staff/WorkerQuickDrawer";
+import { ScopeChip } from "@/components/staff/WorkerQuickDrawer";
+import { WorkerEmploymentDrawer } from "@/components/employment/WorkerEmploymentDrawer";
 import {
   fetchCachedStaffWorkspace,
   fetchStaffWorkspace,
@@ -15,7 +16,7 @@ import {
 } from "@/lib/staff-permissions";
 import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { fetchFactoryManagers, isFactoryAssignmentActive } from "@/lib/factories";
-import { maskCccd } from "@/lib/employment";
+import { isCurrentlyWorking, maskCccd } from "@/lib/employment";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { useAuth } from "@/lib/auth";
@@ -28,6 +29,12 @@ export const Route = createFileRoute("/_authenticated/staff/recruited")({
 
 type RecruitedScope = "all" | "working" | "left";
 const RECRUITED_PAGE_SIZE = 20;
+
+function formatDate(value?: string) {
+  if (!value) return "—";
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : value;
+}
 
 function StaffRecruitedPage() {
   const { user } = useAuth();
@@ -269,6 +276,27 @@ function StaffRecruitedPage() {
                     <StatusChip tone="success">Có thể thao tác</StatusChip>
                   )}
                 </div>
+
+                {worker.histories.length > 0 && (
+                  <div className="mt-2 space-y-1 border-t border-border/60 pt-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Lịch sử đi làm ({worker.histories.length})
+                    </div>
+                    {worker.histories.map((h) => (
+                      <div
+                        key={h.id}
+                        className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground"
+                      >
+                        <span className="min-w-0 flex-1 truncate">
+                          {h.expand?.factory?.name || "Nhà máy"} · Vào {formatDate(h.join_date)}
+                          {isCurrentlyWorking(h)
+                            ? " · Đang làm"
+                            : ` · Nghỉ ${formatDate(h.leave_date)}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </button>
             );
           })}
@@ -286,14 +314,20 @@ function StaffRecruitedPage() {
         </>
       )}
 
-      <WorkerQuickDrawer
-        worker={selected}
-        open={drawerOpen}
-        viewer={user as UserRecord}
+      <WorkerEmploymentDrawer
+        user={selected?.user ?? null}
+        actor={user as UserRecord}
+        histories={selected?.histories ?? []}
         factories={factories}
         mainHouses={mainHouses}
-        managedFactoryIds={managedFactoryIds}
-        staffUsers={staffUsers}
+        users={staffUsers}
+        permissions={{
+          canEditHistory: selected?.canEditHistory ?? false,
+          canAddOldHistory: user?.role === "admin",
+          canReportAdvance: selected?.canReportAdvance ?? false,
+          canUpdateBank: selected?.canUpdateBank ?? false,
+        }}
+        open={drawerOpen}
         onClose={closeDrawer}
         onDataChanged={loadWorkers}
       />
