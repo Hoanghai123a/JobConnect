@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode, useCallback 
 import { pb, type UserRecord } from "./pocketbase";
 import { getPBUpstream } from "./pocketbase-config";
 import { clearStaffCache } from "./staff-cache";
+import { stopStaffRealtimeSync } from "./realtime-sync";
 
 interface AuthCtx {
   user: UserRecord | null;
@@ -99,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    stopStaffRealtimeSync().catch((error) => console.warn("[auth] stopRealtime failed", error));
     pb.authStore.clear();
     clearStaffCache();
   }, []);

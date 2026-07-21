@@ -4,9 +4,11 @@ import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
 import {
+  fetchCachedStaffWorkspace,
   fetchStaffWorkspace,
   type StaffWorkerRecord,
 } from "@/lib/staff-permissions";
+import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import {
   type AdvanceRecord,
   type AdvanceStatus,
@@ -247,6 +249,16 @@ function WorkerAdvancesView() {
       )
       .finally(() => setLoadingWorkers(false));
   }, [showCreateForm, user]);
+
+  const cacheSignal = useStaffCacheSignal();
+  useEffect(() => {
+    if (!showCreateForm || !user?.id || cacheSignal === 0) return;
+    const timer = setTimeout(async () => {
+      const ws = await fetchCachedStaffWorkspace(user as UserRecord);
+      if (ws) setWorkers(ws.workers);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [cacheSignal, showCreateForm, user?.id]);
 
   useEffect(() => {
     if (!selectedWorkerId) {

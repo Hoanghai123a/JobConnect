@@ -14,7 +14,12 @@ import {
 } from "@/components/ui/select";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { fetchFactories } from "@/lib/factories";
-import { fetchStaffWorkspace, fetchFreshStaffWorkspace } from "@/lib/staff-permissions";
+import {
+  fetchCachedStaffWorkspace,
+  fetchStaffWorkspace,
+  fetchFreshStaffWorkspace,
+} from "@/lib/staff-permissions";
+import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { useAuth } from "@/lib/auth";
 import type { FactoryRecord } from "@/lib/factories";
 import type { StaffWorkerRecord } from "@/lib/staff-permissions";
@@ -139,6 +144,16 @@ function StaffExportPage() {
       alive = false;
     };
   }, [user]);
+
+  const cacheSignal = useStaffCacheSignal();
+  useEffect(() => {
+    if (!user?.id || cacheSignal === 0) return;
+    const timer = setTimeout(async () => {
+      const ws = await fetchCachedStaffWorkspace(user as UserRecord);
+      if (ws) setWorkers(ws.workers ?? []);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [cacheSignal, user?.id]);
 
   const filteredHistories = useMemo(() => {
     return workers

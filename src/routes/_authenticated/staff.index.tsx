@@ -14,7 +14,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fetchFactoryManagers, type FactoryManagerRecord } from "@/lib/factories";
-import { fetchStaffWorkspace } from "@/lib/staff-permissions";
+import { fetchCachedStaffWorkspace, fetchStaffWorkspace } from "@/lib/staff-permissions";
+import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { useAuth } from "@/lib/auth";
 import type { UserRecord } from "@/lib/pocketbase";
 
@@ -60,6 +61,16 @@ function StaffDashboardPage() {
       alive = false;
     };
   }, [user?.id]);
+
+  const cacheSignal = useStaffCacheSignal();
+  useEffect(() => {
+    if (!user?.id || cacheSignal === 0) return;
+    const timer = setTimeout(async () => {
+      const ws = await fetchCachedStaffWorkspace(user as UserRecord);
+      if (ws) setWorkersCount(ws.workers.length);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [cacheSignal, user?.id]);
 
   const activeAssignments = useMemo(
     () => assignments.filter((item) => item.status !== "inactive"),

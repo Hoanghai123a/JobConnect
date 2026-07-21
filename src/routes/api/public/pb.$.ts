@@ -45,6 +45,11 @@ async function proxy(request: Request, splat: string | undefined) {
   respHeaders.delete("content-length");
 
   const contentType = upstream.headers.get("content-type") || "";
+  if (contentType.includes("text/event-stream")) {
+    respHeaders.set("Cache-Control", "no-cache, no-transform");
+    respHeaders.set("X-Accel-Buffering", "no");
+    respHeaders.delete("connection");
+  }
   if (upstream.status >= 500 && !contentType.includes("application/json")) {
     return new Response(
       JSON.stringify({

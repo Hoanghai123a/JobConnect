@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Search } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
@@ -87,7 +87,8 @@ function buildLogFilter(actionFilter: string, search: string) {
 }
 
 function AccountLogsPage() {
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [logs, setLogs] = useState<StaffActionLogRecord[]>([]);
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
@@ -97,7 +98,11 @@ function AccountLogsPage() {
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
+    if (page === 1) {
+      setInitialLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
     const filter = buildLogFilter(actionFilter, search);
 
     pb.collection("staff_action_logs")
@@ -112,7 +117,12 @@ function AccountLogsPage() {
         setTotalPages(res.totalPages || 1);
       })
       .finally(() => {
-        if (alive) setLoading(false);
+        if (!alive) return;
+        if (page === 1) {
+          setInitialLoading(false);
+        } else {
+          setLoadingMore(false);
+        }
       });
 
     return () => {
@@ -170,7 +180,7 @@ function AccountLogsPage() {
         </SelectContent>
       </Select>
 
-      {loading ? (
+      {initialLoading ? (
         <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">
           Đang tải nhật ký...
         </div>
@@ -234,10 +244,10 @@ function AccountLogsPage() {
               type="button"
               variant="outline"
               className="w-full rounded-full"
-              disabled={loading}
+              disabled={loadingMore}
               onClick={() => setPage((current) => current + 1)}
             >
-              {loading ? "Đang tải..." : "Tải thêm nhật ký"}
+              {loadingMore ? "Đang tải..." : "Tải thêm nhật ký"}
             </Button>
           )}
         </>

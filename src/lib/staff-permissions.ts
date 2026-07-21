@@ -68,7 +68,7 @@ function toDateOnly(value: Date) {
   return `${y}-${m}-${d}`;
 }
 
-function buildScopedHistoryFilter(viewer: UserRecord, managedFactoryIds: Set<string>) {
+export function buildScopedHistoryFilter(viewer: UserRecord, managedFactoryIds: Set<string>) {
   const referenceDate = new Date();
   const windowStart = new Date(referenceDate);
   windowStart.setDate(windowStart.getDate() - 180);

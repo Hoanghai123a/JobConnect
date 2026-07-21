@@ -4,6 +4,7 @@ import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { isUserApproved } from "@/lib/user-approval";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { StaffRealtimeSyncGate } from "@/components/staff/StaffRealtimeSyncGate";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: ({ location }) => {
@@ -48,7 +49,10 @@ function AuthLayout() {
           Đang tải...
         </div>
       ) : (
-        <Outlet />
+        <>
+          <StaffRealtimeSyncGate />
+          <Outlet />
+        </>
       )}
       <BottomNav />
     </div>

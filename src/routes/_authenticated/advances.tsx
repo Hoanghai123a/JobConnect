@@ -291,6 +291,18 @@ export function AdvancesPage() {
     };
   }, [isAdmin]);
 
+  const handleAdvancesFilterError = useCallback(
+    (error: unknown) => {
+      if ((error as any)?.status === 400 && isAdmin && disbursementFilter !== "all") {
+        setDisbursementFilter("all");
+        toast.info("Bộ lọc 'giải ngân' không khả dụng trên máy chủ, đã đặt lại mặc định.");
+        return true;
+      }
+      return false;
+    },
+    [isAdmin, disbursementFilter],
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -326,6 +338,7 @@ export function AdvancesPage() {
         markSeen("advances", user?.id, latestResolved || Date.now());
       }
     } catch (error: unknown) {
+      if (handleAdvancesFilterError(error)) return;
       toast.error((error as any)?.message || "Lỗi tải Ứng lương");
     } finally {
       setLoading(false);
@@ -334,6 +347,8 @@ export function AdvancesPage() {
     adminSegment,
     dateFrom,
     dateTo,
+    disbursementFilter,
+    handleAdvancesFilterError,
     isAdmin,
     isStaff,
     search,
@@ -361,20 +376,36 @@ export function AdvancesPage() {
           : base;
     const withBase = (statusFilter: string) => joinPbFilters([segmentBase, statusFilter]);
     const adminPendingFilter = `(status="recruiter_approved" || ${LEGACY_STAFF_REQUESTED_PENDING_FILTER})`;
-    const [pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all] =
-      await Promise.all([
-        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.pending)),
-        loadAdvanceSummary(
-          withBase(isAdmin ? adminPendingFilter : ADVANCE_TAB_FILTERS.recruiter_approved),
-        ),
-        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.accepted)),
-        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.recovered)),
-        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.unrecoverable)),
-        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.rejected)),
-        loadAdvanceSummary(segmentBase),
-      ]);
-    setStats({ pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all });
-  }, [adminSegment, dateFrom, dateTo, isAdmin, isStaff, search, selectedFactoryName, user?.id]);
+    try {
+      const [pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all] =
+        await Promise.all([
+          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.pending)),
+          loadAdvanceSummary(
+            withBase(isAdmin ? adminPendingFilter : ADVANCE_TAB_FILTERS.recruiter_approved),
+          ),
+          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.accepted)),
+          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.recovered)),
+          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.unrecoverable)),
+          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.rejected)),
+          loadAdvanceSummary(segmentBase),
+        ]);
+      setStats({ pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all });
+    } catch (error: unknown) {
+      if (handleAdvancesFilterError(error)) return;
+      throw error;
+    }
+  }, [
+    adminSegment,
+    dateFrom,
+    dateTo,
+    disbursementFilter,
+    handleAdvancesFilterError,
+    isAdmin,
+    isStaff,
+    search,
+    selectedFactoryName,
+    user?.id,
+  ]);
 
   const loadOutstanding = useCallback(async () => {
     if (!user?.id || isAdmin) {

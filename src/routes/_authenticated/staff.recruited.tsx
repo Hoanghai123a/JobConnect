@@ -8,10 +8,12 @@ import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ScopeChip, WorkerQuickDrawer } from "@/components/staff/WorkerQuickDrawer";
 import {
+  fetchCachedStaffWorkspace,
   fetchStaffWorkspace,
   hasActiveOrRecentlyLeftEmployment,
   type StaffWorkerRecord,
 } from "@/lib/staff-permissions";
+import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { fetchFactoryManagers, isFactoryAssignmentActive } from "@/lib/factories";
 import { maskCccd } from "@/lib/employment";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
@@ -105,37 +107,61 @@ function StaffRecruitedPage() {
     loadWorkers();
   }, [loadWorkers]);
 
+  const cacheSignal = useStaffCacheSignal();
+  useEffect(() => {
+    if (!user?.id || cacheSignal === 0) return;
+    const timer = setTimeout(async () => {
+      const ws = await fetchCachedStaffWorkspace(user as UserRecord);
+      if (ws) {
+        setWorkers(ws.workers.filter((w) => w.reasons.includes("nvtd")));
+        setManagedFactoryIds(ws.managedFactoryIds);
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [cacheSignal, user?.id]);
+
   const filteredWorkers = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return workers.filter((worker) => {
-      if (!hasActiveOrRecentlyLeftEmployment(worker.histories)) return false;
+    return workers
+      .filter((worker) => {
+        if (!hasActiveOrRecentlyLeftEmployment(worker.histories)) return false;
 
-      const latest = worker.latestHistory;
-      const isWorking = latest?.status === "working" && !latest.leave_date;
-      const haystack = [
-        worker.user.full_name,
-        worker.user.username,
-        worker.user.phone,
-        worker.user.employee_code,
-        worker.user.cccd,
-        latest?.employee_code,
-        latest?.worker_name_snapshot,
-        latest?.worker_cccd_snapshot,
-        latest?.worker_tax_code_snapshot,
-        latest?.expand?.factory?.name,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+        const latest = worker.latestHistory;
+        const isWorking = latest?.status === "working" && !latest.leave_date;
+        const haystack = [
+          worker.user.full_name,
+          worker.user.username,
+          worker.user.phone,
+          worker.user.employee_code,
+          worker.user.cccd,
+          latest?.employee_code,
+          latest?.worker_name_snapshot,
+          latest?.worker_cccd_snapshot,
+          latest?.worker_tax_code_snapshot,
+          latest?.expand?.factory?.name,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
 
-      if (query && !haystack.includes(query)) return false;
+        if (query && !haystack.includes(query)) return false;
 
-      if (scope === "working" && !isWorking) return false;
-      if (scope === "left" && isWorking) return false;
+        if (scope === "working" && !isWorking) return false;
+        if (scope === "left" && isWorking) return false;
 
-      return true;
-    });
+        return true;
+      })
+      .sort((a, b) => {
+        const aTime = new Date(a.latestHistory?.join_date || "").getTime();
+        const bTime = new Date(b.latestHistory?.join_date || "").getTime();
+        const aValid = !Number.isNaN(aTime);
+        const bValid = !Number.isNaN(bTime);
+        if (aValid && bValid && aTime !== bTime) return bTime - aTime;
+        if (!aValid && bValid) return 1;
+        if (aValid && !bValid) return -1;
+        return a.user.id.localeCompare(b.user.id);
+      });
   }, [scope, search, workers]);
 
   const visibleWorkers = useMemo(

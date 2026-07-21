@@ -13,7 +13,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/lib/auth";
 import { pb, type UserRecord } from "@/lib/pocketbase";
-import { fetchStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
+import { fetchCachedStaffWorkspace, fetchStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
+import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { SalaryHoldCreateDialog } from "@/components/staff/SalaryHoldCreateDialog";
 import { SALARY_HOLD_STATUS, buildSalaryHoldTransferDescription, type SalaryHoldRecord, type SalaryHoldStatus } from "@/lib/salary-holds";
 import { createStaffActionLog } from "@/lib/staff-log";
@@ -59,6 +60,16 @@ function SalaryHoldsPage() {
     if (isAdmin) fetchFactories().then(setFactories).catch(() => {});
     else fetchStaffWorkspace(viewer).then((workspace) => setWorkers(workspace.workers.filter((worker) => worker.latestHistory?.recruiter_staff === viewer.id))).catch(() => {});
   }, [isAdmin, viewer?.id]);
+
+  const cacheSignal = useStaffCacheSignal();
+  useEffect(() => {
+    if (!viewer?.id || cacheSignal === 0 || isAdmin) return;
+    const timer = setTimeout(async () => {
+      const ws = await fetchCachedStaffWorkspace(viewer);
+      if (ws) setWorkers(ws.workers.filter((worker) => worker.latestHistory?.recruiter_staff === viewer.id));
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [cacheSignal, isAdmin, viewer?.id]);
 
   const filtered = useMemo(() => rows.filter((row) => {
     if (tab !== "all" && row.status !== tab) return false;

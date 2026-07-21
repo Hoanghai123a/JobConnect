@@ -93,6 +93,15 @@ function idbGet<T>(db: IDBDatabase, store: string, key: IDBValidKey): Promise<T 
   });
 }
 
+function idbDelete(db: IDBDatabase, store: string, key: IDBValidKey): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, "readwrite");
+    tx.objectStore(store).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 function usersFromExpandedHistories(histories: EmploymentHistoryRecord[]): UserRecord[] {
   const map = new Map<string, UserRecord>();
   for (const history of histories) {
@@ -353,4 +362,161 @@ export async function idbPutManyHistories(items: EmploymentHistoryRecord[]): Pro
     const db = await openDB();
     await idbPutMany(db, STORE_HISTORIES, items);
   } catch {}
+}
+
+export async function deleteCachedHistory(id: string): Promise<void> {
+  try {
+    const db = await openDB();
+    await idbDelete(db, STORE_HISTORIES, id);
+  } catch (error) {
+    console.warn("[staff-cache] deleteCachedHistory failed", error);
+  }
+}
+
+export async function deleteCachedUser(id: string): Promise<void> {
+  try {
+    const db = await openDB();
+    await idbDelete(db, STORE_USERS, id);
+  } catch (error) {
+    console.warn("[staff-cache] deleteCachedUser failed", error);
+  }
+}
+
+export async function deleteCachedCccdVersion(id: string): Promise<void> {
+  try {
+    const db = await openDB();
+    await idbDelete(db, STORE_CCCD_VERSIONS, id);
+  } catch (error) {
+    console.warn("[staff-cache] deleteCachedCccdVersion failed", error);
+  }
+}
+
+export async function deleteCachedFactory(id: string): Promise<void> {
+  try {
+    const db = await openDB();
+    await idbDelete(db, STORE_FACTORIES, id);
+  } catch (error) {
+    console.warn("[staff-cache] deleteCachedFactory failed", error);
+  }
+}
+
+export async function deleteCachedMainHouse(id: string): Promise<void> {
+  try {
+    const db = await openDB();
+    await idbDelete(db, STORE_MAIN_HOUSES, id);
+  } catch (error) {
+    console.warn("[staff-cache] deleteCachedMainHouse failed", error);
+  }
+}
+
+export async function readCachedHistory(id: string): Promise<EmploymentHistoryRecord | undefined> {
+  try {
+    const db = await openDB();
+    return await idbGet<EmploymentHistoryRecord>(db, STORE_HISTORIES, id);
+  } catch {
+    return undefined;
+  }
+}
+
+export async function readCachedUser(id: string): Promise<UserRecord | undefined> {
+  try {
+    const db = await openDB();
+    return await idbGet<UserRecord>(db, STORE_USERS, id);
+  } catch {
+    return undefined;
+  }
+}
+
+export async function getCachedUserIds(): Promise<Set<string>> {
+  try {
+    const db = await openDB();
+    const histories = await idbGetAll<EmploymentHistoryRecord>(db, STORE_HISTORIES);
+    const users = await idbGetAll<UserRecord>(db, STORE_USERS);
+    const ids = new Set<string>();
+    for (const h of histories) if (h.user) ids.add(h.user);
+    for (const u of users) if (u.id) ids.add(u.id);
+    return ids;
+  } catch {
+    return new Set();
+  }
+}
+
+export async function upsertCachedHistoryIfNewer(
+  record: EmploymentHistoryRecord,
+): Promise<boolean> {
+  try {
+    const db = await openDB();
+    const cached = await idbGet<EmploymentHistoryRecord>(db, STORE_HISTORIES, record.id);
+    if (cached?.updated && record.updated && cached.updated >= record.updated) return false;
+    await idbPut(db, STORE_HISTORIES, record);
+    return true;
+  } catch (error) {
+    console.warn("[staff-cache] upsertCachedHistoryIfNewer failed", error);
+    return false;
+  }
+}
+
+export async function upsertCachedUserIfNewer(record: UserRecord): Promise<boolean> {
+  try {
+    const db = await openDB();
+    const cached = await idbGet<UserRecord & { updated?: string }>(db, STORE_USERS, record.id);
+    const recordUpdated = (record as UserRecord & { updated?: string }).updated;
+    if (cached?.updated && recordUpdated && cached.updated >= recordUpdated) return false;
+    await idbPut(db, STORE_USERS, record);
+    return true;
+  } catch (error) {
+    console.warn("[staff-cache] upsertCachedUserIfNewer failed", error);
+    return false;
+  }
+}
+
+export async function upsertCachedCccdVersionIfNewer(record: CccdVersionRecord): Promise<boolean> {
+  try {
+    const db = await openDB();
+    const cached = await idbGet<CccdVersionRecord>(db, STORE_CCCD_VERSIONS, record.id);
+    if (cached?.updated && record.updated && cached.updated >= record.updated) return false;
+    await idbPut(db, STORE_CCCD_VERSIONS, record);
+    return true;
+  } catch (error) {
+    console.warn("[staff-cache] upsertCachedCccdVersionIfNewer failed", error);
+    return false;
+  }
+}
+
+export async function updateCachedFactory(record: FactoryRecord): Promise<void> {
+  try {
+    const db = await openDB();
+    await idbPut(db, STORE_FACTORIES, record);
+  } catch (error) {
+    console.warn("[staff-cache] updateCachedFactory failed", error);
+  }
+}
+
+export async function updateCachedMainHouse(record: MainHouseRecord): Promise<void> {
+  try {
+    const db = await openDB();
+    await idbPut(db, STORE_MAIN_HOUSES, record);
+  } catch (error) {
+    console.warn("[staff-cache] updateCachedMainHouse failed", error);
+  }
+}
+
+export async function factoryExistsInCache(id: string): Promise<boolean> {
+  try {
+    const db = await openDB();
+    const rec = await idbGet<FactoryRecord>(db, STORE_FACTORIES, id);
+    return !!rec;
+  } catch {
+    return false;
+  }
+}
+
+export async function mainHouseExistsInCache(id: string): Promise<boolean> {
+  try {
+    const db = await openDB();
+    const rec = await idbGet<MainHouseRecord>(db, STORE_MAIN_HOUSES, id);
+    return !!rec;
+  } catch {
+    return false;
+  }
 }

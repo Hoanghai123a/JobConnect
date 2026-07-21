@@ -2,7 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
-import { fetchStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
+import {
+  fetchCachedStaffWorkspace,
+  fetchStaffWorkspace,
+  type StaffWorkerRecord,
+} from "@/lib/staff-permissions";
+import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
@@ -185,6 +190,16 @@ function NotebookPage() {
     loadCategories();
     loadWorkers();
   }, [loadCategories, loadWorkers]);
+
+  const cacheSignal = useStaffCacheSignal();
+  useEffect(() => {
+    if (!isStaffOrAdmin || !user?.id || cacheSignal === 0) return;
+    const timer = setTimeout(async () => {
+      const ws = await fetchCachedStaffWorkspace(user as UserRecord);
+      if (ws) setWorkers(ws.workers.map((w) => w.user));
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [cacheSignal, isStaffOrAdmin, user?.id]);
 
   useEffect(() => {
     loadEntries();

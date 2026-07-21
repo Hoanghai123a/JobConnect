@@ -8,6 +8,29 @@ import { fetchAppSettings } from "./app-settings";
 
 export type EmploymentStatus = "working" | "left";
 
+export function deriveEmploymentStatus(
+  history: { leave_date?: string | null },
+  referenceDate: Date = new Date(),
+): EmploymentStatus {
+  if (!history.leave_date) return "working";
+  const leave = new Date(history.leave_date);
+  if (Number.isNaN(leave.getTime())) return "working";
+  const leaveDay = new Date(leave.getFullYear(), leave.getMonth(), leave.getDate());
+  const today = new Date(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth(),
+    referenceDate.getDate(),
+  );
+  return leaveDay <= today ? "left" : "working";
+}
+
+export function isCurrentlyWorking(
+  history: { leave_date?: string | null },
+  referenceDate: Date = new Date(),
+): boolean {
+  return deriveEmploymentStatus(history, referenceDate) === "working";
+}
+
 export interface EmploymentHistoryRecord {
   id: string;
   uid?: string;
@@ -135,8 +158,8 @@ export function isHistoryWithinLast90Days(
 
 export function sortEmploymentHistories(histories: EmploymentHistoryRecord[]) {
   return [...histories].sort((a, b) => {
-    const aCurrent = a.status === "working" ? 1 : 0;
-    const bCurrent = b.status === "working" ? 1 : 0;
+    const aCurrent = isCurrentlyWorking(a) ? 1 : 0;
+    const bCurrent = isCurrentlyWorking(b) ? 1 : 0;
     if (aCurrent !== bCurrent) return bCurrent - aCurrent;
 
     const aTime = new Date(a.leave_date || a.join_date || a.created || 0).getTime();
@@ -150,7 +173,7 @@ export function getLatestEmploymentHistory(histories: EmploymentHistoryRecord[])
 }
 
 export function hasActiveEmployment(histories: EmploymentHistoryRecord[]) {
-  return histories.some((item) => item.status === "working" && !item.leave_date);
+  return histories.some((item) => isCurrentlyWorking(item));
 }
 
 export async function findActiveEmploymentByUser(userId: string) {
@@ -230,12 +253,12 @@ export async function fetchRegisterableUsers(opts: { includeLongLeft?: boolean }
   cutoff90.setDate(cutoff90.getDate() - 90);
 
   const activeUserIds = new Set(
-    histories.filter((h) => h.status === "working" && !h.leave_date).map((h) => h.user),
+    histories.filter((h) => isCurrentlyWorking(h)).map((h) => h.user),
   );
   const recentUserIds = new Set(
     histories
       .filter((h) => {
-        if (h.status === "working") return true;
+        if (isCurrentlyWorking(h)) return true;
         if (!h.leave_date) return false;
         const d = new Date(h.leave_date);
         return !Number.isNaN(d.getTime()) && d >= cutoff90;

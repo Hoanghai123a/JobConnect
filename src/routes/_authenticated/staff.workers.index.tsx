@@ -8,7 +8,12 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
 import { ScopeChip, WorkerQuickDrawer } from "@/components/staff/WorkerQuickDrawer";
 import { RegisterDialog } from "@/components/workforce/RegisterDialog";
-import { fetchStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
+import {
+  fetchCachedStaffWorkspace,
+  fetchStaffWorkspace,
+  type StaffWorkerRecord,
+} from "@/lib/staff-permissions";
+import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { fetchFactoryManagers, isFactoryAssignmentActive } from "@/lib/factories";
 import { maskCccd } from "@/lib/employment";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
@@ -107,6 +112,19 @@ function StaffWorkersPage() {
   useEffect(() => {
     loadWorkers();
   }, [loadWorkers]);
+
+  const cacheSignal = useStaffCacheSignal();
+  useEffect(() => {
+    if (!user?.id || cacheSignal === 0) return;
+    const timer = setTimeout(async () => {
+      const ws = await fetchCachedStaffWorkspace(user as UserRecord);
+      if (ws) {
+        setWorkers(ws.workers);
+        setManagedFactoryIds(ws.managedFactoryIds);
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [cacheSignal, user?.id]);
 
   const filteredWorkers = useMemo(() => {
     const query = search.trim().toLowerCase();

@@ -60,8 +60,10 @@ import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import type { CccdVersionRecord } from "@/lib/cccd-versions";
 import {
   createEmploymentHistory,
+  deriveEmploymentStatus,
   fetchEmploymentHistories,
   getLatestEmploymentHistory,
+  isCurrentlyWorking,
   maskCccd,
   syncLegacyUserWorkFields,
   updateEmploymentHistory,
@@ -70,7 +72,12 @@ import {
 } from "@/lib/employment";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
-import { fetchStaffWorkspace, hasActiveOrRecentlyLeftEmployment } from "@/lib/staff-permissions";
+import {
+  fetchCachedStaffWorkspace,
+  fetchStaffWorkspace,
+  hasActiveOrRecentlyLeftEmployment,
+} from "@/lib/staff-permissions";
+import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { cn } from "@/lib/utils";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
@@ -146,7 +153,7 @@ function isWorkingAtEndDate(history: EmploymentHistoryRecord, to: string) {
   const toT = endOfDayTime(to);
   const joinT = new Date(history.join_date).getTime();
   if (Number.isNaN(joinT) || joinT > toT) return false;
-  if (!history.leave_date) return history.status === "working";
+  if (!history.leave_date) return true;
   const leaveT = new Date(history.leave_date).getTime();
   return !Number.isNaN(leaveT) && leaveT > toT;
 }
@@ -226,6 +233,20 @@ function WorkforcePage() {
   useEffect(() => {
     load();
   }, []);
+
+  const cacheSignal = useStaffCacheSignal();
+  useEffect(() => {
+    if (!currentUser?.id || cacheSignal === 0) return;
+    const timer = setTimeout(async () => {
+      const ws = await fetchCachedStaffWorkspace(currentUser);
+      if (!ws) return;
+      const workerUsers = ws.workers.map((w) => w.user);
+      const workerIds = new Set(workerUsers.map((u) => u.id));
+      setHistories(ws.workers.flatMap((w) => w.histories));
+      setUsers((prev) => [...workerUsers, ...prev.filter((u) => !workerIds.has(u.id))]);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [cacheSignal, currentUser?.id]);
 
   const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const factoryById = useMemo(() => new Map(factories.map((f) => [f.id, f])), [factories]);
@@ -993,7 +1014,7 @@ function WorkerList({
     return rows
       .filter(({ user, latest }) => {
         if (!user) return false;
-        const status = latest?.status === "working" && !latest.leave_date ? "working" : "left";
+        const status = latest && isCurrentlyWorking(latest) ? "working" : "left";
         if (scope === "working" && status !== "working") return false;
         if (scope === "left" && status !== "left") return false;
         if (!q) return true;
@@ -1067,7 +1088,7 @@ function WorkerList({
       ) : (
         filtered.map(({ user, latest }) => {
           if (!user) return null;
-          const isWorking = latest?.status === "working" && !latest.leave_date;
+          const isWorking = !!latest && isCurrentlyWorking(latest);
           const factoryName =
             latest?.expand?.factory?.name || factoryById.get(latest?.factory || "")?.name;
           return (
@@ -1145,7 +1166,6 @@ function AdminWorkerDrawer({
     main_house: "",
     join_date: "",
     leave_date: "",
-    status: "working",
     note: "",
   });
   const [oldHistoryForm, setOldHistoryForm] = useState({
@@ -1197,7 +1217,6 @@ function AdminWorkerDrawer({
       main_house: h.main_house || "",
       join_date: h.join_date?.slice(0, 10) || "",
       leave_date: h.leave_date?.slice(0, 10) || "",
-      status: h.status || "working",
       note: h.note || "",
     });
   };
@@ -1265,7 +1284,7 @@ function AdminWorkerDrawer({
         recruiter_staff: oldHistoryForm.recruiter_staff,
         join_date: oldHistoryForm.join_date,
         leave_date: oldHistoryForm.leave_date,
-        status: "left",
+        status: deriveEmploymentStatus({ leave_date: oldHistoryForm.leave_date }),
         note: oldHistoryForm.note.trim(),
       });
 
@@ -1305,7 +1324,7 @@ function AdminWorkerDrawer({
         main_house: form.main_house || undefined,
         join_date: form.join_date || undefined,
         leave_date: form.leave_date || undefined,
-        status: form.leave_date ? "left" : (form.status as "working" | "left"),
+        status: deriveEmploymentStatus({ leave_date: form.leave_date }),
         note: form.note.trim(),
       });
       if (user) {
@@ -1339,7 +1358,7 @@ function AdminWorkerDrawer({
   };
 
   const submitAdvance = async () => {
-    const activeHistory = histories.find((item) => item.status === "working" && !item.leave_date);
+    const activeHistory = histories.find((item) => isCurrentlyWorking(item));
     if (!user || !actor || !activeHistory) {
       toast.error("Chỉ báo ứng cho người lao động đang đi làm");
       return;
@@ -1456,7 +1475,7 @@ function AdminWorkerDrawer({
 
   if (!user) return null;
 
-  const activeHistory = histories.find((item) => item.status === "working" && !item.leave_date);
+  const activeHistory = histories.find((item) => isCurrentlyWorking(item));
   const isWorking = Boolean(activeHistory);
   const advanceLimit = Number(settings?.advance_limit || 0);
   const workerBank = user.bank_account_number
@@ -1691,10 +1710,8 @@ function AdminWorkerDrawer({
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
-                      <StatusChip
-                        tone={h.status === "working" && !h.leave_date ? "success" : "neutral"}
-                      >
-                        {h.status === "working" && !h.leave_date ? "Đang làm" : "Đã nghỉ"}
+                      <StatusChip tone={isCurrentlyWorking(h) ? "success" : "neutral"}>
+                        {isCurrentlyWorking(h) ? "Đang làm" : "Đã nghỉ"}
                       </StatusChip>
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                     </div>
@@ -1962,21 +1979,6 @@ function AdminWorkerDrawer({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Trạng thái</Label>
-                <Select
-                  value={form.status}
-                  onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="working">Đang làm</SelectItem>
-                    <SelectItem value="left">Đã nghỉ</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
                 <Label className="text-xs">Ngày vào</Label>
                 <Input
                   type="date"
@@ -1989,13 +1991,7 @@ function AdminWorkerDrawer({
                 <Input
                   type="date"
                   value={form.leave_date}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      leave_date: e.target.value,
-                      status: e.target.value ? "left" : f.status,
-                    }))
-                  }
+                  onChange={(e) => setForm((f) => ({ ...f, leave_date: e.target.value }))}
                 />
               </div>
             </div>
@@ -2694,7 +2690,7 @@ function MyRecruitedTab({
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     return recruitedWorkers.filter(({ userId, histories: workerHistories, latest }) => {
-      const isWorking = latest?.status === "working" && !latest.leave_date;
+      const isWorking = latest ? isCurrentlyWorking(latest) : false;
       if (scope === "working" && !isWorking) return false;
       if (scope === "left" && isWorking) return false;
       if (query) {
@@ -2805,7 +2801,7 @@ function MyRecruitedTab({
             if (!latest) return null;
             const user = userById.get(userId);
             const factory = factoryById.get(latest.factory);
-            const isWorking = latest.status === "working" && !latest.leave_date;
+            const isWorking = isCurrentlyWorking(latest);
             return (
               <button
                 key={userId}
