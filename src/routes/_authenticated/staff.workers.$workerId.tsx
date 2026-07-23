@@ -92,6 +92,7 @@ import {
   isRecentRecruiter,
 } from "@/lib/staff-permissions";
 import { pb, fileUrl, type UserRecord } from "@/lib/pocketbase";
+import { useAppSettings } from "@/lib/app-settings";
 import { resolveBankName } from "@/lib/vn-banks";
 
 export const Route = createFileRoute("/_authenticated/staff/workers/$workerId")({
@@ -111,6 +112,8 @@ function StaffWorkerDetailPage() {
   const { workerId } = Route.useParams();
   const { user: viewer } = useAuth();
   const navigate = useNavigate();
+  const { data: settings } = useAppSettings();
+  const advanceLimit = Number(settings?.advance_limit || 0);
 
   const [loading, setLoading] = useState(true);
   const [workerUser, setWorkerUser] = useState<UserRecord | null>(null);
@@ -136,6 +139,7 @@ function StaffWorkerDetailPage() {
 
   const [amountText, setAmountText] = useState("");
   const [advanceReason, setAdvanceReason] = useState("");
+  const [advanceTaken, setAdvanceTaken] = useState<number | null>(null);
   const [leaveDate, setLeaveDate] = useState(todayDate());
   const [leaveNote, setLeaveNote] = useState("");
   const [joinForm, setJoinForm] = useState({
@@ -359,6 +363,27 @@ function StaffWorkerDetailPage() {
     });
 
     toast.success("Đã xuất Excel");
+  };
+
+  const openAdvanceDialog = () => {
+    setAdvanceTaken(null);
+    setAdvanceOpen(true);
+    if (!workerUser?.id) return;
+    void (async () => {
+      try {
+        const res = await pb.collection("advances").getList(1, 500, {
+          filter: `user="${workerUser.id}" && (status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))`,
+          fields: "amount",
+        });
+        const total = res.items.reduce(
+          (sum: number, item: { amount?: number }) => sum + Number(item.amount || 0),
+          0,
+        );
+        setAdvanceTaken(total);
+      } catch {
+        setAdvanceTaken(0);
+      }
+    })();
   };
 
   const submitAdvance = async () => {
@@ -782,7 +807,7 @@ function StaffWorkerDetailPage() {
           icon={Wallet}
           label="Báo ứng"
           disabled={!canReportAdvanceForWorker}
-          onClick={() => setAdvanceOpen(true)}
+          onClick={openAdvanceDialog}
         />
         <ActionButton
           icon={CalendarRange}
@@ -1021,6 +1046,18 @@ function StaffWorkerDetailPage() {
               void submitAdvance();
             }}
           >
+            {advanceLimit > 0 && (
+              <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+                Hạn mức:{" "}
+                <span className="font-semibold text-foreground">
+                  {advanceLimit.toLocaleString("vi-VN")} đ
+                </span>{" "}
+                - Đã ứng:{" "}
+                <span className="font-semibold text-foreground">
+                  {advanceTaken === null ? "…" : `${advanceTaken.toLocaleString("vi-VN")} đ`}
+                </span>
+              </div>
+            )}
             <FormField label="Số tiền">
               <Input
                 value={amountText}

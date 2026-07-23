@@ -1003,6 +1003,31 @@ function AdvanceForm({
 }) {
   const { data: settings } = useAppSettings();
   const limit = Number(settings.advance_limit || 0);
+  const [taken, setTaken] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!worker?.user?.id) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const res = await pb.collection("advances").getList(1, 500, {
+          filter: `user="${worker.user.id}" && (status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))`,
+          fields: "amount",
+        });
+        if (!alive) return;
+        const total = res.items.reduce(
+          (sum: number, item: { amount?: number }) => sum + Number(item.amount || 0),
+          0,
+        );
+        setTaken(total);
+      } catch {
+        if (alive) setTaken(0);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [worker?.user?.id]);
 
   const workerBank = worker.user.bank_account_number
     ? `${worker.user.bank_name || "NH"} · ${worker.user.bank_account_number} · ${worker.user.bank_account_name || ""}`
@@ -1024,8 +1049,12 @@ function AdvanceForm({
 
       {limit > 0 && (
         <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
-          Hạn mức ứng lương:{" "}
-          <span className="font-semibold text-foreground">{limit.toLocaleString("vi-VN")} đ</span>
+          Hạn mức:{" "}
+          <span className="font-semibold text-foreground">{limit.toLocaleString("vi-VN")} đ</span>{" "}
+          - Đã ứng:{" "}
+          <span className="font-semibold text-foreground">
+            {taken === null ? "…" : `${taken.toLocaleString("vi-VN")} đ`}
+          </span>
         </div>
       )}
 

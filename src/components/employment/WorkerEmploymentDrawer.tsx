@@ -186,6 +186,7 @@ export function WorkerEmploymentDrawer({
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [advanceReason, setAdvanceReason] = useState("");
   const [advanceBankChoice, setAdvanceBankChoice] = useState<"worker" | "actor">("worker");
+  const [advanceTaken, setAdvanceTaken] = useState<number | null>(null);
   const [form, setForm] = useState({
     employee_code: "",
     worker_name_snapshot: "",
@@ -665,7 +666,23 @@ export function WorkerEmploymentDrawer({
 
   const openAdvanceDialog = () => {
     setAdvanceBankChoice(workerBank ? "worker" : actorBank ? "actor" : "worker");
+    setAdvanceTaken(null);
     setAdvanceOpen(true);
+    void (async () => {
+      try {
+        const res = await pb.collection("advances").getList(1, 500, {
+          filter: `user="${user.id}" && (status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))`,
+          fields: "amount",
+        });
+        const total = res.items.reduce(
+          (sum: number, item: { amount?: number }) => sum + Number(item.amount || 0),
+          0,
+        );
+        setAdvanceTaken(total);
+      } catch {
+        setAdvanceTaken(0);
+      }
+    })();
   };
 
   const openLeaveDialog = () => {
@@ -1346,9 +1363,13 @@ export function WorkerEmploymentDrawer({
 
             {advanceLimit > 0 && (
               <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
-                Hạn mức ứng lương:{" "}
+                Hạn mức:{" "}
                 <span className="font-semibold text-foreground">
                   {advanceLimit.toLocaleString("vi-VN")} đ
+                </span>{" "}
+                - Đã ứng:{" "}
+                <span className="font-semibold text-foreground">
+                  {advanceTaken === null ? "…" : `${advanceTaken.toLocaleString("vi-VN")} đ`}
                 </span>
               </div>
             )}
