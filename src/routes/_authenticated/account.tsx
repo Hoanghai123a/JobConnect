@@ -13,6 +13,7 @@ import {
 import { AppHeader } from "@/components/layout/BottomNav";
 import { PushNotificationSettingsCard } from "@/components/layout/PushNotificationSettingsCard";
 import { Button } from "@/components/ui/button";
+import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
@@ -489,6 +490,18 @@ function AdminUsersPanel() {
     bank_account_name: "",
   });
   const [detailBankSaving, setDetailBankSaving] = useState(false);
+  const [detailProfileEditing, setDetailProfileEditing] = useState(false);
+  const [detailProfileForm, setDetailProfileForm] = useState({
+    full_name: "",
+    phone: "",
+    gender: "",
+    cccd: "",
+    date_of_birth: "",
+    address: "",
+    company: "",
+    employee_code: "",
+  });
+  const [detailProfileSaving, setDetailProfileSaving] = useState(false);
   const [bulkStaffProcessing, setBulkStaffProcessing] = useState(false);
   const emptyNew = {
     full_name: "",
@@ -846,6 +859,55 @@ function AdminUsersPanel() {
     }
   };
 
+  const saveDetailProfile = async () => {
+    if (!detailUser || !me) return;
+    const payload = {
+      full_name: detailProfileForm.full_name.trim(),
+      phone: detailProfileForm.phone.trim(),
+      gender: detailProfileForm.gender.trim(),
+      cccd: detailProfileForm.cccd.trim(),
+      date_of_birth: detailProfileForm.date_of_birth,
+      address: detailProfileForm.address.trim(),
+      company: detailProfileForm.company.trim(),
+      employee_code: detailProfileForm.employee_code.trim(),
+    };
+    if (!payload.full_name) {
+      toast.warning("Vui lòng nhập họ tên");
+      return;
+    }
+    setDetailProfileSaving(true);
+    try {
+      await pb.collection("users").update(detailUser.id, payload);
+      await createStaffActionLog({
+        actor: me as UserRecord,
+        targetUserId: detailUser.id,
+        targetCollection: "users",
+        targetRecord: detailUser.id,
+        action: "update",
+        before: {
+          full_name: detailUser.full_name || "",
+          phone: detailUser.phone || "",
+          gender: detailUser.gender || "",
+          cccd: detailUser.cccd || "",
+          date_of_birth: detailUser.date_of_birth || "",
+          address: detailUser.address || "",
+          company: detailUser.company || "",
+          employee_code: detailUser.employee_code || "",
+        },
+        after: payload,
+        note: "Admin cập nhật thông tin cá nhân cho NLĐ",
+      });
+      setDetailUser((prev: any) => (prev ? { ...prev, ...payload } : prev));
+      setUsers((prev) => prev.map((u) => (u.id === detailUser.id ? { ...u, ...payload } : u)));
+      setDetailProfileEditing(false);
+      toast.success("Đã cập nhật thông tin cá nhân");
+    } catch (e: any) {
+      toast.error(e?.message || "Không cập nhật được thông tin");
+    } finally {
+      setDetailProfileSaving(false);
+    }
+  };
+
   const doResetPassword = async () => {
     if (!resetTarget) return;
     if (newPwd.length < 8) {
@@ -1048,7 +1110,11 @@ function AdminUsersPanel() {
         ).trim();
         if (!full_name || !phone || !normalizedUsername || !password) {
           fail++;
-          failedRows.push({ Dòng: rowNum, "Lý do lỗi": "Thiếu thông tin bắt buộc (họ tên/SĐT/username/mật khẩu)", ...r });
+          failedRows.push({
+            Dòng: rowNum,
+            "Lý do lỗi": "Thiếu thông tin bắt buộc (họ tên/SĐT/username/mật khẩu)",
+            ...r,
+          });
           continue;
         }
         if (existingUsernameKeys.has(normalizedUsername)) {
@@ -1093,7 +1159,11 @@ function AdminUsersPanel() {
           ok++;
         } catch (err: any) {
           fail++;
-          failedRows.push({ Dòng: rowNum, "Lý do lỗi": err?.response?.message || err?.message || "Lỗi tạo tài khoản", ...r });
+          failedRows.push({
+            Dòng: rowNum,
+            "Lý do lỗi": err?.response?.message || err?.message || "Lỗi tạo tài khoản",
+            ...r,
+          });
         }
       }
       toast.success("Đã nhập " + ok + " tài khoản" + (fail ? ", " + fail + " lỗi" : ""));
@@ -1405,7 +1475,29 @@ function AdminUsersPanel() {
             return (
               <div key={u.id} className={"list-card flex items-start gap-3 " + tone}>
                 <Checkbox checked={isSel} onCheckedChange={() => toggle(u.id)} className="mt-1" />
-                <div className="min-w-0 flex-1 cursor-pointer" onClick={() => { setDetailUser(u); setDetailBankEditing(false); setDetailBankForm({ bank_name: u.bank_name || "", bank_account_number: u.bank_account_number || "", bank_account_name: u.bank_account_name || "" }); }}>
+                <div
+                  className="min-w-0 flex-1 cursor-pointer"
+                  onClick={() => {
+                    setDetailUser(u);
+                    setDetailBankEditing(false);
+                    setDetailBankForm({
+                      bank_name: u.bank_name || "",
+                      bank_account_number: u.bank_account_number || "",
+                      bank_account_name: u.bank_account_name || "",
+                    });
+                    setDetailProfileEditing(false);
+                    setDetailProfileForm({
+                      full_name: u.full_name || "",
+                      phone: u.phone || "",
+                      gender: u.gender || "",
+                      cccd: u.cccd || "",
+                      date_of_birth: u.date_of_birth ? u.date_of_birth.slice(0, 10) : "",
+                      address: u.address || "",
+                      company: u.company || "",
+                      employee_code: u.employee_code || "",
+                    });
+                  }}
+                >
                   <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {"📞 " + (u.phone || "—")}
@@ -1664,22 +1756,162 @@ function AdminUsersPanel() {
           {detailUser && (
             <div className="space-y-3 text-sm">
               <DetailRow label="Tên đăng nhập" value={detailUser.username} />
-              <DetailRow label="Họ và tên" value={detailUser.full_name} />
-              <DetailRow label="Số điện thoại" value={detailUser.phone} />
-              <DetailRow label="Giới tính" value={detailUser.gender} />
-              <DetailRow label="CCCD" value={detailUser.cccd} />
-              <DetailRow
-                label="Ngày sinh"
-                value={
-                  detailUser.date_of_birth
-                    ? detailUser.date_of_birth.slice(0, 10).split("-").reverse().join("/")
-                    : ""
-                }
-              />
-              <DetailRow label="Địa chỉ" value={detailUser.address} />
-              <DetailRow label="Mã tài khoản (UID)" value={detailUser.uid} />
-              <DetailRow label="Mã nhân viên" value={detailUser.employee_code} />
-              <DetailRow label="Nhà máy" value={detailUser.company} />
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Thông tin cá nhân
+                  </span>
+                  {!detailProfileEditing && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => setDetailProfileEditing(true)}
+                    >
+                      Sửa thông tin
+                    </Button>
+                  )}
+                </div>
+                {detailProfileEditing ? (
+                  <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Họ và tên</Label>
+                      <Input
+                        value={detailProfileForm.full_name}
+                        onChange={(e) =>
+                          setDetailProfileForm((c) => ({ ...c, full_name: e.target.value }))
+                        }
+                        placeholder="Nhập họ tên"
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Số điện thoại</Label>
+                      <Input
+                        value={detailProfileForm.phone}
+                        onChange={(e) =>
+                          setDetailProfileForm((c) => ({
+                            ...c,
+                            phone: e.target.value.replace(/\D/g, ""),
+                          }))
+                        }
+                        inputMode="tel"
+                        placeholder="Nhập số điện thoại"
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Giới tính</Label>
+                      <Select
+                        value={detailProfileForm.gender}
+                        onValueChange={(v) => setDetailProfileForm((c) => ({ ...c, gender: v }))}
+                      >
+                        <SelectTrigger className="rounded-xl">
+                          <SelectValue placeholder="Chọn giới tính" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Nam">Nam</SelectItem>
+                          <SelectItem value="Nữ">Nữ</SelectItem>
+                          <SelectItem value="Khác">Khác</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">CCCD</Label>
+                      <Input
+                        value={detailProfileForm.cccd}
+                        onChange={(e) =>
+                          setDetailProfileForm((c) => ({
+                            ...c,
+                            cccd: e.target.value.replace(/\D/g, ""),
+                          }))
+                        }
+                        inputMode="numeric"
+                        placeholder="Nhập số CCCD"
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Ngày sinh</Label>
+                      <DateInput
+                        value={detailProfileForm.date_of_birth}
+                        onChange={(v) => setDetailProfileForm((c) => ({ ...c, date_of_birth: v }))}
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Địa chỉ</Label>
+                      <Input
+                        value={detailProfileForm.address}
+                        onChange={(e) =>
+                          setDetailProfileForm((c) => ({ ...c, address: e.target.value }))
+                        }
+                        placeholder="Nhập địa chỉ"
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Mã nhân viên</Label>
+                      <Input
+                        value={detailProfileForm.employee_code}
+                        onChange={(e) =>
+                          setDetailProfileForm((c) => ({ ...c, employee_code: e.target.value }))
+                        }
+                        placeholder="Nhập mã nhân viên"
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Nhà máy</Label>
+                      <Input
+                        value={detailProfileForm.company}
+                        onChange={(e) =>
+                          setDetailProfileForm((c) => ({ ...c, company: e.target.value }))
+                        }
+                        placeholder="Nhập nhà máy"
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 rounded-xl"
+                        onClick={() => setDetailProfileEditing(false)}
+                      >
+                        Hủy
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1 rounded-xl"
+                        disabled={detailProfileSaving}
+                        onClick={saveDetailProfile}
+                      >
+                        {detailProfileSaving ? "Đang lưu..." : "Lưu thông tin"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <DetailRow label="Họ và tên" value={detailUser.full_name} />
+                    <DetailRow label="Số điện thoại" value={detailUser.phone} />
+                    <DetailRow label="Giới tính" value={detailUser.gender} />
+                    <DetailRow label="CCCD" value={detailUser.cccd} />
+                    <DetailRow
+                      label="Ngày sinh"
+                      value={
+                        detailUser.date_of_birth
+                          ? detailUser.date_of_birth.slice(0, 10).split("-").reverse().join("/")
+                          : ""
+                      }
+                    />
+                    <DetailRow label="Địa chỉ" value={detailUser.address} />
+                    <DetailRow label="Mã tài khoản (UID)" value={detailUser.uid} />
+                    <DetailRow label="Mã nhân viên" value={detailUser.employee_code} />
+                    <DetailRow label="Nhà máy" value={detailUser.company} />
+                  </>
+                )}
+              </div>
               <Separator />
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -1703,9 +1935,7 @@ function AdminUsersPanel() {
                       <Label className="text-xs">Ngân hàng</Label>
                       <Select
                         value={detailBankForm.bank_name}
-                        onValueChange={(v) =>
-                          setDetailBankForm((c) => ({ ...c, bank_name: v }))
-                        }
+                        onValueChange={(v) => setDetailBankForm((c) => ({ ...c, bank_name: v }))}
                       >
                         <SelectTrigger className="rounded-xl">
                           <SelectValue placeholder="Chọn ngân hàng" />
@@ -1927,9 +2157,7 @@ function StaffPanel() {
 
       for (const [index, row] of rows.entries()) {
         const rowNum = index + 2;
-        const username = normalizeAccountUsername(
-          pickVal(row, ["username", "Tên đăng nhập"]),
-        );
+        const username = normalizeAccountUsername(pickVal(row, ["username", "Tên đăng nhập"]));
         const fullName = pickVal(row, ["full_name", "Họ tên", "Họ và tên"]);
         const phone = pickVal(row, ["phone", "Số điện thoại", "SĐT"]);
         const dob = normalizeDate(pickVal(row, ["date_of_birth", "Ngày sinh"]));
@@ -1942,7 +2170,11 @@ function StaffPanel() {
           continue;
         }
         if (!/^[a-z0-9_.]{4,30}$/.test(username)) {
-          failedRows.push({ Dòng: rowNum, "Lý do lỗi": "Username không hợp lệ (4-30 ký tự, chỉ chữ/số/._)", ...row });
+          failedRows.push({
+            Dòng: rowNum,
+            "Lý do lỗi": "Username không hợp lệ (4-30 ký tự, chỉ chữ/số/._)",
+            ...row,
+          });
           failed++;
           continue;
         }
@@ -1954,7 +2186,11 @@ function StaffPanel() {
 
         const existing = await findUserByUsernameInsensitive(username);
         if (existing) {
-          failedRows.push({ Dòng: rowNum, "Lý do lỗi": `Username "${username}" đã tồn tại`, ...row });
+          failedRows.push({
+            Dòng: rowNum,
+            "Lý do lỗi": `Username "${username}" đã tồn tại`,
+            ...row,
+          });
           failed++;
           continue;
         }
@@ -2005,7 +2241,11 @@ function StaffPanel() {
           });
           created++;
         } catch (error: any) {
-          failedRows.push({ Dòng: rowNum, "Lý do lỗi": error?.message || "Lỗi tạo tài khoản", ...row });
+          failedRows.push({
+            Dòng: rowNum,
+            "Lý do lỗi": error?.message || "Lỗi tạo tài khoản",
+            ...row,
+          });
           failed++;
         }
       }
@@ -2025,32 +2265,59 @@ function StaffPanel() {
     }
   };
 
-  const submitCreateStaff = async (form: { username: string; full_name: string; phone: string; date_of_birth: string; address: string; password: string }) => {
+  const submitCreateStaff = async (form: {
+    username: string;
+    full_name: string;
+    phone: string;
+    date_of_birth: string;
+    address: string;
+    password: string;
+  }) => {
     const username = normalizeAccountUsername(form.username);
-    if (!username) { toast.error("Nhập tên đăng nhập"); return false; }
-    if (!/^[a-z0-9_.]{4,30}$/.test(username)) { toast.error("Tên đăng nhập 4-30 ký tự, chỉ chữ/số/._"); return false; }
-    if (!form.full_name.trim()) { toast.error("Nhập họ và tên"); return false; }
+    if (!username) {
+      toast.error("Nhập tên đăng nhập");
+      return false;
+    }
+    if (!/^[a-z0-9_.]{4,30}$/.test(username)) {
+      toast.error("Tên đăng nhập 4-30 ký tự, chỉ chữ/số/._");
+      return false;
+    }
+    if (!form.full_name.trim()) {
+      toast.error("Nhập họ và tên");
+      return false;
+    }
 
     const existing = await findUserByUsernameInsensitive(username);
-    if (existing) { toast.error("Tên đăng nhập đã tồn tại"); return false; }
+    if (existing) {
+      toast.error("Tên đăng nhập đã tồn tại");
+      return false;
+    }
 
     const password = form.password.trim() || STAFF_DEFAULT_PASSWORD;
     const uid = await generateUid();
 
     const newUser = await pb.collection("users").create({
-      username, uid,
+      username,
+      uid,
       full_name: form.full_name.trim(),
       phone: form.phone.trim() || undefined,
       date_of_birth: form.date_of_birth || undefined,
       address: form.address.trim() || undefined,
-      password, passwordConfirm: password,
-      role: "staff", approvalStatus: "approved", approved: "true", status: "active",
-      must_change_password: true, emailVisibility: false,
+      password,
+      passwordConfirm: password,
+      role: "staff",
+      approvalStatus: "approved",
+      approved: "true",
+      status: "active",
+      must_change_password: true,
+      emailVisibility: false,
     });
 
     await createStaffActionLog({
       actor: currentUser,
-      targetUserId: newUser.id, targetCollection: "users", targetRecord: newUser.id,
+      targetUserId: newUser.id,
+      targetCollection: "users",
+      targetRecord: newUser.id,
       action: "create",
       after: { username, full_name: form.full_name.trim(), role: "staff", uid },
       note: "Admin tạo tài khoản staff trực tiếp",
@@ -2078,7 +2345,13 @@ function StaffPanel() {
           <FileSpreadsheet className="h-4 w-4" /> Tải file mẫu
         </Button>
         <label className="inline-flex">
-          <input type="file" accept=".xlsx,.xls" className="hidden" disabled={importingStaff} onChange={importStaff} />
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            disabled={importingStaff}
+            onChange={importStaff}
+          />
           <span className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-border px-3 text-xs font-medium">
             <Upload className="h-3.5 w-3.5" /> {importingStaff ? "Đang import..." : "Import Excel"}
           </span>
@@ -2111,7 +2384,10 @@ function StaffPanel() {
           {staffUsers.map((staff) => {
             const factoryCount = assignmentCounts[staff.id] || 0;
             return (
-              <div key={staff.id} className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 p-3">
+              <div
+                key={staff.id}
+                className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 p-3"
+              >
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">
                     {staff.full_name || staff.username || "Chưa có tên"}
@@ -2157,13 +2433,35 @@ function CreateStaffDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (form: { username: string; full_name: string; phone: string; date_of_birth: string; address: string; password: string }) => Promise<boolean>;
+  onSubmit: (form: {
+    username: string;
+    full_name: string;
+    phone: string;
+    date_of_birth: string;
+    address: string;
+    password: string;
+  }) => Promise<boolean>;
 }) {
-  const [form, setForm] = useState({ username: "", full_name: "", phone: "", date_of_birth: "", address: "", password: "" });
+  const [form, setForm] = useState({
+    username: "",
+    full_name: "",
+    phone: "",
+    date_of_birth: "",
+    address: "",
+    password: "",
+  });
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!open) setForm({ username: "", full_name: "", phone: "", date_of_birth: "", address: "", password: "" });
+    if (!open)
+      setForm({
+        username: "",
+        full_name: "",
+        phone: "",
+        date_of_birth: "",
+        address: "",
+        password: "",
+      });
   }, [open]);
 
   const set = (k: keyof typeof form, v: string) => setForm((s) => ({ ...s, [k]: v }));
@@ -2192,33 +2490,68 @@ function CreateStaffDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs">Tên đăng nhập <span className="text-destructive">*</span></Label>
-            <Input value={form.username} onChange={(e) => set("username", e.target.value)} placeholder="VD: nguyenvana" className="rounded-xl" />
+            <Label className="text-xs">
+              Tên đăng nhập <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={form.username}
+              onChange={(e) => set("username", e.target.value)}
+              placeholder="VD: nguyenvana"
+              className="rounded-xl"
+            />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Họ và tên <span className="text-destructive">*</span></Label>
-            <Input value={form.full_name} onChange={(e) => set("full_name", e.target.value)} placeholder="VD: Nguyễn Văn A" className="rounded-xl" />
+            <Label className="text-xs">
+              Họ và tên <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={form.full_name}
+              onChange={(e) => set("full_name", e.target.value)}
+              placeholder="VD: Nguyễn Văn A"
+              className="rounded-xl"
+            />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label className="text-xs">Số điện thoại</Label>
-              <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="Tùy chọn" className="rounded-xl" />
+              <Input
+                value={form.phone}
+                onChange={(e) => set("phone", e.target.value)}
+                placeholder="Tùy chọn"
+                className="rounded-xl"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Ngày sinh</Label>
-              <Input type="date" value={form.date_of_birth} onChange={(e) => set("date_of_birth", e.target.value)} className="rounded-xl" />
+              <DateInput
+                value={form.date_of_birth}
+                onChange={(v) => set("date_of_birth", v)}
+                className="rounded-xl"
+              />
             </div>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Địa chỉ</Label>
-            <Input value={form.address} onChange={(e) => set("address", e.target.value)} placeholder="Tùy chọn" className="rounded-xl" />
+            <Input
+              value={form.address}
+              onChange={(e) => set("address", e.target.value)}
+              placeholder="Tùy chọn"
+              className="rounded-xl"
+            />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Mật khẩu</Label>
-            <Input value={form.password} onChange={(e) => set("password", e.target.value)} placeholder={`Để trống = "${STAFF_DEFAULT_PASSWORD}"`} className="rounded-xl" />
+            <Input
+              value={form.password}
+              onChange={(e) => set("password", e.target.value)}
+              placeholder={`Để trống = "${STAFF_DEFAULT_PASSWORD}"`}
+              className="rounded-xl"
+            />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">Đóng</Button>
+            <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">
+              Đóng
+            </Button>
             <Button type="submit" disabled={submitting} className="rounded-xl">
               <Plus className="h-4 w-4" /> {submitting ? "Đang tạo..." : "Tạo staff"}
             </Button>
@@ -2605,13 +2938,12 @@ function FactoryAssignmentsPanel() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Từ ngày</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={editingAssignment?.active_from || ""}
-                  onChange={(event) =>
+                  onChange={(v) =>
                     setEditingAssignment((current) => ({
                       ...(current || {}),
-                      active_from: event.target.value,
+                      active_from: v,
                     }))
                   }
                   className="rounded-xl"
@@ -2619,13 +2951,12 @@ function FactoryAssignmentsPanel() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Đến ngày</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={editingAssignment?.active_to || ""}
-                  onChange={(event) =>
+                  onChange={(v) =>
                     setEditingAssignment((current) => ({
                       ...(current || {}),
-                      active_to: event.target.value,
+                      active_to: v,
                     }))
                   }
                   className="rounded-xl"
@@ -2721,4 +3052,3 @@ function TextField({
     </div>
   );
 }
-

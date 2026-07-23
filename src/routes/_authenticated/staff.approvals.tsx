@@ -9,12 +9,7 @@ import { StatusChip, toneBorder } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ApprovalForm } from "@/components/approvals/ApprovalForm";
 import { ApprovalDetail } from "@/components/approvals/ApprovalDetail";
 import { escapePb, userDisplayName } from "@/lib/delegations";
@@ -34,7 +29,10 @@ export const Route = createFileRoute("/_authenticated/staff/approvals")({
 
 type Tab = "pending" | "approved" | "rejected" | "completed" | "all";
 
-const STATUS_META: Record<ApprovalStatus, { label: string; tone: "warning" | "success" | "danger" | "info" }> = {
+const STATUS_META: Record<
+  ApprovalStatus,
+  { label: string; tone: "warning" | "success" | "danger" | "info" }
+> = {
   pending: { label: "Chờ duyệt", tone: "warning" },
   approved: { label: "Đã duyệt", tone: "success" },
   rejected: { label: "Từ chối", tone: "danger" },
@@ -65,7 +63,11 @@ function ApprovalsPage() {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [stats, setStats] = useState<Record<Tab, number>>({
-    pending: 0, approved: 0, rejected: 0, completed: 0, all: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    completed: 0,
+    all: 0,
   });
 
   const [detailRequest, setDetailRequest] = useState<ApprovalRequestRecord | null>(null);
@@ -85,9 +87,7 @@ function ApprovalsPage() {
         ? `(admins ~ "${userId}" || creator = "${userId}")`
         : `creator = "${userId}"`;
       const tabPart = TAB_FILTERS[tab];
-      const searchPart = search.trim()
-        ? `title ~ "${escapePb(search.trim())}"`
-        : "";
+      const searchPart = search.trim() ? `title ~ "${escapePb(search.trim())}"` : "";
       const filter = [rolePart, tabPart, searchPart].filter(Boolean).join(" && ");
 
       const res = await pb.collection("approval_requests").getList(1, 200, {
@@ -115,7 +115,9 @@ function ApprovalsPage() {
         const tabPart = TAB_FILTERS[key];
         const filter = [rolePart, tabPart].filter(Boolean).join(" && ");
         try {
-          const r = await pb.collection("approval_requests").getList(1, 1, { filter, fields: "id" });
+          const r = await pb
+            .collection("approval_requests")
+            .getList(1, 1, { filter, fields: "id" });
           return [key, r.totalItems] as const;
         } catch {
           return [key, 0] as const;
@@ -125,8 +127,12 @@ function ApprovalsPage() {
     setStats(Object.fromEntries(counts) as Record<Tab, number>);
   }, [user?.id, isAdmin]);
 
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => { loadStats(); }, [loadStats]);
+  useEffect(() => {
+    load();
+  }, [load]);
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   async function openDetail(req: ApprovalRequestRecord) {
     setDetailRequest(req);
@@ -268,7 +274,10 @@ function ApprovalsPage() {
         onOpenChange={setShowForm}
         creatorId={user?.id || ""}
         currentUserId={user?.id || ""}
-        onCreated={() => { load(); loadStats(); }}
+        onCreated={() => {
+          load();
+          loadStats();
+        }}
       />
 
       <ApprovalDetail
@@ -278,7 +287,10 @@ function ApprovalsPage() {
         responses={detailResponses}
         currentUserId={user?.id || ""}
         isAdmin={isAdmin}
-        onUpdated={() => { load(); loadStats(); }}
+        onUpdated={() => {
+          load();
+          loadStats();
+        }}
       />
 
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
@@ -289,10 +301,9 @@ function ApprovalsPage() {
           <p className="text-sm text-muted-foreground">
             Xóa tất cả yêu cầu phê duyệt được tạo trước ngày:
           </p>
-          <Input
-            type="date"
+          <DateInput
             value={deleteBeforeDate}
-            onChange={(e) => setDeleteBeforeDate(e.target.value)}
+            onChange={(v) => setDeleteBeforeDate(v)}
             className="rounded-xl"
           />
           <Button

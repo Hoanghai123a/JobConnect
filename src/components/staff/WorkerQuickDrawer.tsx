@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CalendarRange,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   Clock3,
   Hash,
   Landmark,
@@ -13,6 +15,7 @@ import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -114,6 +117,7 @@ export function WorkerQuickDrawer({
 }) {
   const navigate = useNavigate();
   const [view, setView] = useState<DrawerView>("summary");
+  const [infoOpen, setInfoOpen] = useState(false);
   const [leaveDate, setLeaveDate] = useState(todayDate());
   const [leaveNote, setLeaveNote] = useState("");
   const [joinForm, setJoinForm] = useState({
@@ -472,34 +476,7 @@ export function WorkerQuickDrawer({
         <div className="min-w-0 space-y-4 overflow-y-auto px-4 pb-6">
           {view === "summary" && worker && (
             <>
-              <div className="grid min-w-0 grid-cols-2 gap-2 text-sm">
-                <InfoCell
-                  label="Họ tên (NM)"
-                  value={latest?.worker_name_snapshot || worker.user.full_name || "—"}
-                />
-                <InfoCell
-                  label="CCCD (NM)"
-                  value={maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)}
-                />
-                <InfoCell label="Mã số thuế" value={latest?.worker_tax_code_snapshot || "—"} />
-                <InfoCell
-                  label="Mã NV"
-                  value={latest?.employee_code || worker.user.employee_code || "—"}
-                />
-                <InfoCell label="SĐT" value={worker.user.phone || "—"} />
-                <InfoCell label="Nhà máy" value={latest?.expand?.factory?.name || "—"} />
-                <InfoCell label="Nhà chính" value={latest?.expand?.main_house?.name || "—"} />
-                <InfoCell
-                  label="Người tuyển"
-                  value={
-                    latest?.expand?.recruiter_staff?.full_name ||
-                    latest?.expand?.recruiter_staff?.username ||
-                    "—"
-                  }
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {worker.canReportLeave && (
                   <ActionButton icon={Clock3} label="Báo nghỉ" onClick={() => setView("leave")} />
                 )}
@@ -553,6 +530,52 @@ export function WorkerQuickDrawer({
                 )}
               </div>
 
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Thông tin</span>
+                <button
+                  type="button"
+                  onClick={() => setInfoOpen((v) => !v)}
+                  className="flex items-center gap-1 rounded-full border border-border/60 bg-card px-3 py-1 text-xs font-medium text-foreground active:scale-[0.98]"
+                  aria-expanded={infoOpen}
+                >
+                  {infoOpen ? (
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  )}
+                  {infoOpen ? "Thu gọn" : "Mở rộng"}
+                </button>
+              </div>
+
+              {infoOpen && (
+                <div className="grid min-w-0 grid-cols-2 gap-2 text-sm">
+                  <InfoCell
+                    label="Họ tên (NM)"
+                    value={latest?.worker_name_snapshot || worker.user.full_name || "—"}
+                  />
+                  <InfoCell
+                    label="CCCD (NM)"
+                    value={maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)}
+                  />
+                  <InfoCell label="Mã số thuế" value={latest?.worker_tax_code_snapshot || "—"} />
+                  <InfoCell
+                    label="Mã NV"
+                    value={latest?.employee_code || worker.user.employee_code || "—"}
+                  />
+                  <InfoCell label="SĐT" value={worker.user.phone || "—"} />
+                  <InfoCell label="Nhà máy" value={latest?.expand?.factory?.name || "—"} />
+                  <InfoCell label="Nhà chính" value={latest?.expand?.main_house?.name || "—"} />
+                  <InfoCell
+                    label="Người tuyển"
+                    value={
+                      latest?.expand?.recruiter_staff?.full_name ||
+                      latest?.expand?.recruiter_staff?.username ||
+                      "—"
+                    }
+                  />
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => {
@@ -575,7 +598,13 @@ export function WorkerQuickDrawer({
           )}
 
           {view === "leave" && (
-            <div className="space-y-3">
+            <form
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submitLeave();
+              }}
+            >
               <div className="text-sm font-semibold">Báo nghỉ nhà máy hiện tại</div>
               {!activeHistory ? (
                 <div className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">
@@ -585,11 +614,7 @@ export function WorkerQuickDrawer({
                 <>
                   <div className="space-y-1">
                     <Label className="text-xs">Ngày nghỉ</Label>
-                    <Input
-                      type="date"
-                      value={leaveDate}
-                      onChange={(e) => setLeaveDate(e.target.value)}
-                    />
+                    <DateInput value={leaveDate} onChange={(v) => setLeaveDate(v)} />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Ghi chú</Label>
@@ -601,20 +626,31 @@ export function WorkerQuickDrawer({
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => setView("summary")} className="flex-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setView("summary")}
+                      className="flex-1"
+                    >
                       Quay lại
                     </Button>
-                    <Button onClick={submitLeave} disabled={submitting} className="flex-1">
+                    <Button type="submit" disabled={submitting} className="flex-1">
                       {submitting ? "Đang lưu..." : "Xác nhận nghỉ"}
                     </Button>
                   </div>
                 </>
               )}
-            </div>
+            </form>
           )}
 
           {view === "join" && (
-            <div className="space-y-3">
+            <form
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submitJoin();
+              }}
+            >
               <div className="text-sm font-semibold">Báo đi làm nhà máy mới</div>
               <div className="space-y-1">
                 <Label className="text-xs">Nhà máy</Label>
@@ -730,10 +766,9 @@ export function WorkerQuickDrawer({
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Ngày vào làm</Label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={joinForm.join_date}
-                    onChange={(e) => setJoinForm((f) => ({ ...f, join_date: e.target.value }))}
+                    onChange={(v) => setJoinForm((f) => ({ ...f, join_date: v }))}
                     max={todayDate()}
                   />
                 </div>
@@ -766,14 +801,19 @@ export function WorkerQuickDrawer({
                 />
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setView("summary")} className="flex-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setView("summary")}
+                  className="flex-1"
+                >
                   Quay lại
                 </Button>
-                <Button onClick={submitJoin} disabled={submitting} className="flex-1">
+                <Button type="submit" disabled={submitting} className="flex-1">
                   {submitting ? "Đang lưu..." : "Tạo bản ghi"}
                 </Button>
               </div>
-            </div>
+            </form>
           )}
 
           {view === "advance" && worker && (
@@ -793,7 +833,13 @@ export function WorkerQuickDrawer({
           )}
 
           {view === "bank" && (
-            <div className="space-y-3">
+            <form
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submitBank();
+              }}
+            >
               <div className="text-sm font-semibold">Cập nhật tài khoản ngân hàng</div>
               <div className="space-y-1">
                 <Label className="text-xs">Ngân hàng</Label>
@@ -827,18 +873,29 @@ export function WorkerQuickDrawer({
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setView("summary")} className="flex-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setView("summary")}
+                  className="flex-1"
+                >
                   Quay lại
                 </Button>
-                <Button onClick={submitBank} disabled={submitting} className="flex-1">
+                <Button type="submit" disabled={submitting} className="flex-1">
                   {submitting ? "Đang lưu..." : "Lưu ngân hàng"}
                 </Button>
               </div>
-            </div>
+            </form>
           )}
 
           {view === "employee_code" && (
-            <div className="space-y-3">
+            <form
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submitEmployeeCode();
+              }}
+            >
               <div className="text-sm font-semibold">Cập nhật mã nhân viên</div>
               <div className="space-y-1">
                 <Label className="text-xs">Mã NV hiện tại</Label>
@@ -855,19 +912,24 @@ export function WorkerQuickDrawer({
                 />
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setView("summary")} className="flex-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setView("summary")}
+                  className="flex-1"
+                >
                   Quay lại
                 </Button>
-                <Button onClick={submitEmployeeCode} disabled={submitting} className="flex-1">
+                <Button type="submit" disabled={submitting} className="flex-1">
                   {submitting ? "Đang lưu..." : "Lưu mã NV"}
                 </Button>
               </div>
-            </div>
+            </form>
           )}
         </div>
 
         <DrawerFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose}>
             Đóng
           </Button>
         </DrawerFooter>
@@ -891,12 +953,14 @@ function ActionButton({
     <button
       type="button"
       onClick={onClick}
-      className="flex min-h-[72px] flex-col items-start gap-1.5 rounded-2xl border border-border/60 bg-card p-3 text-left shadow-soft active:scale-[0.98]"
+      className="flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-border/60 bg-card px-2 py-2 text-center shadow-soft active:scale-[0.98]"
     >
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
         <Icon className="h-4 w-4" />
       </div>
-      <div className="text-xs font-semibold">{label}</div>
+      <div className="break-words text-[11px] font-medium leading-tight [overflow-wrap:anywhere]">
+        {label}
+      </div>
     </button>
   );
 }
@@ -949,7 +1013,13 @@ function AdvanceForm({
   const viewerBankRoleLabel = viewer.role === "admin" ? "Admin" : "Staff";
 
   return (
-    <div className="space-y-3">
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void onSubmit();
+      }}
+    >
       <div className="text-sm font-semibold">Báo ứng lương</div>
 
       {limit > 0 && (
@@ -1026,17 +1096,17 @@ function AdvanceForm({
       </div>
 
       <div className="flex gap-2">
-        <Button variant="outline" onClick={onBack} className="flex-1">
+        <Button type="button" variant="outline" onClick={onBack} className="flex-1">
           Quay lại
         </Button>
         <Button
-          onClick={onSubmit}
+          type="submit"
           disabled={submitting || (!workerBank && !viewerBank)}
           className="flex-1"
         >
           {submitting ? "Đang gửi..." : "Gửi yêu cầu"}
         </Button>
       </div>
-    </div>
+    </form>
   );
 }

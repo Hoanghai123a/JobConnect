@@ -1,19 +1,12 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
-import {
-  Building2,
-  FileSpreadsheet,
-  Plus,
-  Search,
-  ShieldCheck,
-  Upload,
-  Users,
-} from "lucide-react";
+import { Building2, FileSpreadsheet, Plus, Search, ShieldCheck, Upload, Users } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DateInput } from "@/components/ui/date-input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +24,12 @@ import { pb, type UserRecord } from "@/lib/pocketbase";
 import { generateUid } from "@/lib/uid";
 import { findUserByUsernameInsensitive, normalizeAccountUsername } from "@/lib/account-identity";
 import { createStaffActionLog } from "@/lib/staff-log";
-import { fetchFactories, fetchFactoryManagers, isFactoryAssignmentActive, type FactoryRecord } from "@/lib/factories";
+import {
+  fetchFactories,
+  fetchFactoryManagers,
+  isFactoryAssignmentActive,
+  type FactoryRecord,
+} from "@/lib/factories";
 import { exportToExcel } from "@/lib/excel";
 import { normalizeDate } from "@/lib/date-utils";
 import { escapePb } from "@/lib/delegations";
@@ -150,9 +148,7 @@ function AdminStaffPage() {
 
       for (const [index, row] of rows.entries()) {
         const rowNum = index + 2;
-        const username = normalizeAccountUsername(
-          pickValue(row, ["username", "Tên đăng nhập"]),
-        );
+        const username = normalizeAccountUsername(pickValue(row, ["username", "Tên đăng nhập"]));
         const fullName = pickValue(row, ["full_name", "Họ tên", "Họ và tên"]);
         const phone = pickValue(row, ["phone", "Số điện thoại", "SĐT"]);
         const dob = normalizeDate(pickValue(row, ["date_of_birth", "Ngày sinh"]));
@@ -165,7 +161,11 @@ function AdminStaffPage() {
           continue;
         }
         if (!/^[a-z0-9_.]{4,30}$/.test(username)) {
-          failedRows.push({ Dòng: rowNum, "Lý do lỗi": "Username không hợp lệ (4-30 ký tự, chỉ chữ/số/._)", ...row });
+          failedRows.push({
+            Dòng: rowNum,
+            "Lý do lỗi": "Username không hợp lệ (4-30 ký tự, chỉ chữ/số/._)",
+            ...row,
+          });
           failed++;
           continue;
         }
@@ -177,7 +177,11 @@ function AdminStaffPage() {
 
         const existing = await findUserByUsernameInsensitive(username);
         if (existing) {
-          failedRows.push({ Dòng: rowNum, "Lý do lỗi": `Username "${username}" đã tồn tại`, ...row });
+          failedRows.push({
+            Dòng: rowNum,
+            "Lý do lỗi": `Username "${username}" đã tồn tại`,
+            ...row,
+          });
           failed++;
           continue;
         }
@@ -228,7 +232,11 @@ function AdminStaffPage() {
           });
           created++;
         } catch (error: any) {
-          failedRows.push({ Dòng: rowNum, "Lý do lỗi": error?.message || "Lỗi tạo tài khoản", ...row });
+          failedRows.push({
+            Dòng: rowNum,
+            "Lý do lỗi": error?.message || "Lỗi tạo tài khoản",
+            ...row,
+          });
           failed++;
         }
       }
@@ -307,8 +315,7 @@ function AdminStaffPage() {
               onChange={importStaff}
             />
             <span className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full border border-border px-4 text-sm font-medium">
-              <Upload className="h-4 w-4" />{" "}
-              {importingStaff ? "Đang import..." : "Import Excel"}
+              <Upload className="h-4 w-4" /> {importingStaff ? "Đang import..." : "Import Excel"}
             </span>
           </label>
         </div>
@@ -410,7 +417,14 @@ function CreateStaffDialog({
 
   useEffect(() => {
     if (!open) {
-      setForm({ username: "", full_name: "", phone: "", date_of_birth: "", address: "", password: "" });
+      setForm({
+        username: "",
+        full_name: "",
+        phone: "",
+        date_of_birth: "",
+        address: "",
+        password: "",
+      });
     }
   }, [open]);
 
@@ -488,7 +502,8 @@ function CreateStaffDialog({
         <DialogHeader>
           <DialogTitle>Tạo staff mới</DialogTitle>
           <DialogDescription>
-            Tài khoản staff sẽ được kích hoạt ngay, mật khẩu mặc định "{DEFAULT_PASSWORD}" (yêu cầu đổi khi đăng nhập).
+            Tài khoản staff sẽ được kích hoạt ngay, mật khẩu mặc định "{DEFAULT_PASSWORD}" (yêu cầu
+            đổi khi đăng nhập).
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
@@ -526,10 +541,9 @@ function CreateStaffDialog({
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Ngày sinh</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.date_of_birth}
-                onChange={(e) => set("date_of_birth", e.target.value)}
+                onChange={(v) => set("date_of_birth", v)}
                 className="rounded-xl"
               />
             </div>

@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -429,22 +430,11 @@ function WorkforcePage() {
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label className="text-xs">Từ ngày</Label>
-                <Input
-                  type="date"
-                  value={from}
-                  max={to}
-                  onChange={(e) => setFrom(e.target.value)}
-                />
+                <DateInput value={from} max={to} onChange={(v) => setFrom(v)} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Đến ngày</Label>
-                <Input
-                  type="date"
-                  value={to}
-                  min={from}
-                  max={todayIso()}
-                  onChange={(e) => setTo(e.target.value)}
-                />
+                <DateInput value={to} min={from} max={todayIso()} onChange={(v) => setTo(v)} />
               </div>
             </div>
             <div className="flex items-center gap-1.5">
@@ -1554,21 +1544,11 @@ function CccdExportDialog({
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label className="text-xs">Từ ngày</Label>
-              <Input
-                type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-                className="rounded-xl"
-              />
+              <DateInput value={from} onChange={(v) => setFrom(v)} className="rounded-xl" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Đến ngày</Label>
-              <Input
-                type="date"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                className="rounded-xl"
-              />
+              <DateInput value={to} onChange={(v) => setTo(v)} className="rounded-xl" />
             </div>
           </div>
 

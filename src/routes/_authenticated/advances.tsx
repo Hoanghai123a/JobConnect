@@ -24,6 +24,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -1121,11 +1122,11 @@ export function AdvancesPage() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Từ ngày</Label>
-                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                <DateInput value={dateFrom} onChange={(v) => setDateFrom(v)} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Đến ngày</Label>
-                <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                <DateInput value={dateTo} onChange={(v) => setDateTo(v)} />
               </div>
             </div>
           </div>
@@ -1568,6 +1569,7 @@ function AdvanceDetailDialog({
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
+            {" "}
             <div className="rounded-xl border bg-muted/30 p-3">
               <div className="text-sm font-semibold">{advanceDetail.full_name || "-"}</div>
               <div className="text-[11px] text-muted-foreground">
@@ -1595,7 +1597,6 @@ function AdvanceDetailDialog({
                   )}
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-1.5 text-sm">
               <AdvanceDetailCell
                 label="Người báo ứng"
@@ -1631,7 +1632,6 @@ function AdvanceDetailDialog({
                 value={formatDateTime(advanceDetail.recovered_at)}
               />
             </div>
-
             <div className="rounded-xl border bg-card p-3 text-sm">
               <div className="text-[11px] text-muted-foreground">Tài khoản nhận tiền</div>
               <div className="mt-1 font-medium">{advanceDetail.bank_name || "-"}</div>
@@ -1698,10 +1698,34 @@ function AdvanceDetailDialog({
                   );
                 })()}
             </div>
-
             <AdvanceTextBlock label="Lý do ứng" value={advanceDetail.reason} />
             {isAdmin ? (
-              <>
+              <form
+                className="space-y-0"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!advanceDetail) return;
+                  setSavingNotes(true);
+                  (async () => {
+                    try {
+                      const payload: Partial<AdvanceRecord> = {
+                        admin_note: adminNoteDraft,
+                      };
+                      if (advanceDetail.status === "accepted") {
+                        payload.recovery_note = recoveryNoteDraft;
+                      }
+                      await updateRow(advanceDetail.id, payload);
+                      toast.success("Đã lưu ghi chú");
+                      setAdvanceDetail({ ...advanceDetail, ...payload });
+                      load();
+                    } catch (error: unknown) {
+                      toast.error(error instanceof Error ? error.message : "Lỗi lưu ghi chú");
+                    } finally {
+                      setSavingNotes(false);
+                    }
+                  })();
+                }}
+              >
                 <div className="rounded-xl border bg-card p-3 text-sm">
                   <Label className="text-[11px] text-muted-foreground">Ghi chú admin</Label>
                   <Textarea
@@ -1725,36 +1749,17 @@ function AdvanceDetailDialog({
                   </div>
                 )}
                 <Button
-                  className="w-full"
+                  type="submit"
+                  className="mt-3 w-full"
                   disabled={
                     savingNotes ||
                     (adminNoteDraft === (advanceDetail.admin_note || "") &&
                       recoveryNoteDraft === (advanceDetail.recovery_note || ""))
                   }
-                  onClick={async () => {
-                    if (!advanceDetail) return;
-                    setSavingNotes(true);
-                    try {
-                      const payload: Partial<AdvanceRecord> = {
-                        admin_note: adminNoteDraft,
-                      };
-                      if (advanceDetail.status === "accepted") {
-                        payload.recovery_note = recoveryNoteDraft;
-                      }
-                      await updateRow(advanceDetail.id, payload);
-                      toast.success("Đã lưu ghi chú");
-                      setAdvanceDetail({ ...advanceDetail, ...payload });
-                      load();
-                    } catch (error: unknown) {
-                      toast.error(error instanceof Error ? error.message : "Lỗi lưu ghi chú");
-                    } finally {
-                      setSavingNotes(false);
-                    }
-                  }}
                 >
                   {savingNotes ? "Đang lưu…" : "Lưu ghi chú"}
                 </Button>
-              </>
+              </form>
             ) : (
               <>
                 <AdvanceTextBlock label="Ghi chú admin" value={advanceDetail.admin_note} />

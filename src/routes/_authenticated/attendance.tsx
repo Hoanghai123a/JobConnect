@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/layout/BottomNav";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -302,7 +303,15 @@ function AdminAttendance() {
   );
 }
 
-function UserDetailMonth({ user, rows, periodStart }: { user: any; rows: RowWithUser[]; periodStart: string }) {
+function UserDetailMonth({
+  user,
+  rows,
+  periodStart,
+}: {
+  user: any;
+  rows: RowWithUser[];
+  periodStart: string;
+}) {
   const buckets = aggregate(rows);
   const salary = calcSalary(buckets, {
     lcb: user.lcb || 0,
@@ -427,7 +436,15 @@ function UserAttendance() {
         rows,
         periodStart: payrollPeriod.start,
       }),
-    [buckets, user?.lcb, user?.chuyen_can, user?.doi_song, user?.tham_nien, rows, payrollPeriod.start],
+    [
+      buckets,
+      user?.lcb,
+      user?.chuyen_can,
+      user?.doi_song,
+      user?.tham_nien,
+      rows,
+      payrollPeriod.start,
+    ],
   );
   const visibleRateCells = [
     { label: "100%", hours: buckets.r100 },
@@ -566,7 +583,7 @@ function UserAttendance() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Ngày</Label>
-                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                  <DateInput value={date} onChange={(v) => setDate(v)} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Ca</Label>
@@ -867,7 +884,13 @@ function AttendanceSettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
           <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Nhà máy hiện tại</span>
@@ -924,16 +947,16 @@ function AttendanceSettingsDialog({
               onChange={(v) => setForm({ ...form, default_ot_hours: v })}
             />
           </div>
-        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Đóng
-          </Button>
-          <Button onClick={save} disabled={saving}>
-            <Save className="h-4 w-4" /> {saving ? "Đang lưu..." : "Lưu cài đặt"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Đóng
+            </Button>
+            <Button type="submit" disabled={saving}>
+              <Save className="h-4 w-4" /> {saving ? "Đang lưu..." : "Lưu cài đặt"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

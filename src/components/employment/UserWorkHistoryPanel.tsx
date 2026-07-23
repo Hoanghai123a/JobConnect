@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -158,7 +159,8 @@ export function UserWorkHistoryPanel() {
         </div>
         {activeHistory && (
           <p className="text-[11px] text-muted-foreground">
-            Muốn chuyển nhà máy mới, hãy báo nghỉ nhà máy hiện tại trước rồi liên hệ người tuyển hoặc QLNM.
+            Muốn chuyển nhà máy mới, hãy báo nghỉ nhà máy hiện tại trước rồi liên hệ người tuyển
+            hoặc QLNM.
           </p>
         )}
       </Card>
@@ -230,13 +232,18 @@ export function UserWorkHistoryPanel() {
               Ghi nhận ngày nghỉ tại {activeHistory?.expand?.factory?.name || "nhà máy hiện tại"}.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitLeave();
+            }}
+          >
             <div className="space-y-1.5">
               <Label className="text-xs">Ngày nghỉ</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={leaveDate}
-                onChange={(e) => setLeaveDate(e.target.value)}
+                onChange={(value) => setLeaveDate(value)}
                 className="rounded-xl"
               />
             </div>
@@ -250,15 +257,20 @@ export function UserWorkHistoryPanel() {
                 placeholder="Ví dụ: nghỉ việc, chuyển nhà máy..."
               />
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" className="rounded-xl" onClick={() => setLeaveOpen(false)}>
-              Đóng
-            </Button>
-            <Button className="rounded-xl" onClick={submitLeave} disabled={submitting}>
-              Xác nhận nghỉ
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl"
+                onClick={() => setLeaveOpen(false)}
+              >
+                Đóng
+              </Button>
+              <Button type="submit" className="rounded-xl" disabled={submitting}>
+                Xác nhận nghỉ
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

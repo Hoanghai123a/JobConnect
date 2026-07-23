@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CalendarRange,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock3,
   Download,
   IdCard,
@@ -25,6 +27,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -129,6 +132,7 @@ function StaffWorkerDetailPage() {
   const [detailHistory, setDetailHistory] = useState<EmploymentHistoryRecord | null>(null);
   const [detailCccdVersion, setDetailCccdVersion] = useState<CccdVersionRecord | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
 
   const [amountText, setAmountText] = useState("");
   const [advanceReason, setAdvanceReason] = useState("");
@@ -309,6 +313,14 @@ function StaffWorkerDetailPage() {
     if (viewer?.role === "admin" || recentRecruiter) return factories;
     return factories.filter((factory) => managedFactoryIds.has(factory.id));
   }, [factories, managedFactoryIds, recentRecruiter, viewer?.role]);
+  const latestLeaveDate = useMemo(() => {
+    const dates = allWorkerHistories
+      .map((h) => h.leave_date?.slice(0, 10))
+      .filter((d): d is string => Boolean(d));
+    if (!dates.length) return "";
+    // ISO yyyy-mm-dd: sort chữ = sort thời gian
+    return dates.sort()[dates.length - 1];
+  }, [allWorkerHistories]);
 
   const reloadHistories = async () => {
     if (!viewer?.id) return;
@@ -476,6 +488,15 @@ function StaffWorkerDetailPage() {
     const active = await findActiveEmploymentByUser(workerUser.id);
     if (active) {
       toast.error("Người lao động vẫn đang ở nhà máy cũ, cần báo nghỉ trước");
+      return;
+    }
+
+    if (latestLeaveDate && joinForm.join_date < latestLeaveDate) {
+      toast.error(`Ngày vào không được cũ hơn ngày nghỉ gần nhất (${formatDate(latestLeaveDate)})`);
+      return;
+    }
+    if (joinForm.join_date > todayDate()) {
+      toast.warning("Ngày vào không được lớn hơn ngày hiện tại");
       return;
     }
 
@@ -756,47 +777,7 @@ function StaffWorkerDetailPage() {
         </button>
       }
     >
-      <Card className="space-y-3 rounded-2xl border-border/60 p-4 shadow-soft">
-        <div className="flex flex-wrap items-center gap-2">
-          {viewer?.role === "admin" ? (
-            <StatusChip tone="info">Admin có toàn quyền sửa lịch sử</StatusChip>
-          ) : recentRecruiter ? (
-            <StatusChip tone="success">Bạn là người tuyển trong 3 lịch sử gần nhất</StatusChip>
-          ) : canDoAnyAction ? (
-            <StatusChip tone="info">Bạn có quyền theo nhà máy phụ trách</StatusChip>
-          ) : (
-            <StatusChip tone="neutral">Bạn chỉ có quyền xem</StatusChip>
-          )}
-          <StatusChip tone={latestHistory?.status === "working" ? "success" : "neutral"}>
-            {latestHistory?.status === "working" ? "Đang làm" : "Đã nghỉ"}
-          </StatusChip>
-        </div>
-
-        <div className="grid min-w-0 grid-cols-1 gap-2 text-sm min-[360px]:grid-cols-2">
-          <InfoCell label="Họ tên gốc" value={workerUser.full_name || "Chưa có"} />
-          <InfoCell label="CCCD gốc" value={workerUser.cccd || "Chưa có"} />
-          <InfoCell label="Điện thoại" value={workerUser.phone || "Chưa có"} />
-          <InfoCell
-            label="Nhà máy gần nhất"
-            value={latestHistory?.expand?.factory?.name || "Chưa có"}
-          />
-          <InfoCell label="Mã NV gần nhất" value={latestHistory?.employee_code || "Chưa có"} />
-          <InfoCell
-            label="Mã số thuế gần nhất"
-            value={latestHistory?.worker_tax_code_snapshot || "Chưa có"}
-          />
-          <InfoCell
-            label="Người tuyển gần nhất"
-            value={
-              latestHistory?.expand?.recruiter_staff?.full_name ||
-              latestHistory?.expand?.recruiter_staff?.username ||
-              "Chưa gán"
-            }
-          />
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <ActionButton
           icon={Wallet}
           label="Báo ứng"
@@ -832,7 +813,64 @@ function StaffWorkerDetailPage() {
         )}
       </div>
 
-      {workerUser && (
+      <Card className="space-y-3 rounded-2xl border-border/60 p-4 shadow-soft">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {viewer?.role === "admin" ? (
+              <StatusChip tone="info">Admin có toàn quyền sửa lịch sử</StatusChip>
+            ) : recentRecruiter ? (
+              <StatusChip tone="success">Bạn là người tuyển trong 3 lịch sử gần nhất</StatusChip>
+            ) : canDoAnyAction ? (
+              <StatusChip tone="info">Bạn có quyền theo nhà máy phụ trách</StatusChip>
+            ) : (
+              <StatusChip tone="neutral">Bạn chỉ có quyền xem</StatusChip>
+            )}
+            <StatusChip tone={latestHistory?.status === "working" ? "success" : "neutral"}>
+              {latestHistory?.status === "working" ? "Đang làm" : "Đã nghỉ"}
+            </StatusChip>
+          </div>
+          <button
+            type="button"
+            onClick={() => setInfoOpen((v) => !v)}
+            className="flex items-center gap-1 rounded-full border border-border/60 bg-card px-3 py-1 text-xs font-medium text-foreground active:scale-[0.98]"
+            aria-expanded={infoOpen}
+          >
+            {infoOpen ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+            {infoOpen ? "Thu gọn" : "Mở rộng"}
+          </button>
+        </div>
+
+        {infoOpen && (
+          <div className="grid min-w-0 grid-cols-1 gap-2 text-sm min-[360px]:grid-cols-2">
+            <InfoCell label="Họ tên gốc" value={workerUser.full_name || "Chưa có"} />
+            <InfoCell label="CCCD gốc" value={workerUser.cccd || "Chưa có"} />
+            <InfoCell label="Điện thoại" value={workerUser.phone || "Chưa có"} />
+            <InfoCell
+              label="Nhà máy gần nhất"
+              value={latestHistory?.expand?.factory?.name || "Chưa có"}
+            />
+            <InfoCell label="Mã NV gần nhất" value={latestHistory?.employee_code || "Chưa có"} />
+            <InfoCell
+              label="Mã số thuế gần nhất"
+              value={latestHistory?.worker_tax_code_snapshot || "Chưa có"}
+            />
+            <InfoCell
+              label="Người tuyển gần nhất"
+              value={
+                latestHistory?.expand?.recruiter_staff?.full_name ||
+                latestHistory?.expand?.recruiter_staff?.username ||
+                "Chưa gán"
+              }
+            />
+          </div>
+        )}
+      </Card>
+
+      {infoOpen && workerUser && (
         <div className="space-y-2">
           <div className="text-sm font-semibold">Ảnh CCCD</div>
           <CccdManager
@@ -976,7 +1014,13 @@ function StaffWorkerDetailPage() {
               Tạo yêu cầu ứng lương cho người lao động từ hồ sơ gần nhất.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitAdvance();
+            }}
+          >
             <FormField label="Số tiền">
               <Input
                 value={amountText}
@@ -995,15 +1039,20 @@ function StaffWorkerDetailPage() {
                 placeholder="Ví dụ: ứng tiền sinh hoạt, ứng trước kỳ lương..."
               />
             </FormField>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAdvanceOpen(false)} className="rounded-xl">
-              Đóng
-            </Button>
-            <Button onClick={submitAdvance} className="rounded-xl">
-              Gửi yêu cầu
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAdvanceOpen(false)}
+                className="rounded-xl"
+              >
+                Đóng
+              </Button>
+              <Button type="submit" className="rounded-xl">
+                Gửi yêu cầu
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -1015,12 +1064,17 @@ function StaffWorkerDetailPage() {
               Chỉ áp dụng với bản ghi đang làm hiện tại của người lao động.
             </DrawerDescription>
           </DrawerHeader>
-          <div className="space-y-3 overflow-y-auto px-4 pb-4">
+          <form
+            className="space-y-3 overflow-y-auto px-4 pb-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitLeave();
+            }}
+          >
             <FormField label="Ngày nghỉ">
-              <Input
-                type="date"
+              <DateInput
                 value={leaveDate}
-                onChange={(event) => setLeaveDate(event.target.value)}
+                onChange={(v) => setLeaveDate(v)}
                 className="rounded-xl"
               />
             </FormField>
@@ -1033,15 +1087,20 @@ function StaffWorkerDetailPage() {
                 placeholder="Ví dụ: nghỉ việc, chuyển nhà máy, nghỉ tạm thời..."
               />
             </FormField>
-          </div>
-          <DrawerFooter>
-            <Button variant="outline" onClick={() => setLeaveOpen(false)} className="rounded-xl">
-              Đóng
-            </Button>
-            <Button onClick={submitLeave} className="rounded-xl">
-              Cập nhật ngày nghỉ
-            </Button>
-          </DrawerFooter>
+            <DrawerFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLeaveOpen(false)}
+                className="rounded-xl"
+              >
+                Đóng
+              </Button>
+              <Button type="submit" className="rounded-xl">
+                Cập nhật ngày nghỉ
+              </Button>
+            </DrawerFooter>
+          </form>
         </DrawerContent>
       </Drawer>
 
@@ -1050,10 +1109,17 @@ function StaffWorkerDetailPage() {
           <DrawerHeader>
             <DrawerTitle>Báo đi làm nhà máy mới</DrawerTitle>
             <DrawerDescription>
-              Hồ sơ cũ phải kết thúc trước khi tạo bản ghi đi làm mới.
+              Hồ sơ cũ phải kết thúc trước khi tạo bản ghi đi làm mới. Ngày vào không được cũ hơn
+              ngày nghỉ gần nhất.
             </DrawerDescription>
           </DrawerHeader>
-          <div className="space-y-3 overflow-y-auto px-4 pb-4">
+          <form
+            className="space-y-3 overflow-y-auto px-4 pb-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitJoin();
+            }}
+          >
             <FormField label="Nhà máy">
               <Select
                 value={joinForm.factory}
@@ -1142,14 +1208,19 @@ function StaffWorkerDetailPage() {
               />
             </FormField>
             <FormField label="Ngày vào">
-              <Input
-                type="date"
+              <DateInput
                 value={joinForm.join_date}
-                onChange={(event) =>
-                  setJoinForm((current) => ({ ...current, join_date: event.target.value }))
-                }
+                min={latestLeaveDate || undefined}
+                max={todayDate()}
+                onChange={(v) => setJoinForm((current) => ({ ...current, join_date: v }))}
                 className="rounded-xl"
               />
+              {latestLeaveDate && (
+                <p className="text-xs text-muted-foreground">
+                  Ngày nghỉ gần nhất: {formatDate(latestLeaveDate)}. Ngày vào không được cũ hơn ngày
+                  này.
+                </p>
+              )}
             </FormField>
             <FormField label="Người tuyển">
               <Select
@@ -1198,15 +1269,20 @@ function StaffWorkerDetailPage() {
                 />
               </div>
             </div>
-          </div>
-          <DrawerFooter>
-            <Button variant="outline" onClick={() => setJoinOpen(false)} className="rounded-xl">
-              Đóng
-            </Button>
-            <Button onClick={submitJoin} disabled={!canSubmitJoinForWorker} className="rounded-xl">
-              Tạo bản ghi đi làm
-            </Button>
-          </DrawerFooter>
+            <DrawerFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setJoinOpen(false)}
+                className="rounded-xl"
+              >
+                Đóng
+              </Button>
+              <Button type="submit" disabled={!canSubmitJoinForWorker} className="rounded-xl">
+                Tạo bản ghi đi làm
+              </Button>
+            </DrawerFooter>
+          </form>
         </DrawerContent>
       </Drawer>
 
@@ -1218,7 +1294,13 @@ function StaffWorkerDetailPage() {
               Cập nhật trực tiếp thông tin ngân hàng của user gốc.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitBankUpdate();
+            }}
+          >
             <FormField label="Ngân hàng">
               <BankNameInput
                 value={bankForm.bank_name}
@@ -1246,15 +1328,20 @@ function StaffWorkerDetailPage() {
                 className="rounded-xl"
               />
             </FormField>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBankOpen(false)} className="rounded-xl">
-              Đóng
-            </Button>
-            <Button onClick={submitBankUpdate} className="rounded-xl">
-              Lưu tài khoản
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setBankOpen(false)}
+                className="rounded-xl"
+              >
+                Đóng
+              </Button>
+              <Button type="submit" className="rounded-xl">
+                Lưu tài khoản
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -1276,7 +1363,13 @@ function StaffWorkerDetailPage() {
               Bản ghi này luôn có trạng thái Đã nghỉ và không được trùng thời gian với lịch sử khác.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitOldHistory();
+            }}
+          >
             <FormField label="Nhà máy *">
               <Select
                 value={oldHistoryForm.factory}
@@ -1385,29 +1478,27 @@ function StaffWorkerDetailPage() {
             </FormField>
             <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
               <FormField label="Ngày vào *">
-                <Input
-                  type="date"
+                <DateInput
                   value={oldHistoryForm.join_date}
                   max={oldHistoryForm.leave_date || todayDate()}
-                  onChange={(event) =>
+                  onChange={(v) =>
                     setOldHistoryForm((current) => ({
                       ...current,
-                      join_date: event.target.value,
+                      join_date: v,
                     }))
                   }
                   className="rounded-xl"
                 />
               </FormField>
               <FormField label="Ngày nghỉ *">
-                <Input
-                  type="date"
+                <DateInput
                   value={oldHistoryForm.leave_date}
                   min={oldHistoryForm.join_date}
                   max={todayDate()}
-                  onChange={(event) =>
+                  onChange={(v) =>
                     setOldHistoryForm((current) => ({
                       ...current,
-                      leave_date: event.target.value,
+                      leave_date: v,
                     }))
                   }
                   className="rounded-xl"
@@ -1425,24 +1516,20 @@ function StaffWorkerDetailPage() {
                 className="rounded-xl"
               />
             </FormField>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setOldHistoryOpen(false)}
-              disabled={oldHistorySubmitting}
-              className="rounded-xl"
-            >
-              Đóng
-            </Button>
-            <Button
-              onClick={submitOldHistory}
-              disabled={oldHistorySubmitting}
-              className="rounded-xl"
-            >
-              {oldHistorySubmitting ? "Đang lưu..." : "Lưu lịch sử cũ"}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOldHistoryOpen(false)}
+                disabled={oldHistorySubmitting}
+              >
+                Đóng
+              </Button>
+              <Button type="submit" disabled={oldHistorySubmitting} className="rounded-xl">
+                {oldHistorySubmitting ? "Đang lưu..." : "Lưu lịch sử cũ"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -1454,7 +1541,13 @@ function StaffWorkerDetailPage() {
               Chỉ admin mới được chỉnh trực tiếp lịch sử đi làm của user.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveEditedHistory();
+            }}
+          >
             <FormField label="Mã NV">
               <Input
                 value={historyForm.employee_code}
@@ -1544,22 +1637,16 @@ function StaffWorkerDetailPage() {
             </FormField>
             <div className="grid min-w-0 grid-cols-1 gap-3 min-[360px]:grid-cols-2">
               <FormField label="Ngày vào">
-                <Input
-                  type="date"
+                <DateInput
                   value={historyForm.join_date}
-                  onChange={(event) =>
-                    setHistoryForm((current) => ({ ...current, join_date: event.target.value }))
-                  }
+                  onChange={(v) => setHistoryForm((current) => ({ ...current, join_date: v }))}
                   className="rounded-xl"
                 />
               </FormField>
               <FormField label="Ngày nghỉ">
-                <Input
-                  type="date"
+                <DateInput
                   value={historyForm.leave_date}
-                  onChange={(event) =>
-                    setHistoryForm((current) => ({ ...current, leave_date: event.target.value }))
-                  }
+                  onChange={(v) => setHistoryForm((current) => ({ ...current, leave_date: v }))}
                   className="rounded-xl"
                 />
               </FormField>
@@ -1590,19 +1677,20 @@ function StaffWorkerDetailPage() {
                 className="rounded-xl"
               />
             </FormField>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setEditingHistory(null)}
-              className="rounded-xl"
-            >
-              Đóng
-            </Button>
-            <Button onClick={saveEditedHistory} className="rounded-xl">
-              Lưu thay đổi
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditingHistory(null)}
+                className="rounded-xl"
+              >
+                Đóng
+              </Button>
+              <Button type="submit" className="rounded-xl">
+                Lưu thay đổi
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -1711,12 +1799,14 @@ function ActionButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="flex min-h-[88px] min-w-0 flex-col items-start gap-2 overflow-hidden rounded-2xl border border-border/60 bg-card p-4 text-left shadow-soft disabled:cursor-not-allowed disabled:opacity-45"
+      className="flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-border/60 bg-card px-2 py-2 text-center shadow-soft disabled:cursor-not-allowed disabled:opacity-45"
     >
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        <Icon className="h-5 w-5" />
+      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <Icon className="h-4 w-4" />
       </div>
-      <div className="break-words text-sm font-semibold [overflow-wrap:anywhere]">{label}</div>
+      <div className="break-words text-[11px] font-medium leading-tight [overflow-wrap:anywhere]">
+        {label}
+      </div>
     </button>
   );
 }

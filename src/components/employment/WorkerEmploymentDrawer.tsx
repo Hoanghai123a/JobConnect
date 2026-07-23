@@ -1,9 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Landmark, Plus, Wallet } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import {
+  CalendarRange,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Clock3,
+  Hash,
+  Landmark,
+  Plus,
+  Wallet,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,6 +41,7 @@ import {
   createEmploymentHistory,
   deriveEmploymentStatus,
   fetchEmploymentHistories,
+  findActiveEmploymentByUser,
   getLatestEmploymentHistory,
   isCurrentlyWorking,
   maskCccd,
@@ -39,6 +52,7 @@ import {
 } from "@/lib/employment";
 import type { FactoryRecord } from "@/lib/factories";
 import type { MainHouseRecord } from "@/lib/main-houses";
+import { canReportJoin, isRecentRecruiter } from "@/lib/staff-permissions";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
 import { VN_BANKS } from "@/lib/vn-banks";
@@ -52,6 +66,12 @@ export type WorkerEmploymentPermissions = {
   canReportAdvance: boolean;
   /** Cho phép cập nhật STK ngân hàng của NLĐ. */
   canUpdateBank: boolean;
+  /** Cho phép báo nghỉ nhà máy hiện tại. */
+  canReportLeave: boolean;
+  /** Cho phép báo đi làm nhà máy mới. */
+  canReportJoin: boolean;
+  /** Cho phép xem công lương của NLĐ. */
+  canViewPayroll: boolean;
 };
 
 function todayIso() {
@@ -86,6 +106,31 @@ function getPocketBaseFieldErrors(error: unknown) {
     .join("; ");
 }
 
+function ActionButton({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-border/60 bg-card px-2 py-2 text-center shadow-soft active:scale-[0.98]"
+    >
+      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="break-words text-[11px] font-medium leading-tight [overflow-wrap:anywhere]">
+        {label}
+      </div>
+    </button>
+  );
+}
+
 export function WorkerEmploymentDrawer({
   user,
   actor,
@@ -93,6 +138,7 @@ export function WorkerEmploymentDrawer({
   factories,
   mainHouses,
   users,
+  managedFactoryIds,
   permissions,
   open,
   onClose,
@@ -104,12 +150,35 @@ export function WorkerEmploymentDrawer({
   factories: FactoryRecord[];
   mainHouses: MainHouseRecord[];
   users: UserRecord[];
+  managedFactoryIds?: Set<string>;
   permissions: WorkerEmploymentPermissions;
   open: boolean;
   onClose: () => void;
   onDataChanged: () => void | Promise<void>;
 }) {
+  const navigate = useNavigate();
   const { data: settings } = useAppSettings();
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leaveDate, setLeaveDate] = useState(todayIso());
+  const [leaveNote, setLeaveNote] = useState("");
+  const [leaveSaving, setLeaveSaving] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [joinSaving, setJoinSaving] = useState(false);
+  const [joinForm, setJoinForm] = useState({
+    factory: "",
+    main_house: "",
+    employee_code: "",
+    worker_name_snapshot: "",
+    worker_cccd_snapshot: "",
+    worker_tax_code_snapshot: "",
+    recruiter_staff: "",
+    join_date: todayIso(),
+    note: "",
+  });
+  const [employeeCodeOpen, setEmployeeCodeOpen] = useState(false);
+  const [employeeCodeForm, setEmployeeCodeForm] = useState("");
+  const [employeeCodeSaving, setEmployeeCodeSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [oldHistoryOpen, setOldHistoryOpen] = useState(false);
   const [oldHistorySaving, setOldHistorySaving] = useState(false);
@@ -155,6 +224,14 @@ export function WorkerEmploymentDrawer({
     [users],
   );
 
+  const managedIds = useMemo(() => managedFactoryIds ?? new Set<string>(), [managedFactoryIds]);
+
+  const joinableFactories = useMemo(() => {
+    if (actor?.role === "admin") return factories;
+    if (isRecentRecruiter(actor, histories)) return factories;
+    return factories.filter((factory) => managedIds.has(factory.id));
+  }, [factories, managedIds, actor, histories]);
+
   useEffect(() => {
     if (user) {
       setBankEditing(false);
@@ -163,6 +240,24 @@ export function WorkerEmploymentDrawer({
         bank_account_number: user.bank_account_number || "",
         bank_account_name: user.bank_account_name || "",
       });
+      setLeaveOpen(false);
+      setLeaveDate(todayIso());
+      setLeaveNote("");
+      setJoinOpen(false);
+      setEmployeeCodeOpen(false);
+      const latest = getLatestEmploymentHistory(histories);
+      setJoinForm({
+        factory: "",
+        main_house: "",
+        employee_code: "",
+        worker_name_snapshot: latest?.worker_name_snapshot || user.full_name || user.username || "",
+        worker_cccd_snapshot: latest?.worker_cccd_snapshot || user.cccd || "",
+        worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
+        recruiter_staff: actor?.id || "",
+        join_date: todayIso(),
+        note: "",
+      });
+      setEmployeeCodeForm(latest?.employee_code || user.employee_code || "");
     }
   }, [user?.id]);
 
@@ -180,6 +275,127 @@ export function WorkerEmploymentDrawer({
       leave_date: h.leave_date?.slice(0, 10) || "",
       note: h.note || "",
     });
+  };
+
+  const submitLeave = async () => {
+    if (!user || !actor) return;
+    const active = histories.find((item) => isCurrentlyWorking(item));
+    if (!active) {
+      toast.error("Không có bản ghi đang làm để báo nghỉ");
+      return;
+    }
+    if (!leaveDate) {
+      toast.warning("Chọn ngày nghỉ");
+      return;
+    }
+    setLeaveSaving(true);
+    try {
+      await updateEmploymentHistory(active.id, {
+        leave_date: leaveDate,
+        status: "left",
+        note: leaveNote.trim(),
+      });
+      const updated = await fetchEmploymentHistories([user.id]);
+      await syncLegacyUserWorkFields(user.id, getLatestEmploymentHistory(updated));
+      await createStaffActionLog({
+        actor,
+        targetUserId: user.id,
+        targetCollection: "employment_histories",
+        targetRecord: active.id,
+        action: "report_leave",
+        note: "Báo nghỉ từ hồ sơ lao động",
+      });
+      toast.success("Đã cập nhật ngày nghỉ");
+      setLeaveOpen(false);
+      await onDataChanged();
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Lỗi báo nghỉ"));
+    } finally {
+      setLeaveSaving(false);
+    }
+  };
+
+  const submitJoin = async () => {
+    if (!user || !actor) return;
+    if (!joinForm.factory) return toast.warning("Chọn nhà máy");
+    if (!joinForm.join_date) return toast.warning("Nhập ngày vào làm");
+    if (!joinForm.recruiter_staff) return toast.warning("Chọn người tuyển");
+    if (!joinForm.main_house) return toast.warning("Chọn nhà chính");
+    if (!canReportJoin(actor, histories, managedFactoryIds ?? new Set(), joinForm.factory)) {
+      toast.error("Bạn không có quyền báo đi làm tại nhà máy đã chọn");
+      return;
+    }
+    setJoinSaving(true);
+    try {
+      const active = await findActiveEmploymentByUser(user.id);
+      if (active) {
+        toast.error("Cần báo nghỉ nhà máy cũ trước");
+        return;
+      }
+      const created = await createEmploymentHistory({
+        user: user.id,
+        factory: joinForm.factory,
+        main_house: joinForm.main_house,
+        employee_code: joinForm.employee_code.trim(),
+        worker_name_snapshot:
+          joinForm.worker_name_snapshot.trim() || user.full_name || user.username || "",
+        worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim() || user.cccd || "",
+        worker_tax_code_snapshot: joinForm.worker_tax_code_snapshot.trim(),
+        recruiter_staff: joinForm.recruiter_staff,
+        join_date: joinForm.join_date,
+        status: "working",
+        note: joinForm.note.trim(),
+      });
+      await syncLegacyUserWorkFields(user.id, created);
+      await createStaffActionLog({
+        actor,
+        targetUserId: user.id,
+        targetCollection: "employment_histories",
+        targetRecord: created.id,
+        action: "report_join",
+        note: "Báo đi làm mới từ hồ sơ lao động",
+      });
+      toast.success("Đã tạo bản ghi đi làm mới");
+      setJoinOpen(false);
+      await onDataChanged();
+    } catch (error: unknown) {
+      const fieldErrors = getPocketBaseFieldErrors(error);
+      toast.error(fieldErrors || getErrorMessage(error, "Lỗi báo đi làm"));
+    } finally {
+      setJoinSaving(false);
+    }
+  };
+
+  const submitEmployeeCode = async () => {
+    if (!user || !actor) return;
+    const code = employeeCodeForm.trim();
+    if (!code) {
+      toast.warning("Nhập mã nhân viên");
+      return;
+    }
+    setEmployeeCodeSaving(true);
+    try {
+      await updateUserAndCache(user.id, { employee_code: code });
+      const latest = getLatestEmploymentHistory(histories);
+      if (latest) {
+        await updateEmploymentHistory(latest.id, { employee_code: code });
+      }
+      await createStaffActionLog({
+        actor,
+        targetUserId: user.id,
+        targetCollection: "employment_histories",
+        targetRecord: latest?.id || user.id,
+        action: "update",
+        note: `Cập nhật mã NV: ${code}`,
+      });
+      toast.success("Đã cập nhật mã nhân viên");
+      setEmployeeCodeOpen(false);
+      await onDataChanged();
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Lỗi cập nhật mã NV"));
+    } finally {
+      setEmployeeCodeSaving(false);
+    }
   };
 
   const openOldHistory = () => {
@@ -452,6 +668,34 @@ export function WorkerEmploymentDrawer({
     setAdvanceOpen(true);
   };
 
+  const openLeaveDialog = () => {
+    setLeaveDate(todayIso());
+    setLeaveNote("");
+    setLeaveOpen(true);
+  };
+
+  const openJoinDialog = () => {
+    const latest = getLatestEmploymentHistory(histories);
+    setJoinForm({
+      factory: "",
+      main_house: "",
+      employee_code: "",
+      worker_name_snapshot: latest?.worker_name_snapshot || user.full_name || user.username || "",
+      worker_cccd_snapshot: latest?.worker_cccd_snapshot || user.cccd || "",
+      worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
+      recruiter_staff: actor?.id || "",
+      join_date: todayIso(),
+      note: "",
+    });
+    setJoinOpen(true);
+  };
+
+  const openEmployeeCodeDialog = () => {
+    const latest = getLatestEmploymentHistory(histories);
+    setEmployeeCodeForm(latest?.employee_code || user.employee_code || "");
+    setEmployeeCodeOpen(true);
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -466,186 +710,235 @@ export function WorkerEmploymentDrawer({
           </DialogHeader>
 
           <div className="min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-            <div className="grid min-w-0 grid-cols-2 gap-2 text-sm">
-              {user.uid && (
-                <div className="col-span-2 min-w-0 overflow-hidden rounded-xl bg-primary/10 p-2.5">
-                  <div className="text-[10px] text-muted-foreground">Mã tài khoản</div>
-                  <div className="mt-0.5 break-words text-sm font-semibold text-primary [overflow-wrap:anywhere]">
-                    {user.uid}
-                  </div>
-                </div>
-              )}
-              <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                <div className="text-[10px] text-muted-foreground">Họ tên tài khoản</div>
-                <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                  {user.full_name || "—"}
-                </div>
-              </div>
-              <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                <div className="text-[10px] text-muted-foreground">CCCD tài khoản</div>
-                <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                  {maskCccd(user.cccd)}
-                </div>
-              </div>
-              <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                <div className="text-[10px] text-muted-foreground">SĐT</div>
-                <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                  {user.phone || "—"}
-                </div>
-              </div>
-              <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                <div className="text-[10px] text-muted-foreground">Tên đăng nhập</div>
-                <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                  {user.username || "—"}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <Landmark className="h-3.5 w-3.5" />
-                  Tài khoản ngân hàng
-                </div>
-                {permissions.canUpdateBank && !bankEditing && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={() => setBankEditing(true)}
-                  >
-                    Sửa STK
-                  </Button>
+            {((isWorking && permissions.canReportLeave) ||
+              permissions.canReportJoin ||
+              (isWorking && permissions.canReportAdvance) ||
+              permissions.canViewPayroll ||
+              permissions.canUpdateBank ||
+              permissions.canAddOldHistory) && (
+              <div className="grid grid-cols-3 gap-2">
+                {isWorking && permissions.canReportLeave && (
+                  <ActionButton icon={Clock3} label="Báo nghỉ" onClick={openLeaveDialog} />
+                )}
+                {permissions.canReportJoin && (
+                  <ActionButton icon={Plus} label="Báo đi làm mới" onClick={openJoinDialog} />
+                )}
+                {isWorking && permissions.canReportAdvance && (
+                  <ActionButton icon={Wallet} label="Báo ứng lương" onClick={openAdvanceDialog} />
+                )}
+                {permissions.canViewPayroll && (
+                  <ActionButton
+                    icon={CalendarRange}
+                    label="Check công lương"
+                    onClick={() => {
+                      const id = user.id;
+                      onClose();
+                      setTimeout(
+                        () =>
+                          navigate({
+                            to: "/staff/workers/$workerId/payroll",
+                            params: { workerId: id },
+                          }),
+                        150,
+                      );
+                    }}
+                  />
+                )}
+                {permissions.canUpdateBank && (
+                  <ActionButton
+                    icon={Landmark}
+                    label="Cập nhật ngân hàng"
+                    onClick={() => {
+                      setInfoOpen(true);
+                      setBankEditing(true);
+                    }}
+                  />
+                )}
+                {isWorking && (permissions.canReportLeave || permissions.canReportAdvance) && (
+                  <ActionButton
+                    icon={Hash}
+                    label="Cập nhật mã NV"
+                    onClick={openEmployeeCodeDialog}
+                  />
+                )}
+                {permissions.canAddOldHistory && (
+                  <ActionButton icon={Plus} label="Bổ sung lịch sử" onClick={openOldHistory} />
                 )}
               </div>
-              {bankEditing ? (
-                <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Ngân hàng</Label>
-                    <Select
-                      value={bankForm.bank_name}
-                      onValueChange={(v) => setBankForm((c) => ({ ...c, bank_name: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Chọn ngân hàng" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-72">
-                        {VN_BANKS.map((bank) => (
-                          <SelectItem key={bank.code} value={bank.name}>
-                            {bank.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Số tài khoản</Label>
-                    <Input
-                      value={bankForm.bank_account_number}
-                      onChange={(e) =>
-                        setBankForm((c) => ({
-                          ...c,
-                          bank_account_number: e.target.value.replace(/\D/g, ""),
-                        }))
-                      }
-                      inputMode="numeric"
-                      placeholder="Nhập số tài khoản"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Tên chủ tài khoản</Label>
-                    <Input
-                      value={bankForm.bank_account_name}
-                      onChange={(e) =>
-                        setBankForm((c) => ({ ...c, bank_account_name: e.target.value }))
-                      }
-                      placeholder="Nhập tên chủ tài khoản"
-                    />
-                  </div>
-                  <div className="flex gap-2 pt-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => setBankEditing(false)}
-                    >
-                      Hủy
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="flex-1"
-                      disabled={bankSaving}
-                      onClick={saveBankInfo}
-                    >
-                      {bankSaving ? "Đang lưu..." : "Lưu STK"}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid min-w-0 grid-cols-1 gap-1.5 text-sm">
-                  <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                    <div className="text-[10px] text-muted-foreground">Ngân hàng</div>
-                    <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                      {user.bank_name || "—"}
-                    </div>
-                  </div>
-                  <div className="grid min-w-0 grid-cols-2 gap-1.5">
-                    <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                      <div className="text-[10px] text-muted-foreground">Số tài khoản</div>
-                      <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                        {user.bank_account_number || "—"}
-                      </div>
-                    </div>
-                    <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                      <div className="text-[10px] text-muted-foreground">Tên chủ TK</div>
-                      <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                        {user.bank_account_name || "—"}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Ảnh CCCD
-            </div>
-            <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} readOnly />
-
-            {isWorking && permissions.canReportAdvance && (
-              <button
-                type="button"
-                onClick={openAdvanceDialog}
-                className="flex w-full items-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-3 text-left shadow-soft active:scale-[0.99]"
-              >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Wallet className="h-4 w-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold">Báo ứng lương</span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    Tạo yêu cầu ứng cho lao động đang đi làm
-                  </span>
-                </span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-              </button>
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Lịch sử đi làm ({histories.length})
-              </div>
-              {permissions.canAddOldHistory && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 rounded-xl text-xs"
-                  onClick={openOldHistory}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-              )}
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Thông tin</span>
+              <button
+                type="button"
+                onClick={() => setInfoOpen((v) => !v)}
+                className="flex items-center gap-1 rounded-full border border-border/60 bg-card px-3 py-1 text-xs font-medium text-foreground active:scale-[0.98]"
+                aria-expanded={infoOpen}
+              >
+                {infoOpen ? (
+                  <ChevronUp className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                )}
+                {infoOpen ? "Thu gọn" : "Mở rộng"}
+              </button>
+            </div>
+
+            {infoOpen && (
+              <>
+                <div className="grid min-w-0 grid-cols-2 gap-2 text-sm">
+                  {user.uid && (
+                    <div className="col-span-2 min-w-0 overflow-hidden rounded-xl bg-primary/10 p-2.5">
+                      <div className="text-[10px] text-muted-foreground">Mã tài khoản</div>
+                      <div className="mt-0.5 break-words text-sm font-semibold text-primary [overflow-wrap:anywhere]">
+                        {user.uid}
+                      </div>
+                    </div>
+                  )}
+                  <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                    <div className="text-[10px] text-muted-foreground">Họ tên tài khoản</div>
+                    <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                      {user.full_name || "—"}
+                    </div>
+                  </div>
+                  <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                    <div className="text-[10px] text-muted-foreground">CCCD tài khoản</div>
+                    <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                      {maskCccd(user.cccd)}
+                    </div>
+                  </div>
+                  <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                    <div className="text-[10px] text-muted-foreground">SĐT</div>
+                    <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                      {user.phone || "—"}
+                    </div>
+                  </div>
+                  <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                    <div className="text-[10px] text-muted-foreground">Tên đăng nhập</div>
+                    <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                      {user.username || "—"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <Landmark className="h-3.5 w-3.5" />
+                      Tài khoản ngân hàng
+                    </div>
+                    {permissions.canUpdateBank && !bankEditing && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => setBankEditing(true)}
+                      >
+                        Sửa STK
+                      </Button>
+                    )}
+                  </div>
+                  {bankEditing ? (
+                    <form
+                      className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void saveBankInfo();
+                      }}
+                    >
+                      <div className="space-y-1">
+                        <Label className="text-xs">Ngân hàng</Label>
+                        <Select
+                          value={bankForm.bank_name}
+                          onValueChange={(v) => setBankForm((c) => ({ ...c, bank_name: v }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Chọn ngân hàng" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-72">
+                            {VN_BANKS.map((bank) => (
+                              <SelectItem key={bank.code} value={bank.name}>
+                                {bank.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Số tài khoản</Label>
+                        <Input
+                          value={bankForm.bank_account_number}
+                          onChange={(e) =>
+                            setBankForm((c) => ({
+                              ...c,
+                              bank_account_number: e.target.value.replace(/\D/g, ""),
+                            }))
+                          }
+                          inputMode="numeric"
+                          placeholder="Nhập số tài khoản"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Tên chủ tài khoản</Label>
+                        <Input
+                          value={bankForm.bank_account_name}
+                          onChange={(e) =>
+                            setBankForm((c) => ({ ...c, bank_account_name: e.target.value }))
+                          }
+                          placeholder="Nhập tên chủ tài khoản"
+                        />
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => setBankEditing(false)}
+                        >
+                          Hủy
+                        </Button>
+                        <Button type="submit" size="sm" className="flex-1" disabled={bankSaving}>
+                          {bankSaving ? "Đang lưu..." : "Lưu STK"}
+                        </Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="grid min-w-0 grid-cols-1 gap-1.5 text-sm">
+                      <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                        <div className="text-[10px] text-muted-foreground">Ngân hàng</div>
+                        <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                          {user.bank_name || "—"}
+                        </div>
+                      </div>
+                      <div className="grid min-w-0 grid-cols-2 gap-1.5">
+                        <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                          <div className="text-[10px] text-muted-foreground">Số tài khoản</div>
+                          <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                            {user.bank_account_number || "—"}
+                          </div>
+                        </div>
+                        <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                          <div className="text-[10px] text-muted-foreground">Tên chủ TK</div>
+                          <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                            {user.bank_account_name || "—"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Ảnh CCCD
+                </div>
+                <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} readOnly />
+              </>
+            )}
+
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Lịch sử đi làm ({histories.length})
             </div>
 
             {histories.length === 0 ? (
@@ -665,13 +958,12 @@ export function WorkerEmploymentDrawer({
                     <div className="min-w-0 flex-1">
                       <div className="break-words text-sm font-semibold [overflow-wrap:anywhere]">
                         {h.expand?.factory?.name || "Nhà máy"}
+                        <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                          · Mã: {h.employee_code || "—"}
+                        </span>
                       </div>
                       <div className="break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
-                        {h.worker_name_snapshot} · {maskCccd(h.worker_cccd_snapshot)} · Mã:{" "}
-                        {h.employee_code || "—"}
-                      </div>
-                      <div className="break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
-                        Mã số thuế: {h.worker_tax_code_snapshot || "—"}
+                        {h.worker_name_snapshot}
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
@@ -683,12 +975,9 @@ export function WorkerEmploymentDrawer({
                       )}
                     </div>
                   </div>
-                  <div className="grid min-w-0 grid-cols-2 gap-1.5 text-[11px]">
+                  <div className="min-w-0 space-y-1 text-[11px] text-muted-foreground">
                     <div className="min-w-0 break-words [overflow-wrap:anywhere]">
-                      Vào: {formatDate(h.join_date)}
-                    </div>
-                    <div className="min-w-0 break-words [overflow-wrap:anywhere]">
-                      Nghỉ: {formatDate(h.leave_date) || "—"}
+                      Vào: {formatDate(h.join_date)} · Nghỉ: {formatDate(h.leave_date) || "—"}
                     </div>
                     <div className="min-w-0 break-words [overflow-wrap:anywhere]">
                       Người tuyển:{" "}
@@ -696,13 +985,8 @@ export function WorkerEmploymentDrawer({
                         h.expand?.recruiter_staff?.username ||
                         "—"}
                     </div>
-                    <div className="min-w-0 break-words [overflow-wrap:anywhere]">
-                      Nhà chính: {h.expand?.main_house?.name || "—"}
-                    </div>
                     {h.note && (
-                      <div className="col-span-2 min-w-0 break-words text-muted-foreground [overflow-wrap:anywhere]">
-                        {h.note}
-                      </div>
+                      <div className="min-w-0 break-words [overflow-wrap:anywhere]">{h.note}</div>
                     )}
                   </div>
                 </Card>
@@ -729,7 +1013,13 @@ export function WorkerEmploymentDrawer({
               Bản ghi luôn ở trạng thái Đã nghỉ và không được trùng thời gian với lịch sử khác.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveOldHistory();
+            }}
+          >
             <div className="space-y-1">
               <Label className="text-xs">Nhà máy *</Label>
               <Select
@@ -847,24 +1137,22 @@ export function WorkerEmploymentDrawer({
             <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs">Ngày vào *</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={oldHistoryForm.join_date}
                   max={oldHistoryForm.leave_date || todayIso()}
-                  onChange={(event) =>
-                    setOldHistoryForm((current) => ({ ...current, join_date: event.target.value }))
+                  onChange={(value) =>
+                    setOldHistoryForm((current) => ({ ...current, join_date: value }))
                   }
                 />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Ngày nghỉ *</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={oldHistoryForm.leave_date}
                   min={oldHistoryForm.join_date}
                   max={todayIso()}
-                  onChange={(event) =>
-                    setOldHistoryForm((current) => ({ ...current, leave_date: event.target.value }))
+                  onChange={(value) =>
+                    setOldHistoryForm((current) => ({ ...current, leave_date: value }))
                   }
                 />
               </div>
@@ -880,19 +1168,20 @@ export function WorkerEmploymentDrawer({
                 placeholder="Ví dụ: bổ sung hồ sơ làm việc trước đây..."
               />
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setOldHistoryOpen(false)}
-              disabled={oldHistorySaving}
-            >
-              Đóng
-            </Button>
-            <Button onClick={saveOldHistory} disabled={oldHistorySaving}>
-              {oldHistorySaving ? "Đang lưu..." : "Lưu lịch sử cũ"}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOldHistoryOpen(false)}
+                disabled={oldHistorySaving}
+              >
+                Đóng
+              </Button>
+              <Button type="submit" disabled={oldHistorySaving}>
+                {oldHistorySaving ? "Đang lưu..." : "Lưu lịch sử cũ"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -904,7 +1193,13 @@ export function WorkerEmploymentDrawer({
               Chỉnh sửa thông tin lịch sử đi làm của người lao động.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveEdit();
+            }}
+          >
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label className="text-xs">Họ tên (NM)</Label>
@@ -947,18 +1242,16 @@ export function WorkerEmploymentDrawer({
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Ngày vào</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={form.join_date}
-                  onChange={(e) => setForm((f) => ({ ...f, join_date: e.target.value }))}
+                  onChange={(v) => setForm((f) => ({ ...f, join_date: v }))}
                 />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Ngày nghỉ</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={form.leave_date}
-                  onChange={(e) => setForm((f) => ({ ...f, leave_date: e.target.value }))}
+                  onChange={(v) => setForm((f) => ({ ...f, leave_date: v }))}
                 />
               </div>
             </div>
@@ -1013,15 +1306,15 @@ export function WorkerEmploymentDrawer({
               </Label>
               <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} />
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingId(null)}>
-              Huỷ
-            </Button>
-            <Button onClick={saveEdit} disabled={saving}>
-              {saving ? "Đang lưu..." : "Lưu"}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingId(null)}>
+                Huỷ
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? "Đang lưu..." : "Lưu"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -1034,7 +1327,13 @@ export function WorkerEmploymentDrawer({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitAdvance();
+            }}
+          >
             <div className="rounded-xl border bg-muted/30 p-3 text-sm">
               <div className="font-semibold">
                 {user.full_name || user.username || "Người lao động"}
@@ -1114,19 +1413,256 @@ export function WorkerEmploymentDrawer({
                 placeholder="Ví dụ: ứng tiền sinh hoạt..."
               />
             </div>
-          </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAdvanceOpen(false)}>
-              Huỷ
-            </Button>
-            <Button
-              onClick={submitAdvance}
-              disabled={submittingAdvance || !isWorking || (!workerBank && !actorBank)}
-            >
-              {submittingAdvance ? "Đang gửi..." : "Gửi yêu cầu"}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setAdvanceOpen(false)}>
+                Huỷ
+              </Button>
+              <Button
+                type="submit"
+                disabled={submittingAdvance || !isWorking || (!workerBank && !actorBank)}
+              >
+                {submittingAdvance ? "Đang gửi..." : "Gửi yêu cầu"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={leaveOpen} onOpenChange={(v) => !leaveSaving && setLeaveOpen(v)}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Báo nghỉ nhà máy hiện tại</DialogTitle>
+            <DialogDescription>
+              Cập nhật ngày nghỉ cho bản ghi đang đi làm của người lao động.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitLeave();
+            }}
+          >
+            <div className="space-y-1">
+              <Label className="text-xs">Ngày nghỉ</Label>
+              <DateInput value={leaveDate} max={todayIso()} onChange={(v) => setLeaveDate(v)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Ghi chú</Label>
+              <Textarea
+                rows={3}
+                value={leaveNote}
+                onChange={(e) => setLeaveNote(e.target.value)}
+                placeholder="Ví dụ: nghỉ việc, chuyển nhà máy..."
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLeaveOpen(false)}
+                disabled={leaveSaving}
+              >
+                Huỷ
+              </Button>
+              <Button type="submit" disabled={leaveSaving}>
+                {leaveSaving ? "Đang lưu..." : "Xác nhận nghỉ"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={joinOpen} onOpenChange={(v) => !joinSaving && setJoinOpen(v)}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Báo đi làm nhà máy mới</DialogTitle>
+            <DialogDescription>
+              Tạo bản ghi đi làm mới. Cần báo nghỉ nhà máy cũ trước khi tạo.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitJoin();
+            }}
+          >
+            <div className="space-y-1">
+              <Label className="text-xs">Nhà máy *</Label>
+              <Select
+                value={joinForm.factory}
+                onValueChange={(v) => setJoinForm((f) => ({ ...f, factory: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn nhà máy" />
+                </SelectTrigger>
+                <SelectContent>
+                  {joinableFactories.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Nhà chính *</Label>
+                <Select
+                  value={joinForm.main_house}
+                  onValueChange={(v) => setJoinForm((f) => ({ ...f, main_house: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn nhà chính" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mainHouses.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Người tuyển *</Label>
+                <Select
+                  value={joinForm.recruiter_staff}
+                  onValueChange={(v) => setJoinForm((f) => ({ ...f, recruiter_staff: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn người tuyển" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {staffUsers.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.full_name || s.username || s.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Mã NV</Label>
+                <Input
+                  value={joinForm.employee_code}
+                  onChange={(e) => setJoinForm((f) => ({ ...f, employee_code: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Ngày vào *</Label>
+                <DateInput
+                  value={joinForm.join_date}
+                  max={todayIso()}
+                  onChange={(v) => setJoinForm((f) => ({ ...f, join_date: v }))}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Họ tên tại nhà máy</Label>
+              <Input
+                value={joinForm.worker_name_snapshot}
+                onChange={(e) =>
+                  setJoinForm((f) => ({ ...f, worker_name_snapshot: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">CCCD tại nhà máy</Label>
+              <Input
+                value={joinForm.worker_cccd_snapshot}
+                onChange={(e) =>
+                  setJoinForm((f) => ({
+                    ...f,
+                    worker_cccd_snapshot: e.target.value.replace(/[^\d]/g, ""),
+                  }))
+                }
+                inputMode="numeric"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Mã số thuế</Label>
+              <Input
+                value={joinForm.worker_tax_code_snapshot}
+                onChange={(e) =>
+                  setJoinForm((f) => ({
+                    ...f,
+                    worker_tax_code_snapshot: e.target.value.replace(/[^\d]/g, ""),
+                  }))
+                }
+                inputMode="numeric"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Ghi chú</Label>
+              <Textarea
+                rows={3}
+                value={joinForm.note}
+                onChange={(e) => setJoinForm((f) => ({ ...f, note: e.target.value }))}
+                placeholder="Tuỳ chọn"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setJoinOpen(false)}
+                disabled={joinSaving}
+              >
+                Huỷ
+              </Button>
+              <Button type="submit" disabled={joinSaving}>
+                {joinSaving ? "Đang lưu..." : "Tạo bản ghi"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={employeeCodeOpen}
+        onOpenChange={(v) => !employeeCodeSaving && setEmployeeCodeOpen(v)}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Cập nhật mã nhân viên</DialogTitle>
+            <DialogDescription>
+              Cập nhật mã NV cho hồ sơ và lịch sử đi làm gần nhất.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitEmployeeCode();
+            }}
+          >
+            <div className="space-y-1">
+              <Label className="text-xs">Mã nhân viên</Label>
+              <Input
+                value={employeeCodeForm}
+                onChange={(e) => setEmployeeCodeForm(e.target.value)}
+                placeholder="Nhập mã nhân viên"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEmployeeCodeOpen(false)}
+                disabled={employeeCodeSaving}
+              >
+                Huỷ
+              </Button>
+              <Button type="submit" disabled={employeeCodeSaving}>
+                {employeeCodeSaving ? "Đang lưu..." : "Lưu mã NV"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>

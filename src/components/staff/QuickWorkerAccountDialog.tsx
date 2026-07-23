@@ -36,6 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -672,14 +673,18 @@ function TextField({
   return (
     <div className="flex flex-col gap-1">
       <Label className="text-xs">{label}</Label>
-      <Input
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        inputMode={inputMode}
-        list={list}
-      />
+      {type === "date" ? (
+        <DateInput value={value} onChange={onChange} placeholder={placeholder} />
+      ) : (
+        <Input
+          type={type}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          inputMode={inputMode}
+          list={list}
+        />
+      )}
     </div>
   );
 }

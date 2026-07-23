@@ -5,6 +5,7 @@ import { pb, type UserRecord } from "@/lib/pocketbase";
 import { StatCard } from "@/components/ui/stat-card";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 
 function daysAgoIso(days: number) {
@@ -54,7 +55,9 @@ export function AccountActivityStats() {
         if (alive) setLoading(false);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const stats = useMemo(() => {
@@ -92,37 +95,42 @@ export function AccountActivityStats() {
     <section className="rounded-3xl bg-card p-3 shadow-soft">
       <div className="px-1 pb-2 pt-1">
         <div className="text-sm font-semibold tracking-tight">Thống kê tài khoản</div>
-        <div className="text-[11px] text-muted-foreground">
-          Đăng nhập theo khoảng thời gian
-        </div>
+        <div className="text-[11px] text-muted-foreground">Đăng nhập theo khoảng thời gian</div>
       </div>
 
       <Card className="space-y-2 p-3">
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <Label className="text-xs">Từ ngày</Label>
-            <Input
-              type="date"
-              value={from}
-              max={to}
-              onChange={(e) => setFrom(e.target.value)}
-            />
+            <DateInput value={from} max={to} onChange={(value) => setFrom(value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Đến ngày</Label>
-            <Input
-              type="date"
-              value={to}
-              min={from}
-              max={todayIso()}
-              onChange={(e) => setTo(e.target.value)}
-            />
+            <DateInput value={to} min={from} max={todayIso()} onChange={(value) => setTo(value)} />
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          <QuickBtn label="7 ngày" onClick={() => { setFrom(daysAgoIso(7)); setTo(todayIso()); }} />
-          <QuickBtn label="30 ngày" onClick={() => { setFrom(daysAgoIso(30)); setTo(todayIso()); }} />
-          <QuickBtn label="90 ngày" onClick={() => { setFrom(daysAgoIso(90)); setTo(todayIso()); }} />
+          <QuickBtn
+            label="7 ngày"
+            onClick={() => {
+              setFrom(daysAgoIso(7));
+              setTo(todayIso());
+            }}
+          />
+          <QuickBtn
+            label="30 ngày"
+            onClick={() => {
+              setFrom(daysAgoIso(30));
+              setTo(todayIso());
+            }}
+          />
+          <QuickBtn
+            label="90 ngày"
+            onClick={() => {
+              setFrom(daysAgoIso(90));
+              setTo(todayIso());
+            }}
+          />
         </div>
       </Card>
 

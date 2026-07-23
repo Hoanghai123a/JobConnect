@@ -14,6 +14,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -239,7 +240,8 @@ function NotebookPage() {
   const submitEntry = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseMoneyInput(fAmount);
-    const hasData = fDate || fCategory || fWorker || fOtherPerson.trim() || amount > 0 || fNote.trim();
+    const hasData =
+      fDate || fCategory || fWorker || fOtherPerson.trim() || amount > 0 || fNote.trim();
     if (!hasData) {
       toast.error("Cần nhập ít nhất 1 thông tin");
       return;
@@ -336,7 +338,12 @@ function NotebookPage() {
       subtitle="Ghi chú, ghi nợ theo ngày"
       right={
         <div className="flex gap-1.5">
-          <Button size="icon" variant="ghost" className="h-9 w-9 rounded-full" onClick={() => setShowCatMgr(true)}>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-9 w-9 rounded-full"
+            onClick={() => setShowCatMgr(true)}
+          >
             <Settings2 className="h-4 w-4" />
           </Button>
           <Button size="sm" className="h-9 rounded-full gap-1" onClick={openCreateForm}>
@@ -347,10 +354,30 @@ function NotebookPage() {
     >
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-2.5">
-        <StatCard label="Đang xử lý" value={stats.pending.toLocaleString("vi-VN")} icon={CircleDashed} tone="warning" />
-        <StatCard label="Đã xong" value={stats.done.toLocaleString("vi-VN")} icon={Check} tone="success" />
-        <StatCard label="Hủy" value={stats.cancelled.toLocaleString("vi-VN")} icon={Ban} tone="danger" />
-        <StatCard label="Khác" value={stats.other.toLocaleString("vi-VN")} icon={CircleHelp} tone="info" />
+        <StatCard
+          label="Đang xử lý"
+          value={stats.pending.toLocaleString("vi-VN")}
+          icon={CircleDashed}
+          tone="warning"
+        />
+        <StatCard
+          label="Đã xong"
+          value={stats.done.toLocaleString("vi-VN")}
+          icon={Check}
+          tone="success"
+        />
+        <StatCard
+          label="Hủy"
+          value={stats.cancelled.toLocaleString("vi-VN")}
+          icon={Ban}
+          tone="danger"
+        />
+        <StatCard
+          label="Khác"
+          value={stats.other.toLocaleString("vi-VN")}
+          icon={CircleHelp}
+          tone="info"
+        />
       </div>
 
       {/* Filters */}
@@ -365,28 +392,31 @@ function NotebookPage() {
 
       {/* Date range + category filter */}
       <div className="flex flex-wrap gap-2">
-        <Select value={catFilter || "__all__"} onValueChange={(v) => setCatFilter(v === "__all__" ? "" : v)}>
+        <Select
+          value={catFilter || "__all__"}
+          onValueChange={(v) => setCatFilter(v === "__all__" ? "" : v)}
+        >
           <SelectTrigger className="h-9 w-auto min-w-[120px] rounded-full text-xs">
             <SelectValue placeholder="Danh mục" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Tất cả</SelectItem>
             {categories.map((c) => (
-              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Input
-          type="date"
+        <DateInput
           value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
+          onChange={(v) => setDateFrom(v)}
           className="h-9 w-auto rounded-full text-xs"
           placeholder="Từ ngày"
         />
-        <Input
-          type="date"
+        <DateInput
           value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
+          onChange={(v) => setDateTo(v)}
           className="h-9 w-auto rounded-full text-xs"
           placeholder="Đến ngày"
         />
@@ -400,7 +430,11 @@ function NotebookPage() {
           icon={BookOpenText}
           title="Chưa có ghi chú"
           description="Nhấn 'Thêm' để tạo ghi chú đầu tiên."
-          action={<Button onClick={openCreateForm} size="sm" className="rounded-full gap-1"><Plus className="h-4 w-4" /> Thêm mới</Button>}
+          action={
+            <Button onClick={openCreateForm} size="sm" className="rounded-full gap-1">
+              <Plus className="h-4 w-4" /> Thêm mới
+            </Button>
+          }
         />
       ) : (
         <div className="space-y-2">
@@ -426,16 +460,23 @@ function NotebookPage() {
           <form onSubmit={submitEntry} className="space-y-3">
             <div>
               <Label className="text-xs">Ngày</Label>
-              <Input type="date" value={fDate} onChange={(e) => setFDate(e.target.value)} />
+              <DateInput value={fDate} onChange={(v) => setFDate(v)} />
             </div>
             <div>
               <Label className="text-xs">Danh mục</Label>
-              <Select value={fCategory || "__none__"} onValueChange={(v) => setFCategory(v === "__none__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Chọn danh mục" /></SelectTrigger>
+              <Select
+                value={fCategory || "__none__"}
+                onValueChange={(v) => setFCategory(v === "__none__" ? "" : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn danh mục" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">— Không chọn —</SelectItem>
                   {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -443,16 +484,18 @@ function NotebookPage() {
             {isStaffOrAdmin && (
               <div>
                 <Label className="text-xs">Người lao động</Label>
-                <WorkerSearchSelect
-                  workers={workers}
-                  value={fWorker}
-                  onChange={setFWorker}
-                />
+                <WorkerSearchSelect workers={workers} value={fWorker} onChange={setFWorker} />
               </div>
             )}
             <div>
-              <Label className="text-xs">{isStaffOrAdmin ? "Người khác (tự nhập)" : "Họ tên"}</Label>
-              <Input value={fOtherPerson} onChange={(e) => setFOtherPerson(e.target.value)} placeholder="Nhập họ tên" />
+              <Label className="text-xs">
+                {isStaffOrAdmin ? "Người khác (tự nhập)" : "Họ tên"}
+              </Label>
+              <Input
+                value={fOtherPerson}
+                onChange={(e) => setFOtherPerson(e.target.value)}
+                placeholder="Nhập họ tên"
+              />
             </div>
             <div>
               <Label className="text-xs">Số tiền</Label>
@@ -465,7 +508,12 @@ function NotebookPage() {
             </div>
             <div>
               <Label className="text-xs">Ghi chú</Label>
-              <Textarea value={fNote} onChange={(e) => setFNote(e.target.value)} placeholder="Nội dung ghi chú..." rows={3} />
+              <Textarea
+                value={fNote}
+                onChange={(e) => setFNote(e.target.value)}
+                placeholder="Nội dung ghi chú..."
+                rows={3}
+              />
             </div>
             <Button type="submit" className="w-full" disabled={sending}>
               {sending ? "Đang lưu..." : editingEntry ? "Cập nhật" : "Thêm mới"}
@@ -490,16 +538,25 @@ function NotebookPage() {
                 className="flex-1"
                 onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), createCategory())}
               />
-              <Button size="sm" onClick={createCategory} disabled={catSending || !newCatName.trim()}>
+              <Button
+                size="sm"
+                onClick={createCategory}
+                disabled={catSending || !newCatName.trim()}
+              >
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
             {categories.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Chưa có danh mục nào.</p>
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Chưa có danh mục nào.
+              </p>
             ) : (
               <div className="space-y-1">
                 {categories.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between rounded-xl border border-border px-3 py-2">
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between rounded-xl border border-border px-3 py-2"
+                  >
                     <span className="text-sm">{c.name}</span>
                     <button
                       type="button"
@@ -545,7 +602,9 @@ function EntryCard({
             {catName && (
               <>
                 <span className="opacity-40">&bull;</span>
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">{catName}</span>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">
+                  {catName}
+                </span>
               </>
             )}
           </div>
@@ -584,10 +643,18 @@ function EntryCard({
           ))}
         </div>
         <div className="flex gap-1">
-          <button type="button" onClick={onEdit} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted transition">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="rounded-full p-1.5 text-muted-foreground hover:bg-muted transition"
+          >
             <NotebookPen className="h-3.5 w-3.5" />
           </button>
-          <button type="button" onClick={onDelete} className="rounded-full p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition">
+          <button
+            type="button"
+            onClick={onDelete}
+            className="rounded-full p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition"
+          >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -647,7 +714,12 @@ function WorkerSearchSelect({
         <span className={selectedWorker ? "" : "text-muted-foreground"}>
           {selectedWorker ? selectedWorker.full_name || selectedWorker.username : "Chọn NLĐ"}
         </span>
-        <svg className="h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg
+          className="h-4 w-4 text-muted-foreground"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
@@ -666,7 +738,11 @@ function WorkerSearchSelect({
           <div className="max-h-48 overflow-y-auto px-1 pb-1">
             <button
               type="button"
-              onClick={() => { onChange(""); setOpen(false); setQuery(""); }}
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+                setQuery("");
+              }}
               className="w-full rounded-lg px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted transition"
             >
               — Không chọn —
@@ -678,7 +754,11 @@ function WorkerSearchSelect({
                 <button
                   key={w.id}
                   type="button"
-                  onClick={() => { onChange(w.id); setOpen(false); setQuery(""); }}
+                  onClick={() => {
+                    onChange(w.id);
+                    setOpen(false);
+                    setQuery("");
+                  }}
                   className={cn(
                     "w-full rounded-lg px-3 py-2 text-left text-sm transition",
                     w.id === value ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted",

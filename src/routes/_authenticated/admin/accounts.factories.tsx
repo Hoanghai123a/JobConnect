@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
@@ -460,13 +461,12 @@ function AccountStaffFactoriesPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Từ ngày</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={editingAssignment?.active_from || ""}
-                  onChange={(event) =>
+                  onChange={(v) =>
                     setEditingAssignment((current) => ({
                       ...(current || {}),
-                      active_from: event.target.value,
+                      active_from: v,
                     }))
                   }
                   className="rounded-xl"
@@ -474,13 +474,12 @@ function AccountStaffFactoriesPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Đến ngày</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={editingAssignment?.active_to || ""}
-                  onChange={(event) =>
+                  onChange={(v) =>
                     setEditingAssignment((current) => ({
                       ...(current || {}),
-                      active_to: event.target.value,
+                      active_to: v,
                     }))
                   }
                   className="rounded-xl"

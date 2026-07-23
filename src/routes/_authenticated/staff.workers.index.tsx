@@ -320,11 +320,15 @@ function StaffWorkersPage() {
         factories={factories}
         mainHouses={mainHouses}
         users={staffUsers}
+        managedFactoryIds={managedFactoryIds}
         permissions={{
           canEditHistory: selected?.canEditHistory ?? false,
           canAddOldHistory: user?.role === "admin",
           canReportAdvance: selected?.canReportAdvance ?? false,
           canUpdateBank: selected?.canUpdateBank ?? false,
+          canReportLeave: selected?.canReportLeave ?? false,
+          canReportJoin: selected?.canReportJoin ?? false,
+          canViewPayroll: selected?.canViewPayroll ?? false,
         }}
         open={drawerOpen}
         onClose={closeDrawer}
@@ -349,7 +353,7 @@ function StaffWorkersPage() {
         actor={user as UserRecord}
         onClose={() => setRegisterOpen(false)}
         users={staffUsers}
-        factories={factories.filter((f) => managedFactoryIds.has(f.id))}
+        factories={factories}
         mainHouses={mainHouses}
         onCreated={loadWorkers}
         defaultRecruiterId={user?.id || ""}

@@ -321,11 +321,15 @@ function StaffRecruitedPage() {
         factories={factories}
         mainHouses={mainHouses}
         users={staffUsers}
+        managedFactoryIds={managedFactoryIds}
         permissions={{
           canEditHistory: selected?.canEditHistory ?? false,
           canAddOldHistory: user?.role === "admin",
           canReportAdvance: selected?.canReportAdvance ?? false,
           canUpdateBank: selected?.canUpdateBank ?? false,
+          canReportLeave: selected?.canReportLeave ?? false,
+          canReportJoin: selected?.canReportJoin ?? false,
+          canViewPayroll: selected?.canViewPayroll ?? false,
         }}
         open={drawerOpen}
         onClose={closeDrawer}

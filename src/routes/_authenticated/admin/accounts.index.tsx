@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/select";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { escapePb } from "@/lib/delegations";
+import { updateUserAndCache } from "@/lib/employment";
+import { createStaffActionLog } from "@/lib/staff-log";
 import { VN_BANKS } from "@/lib/vn-banks";
 
 function userSearchFilter(search: string) {
@@ -52,7 +54,14 @@ function AdminAccountsPage() {
     bank_account_number: "",
     bank_account_name: "",
   });
+  const [profileForm, setProfileForm] = useState({
+    full_name: "",
+    cccd: "",
+    phone: "",
+    company: "",
+  });
   const [saving, setSaving] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -88,6 +97,12 @@ function AdminAccountsPage() {
       bank_account_number: user.bank_account_number || "",
       bank_account_name: user.bank_account_name || "",
     });
+    setProfileForm({
+      full_name: user.full_name || "",
+      cccd: user.cccd || "",
+      phone: user.phone || "",
+      company: user.company || "",
+    });
   };
 
   const saveBankUpdate = async () => {
@@ -104,6 +119,50 @@ function AdminAccountsPage() {
       toast.error(error?.message || "Không cập nhật được STK");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveProfileUpdate = async () => {
+    if (!detailUser) return;
+    const payload = {
+      full_name: profileForm.full_name.trim(),
+      cccd: profileForm.cccd.trim(),
+      phone: profileForm.phone.trim(),
+      company: profileForm.company.trim(),
+    };
+    if (!payload.full_name) {
+      toast.warning("Vui lòng nhập họ tên");
+      return;
+    }
+    const before = {
+      full_name: detailUser.full_name || "",
+      cccd: detailUser.cccd || "",
+      phone: detailUser.phone || "",
+      company: detailUser.company || "",
+    };
+    setSavingProfile(true);
+    try {
+      await updateUserAndCache(detailUser.id, payload);
+      const actor = pb.authStore.record as UserRecord | null;
+      await createStaffActionLog({
+        actor,
+        targetUserId: detailUser.id,
+        targetCollection: "users",
+        targetRecord: detailUser.id,
+        action: "update",
+        before,
+        after: payload,
+        note: "Admin cập nhật thông tin cá nhân",
+      });
+      setUsers((prev) =>
+        prev.map((u) => (u.id === detailUser.id ? { ...u, ...payload } : u)),
+      );
+      setDetailUser((prev) => (prev ? { ...prev, ...payload } : prev));
+      toast.success("Đã cập nhật thông tin cá nhân");
+    } catch (error: any) {
+      toast.error(error?.message || "Không cập nhật được thông tin");
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -214,31 +273,72 @@ function AdminAccountsPage() {
           </DrawerHeader>
           {detailUser && (
             <div className="space-y-4 overflow-y-auto px-4 pb-4">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="rounded-2xl bg-muted/35 p-3">
-                  <div className="text-[11px] text-muted-foreground">Họ tên</div>
-                  <div className="mt-1 text-sm font-semibold">
-                    {detailUser.full_name || "Chưa có"}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  Thông tin cá nhân
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Họ tên</Label>
+                    <Input
+                      value={profileForm.full_name}
+                      onChange={(e) =>
+                        setProfileForm((c) => ({ ...c, full_name: e.target.value }))
+                      }
+                      placeholder="Nhập họ tên"
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">CCCD</Label>
+                    <Input
+                      value={profileForm.cccd}
+                      onChange={(e) =>
+                        setProfileForm((c) => ({
+                          ...c,
+                          cccd: e.target.value.replace(/\D/g, ""),
+                        }))
+                      }
+                      inputMode="numeric"
+                      placeholder="Nhập số CCCD"
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Điện thoại</Label>
+                    <Input
+                      value={profileForm.phone}
+                      onChange={(e) =>
+                        setProfileForm((c) => ({
+                          ...c,
+                          phone: e.target.value.replace(/\D/g, ""),
+                        }))
+                      }
+                      inputMode="tel"
+                      placeholder="Nhập số điện thoại"
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Công ty</Label>
+                    <Input
+                      value={profileForm.company}
+                      onChange={(e) =>
+                        setProfileForm((c) => ({ ...c, company: e.target.value }))
+                      }
+                      placeholder="Nhập công ty"
+                      className="rounded-xl"
+                    />
                   </div>
                 </div>
-                <div className="rounded-2xl bg-muted/35 p-3">
-                  <div className="text-[11px] text-muted-foreground">CCCD</div>
-                  <div className="mt-1 text-sm font-semibold">
-                    {detailUser.cccd || "Chưa có"}
-                  </div>
-                </div>
-                <div className="rounded-2xl bg-muted/35 p-3">
-                  <div className="text-[11px] text-muted-foreground">Điện thoại</div>
-                  <div className="mt-1 text-sm font-semibold">
-                    {detailUser.phone || "Chưa có"}
-                  </div>
-                </div>
-                <div className="rounded-2xl bg-muted/35 p-3">
-                  <div className="text-[11px] text-muted-foreground">Công ty</div>
-                  <div className="mt-1 text-sm font-semibold">
-                    {detailUser.company || "Chưa có"}
-                  </div>
-                </div>
+                <Button
+                  onClick={saveProfileUpdate}
+                  disabled={savingProfile}
+                  className="w-full rounded-xl"
+                >
+                  {savingProfile ? "Đang lưu..." : "Lưu thông tin cá nhân"}
+                </Button>
               </div>
 
               <div className="space-y-3">
