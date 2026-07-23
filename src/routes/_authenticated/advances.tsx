@@ -1,8 +1,21 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
+import {
+  type AdvanceRecord,
+  type AdvanceStatus,
+  type RecoveryStatus,
+  type AdminTab,
+  ADVANCE_TAB_FILTERS,
+  LEGACY_STAFF_REQUESTED_PENDING_FILTER,
+  STATUS_META,
+  RECOVERY_META,
+  joinPbFilters,
+  buildAdvanceFilter,
+  formatMoney,
+} from "@/lib/advances";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
@@ -11,9 +24,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { UserCombobox } from "@/components/users/UserCombobox";
 import {
   Select,
   SelectContent,
@@ -28,20 +41,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { exportToExcel } from "@/lib/excel";
-import { fetchReceivedDelegations, relationInFilter } from "@/lib/delegations";
+import { exportToExcel, formatDateOnly } from "@/lib/excel";
+import { escapePb } from "@/lib/delegations";
+import { markSeen } from "@/lib/seen";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
-import { VN_BANKS } from "@/lib/vn-banks";
+import { createStaffActionLog } from "@/lib/staff-log";
+import { findActiveEmploymentByUser } from "@/lib/employment";
+import { fetchFactories, type FactoryRecord } from "@/lib/factories";
+import { VN_BANKS, buildVietQrUrl, resolveBankName } from "@/lib/vn-banks";
 import { toast } from "sonner";
 import {
   Banknote,
   Check,
+  ChevronLeft,
   ChevronRight,
+  RotateCcw,
   Clock,
   FileDown,
   History,
+  Pencil,
   Send,
   ShieldCheck,
+  SlidersHorizontal,
   TriangleAlert,
   Wallet,
   X,
@@ -52,193 +73,398 @@ export const Route = createFileRoute("/_authenticated/advances")({
   component: AdvancesPage,
 });
 
-type AdvanceStatus = "pending" | "accepted" | "rejected";
-type RecoveryStatus = "none" | "recovered" | "unrecoverable";
-type AdminTab = "pending" | "accepted" | "recovered" | "unrecoverable" | "rejected" | "all";
+const TRANSFER_DESCRIPTION_STORAGE_KEY = "jobconnect.advanceTransferDescriptionTemplate";
+const ADVANCE_FILTERS_STORAGE_KEY = "jobconnect.advanceFilters";
+const DEFAULT_TRANSFER_DESCRIPTION_TEMPLATE = "Giải ngân ứng + tên";
 
-type AdvanceRecord = {
-  id: string;
-  user?: string;
-  requested_by?: string;
-  expand?: {
-    requested_by?: UserRecord;
+type DisbursementFilter = "all" | "yes" | "no";
+
+type StoredAdvanceFilters = {
+  search?: string;
+  tab?: AdminTab;
+  dateFrom?: string;
+  dateTo?: string;
+  factoryFilter?: string;
+  disbursementFilter?: DisbursementFilter;
+  showFilters?: boolean;
+};
+
+type AdvanceSummary = {
+  count: number;
+  total: number;
+};
+
+function emptyAdvanceSummaries(): Record<AdminTab, AdvanceSummary> {
+  return {
+    pending: { count: 0, total: 0 },
+    recruiter_approved: { count: 0, total: 0 },
+    accepted: { count: 0, total: 0 },
+    recovered: { count: 0, total: 0 },
+    unrecoverable: { count: 0, total: 0 },
+    rejected: { count: 0, total: 0 },
+    all: { count: 0, total: 0 },
   };
-  employee_code: string;
-  full_name: string;
-  company: string;
-  phone: string;
-  bank_name?: string;
-  bank_account_number?: string;
-  bank_account_name?: string;
-  amount: number;
-  reason: string;
-  status?: AdvanceStatus;
-  recovery_status?: RecoveryStatus;
-  admin_note?: string;
-  recovery_note?: string;
-  resolved_at?: string;
-  recovered_at?: string;
-  created: string;
-};
+}
 
-const STATUS_META: Record<
-  AdvanceStatus,
-  { label: string; tone: "warning" | "success" | "danger" }
-> = {
-  pending: { label: "Chờ duyệt", tone: "warning" },
-  accepted: { label: "Đã tiếp nhận", tone: "success" },
-  rejected: { label: "Đã từ chối", tone: "danger" },
-};
+function statValue(summary: AdvanceSummary) {
+  return (
+    <span className="block text-[15px] leading-tight sm:text-base">
+      SL:{summary.count} - {formatMoney(summary.total)}đ
+    </span>
+  );
+}
 
-const RECOVERY_META: Record<
-  RecoveryStatus,
-  { label: string; tone: "neutral" | "success" | "danger" }
-> = {
-  none: { label: "Chờ thu hồi", tone: "neutral" },
-  recovered: { label: "Đã thu hồi", tone: "success" },
-  unrecoverable: { label: "Không thu hồi", tone: "danger" },
-};
+function removeVietnameseTone(value: string) {
+  return value
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function buildTransferDescription(template: string, fullName?: string) {
+  const name = fullName?.trim() || "";
+  const withName = template.replace(/\+\s*(?:tên|ten)/gi, name);
+  const normalized = removeVietnameseTone(withName).replace(/\s+/g, " ").trim();
+  return normalized || "Giai ngan ung";
+}
+
+function readStoredAdvanceFilters(): StoredAdvanceFilters {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(ADVANCE_FILTERS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as StoredAdvanceFilters;
+    const validTab = parsed.tab && parsed.tab in ADVANCE_TAB_FILTERS ? parsed.tab : undefined;
+    const validDisbursement: DisbursementFilter =
+      parsed.disbursementFilter === "yes" || parsed.disbursementFilter === "no"
+        ? parsed.disbursementFilter
+        : "all";
+    return {
+      search: parsed.search || "",
+      tab: validTab,
+      dateFrom: parsed.dateFrom || "",
+      dateTo: parsed.dateTo || "",
+      factoryFilter: parsed.factoryFilter || "all",
+      disbursementFilter: validDisbursement,
+      showFilters: Boolean(parsed.showFilters),
+    };
+  } catch {
+    return {};
+  }
+}
+
+async function loadAdvanceSummary(filter: string): Promise<AdvanceSummary> {
+  const rows = await pb.collection("advances").getFullList<Pick<AdvanceRecord, "amount">>({
+    filter,
+    fields: "amount",
+  });
+  return rows.reduce<AdvanceSummary>(
+    (summary, row) => ({
+      count: summary.count + 1,
+      total: summary.total + Number(row.amount || 0),
+    }),
+    { count: 0, total: 0 },
+  );
+}
 
 export function AdvancesPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isStaff } = useAuth();
   const { data: settings } = useAppSettings();
+  const [storedFilters] = useState(readStoredAdvanceFilters);
 
   const [items, setItems] = useState<AdvanceRecord[]>([]);
-  const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<AdminTab>("pending");
+  const [search, setSearch] = useState(storedFilters.search || "");
+  const [tab, setTab] = useState<AdminTab>(storedFilters.tab || "pending");
   const [showProfile, setShowProfile] = useState(false);
   const [sending, setSending] = useState(false);
   const [amountText, setAmountText] = useState("");
   const [reason, setReason] = useState("");
-  const [delegatedUsers, setDelegatedUsers] = useState<UserRecord[]>([]);
-  const [selectedAdvanceUserId, setSelectedAdvanceUserId] = useState(user?.id || "");
   const [bankForm, setBankForm] = useState({
     bank_name: "",
     bank_account_number: "",
     bank_account_name: "",
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
+  const [editAmountText, setEditAmountText] = useState("");
+  const [dateFrom, setDateFrom] = useState(storedFilters.dateFrom || "");
+  const [dateTo, setDateTo] = useState(storedFilters.dateTo || "");
+  const [factoryFilter, setFactoryFilter] = useState(storedFilters.factoryFilter || "all");
+  const [disbursementFilter, setDisbursementFilter] = useState<DisbursementFilter>(
+    storedFilters.disbursementFilter || "all",
+  );
+  const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [advanceDetail, setAdvanceDetail] = useState<AdvanceRecord | null>(null);
+  const [adminNoteDraft, setAdminNoteDraft] = useState("");
+  const [recoveryNoteDraft, setRecoveryNoteDraft] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [outstandingAmount, setOutstandingAmount] = useState(0);
+  const [stats, setStats] = useState<Record<AdminTab, AdvanceSummary>>(emptyAdvanceSummaries);
+  const [adminSegment, setAdminSegment] = useState<"workers" | "staff">("workers");
+  const [transferDescriptionTemplate, setTransferDescriptionTemplate] = useState(
+    DEFAULT_TRANSFER_DESCRIPTION_TEMPLATE,
+  );
+  const [showAllStats, setShowAllStats] = useState(false);
+  const [showFilters, setShowFilters] = useState(Boolean(storedFilters.showFilters));
 
-  const advanceUsers = useMemo(() => {
-    const self = user ? [user as UserRecord] : [];
-    const map = new Map<string, UserRecord>();
-    for (const item of [...self, ...delegatedUsers]) map.set(item.id, item);
-    return [...map.values()];
-  }, [delegatedUsers, user]);
-
-  const selectedAdvanceUser = useMemo(
-    () => advanceUsers.find((item) => item.id === selectedAdvanceUserId) || advanceUsers[0] || null,
-    [advanceUsers, selectedAdvanceUserId],
+  const selectedAdvanceUser = user as UserRecord | null;
+  const selectedFactoryName = useMemo(
+    () => factories.find((factory) => factory.id === factoryFilter)?.name || "",
+    [factories, factoryFilter],
   );
 
   useEffect(() => {
-    if (isAdmin || !user?.id) return;
-    const ids = advanceUsers.map((item) => item.id);
-    if (!selectedAdvanceUserId || !ids.includes(selectedAdvanceUserId)) {
-      setSelectedAdvanceUserId(user.id);
-    }
-  }, [advanceUsers, isAdmin, selectedAdvanceUserId, user?.id]);
+    setAdminNoteDraft(advanceDetail?.admin_note || "");
+    setRecoveryNoteDraft(advanceDetail?.recovery_note || "");
+  }, [advanceDetail?.id]);
 
   useEffect(() => {
-    if (isAdmin || !user?.id) return;
-    fetchReceivedDelegations(user.id, "advance")
-      .then((rows) =>
-        setDelegatedUsers(rows.map((row) => row.expand?.grantor).filter(Boolean) as UserRecord[]),
-      )
-      .catch(() => setDelegatedUsers([]));
-  }, [isAdmin, user?.id]);
+    try {
+      const stored = window.localStorage.getItem(TRANSFER_DESCRIPTION_STORAGE_KEY);
+      if (stored) setTransferDescriptionTemplate(stored);
+    } catch {
+      // localStorage can be unavailable in some browser modes; keep the default template.
+    }
+  }, []);
+
+  const updateTransferDescriptionTemplate = useCallback((value: string) => {
+    setTransferDescriptionTemplate(value);
+    try {
+      window.localStorage.setItem(TRANSFER_DESCRIPTION_STORAGE_KEY, value);
+    } catch {
+      // The current input state is still enough to build QR content.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        ADVANCE_FILTERS_STORAGE_KEY,
+        JSON.stringify({
+          search,
+          tab,
+          dateFrom,
+          dateTo,
+          factoryFilter,
+          disbursementFilter,
+          showFilters,
+        } satisfies StoredAdvanceFilters),
+      );
+    } catch {
+      // Filters still work for the current session when localStorage is unavailable.
+    }
+  }, [dateFrom, dateTo, disbursementFilter, factoryFilter, search, showFilters, tab]);
 
   useEffect(() => {
     if (!selectedAdvanceUser) return;
     setBankForm({
-      bank_name: selectedAdvanceUser.bank_name || "",
+      bank_name: resolveBankName(selectedAdvanceUser.bank_name || ""),
       bank_account_number: selectedAdvanceUser.bank_account_number || "",
       bank_account_name: selectedAdvanceUser.bank_account_name || "",
     });
-  }, [selectedAdvanceUser]);
+  }, [
+    selectedAdvanceUser?.id,
+    selectedAdvanceUser?.bank_name,
+    selectedAdvanceUser?.bank_account_number,
+    selectedAdvanceUser?.bank_account_name,
+  ]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setFactories([]);
+      setFactoryFilter("all");
+      return;
+    }
+
+    let active = true;
+    fetchFactories()
+      .then((rows) => {
+        if (active) setFactories(rows);
+      })
+      .catch((error: unknown) => {
+        toast.error((error as any)?.message || "Lỗi tải danh sách nhà máy");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAdmin]);
+
+  const handleAdvancesFilterError = useCallback(
+    (error: unknown) => {
+      if ((error as any)?.status === 400 && isAdmin && disbursementFilter !== "all") {
+        setDisbursementFilter("all");
+        toast.info("Bộ lọc 'giải ngân' không khả dụng trên máy chủ, đã đặt lại mặc định.");
+        return true;
+      }
+      return false;
+    },
+    [isAdmin, disbursementFilter],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const visibleUserIds = advanceUsers.map((item) => item.id);
-      const filter = isAdmin
-        ? ""
-        : relationInFilter("user", visibleUserIds.length ? visibleUserIds : [user?.id || ""]);
-      const res = await pb.collection("advances").getFullList({
-        filter,
+      const baseFilter = buildAdvanceFilter({
+        isAdmin,
+        isStaff,
+        userId: user?.id,
+        tab: isAdmin || isStaff ? tab : undefined,
+        dateFrom,
+        dateTo,
+        search,
+        factoryName: isAdmin ? selectedFactoryName : "",
+        disbursed: isAdmin ? disbursementFilter : "all",
+      });
+      const segmentFilter =
+        isAdmin && adminSegment === "staff"
+          ? joinPbFilters([baseFilter, 'recruiter_id=""', "requested_by=user"])
+          : isAdmin && adminSegment === "workers"
+            ? joinPbFilters([baseFilter, 'recruiter_id!=""'])
+            : baseFilter;
+      const res = await pb.collection("advances").getList(1, 300, {
+        filter: segmentFilter,
         sort: "-created",
         expand: "requested_by",
       });
-      setItems(res as unknown as AdvanceRecord[]);
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi tải Ứng lương");
+      const rows = res.items as unknown as AdvanceRecord[];
+      setItems(rows);
+      if (!isAdmin) {
+        const latestResolved = rows.reduce(
+          (max, row) => Math.max(max, row.resolved_at ? new Date(row.resolved_at).getTime() : 0),
+          0,
+        );
+        markSeen("advances", user?.id, latestResolved || Date.now());
+      }
+    } catch (error: unknown) {
+      if (handleAdvancesFilterError(error)) return;
+      toast.error((error as any)?.message || "Lỗi tải Ứng lương");
     } finally {
       setLoading(false);
     }
-  }, [advanceUsers, isAdmin, user?.id]);
+  }, [
+    adminSegment,
+    dateFrom,
+    dateTo,
+    disbursementFilter,
+    handleAdvancesFilterError,
+    isAdmin,
+    isStaff,
+    search,
+    selectedFactoryName,
+    tab,
+    user?.id,
+  ]);
+
+  const loadStats = useCallback(async () => {
+    const base = buildAdvanceFilter({
+      isAdmin,
+      isStaff,
+      userId: user?.id,
+      dateFrom,
+      dateTo,
+      search,
+      factoryName: isAdmin ? selectedFactoryName : "",
+      disbursed: isAdmin ? disbursementFilter : "all",
+    });
+    const segmentBase =
+      isAdmin && adminSegment === "staff"
+        ? joinPbFilters([base, 'recruiter_id=""', "requested_by=user"])
+        : isAdmin && adminSegment === "workers"
+          ? joinPbFilters([base, 'recruiter_id!=""'])
+          : base;
+    const withBase = (statusFilter: string) => joinPbFilters([segmentBase, statusFilter]);
+    const adminPendingFilter = `(status="recruiter_approved" || ${LEGACY_STAFF_REQUESTED_PENDING_FILTER})`;
+    try {
+      const [pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all] =
+        await Promise.all([
+          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.pending)),
+          loadAdvanceSummary(
+            withBase(isAdmin ? adminPendingFilter : ADVANCE_TAB_FILTERS.recruiter_approved),
+          ),
+          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.accepted)),
+          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.recovered)),
+          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.unrecoverable)),
+          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.rejected)),
+          loadAdvanceSummary(segmentBase),
+        ]);
+      setStats({ pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all });
+    } catch (error: unknown) {
+      if (handleAdvancesFilterError(error)) return;
+      throw error;
+    }
+  }, [
+    adminSegment,
+    dateFrom,
+    dateTo,
+    disbursementFilter,
+    handleAdvancesFilterError,
+    isAdmin,
+    isStaff,
+    search,
+    selectedFactoryName,
+    user?.id,
+  ]);
+
+  const loadOutstanding = useCallback(async () => {
+    if (!user?.id || isAdmin) {
+      setOutstandingAmount(0);
+      return;
+    }
+    const res = await pb.collection("advances").getList(1, 500, {
+      filter: joinPbFilters([
+        `user="${escapePb(user.id)}"`,
+        '(status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))',
+      ]),
+      fields: "amount",
+    });
+    setOutstandingAmount(
+      (res.items as unknown as Pick<AdvanceRecord, "amount">[]).reduce(
+        (sum, row) => sum + Number(row.amount || 0),
+        0,
+      ),
+    );
+  }, [isAdmin, user?.id]);
 
   useEffect(() => {
     load();
-  }, [load]);
+    loadStats().catch(() => {});
+  }, [load, loadStats]);
+
+  useEffect(() => {
+    loadOutstanding().catch(() => {});
+  }, [loadOutstanding]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [dateFrom, dateTo, disbursementFilter, factoryFilter, search, tab]);
 
   const limit = Number(settings.advance_limit || 0);
-  const outstanding = useMemo(() => {
-    return items.reduce((sum, row) => {
-      if (!isAdmin && selectedAdvanceUser?.id && row.user !== selectedAdvanceUser.id) return sum;
-      const status = row.status || "pending";
-      const recovery = row.recovery_status || "none";
-      if (status === "pending") return sum + Number(row.amount || 0);
-      if (status === "accepted" && recovery === "none") return sum + Number(row.amount || 0);
-      return sum;
-    }, 0);
-  }, [isAdmin, items, selectedAdvanceUser?.id]);
+  const outstanding = isAdmin ? 0 : outstandingAmount;
   const available = limit > 0 ? Math.max(0, limit - outstanding) : 0;
 
-  const filtered = useMemo(() => {
-    const from = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
-    const to = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
-    return items.filter((row) => {
-      const status = row.status || "pending";
-      const recovery = row.recovery_status || "none";
-      if (tab === "pending" && status !== "pending") return false;
-      if (tab === "accepted" && (status !== "accepted" || recovery !== "none")) return false;
-      if (tab === "recovered" && (status !== "accepted" || recovery !== "recovered")) return false;
-      if (tab === "unrecoverable" && (status !== "accepted" || recovery !== "unrecoverable")) {
-        return false;
-      }
-      if (tab === "rejected" && status !== "rejected") return false;
-      const createdAt = new Date(row.created).getTime();
-      if (from && createdAt < from) return false;
-      if (to && createdAt > to) return false;
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return (
-        row.full_name?.toLowerCase().includes(q) ||
-        row.employee_code?.toLowerCase().includes(q) ||
-        row.company?.toLowerCase().includes(q) ||
-        row.phone?.toLowerCase().includes(q) ||
-        row.bank_name?.toLowerCase().includes(q) ||
-        row.bank_account_number?.toLowerCase().includes(q) ||
-        row.bank_account_name?.toLowerCase().includes(q) ||
-        getAdvanceRequesterName(row).toLowerCase().includes(q) ||
-        getAdvanceRequesterMeta(row).toLowerCase().includes(q) ||
-        row.reason?.toLowerCase().includes(q) ||
-        String(row.amount || 0).includes(q)
-      );
-    });
-  }, [items, search, tab, dateFrom, dateTo]);
+  const filtered = items;
   const isActionable = (row: AdvanceRecord) => {
     const status = row.status || "pending";
     const recovery = row.recovery_status || "none";
+    if (isAdmin) {
+      return (
+        status === "pending" ||
+        status === "recruiter_approved" ||
+        (status === "accepted" && recovery === "none")
+      );
+    }
     return status === "pending" || (status === "accepted" && recovery === "none");
   };
   const selectableFiltered = useMemo(() => filtered.filter(isActionable), [filtered]);
   const selectedPendingCount = filtered.filter(
-    (row) => selectedIds.has(row.id) && (row.status || "pending") === "pending",
+    (row) =>
+      selectedIds.has(row.id) &&
+      (isAdmin
+        ? (row.status || "pending") === "pending" || row.status === "recruiter_approved"
+        : (row.status || "pending") === "pending"),
   ).length;
   const selectedRecoverableCount = filtered.filter(
     (row) =>
@@ -248,39 +474,51 @@ export function AdvancesPage() {
   ).length;
   const selectedActionableCount = selectedPendingCount + selectedRecoverableCount;
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent): Promise<boolean> => {
     e.preventDefault();
     const amount = parseMoneyInput(amountText);
     if (!amount) {
       toast.error("Số tiền xin ứng không được để trống");
-      return;
+      return false;
     }
     if (!reason.trim()) {
       toast.error("Lý do ứng không được để trống");
-      return;
+      return false;
     }
     if (!selectedAdvanceUser?.id) {
       toast.error("Chọn người báo ứng");
-      return;
+      return false;
     }
     if (limit <= 0) {
       toast.error("Admin chưa cài hạn mức Ứng lương");
-      return;
+      return false;
     }
     if (outstanding + amount > limit) {
       toast.error("Vượt hạn mức Ứng lương đang cài đặt");
-      return;
+      return false;
     }
 
     setSending(true);
     try {
+      const employment = await findActiveEmploymentByUser(selectedAdvanceUser.id);
+      if (!employment) {
+        toast.error("Bạn hiện không đang đi làm nhà máy nào, không thể báo ứng");
+        setSending(false);
+        return false;
+      }
+      const recruiterId = employment.recruiter_staff || "";
+      const factoryName = employment.expand?.factory?.name || selectedAdvanceUser.company || "";
+      const employeeCode = employment.employee_code || selectedAdvanceUser.employee_code || "";
+      const joinDate = employment.join_date || "";
       await pb.collection("advances").create({
         user: selectedAdvanceUser.id,
         requested_by: user?.id || selectedAdvanceUser.id,
-        employee_code: selectedAdvanceUser.employee_code || "",
+        recruiter_id: recruiterId,
+        employee_code: employeeCode,
         full_name: selectedAdvanceUser.full_name || "",
-        company: selectedAdvanceUser.company || "",
+        company: factoryName,
         phone: selectedAdvanceUser.phone || "",
+        join_date: joinDate,
         bank_name: bankForm.bank_name || "",
         bank_account_number: bankForm.bank_account_number || "",
         bank_account_name: bankForm.bank_account_name || "",
@@ -293,8 +531,11 @@ export function AdvancesPage() {
       setAmountText("");
       setReason("");
       load();
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi gửi Ứng lương");
+      loadOutstanding().catch(() => {});
+      return true;
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi gửi Ứng lương");
+      return false;
     } finally {
       setSending(false);
     }
@@ -304,24 +545,39 @@ export function AdvancesPage() {
     await pb.collection("advances").update(id, payload);
   };
 
-  const bulkUpdate = async (status: Exclude<AdvanceStatus, "pending">) => {
+  const bulkUpdate = async (status: Exclude<AdvanceStatus, "pending" | "recruiter_approved">) => {
     const rows = filtered.filter(
-      (row) => selectedIds.has(row.id) && (row.status || "pending") === "pending",
+      (row) =>
+        selectedIds.has(row.id) &&
+        (isAdmin
+          ? (row.status || "pending") === "pending" || row.status === "recruiter_approved"
+          : (row.status || "pending") === "pending"),
     );
     if (!rows.length) return;
     try {
       for (const row of rows) {
-        await updateRow(row.id, {
+        const after = {
           status,
           resolved_at: new Date().toISOString(),
           admin_note: row.admin_note || "",
+        };
+        await updateRow(row.id, after);
+        await createStaffActionLog({
+          actor: user,
+          targetUserId: row.user,
+          targetCollection: "advances",
+          targetRecord: row.id,
+          action: "update",
+          before: { status: row.status || "pending" },
+          after,
+          note: status === "accepted" ? "Admin duyệt báo ứng" : "Admin từ chối báo ứng",
         });
       }
       toast.success(status === "accepted" ? "Đã duyệt" : "Đã từ chối");
       setSelectedIds(new Set());
       load();
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi xử lý hàng loạt");
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi xử lý hàng loạt");
     }
   };
 
@@ -335,9 +591,23 @@ export function AdvancesPage() {
     if (!rows.length) return;
     try {
       for (const row of rows) {
-        await updateRow(row.id, {
+        const after = {
           recovery_status: recoveryStatus,
           recovered_at: recoveryStatus === "recovered" ? new Date().toISOString() : "",
+        };
+        await updateRow(row.id, after);
+        await createStaffActionLog({
+          actor: user,
+          targetUserId: row.user,
+          targetCollection: "advances",
+          targetRecord: row.id,
+          action: "update",
+          before: { recovery_status: row.recovery_status || "none" },
+          after,
+          note:
+            recoveryStatus === "recovered"
+              ? "Admin đánh dấu đã thu hồi"
+              : "Admin đánh dấu không thu hồi",
         });
       }
       toast.success(
@@ -345,8 +615,8 @@ export function AdvancesPage() {
       );
       setSelectedIds(new Set());
       load();
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi xử lý hàng loạt");
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi xử lý hàng loạt");
     }
   };
 
@@ -355,185 +625,264 @@ export function AdvancesPage() {
     recoveryStatus: Exclude<RecoveryStatus, "none">,
   ) => {
     try {
-      await updateRow(row.id, {
+      const after = {
         recovery_status: recoveryStatus,
         recovered_at: recoveryStatus === "recovered" ? new Date().toISOString() : "",
+      };
+      await updateRow(row.id, after);
+      await createStaffActionLog({
+        actor: user,
+        targetUserId: row.user,
+        targetCollection: "advances",
+        targetRecord: row.id,
+        action: "update",
+        before: { recovery_status: row.recovery_status || "none" },
+        after,
+        note:
+          recoveryStatus === "recovered"
+            ? "Admin đánh dấu đã thu hồi"
+            : "Admin đánh dấu không thể thu hồi",
       });
       toast.success(
         recoveryStatus === "recovered" ? "Đã đánh dấu thu hồi" : "Đã đánh dấu không thể thu hồi",
       );
       load();
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi");
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi");
+    }
+  };
+
+  const setDisbursed = async (row: AdvanceRecord, disbursed: boolean) => {
+    try {
+      const after = {
+        disbursed,
+        disbursed_at: disbursed ? new Date().toISOString() : "",
+      };
+      await updateRow(row.id, after);
+      await createStaffActionLog({
+        actor: user,
+        targetUserId: row.user,
+        targetCollection: "advances",
+        targetRecord: row.id,
+        action: "update",
+        before: { disbursed: Boolean(row.disbursed) },
+        after,
+        note: disbursed ? "Admin đánh dấu đã giải ngân" : "Admin hoàn tác giải ngân",
+      });
+      setAdvanceDetail((current) =>
+        current && current.id === row.id ? { ...current, ...after } : current,
+      );
+      toast.success(disbursed ? "Đã đánh dấu giải ngân" : "Đã hoàn tác giải ngân");
+      load();
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi");
+    }
+  };
+
+  const saveEditedAmount = async (row: AdvanceRecord) => {
+    const newAmount = parseMoneyInput(editAmountText);
+    if (!newAmount || newAmount <= 0) {
+      toast.error("Số tiền không hợp lệ");
+      return;
+    }
+    if (newAmount === row.amount) {
+      setEditingAmountId(null);
+      return;
+    }
+    try {
+      const payload: Partial<AdvanceRecord> = {
+        amount: newAmount,
+        original_amount: row.original_amount || row.amount,
+      };
+      await updateRow(row.id, payload);
+      await createStaffActionLog({
+        actor: user,
+        targetUserId: row.user,
+        targetCollection: "advances",
+        targetRecord: row.id,
+        action: "update",
+        before: { amount: row.amount },
+        after: { amount: newAmount, original_amount: row.original_amount || row.amount },
+        note: `Admin sửa số tiền ứng: ${formatMoney(row.amount)} → ${formatMoney(newAmount)}`,
+      });
+      toast.success("Đã cập nhật số tiền");
+      setEditingAmountId(null);
+      load();
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi cập nhật số tiền");
+    }
+  };
+
+  const adminResolve = async (row: AdvanceRecord, newStatus: "accepted" | "rejected") => {
+    try {
+      const after = {
+        status: newStatus,
+        resolved_at: new Date().toISOString(),
+      };
+      await updateRow(row.id, after);
+      await createStaffActionLog({
+        actor: user,
+        targetUserId: row.user,
+        targetCollection: "advances",
+        targetRecord: row.id,
+        action: "update",
+        before: { status: row.status || "recruiter_approved" },
+        after,
+        note: newStatus === "accepted" ? "Admin tiếp nhận ứng lương" : "Admin từ chối ứng lương",
+      });
+      toast.success(newStatus === "accepted" ? "Đã tiếp nhận" : "Đã từ chối");
+      load();
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi xử lý");
     }
   };
 
   const exportCurrent = () => {
     const rows = filtered.map((row) => ({
       "Họ tên": row.full_name,
-      "Mã NV": row.employee_code,
+      "Mã nhân viên": row.employee_code,
       "Nhà máy": row.company,
-      SĐT: row.phone,
+      "Ngày vào làm": formatDateOnly(row.join_date),
+      "Số điện thoại": row.phone,
       "Người báo ứng": getAdvanceRequesterName(row),
-      "Mã NV người báo": getAdvanceRequesterField(row, "employee_code"),
+      "Mã nhân viên người báo": getAdvanceRequesterField(row, "employee_code"),
       "Nhà máy người báo": getAdvanceRequesterField(row, "company"),
-      "SĐT người báo": getAdvanceRequesterField(row, "phone"),
+      "Số điện thoại người báo": getAdvanceRequesterField(row, "phone"),
       "Ngân hàng": row.bank_name || "",
-      "Số TK": row.bank_account_number || "",
-      "Tên TK": row.bank_account_name || "",
+      "Số tài khoản": row.bank_account_number || "",
+      "Tên chủ tài khoản": row.bank_account_name || "",
       "Số tiền": row.amount,
+      "Số tiền ban đầu":
+        row.original_amount && row.original_amount !== row.amount ? row.original_amount : "",
       "Lý do": row.reason,
       "Trạng thái": STATUS_META[(row.status || "pending") as AdvanceStatus].label,
+      "Đã giải ngân": row.status === "accepted" ? (row.disbursed ? "Có" : "Không") : "",
       "Thu hồi": RECOVERY_META[(row.recovery_status || "none") as RecoveryStatus].label,
       "Ghi chú admin": row.admin_note || "",
+      "Ghi chú người tuyển": row.recruiter_note || "",
       "Ghi chú thu hồi": row.recovery_note || "",
-      "Ngày gửi": row.created,
-      "Ngày duyệt": row.resolved_at || "",
-      "Ngày thu hồi": row.recovered_at || "",
+      "Ngày gửi": formatDateOnly(row.created),
+      "Ngày duyệt": formatDateOnly(row.resolved_at),
+      "Ngày giải ngân": formatDateOnly(row.disbursed_at),
+      "Ngày thu hồi": formatDateOnly(row.recovered_at),
     }));
     exportToExcel(`ung_luong_${Date.now()}`, { "Ứng lương": rows });
   };
 
-  const stats = useMemo(
-    () => ({
-      pending: items.filter((row) => (row.status || "pending") === "pending").length,
-      accepted: items.filter(
-        (row) => row.status === "accepted" && (row.recovery_status || "none") === "none",
-      ).length,
-      rejected: items.filter((row) => row.status === "rejected").length,
-      recovered: items.filter(
-        (row) => row.status === "accepted" && row.recovery_status === "recovered",
-      ).length,
-      unrecoverable: items.filter(
-        (row) => row.status === "accepted" && row.recovery_status === "unrecoverable",
-      ).length,
-    }),
-    [items],
-  );
-
-  if (!isAdmin) {
+  if (!isAdmin && !isStaff) {
     return (
       <PageContainer title="Ứng lương" subtitle="Xin ứng lương & xem lịch sử">
         <AdvanceRulesCard rules={settings.advance_rules} />
-        <form onSubmit={submit} className="space-y-3">
-          <div className="card-soft space-y-3 rounded-2xl border bg-card p-4">
-            {advanceUsers.length > 1 && (
-              <div className="space-y-1">
-                <Label>Người báo ứng</Label>
-                <UserCombobox
-                  value={selectedAdvanceUserId}
-                  onChange={setSelectedAdvanceUserId}
-                  users={advanceUsers}
-                  currentUserId={user?.id}
-                  placeholder="Chọn người báo ứng"
-                />
-              </div>
-            )}
 
-            <button
-              type="button"
-              onClick={() => setShowProfile((v) => !v)}
-              className="flex w-full items-center justify-between rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm font-medium"
+        <Button className="w-full" onClick={() => setShowProfile(true)}>
+          <Send className="h-4 w-4" /> Báo ứng mới
+        </Button>
+
+        <Dialog open={showProfile} onOpenChange={setShowProfile}>
+          <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-[26rem] overflow-y-auto rounded-2xl p-4">
+            <DialogHeader>
+              <DialogTitle>Báo ứng mới</DialogTitle>
+              <DialogDescription>Nhập thông tin và gửi yêu cầu ứng lương.</DialogDescription>
+            </DialogHeader>
+            <form
+              onSubmit={async (e) => {
+                const ok = await submit(e);
+                if (ok) setShowProfile(false);
+              }}
+              className="min-w-0 space-y-3"
             >
-              <span>Thông tin người báo ứng</span>
-              <span className="text-xs text-muted-foreground">
-                {showProfile ? "Thu gọn" : "Xem"}
-              </span>
-            </button>
-            {showProfile && (
-              <div className="space-y-3">
-                <ReadOnlyField label="Mã NV" value={selectedAdvanceUser?.employee_code} />
-                <ReadOnlyField label="Họ và tên" value={selectedAdvanceUser?.full_name} />
-                <ReadOnlyField label="Nhà máy đang làm" value={selectedAdvanceUser?.company} />
-                <ReadOnlyField label="Số điện thoại liên hệ" value={selectedAdvanceUser?.phone} />
-              </div>
-            )}
+              <div className="min-w-0 space-y-3">
+                <UserProfileCollapsible user={selectedAdvanceUser} />
 
-            <div className="grid grid-cols-2 gap-2">
-              <StatCard
-                label="Hạn mức"
-                value={limit > 0 ? formatMoney(limit) : "Chưa cài"}
-                icon={Wallet}
-                tone="primary"
-              />
-              <StatCard
-                label="Đang dùng"
-                value={formatMoney(outstanding)}
-                icon={Banknote}
-                tone="warning"
-              />
-            </div>
-            <div className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-              Còn lại:{" "}
-              <span className="font-semibold text-foreground">
-                {limit > 0 ? formatMoney(available) : "—"}
-              </span>
-            </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <StatCard
+                    label="Hạn mức"
+                    value={limit > 0 ? formatMoney(limit) : "Chưa cài"}
+                    icon={Wallet}
+                    tone="primary"
+                  />
+                  <StatCard
+                    label="Đã báo ứng chưa thu hồi"
+                    value={formatMoney(outstanding)}
+                    icon={Banknote}
+                    tone="warning"
+                  />
+                </div>
+                <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2 text-xs text-muted-foreground">
+                  Còn có thể báo ứng:{" "}
+                  <span className="font-semibold text-foreground">
+                    {limit > 0 ? formatMoney(available) : "—"}
+                  </span>
+                </div>
 
-            <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
-              <div className="text-xs font-semibold text-muted-foreground">Tài khoản nhận tiền</div>
-              <div className="space-y-1">
-                <Label>Ngân hàng</Label>
-                <Select
-                  value={bankForm.bank_name || ""}
-                  onValueChange={(value) => setBankForm({ ...bankForm, bank_name: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn ngân hàng" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-72">
-                    {VN_BANKS.map((bank) => (
-                      <SelectItem key={bank.code} value={bank.name}>
-                        {bank.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
+                  <div className="text-xs font-semibold text-muted-foreground">
+                    Tài khoản nhận tiền
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Ngân hàng</Label>
+                    <Select
+                      value={bankForm.bank_name || ""}
+                      onValueChange={(value) => setBankForm({ ...bankForm, bank_name: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Chọn ngân hàng" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {VN_BANKS.map((bank) => (
+                          <SelectItem key={bank.code} value={bank.name}>
+                            {bank.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="min-w-0 space-y-1">
+                      <Label>Số TK</Label>
+                      <Input
+                        value={bankForm.bank_account_number}
+                        inputMode="numeric"
+                        onChange={(e) =>
+                          setBankForm({
+                            ...bankForm,
+                            bank_account_number: e.target.value.replace(/\D/g, ""),
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <Label>Tên TK</Label>
+                      <Input
+                        value={bankForm.bank_account_name}
+                        onChange={(e) =>
+                          setBankForm({ ...bankForm, bank_account_name: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-1">
-                  <Label>Số TK</Label>
+                  <Label>Số tiền xin ứng</Label>
                   <Input
-                    value={bankForm.bank_account_number}
+                    value={amountText}
+                    onChange={(e) => setAmountText(formatMoneyInput(e.target.value))}
                     inputMode="numeric"
-                    onChange={(e) =>
-                      setBankForm({
-                        ...bankForm,
-                        bank_account_number: e.target.value.replace(/\D/g, ""),
-                      })
-                    }
+                    placeholder="0"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>Tên TK</Label>
-                  <Input
-                    value={bankForm.bank_account_name}
-                    onChange={(e) =>
-                      setBankForm({ ...bankForm, bank_account_name: e.target.value })
-                    }
-                  />
+                  <Label>Lý do ứng</Label>
+                  <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
                 </div>
+                <Button type="submit" className="w-full" disabled={sending}>
+                  <Send className="h-4 w-4" /> {sending ? "Đang gửi…" : "Gửi Ứng lương"}
+                </Button>
               </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label>Số tiền xin ứng</Label>
-              <Input
-                value={amountText}
-                onChange={(e) => setAmountText(formatMoneyInput(e.target.value))}
-                inputMode="numeric"
-                placeholder="0"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Lý do ứng</Label>
-              <Textarea rows={4} value={reason} onChange={(e) => setReason(e.target.value)} />
-            </div>
-            <Button type="submit" className="w-full" disabled={sending}>
-              <Send className="h-4 w-4" /> {sending ? "Đang gửi…" : "Gửi Ứng lương"}
-            </Button>
-          </div>
-        </form>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         <div className="flex items-center gap-2 px-1 pt-2">
           <History className="h-4 w-4 text-muted-foreground" />
@@ -549,73 +898,59 @@ export function AdvancesPage() {
           items.map((row) => (
             <div
               key={row.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setAdvanceDetail(row)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setAdvanceDetail(row);
+                }
+              }}
               className={cn(
-                "list-card",
-                toneBorder[
-                  row.status === "accepted"
-                    ? "success"
-                    : row.status === "rejected"
-                      ? "danger"
-                      : "warning"
-                ],
+                "list-card cursor-pointer",
+                toneBorder[STATUS_META[(row.status || "pending") as AdvanceStatus].tone],
               )}
             >
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold">{formatMoney(row.amount)}</div>
+                  <div className="text-sm font-bold text-primary">{formatMoney(row.amount)}</div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {new Date(row.created).toLocaleString("vi-VN")}
                   </div>
                 </div>
                 <StatusChip
-                  tone={
-                    (row.status === "accepted"
-                      ? "success"
-                      : row.status === "rejected"
-                        ? "danger"
-                        : "warning") as any
-                  }
+                  tone={STATUS_META[(row.status || "pending") as AdvanceStatus].tone as any}
                 >
                   {STATUS_META[(row.status || "pending") as AdvanceStatus].label}
                 </StatusChip>
               </div>
-              <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed">{row.reason}</p>
-              {(row.bank_name || row.bank_account_number || row.bank_account_name) && (
-                <div className="mt-2 rounded-lg bg-muted/60 p-2 text-[12px] text-muted-foreground">
-                  Nhận tiền: {row.bank_name || "—"} · {row.bank_account_number || "—"} ·{" "}
-                  {row.bank_account_name || "—"}
-                </div>
-              )}
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                <StatusChip
-                  tone={
-                    RECOVERY_META[(row.recovery_status || "none") as RecoveryStatus].tone as any
-                  }
-                >
-                  {RECOVERY_META[(row.recovery_status || "none") as RecoveryStatus].label}
-                </StatusChip>
-              </div>
-              {(row.admin_note || row.recovery_note) && (
-                <div className="mt-2 space-y-2 rounded-lg bg-muted/60 p-2 text-[12px]">
-                  {row.admin_note && (
-                    <div>
-                      <div className="font-semibold text-muted-foreground">Phản hồi admin:</div>
-                      <div className="whitespace-pre-wrap">{row.admin_note}</div>
-                    </div>
-                  )}
-                  {row.recovery_note && (
-                    <div>
-                      <div className="font-semibold text-muted-foreground">Ghi chú thu hồi:</div>
-                      <div className="whitespace-pre-wrap">{row.recovery_note}</div>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           ))
         )}
+
+        <AdvanceDetailDialog
+          advanceDetail={advanceDetail}
+          setAdvanceDetail={setAdvanceDetail}
+          items={items}
+          isAdmin={false}
+          adminNoteDraft={adminNoteDraft}
+          setAdminNoteDraft={setAdminNoteDraft}
+          recoveryNoteDraft={recoveryNoteDraft}
+          setRecoveryNoteDraft={setRecoveryNoteDraft}
+          transferDescriptionTemplate={transferDescriptionTemplate}
+          savingNotes={savingNotes}
+          setSavingNotes={setSavingNotes}
+          updateRow={updateRow}
+          setDisbursed={setDisbursed}
+          load={load}
+        />
       </PageContainer>
     );
+  }
+
+  if (isStaff && !isAdmin) {
+    return <Navigate to="/staff/advances" />;
   }
 
   return (
@@ -633,39 +968,169 @@ export function AdvancesPage() {
       }
     >
       <AdvanceRulesCard rules={settings.advance_rules} />
-      <div className="grid grid-cols-2 gap-2">
-        <StatCard label="Chờ duyệt" value={stats.pending} icon={Clock} tone="warning" />
-        <StatCard label="Đã tiếp nhận" value={stats.accepted} icon={Check} tone="success" />
-        <StatCard label="Từ chối" value={stats.rejected} icon={X} tone="danger" />
-        <StatCard label="Đã thu hồi" value={stats.recovered} icon={ShieldCheck} tone="primary" />
-        <StatCard label="Không thu hồi" value={stats.unrecoverable} icon={X} tone="danger" />
+      <div className="flex gap-1 rounded-lg bg-muted p-1">
+        <button
+          type="button"
+          className={cn(
+            "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+            adminSegment === "workers"
+              ? "bg-background shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={() => setAdminSegment("workers")}
+        >
+          Ứng NLĐ
+        </button>
+        <button
+          type="button"
+          className={cn(
+            "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+            adminSegment === "staff"
+              ? "bg-background shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={() => setAdminSegment("staff")}
+        >
+          Ứng Staff
+        </button>
+      </div>
+      <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <StatCard
+            label="Chờ duyệt"
+            value={statValue(stats.recruiter_approved)}
+            icon={Clock}
+            tone="warning"
+          />
+          <StatCard
+            label="Đã tiếp nhận"
+            value={statValue(stats.accepted)}
+            icon={Check}
+            tone="success"
+          />
+          {showAllStats && (
+            <>
+              <StatCard label="Từ chối" value={statValue(stats.rejected)} icon={X} tone="danger" />
+              <StatCard
+                label="Đã thu hồi"
+                value={statValue(stats.recovered)}
+                icon={ShieldCheck}
+                tone="primary"
+              />
+              <StatCard
+                label="Không thu hồi"
+                value={statValue(stats.unrecoverable)}
+                icon={X}
+                tone="danger"
+              />
+            </>
+          )}
+        </div>
+        <div className="relative flex min-h-8 items-center justify-center">
+          <button
+            type="button"
+            className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+            onClick={() => setShowAllStats((value) => !value)}
+          >
+            {showAllStats ? "Thu gọn" : "Mở rộng"}
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "absolute right-0 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-soft transition",
+              showFilters
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card text-primary",
+            )}
+            onClick={() => setShowFilters((value) => !value)}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Bộ lọc
+          </button>
+        </div>
       </div>
 
       <FilterBar
-        search={search}
-        onSearchChange={setSearch}
-        placeholder="Tìm theo tên, mã NV, số tiền…"
         chips={[
-          { key: "pending", label: `Chờ (${stats.pending})` },
-          { key: "accepted", label: `Đã tiếp nhận (${stats.accepted})` },
-          { key: "recovered", label: `Đã thu hồi (${stats.recovered})` },
-          { key: "unrecoverable", label: `Không thu hồi (${stats.unrecoverable})` },
-          { key: "rejected", label: `Từ chối (${stats.rejected})` },
+          { key: "pending", label: `Chờ duyệt (${stats.recruiter_approved.count})` },
+          { key: "accepted", label: `Đã tiếp nhận (${stats.accepted.count})` },
+          { key: "recovered", label: `Đã thu hồi (${stats.recovered.count})` },
+          { key: "unrecoverable", label: `Không thu hồi (${stats.unrecoverable.count})` },
+          { key: "rejected", label: `Từ chối (${stats.rejected.count})` },
           { key: "all", label: "Tất cả" },
         ]}
         activeChip={tab}
         onChipChange={(v) => setTab(v as AdminTab)}
+        className="static -mx-1 bg-transparent px-0 py-0 backdrop-blur-0"
       />
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <Label className="text-xs">Từ ngày</Label>
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Đến ngày</Label>
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        </div>
+      <div className="space-y-2">
+        {showFilters && (
+          <div className="space-y-3 rounded-xl border bg-card p-3">
+            <FilterBar
+              search={search}
+              onSearchChange={setSearch}
+              placeholder="Tìm theo tên, mã NV, số tiền…"
+              className="static -mx-0 bg-transparent px-0 py-0 backdrop-blur-0"
+            />
+
+            <div className="space-y-1">
+              <Label className="text-xs">Nội dung chuyển khoản</Label>
+              <Input
+                value={transferDescriptionTemplate}
+                onChange={(e) => updateTransferDescriptionTemplate(e.target.value)}
+                placeholder="Ví dụ: Giải ngân ứng + tên"
+                className="h-10"
+              />
+              <div className="text-[11px] text-muted-foreground">
+                Dùng + tên để tự lấy họ tên trong từng card.
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="space-y-1 sm:col-span-1">
+                <Label className="text-xs">Nhà máy</Label>
+                <Select value={factoryFilter} onValueChange={setFactoryFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tất cả nhà máy" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả nhà máy</SelectItem>
+                    {factories.map((factory) => (
+                      <SelectItem key={factory.id} value={factory.id}>
+                        {[factory.code, factory.name].filter(Boolean).join(" - ")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Trạng thái giải ngân</Label>
+                <Select
+                  value={disbursementFilter}
+                  onValueChange={(v) => setDisbursementFilter(v as DisbursementFilter)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tất cả" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả</SelectItem>
+                    <SelectItem value="yes">Đã giải ngân</SelectItem>
+                    <SelectItem value="no">Chưa giải ngân</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Từ ngày</Label>
+                <DateInput value={dateFrom} onChange={(v) => setDateFrom(v)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Đến ngày</Label>
+                <DateInput value={dateTo} onChange={(v) => setDateTo(v)} />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {selectedActionableCount > 0 && (
@@ -722,7 +1187,7 @@ export function AdvancesPage() {
           icon={Wallet}
           title="Không có Ứng lương"
           description={
-            search || dateFrom || dateTo
+            search || dateFrom || dateTo || factoryFilter !== "all"
               ? "Không có kết quả phù hợp."
               : "Dữ liệu sẽ hiển thị ở đây."
           }
@@ -733,6 +1198,7 @@ export function AdvancesPage() {
           const recovery = (row.recovery_status || "none") as RecoveryStatus;
           const selectable = isActionable(row);
           const canRecover = status === "accepted" && recovery === "none";
+          const canAdminResolve = status === "pending" || status === "recruiter_approved";
           const requesterName = getAdvanceRequesterName(row);
           return (
             <div
@@ -772,8 +1238,63 @@ export function AdvancesPage() {
                   <div className="truncate text-sm font-semibold leading-tight">
                     {row.employee_code || "-"} - {row.full_name || "-"}
                   </div>
-                  <div className="mt-0.5 text-sm font-bold leading-tight text-primary">
-                    {formatMoney(row.amount)}
+                  <div className="mt-0.5 flex items-center gap-1">
+                    {editingAmountId === row.id ? (
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <Input
+                          value={editAmountText}
+                          onChange={(e) => setEditAmountText(formatMoneyInput(e.target.value))}
+                          inputMode="numeric"
+                          className="h-7 w-28 text-sm font-bold"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveEditedAmount(row);
+                            if (e.key === "Escape") setEditingAmountId(null);
+                          }}
+                        />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6"
+                          onClick={() => saveEditedAmount(row)}
+                        >
+                          <Check className="h-3.5 w-3.5 text-green-600" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6"
+                          onClick={() => setEditingAmountId(null)}
+                        >
+                          <X className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-sm font-bold leading-tight text-primary">
+                          {formatMoney(row.amount)}
+                        </span>
+                        {row.original_amount && row.original_amount !== row.amount && (
+                          <span className="text-[11px] text-muted-foreground line-through">
+                            {formatMoney(row.original_amount)}
+                          </span>
+                        )}
+                        {canAdminResolve && (
+                          <button
+                            type="button"
+                            className="ml-0.5 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            title="Sửa số tiền"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingAmountId(row.id);
+                              setEditAmountText(formatMoneyInput(String(row.amount)));
+                            }}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        )}
+                      </>
+                    )}
                   </div>
                   <div className="truncate text-[11px] leading-tight text-muted-foreground">
                     Báo ứng: {requesterName}
@@ -786,6 +1307,11 @@ export function AdvancesPage() {
                   <StatusChip tone={STATUS_META[status].tone}>
                     {STATUS_META[status].label}
                   </StatusChip>
+                  {status === "accepted" && (
+                    <StatusChip tone={row.disbursed ? "success" : "warning"}>
+                      {row.disbursed ? "Đã giải ngân" : "Chưa giải ngân"}
+                    </StatusChip>
+                  )}
                   {recovery !== "none" && (
                     <StatusChip tone={RECOVERY_META[recovery].tone as any}>
                       {RECOVERY_META[recovery].label}
@@ -794,7 +1320,7 @@ export function AdvancesPage() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                {status === "pending" && (
+                {canAdminResolve && (
                   <>
                     <Button
                       size="icon"
@@ -803,10 +1329,7 @@ export function AdvancesPage() {
                       aria-label="Tiếp nhận ứng lương"
                       onClick={(event) => {
                         event.stopPropagation();
-                        updateRow(row.id, {
-                          status: "accepted",
-                          resolved_at: new Date().toISOString(),
-                        }).then(load);
+                        adminResolve(row, "accepted");
                       }}
                     >
                       <Check className="h-3.5 w-3.5" />
@@ -819,10 +1342,7 @@ export function AdvancesPage() {
                       aria-label="Từ chối ứng lương"
                       onClick={(event) => {
                         event.stopPropagation();
-                        updateRow(row.id, {
-                          status: "rejected",
-                          resolved_at: new Date().toISOString(),
-                        }).then(load);
+                        adminResolve(row, "rejected");
                       }}
                     >
                       <X className="h-3.5 w-3.5" />
@@ -864,94 +1384,400 @@ export function AdvancesPage() {
         })
       )}
 
-      <Dialog open={!!advanceDetail} onOpenChange={(open) => !open && setAdvanceDetail(null)}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>Chi tiết ứng lương</DialogTitle>
-            <DialogDescription>Thông tin đầy đủ của yêu cầu ứng lương.</DialogDescription>
-          </DialogHeader>
-          {advanceDetail && (
-            <div className="space-y-3">
-              <div className="rounded-xl border bg-muted/30 p-3">
-                <div className="text-[11px] uppercase text-muted-foreground">Số tiền</div>
-                <div className="mt-1 text-2xl font-bold text-primary">
-                  {formatMoney(advanceDetail.amount)}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <AdvanceDetailCell label="Họ tên" value={advanceDetail.full_name} />
-                <AdvanceDetailCell label="Mã NV" value={advanceDetail.employee_code} />
-                <AdvanceDetailCell label="Nhà máy" value={advanceDetail.company} />
-                <AdvanceDetailCell
-                  label="Người báo ứng"
-                  value={getAdvanceRequesterName(advanceDetail)}
-                />
-                <AdvanceDetailCell
-                  label="Thông tin người báo ứng"
-                  value={getAdvanceRequesterMeta(advanceDetail)}
-                />
-                <AdvanceDetailCell
-                  label="Số điện thoại"
-                  value={
-                    advanceDetail.phone ? (
-                      <a
-                        href={`tel:${advanceDetail.phone.replace(/\s/g, "")}`}
-                        className="font-semibold text-primary underline-offset-2 hover:underline"
-                      >
-                        {advanceDetail.phone}
-                      </a>
-                    ) : (
-                      "-"
-                    )
-                  }
-                />
-                <AdvanceDetailCell
-                  label="Trạng thái"
-                  value={STATUS_META[(advanceDetail.status || "pending") as AdvanceStatus].label}
-                />
-                <AdvanceDetailCell
-                  label="Thu hồi"
-                  value={
-                    RECOVERY_META[(advanceDetail.recovery_status || "none") as RecoveryStatus].label
-                  }
-                />
-                <AdvanceDetailCell label="Ngày gửi" value={formatDateTime(advanceDetail.created)} />
-                <AdvanceDetailCell
-                  label="Ngày xử lý"
-                  value={formatDateTime(advanceDetail.resolved_at)}
-                />
-                <AdvanceDetailCell
-                  label="Ngày thu hồi"
-                  value={formatDateTime(advanceDetail.recovered_at)}
-                />
-              </div>
-
-              <div className="rounded-xl border bg-card p-3 text-sm">
-                <div className="text-[11px] text-muted-foreground">Tài khoản nhận tiền</div>
-                <div className="mt-1 font-medium">{advanceDetail.bank_name || "-"}</div>
-                <div className="mt-0.5 text-muted-foreground">
-                  {advanceDetail.bank_account_number || "-"} -{" "}
-                  {advanceDetail.bank_account_name || "-"}
-                </div>
-              </div>
-
-              <AdvanceTextBlock label="Lý do ứng" value={advanceDetail.reason} />
-              <AdvanceTextBlock label="Ghi chú admin" value={advanceDetail.admin_note} />
-              <AdvanceTextBlock label="Ghi chú thu hồi" value={advanceDetail.recovery_note} />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <AdvanceDetailDialog
+        advanceDetail={advanceDetail}
+        setAdvanceDetail={setAdvanceDetail}
+        items={filtered}
+        isAdmin={isAdmin}
+        adminNoteDraft={adminNoteDraft}
+        setAdminNoteDraft={setAdminNoteDraft}
+        recoveryNoteDraft={recoveryNoteDraft}
+        setRecoveryNoteDraft={setRecoveryNoteDraft}
+        transferDescriptionTemplate={transferDescriptionTemplate}
+        savingNotes={savingNotes}
+        setSavingNotes={setSavingNotes}
+        updateRow={updateRow}
+        setDisbursed={setDisbursed}
+        load={load}
+      />
     </PageContainer>
+  );
+}
+
+function AdvanceDetailDialog({
+  advanceDetail,
+  setAdvanceDetail,
+  items,
+  isAdmin,
+  adminNoteDraft,
+  setAdminNoteDraft,
+  recoveryNoteDraft,
+  setRecoveryNoteDraft,
+  transferDescriptionTemplate,
+  savingNotes,
+  setSavingNotes,
+  updateRow,
+  setDisbursed,
+  load,
+}: {
+  advanceDetail: AdvanceRecord | null;
+  setAdvanceDetail: (v: AdvanceRecord | null) => void;
+  items: AdvanceRecord[];
+  isAdmin: boolean;
+  adminNoteDraft: string;
+  setAdminNoteDraft: (v: string) => void;
+  recoveryNoteDraft: string;
+  setRecoveryNoteDraft: (v: string) => void;
+  transferDescriptionTemplate: string;
+  savingNotes: boolean;
+  setSavingNotes: (v: boolean) => void;
+  updateRow: (id: string, payload: Partial<AdvanceRecord>) => Promise<void>;
+  setDisbursed: (row: AdvanceRecord, disbursed: boolean) => Promise<void>;
+  load: () => void;
+}) {
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+  const [showQr, setShowQr] = useState(false);
+
+  useEffect(() => {
+    setShowQr(false);
+  }, [advanceDetail?.id]);
+
+  const status = advanceDetail?.status;
+  const disbursed = Boolean(advanceDetail?.disbursed);
+  const canDisburse = isAdmin && status === "accepted" && !disbursed;
+
+  const currentIndex = useMemo(() => {
+    if (!advanceDetail) return -1;
+    return items.findIndex((row) => row.id === advanceDetail.id);
+  }, [advanceDetail, items]);
+
+  const hasPrev = currentIndex > 0;
+  const hasNext = currentIndex >= 0 && currentIndex < items.length - 1;
+
+  const goPrev = useCallback(() => {
+    if (hasPrev) setAdvanceDetail(items[currentIndex - 1]);
+  }, [hasPrev, items, currentIndex, setAdvanceDetail]);
+
+  const goNext = useCallback(() => {
+    if (hasNext) setAdvanceDetail(items[currentIndex + 1]);
+  }, [hasNext, items, currentIndex, setAdvanceDetail]);
+
+  useEffect(() => {
+    if (!advanceDetail) return;
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        goPrev();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        if (canDisburse && advanceDetail) {
+          void setDisbursed(advanceDetail, true).then(goNext);
+        } else {
+          goNext();
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [advanceDetail, canDisburse, setDisbursed, goPrev, goNext]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    const diff = touchStartX.current - touchEndX.current;
+    const threshold = 50;
+    if (diff > threshold) goNext();
+    else if (diff < -threshold) goPrev();
+  };
+
+  return (
+    <Dialog open={!!advanceDetail} onOpenChange={(open) => !open && setAdvanceDetail(null)}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+        <DialogHeader>
+          <DialogTitle>Chi tiết ứng lương</DialogTitle>
+          <DialogDescription>
+            {currentIndex >= 0 && items.length > 1
+              ? `${currentIndex + 1} / ${items.length}`
+              : "Thông tin đầy đủ của yêu cầu ứng lương."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {(items.length > 1 || canDisburse) && (
+          <div className="flex items-center justify-between">
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-9 w-9 rounded-full"
+              disabled={!hasPrev}
+              onClick={goPrev}
+              aria-label="Card trước"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {canDisburse ? "Bấm → để đánh dấu đã giải ngân" : "Vuốt hoặc bấm mũi tên để chuyển"}
+            </span>
+            {canDisburse ? (
+              <Button
+                size="icon"
+                className="h-9 w-9 rounded-full"
+                onClick={async () => {
+                  if (!advanceDetail) return;
+                  await setDisbursed(advanceDetail, true);
+                  goNext();
+                }}
+                aria-label="Đánh dấu đã giải ngân & sang card tiếp"
+                title="Đánh dấu đã giải ngân & sang card tiếp"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-9 w-9 rounded-full"
+                disabled={!hasNext}
+                onClick={goNext}
+                aria-label="Card tiếp theo"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        )}
+
+        {advanceDetail && (
+          <div
+            className="space-y-3"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {" "}
+            <div className="rounded-xl border bg-muted/30 p-3">
+              <div className="text-sm font-semibold">{advanceDetail.full_name || "-"}</div>
+              <div className="text-[11px] text-muted-foreground">
+                {[advanceDetail.employee_code, advanceDetail.company].filter(Boolean).join(" - ") ||
+                  "-"}
+                {advanceDetail.phone && (
+                  <>
+                    {" - "}
+                    <a
+                      href={`tel:${advanceDetail.phone.replace(/\s/g, "")}`}
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      {advanceDetail.phone}
+                    </a>
+                  </>
+                )}
+              </div>
+              <div className="mt-2 text-2xl font-bold text-primary">
+                {formatMoney(advanceDetail.amount)}
+                {advanceDetail.original_amount &&
+                  advanceDetail.original_amount !== advanceDetail.amount && (
+                    <span className="ml-2 text-sm font-normal text-muted-foreground line-through">
+                      {formatMoney(advanceDetail.original_amount)}
+                    </span>
+                  )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 text-sm">
+              <AdvanceDetailCell
+                label="Người báo ứng"
+                value={getAdvanceRequesterName(advanceDetail)}
+              />
+              <AdvanceDetailCell
+                label="TT người báo"
+                value={getAdvanceRequesterMeta(advanceDetail)}
+              />
+              <AdvanceDetailCell
+                label="Trạng thái"
+                value={STATUS_META[(advanceDetail.status || "pending") as AdvanceStatus].label}
+              />
+              <AdvanceDetailCell
+                label="Thu hồi"
+                value={
+                  RECOVERY_META[(advanceDetail.recovery_status || "none") as RecoveryStatus].label
+                }
+              />
+              <AdvanceDetailCell label="Ngày gửi" value={formatDateTime(advanceDetail.created)} />
+              <AdvanceDetailCell
+                label="Ngày xử lý"
+                value={formatDateTime(advanceDetail.resolved_at)}
+              />
+              {advanceDetail.status === "accepted" && (
+                <AdvanceDetailCell
+                  label="Ngày giải ngân"
+                  value={formatDateTime(advanceDetail.disbursed_at)}
+                />
+              )}
+              <AdvanceDetailCell
+                label="Ngày thu hồi"
+                value={formatDateTime(advanceDetail.recovered_at)}
+              />
+            </div>
+            <div className="rounded-xl border bg-card p-3 text-sm">
+              <div className="text-[11px] text-muted-foreground">Tài khoản nhận tiền</div>
+              <div className="mt-1 font-medium">{advanceDetail.bank_name || "-"}</div>
+              <div className="mt-0.5 text-muted-foreground">
+                {advanceDetail.bank_account_number || "-"} -{" "}
+                {advanceDetail.bank_account_name || "-"}
+              </div>
+              {advanceDetail.status === "accepted" &&
+                (() => {
+                  const qrUrl = buildVietQrUrl({
+                    bankName: advanceDetail.bank_name || "",
+                    accountNumber: advanceDetail.bank_account_number || "",
+                    accountName: advanceDetail.bank_account_name,
+                    amount: advanceDetail.amount,
+                    description: buildTransferDescription(
+                      transferDescriptionTemplate,
+                      advanceDetail.full_name,
+                    ),
+                  });
+                  if (!qrUrl) return null;
+                  const qrBlock = (
+                    <div className="mt-3 flex flex-col items-center gap-2 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3">
+                      <div className="text-[11px] font-semibold text-primary">
+                        Mã QR chuyển khoản
+                      </div>
+                      <img
+                        src={qrUrl}
+                        alt="QR chuyển khoản"
+                        className="h-52 w-52 rounded-lg"
+                        loading="lazy"
+                      />
+                      <div className="text-center text-[11px] text-muted-foreground">
+                        Quét mã để chuyển {formatMoney(advanceDetail.amount)} VND
+                      </div>
+                    </div>
+                  );
+                  if (!disbursed) return qrBlock;
+                  return (
+                    <>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setShowQr((v) => !v)}>
+                          {showQr ? "Ẩn mã QR" : "Xem mã QR"}
+                        </Button>
+                        {isAdmin && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-amber-600 hover:text-amber-700"
+                            onClick={async () => {
+                              await setDisbursed(advanceDetail, false);
+                              setAdvanceDetail({
+                                ...advanceDetail,
+                                disbursed: false,
+                                disbursed_at: "",
+                              });
+                            }}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" /> Hoàn tác giải ngân
+                          </Button>
+                        )}
+                      </div>
+                      {showQr && qrBlock}
+                    </>
+                  );
+                })()}
+            </div>
+            <AdvanceTextBlock label="Lý do ứng" value={advanceDetail.reason} />
+            {isAdmin ? (
+              <form
+                className="space-y-0"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!advanceDetail) return;
+                  setSavingNotes(true);
+                  (async () => {
+                    try {
+                      const payload: Partial<AdvanceRecord> = {
+                        admin_note: adminNoteDraft,
+                      };
+                      if (advanceDetail.status === "accepted") {
+                        payload.recovery_note = recoveryNoteDraft;
+                      }
+                      await updateRow(advanceDetail.id, payload);
+                      toast.success("Đã lưu ghi chú");
+                      setAdvanceDetail({ ...advanceDetail, ...payload });
+                      load();
+                    } catch (error: unknown) {
+                      toast.error(error instanceof Error ? error.message : "Lỗi lưu ghi chú");
+                    } finally {
+                      setSavingNotes(false);
+                    }
+                  })();
+                }}
+              >
+                <div className="rounded-xl border bg-card p-3 text-sm">
+                  <Label className="text-[11px] text-muted-foreground">Ghi chú admin</Label>
+                  <Textarea
+                    rows={3}
+                    value={adminNoteDraft}
+                    onChange={(e) => setAdminNoteDraft(e.target.value)}
+                    className="mt-1"
+                    placeholder="Lý do duyệt/từ chối, ghi chú nội bộ…"
+                  />
+                </div>
+                {advanceDetail.status === "accepted" && (
+                  <div className="rounded-xl border bg-card p-3 text-sm">
+                    <Label className="text-[11px] text-muted-foreground">Ghi chú thu hồi</Label>
+                    <Textarea
+                      rows={3}
+                      value={recoveryNoteDraft}
+                      onChange={(e) => setRecoveryNoteDraft(e.target.value)}
+                      className="mt-1"
+                      placeholder="Tình trạng thu hồi, lý do không thu hồi…"
+                    />
+                  </div>
+                )}
+                <Button
+                  type="submit"
+                  className="mt-3 w-full"
+                  disabled={
+                    savingNotes ||
+                    (adminNoteDraft === (advanceDetail.admin_note || "") &&
+                      recoveryNoteDraft === (advanceDetail.recovery_note || ""))
+                  }
+                >
+                  {savingNotes ? "Đang lưu…" : "Lưu ghi chú"}
+                </Button>
+              </form>
+            ) : (
+              <>
+                <AdvanceTextBlock label="Ghi chú admin" value={advanceDetail.admin_note} />
+                <AdvanceTextBlock label="Ghi chú thu hồi" value={advanceDetail.recovery_note} />
+              </>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
 function AdvanceDetailCell({ label, value }: { label: string; value?: ReactNode }) {
   return (
-    <div className="rounded-xl border bg-card p-3">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className="mt-0.5 break-words text-sm font-semibold">{value || "-"}</div>
+    <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+      <div className="break-words text-xs font-medium">{value || "-"}</div>
     </div>
   );
 }
@@ -1053,6 +1879,26 @@ function ReadOnlyField({ label, value }: { label: string; value?: string | null 
   );
 }
 
-function formatMoney(value: number) {
-  return Number(value || 0).toLocaleString("vi-VN");
+function UserProfileCollapsible({ user }: { user: UserRecord | null }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl border bg-muted/30">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-3 py-2.5 text-sm font-medium"
+      >
+        <span>Thông tin người báo ứng</span>
+        <span className="text-xs text-muted-foreground">{open ? "Thu gọn" : "Xem"}</span>
+      </button>
+      {open && (
+        <div className="space-y-2 border-t px-3 pb-3 pt-2">
+          <ReadOnlyField label="Mã NV" value={user?.employee_code} />
+          <ReadOnlyField label="Họ và tên" value={user?.full_name} />
+          <ReadOnlyField label="Nhà máy đang làm" value={user?.company} />
+          <ReadOnlyField label="Số điện thoại liên hệ" value={user?.phone} />
+        </div>
+      )}
+    </div>
+  );
 }

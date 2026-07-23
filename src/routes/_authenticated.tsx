@@ -4,6 +4,7 @@ import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { isUserApproved } from "@/lib/user-approval";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { StaffRealtimeSyncGate } from "@/components/staff/StaffRealtimeSyncGate";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: ({ location }) => {
@@ -15,6 +16,9 @@ export const Route = createFileRoute("/_authenticated")({
     const u = pb.authStore.record as any;
     if (u && !isUserApproved(u)) {
       throw redirect({ to: "/pending" });
+    }
+    if (u?.must_change_password && !location.pathname.includes("force-change-password")) {
+      throw redirect({ to: "/force-change-password" });
     }
   },
   component: AuthLayout,
@@ -45,7 +49,10 @@ function AuthLayout() {
           Đang tải...
         </div>
       ) : (
-        <Outlet />
+        <>
+          <StaffRealtimeSyncGate />
+          <Outlet />
+        </>
       )}
       <BottomNav />
     </div>

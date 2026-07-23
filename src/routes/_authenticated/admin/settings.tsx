@@ -1,19 +1,26 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { pb, dataUrlToFile, fileUrl } from "@/lib/pocketbase";
+import { pb, dataUrlToFile, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";
-import { isUserApproved } from "@/lib/user-approval";
+import { createStaffActionLog } from "@/lib/staff-log";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { useQueryClient } from "@tanstack/react-query";
-import { DelegationPanel } from "@/components/delegations/DelegationPanel";
 import { AppHeader } from "@/components/layout/BottomNav";
+import { PushNotificationSettingsCard } from "@/components/layout/PushNotificationSettingsCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { FactoryManagersDialog } from "@/components/factories/FactoryManagersDialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
@@ -26,20 +33,19 @@ import { toast } from "sonner";
 import {
   Building2,
   Factory,
-  Users,
+  Home,
   Save,
   ImagePlus,
   Pencil,
   Trash2,
   Plus,
-  Check,
   X,
   ShieldCheck,
-  Search,
   Smartphone,
   CalendarDays,
   ChevronDown,
   MapPin,
+  Search,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({
@@ -55,16 +61,14 @@ function AdminSettingsPage() {
     <div>
       <AppHeader title="Cài đặt hệ thống" back />
       <div className="p-4">
+        <PushNotificationSettingsCard />
         <Tabs defaultValue="company" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 rounded-2xl">
+          <TabsList className="grid w-full grid-cols-2 rounded-2xl">
             <TabsTrigger value="company" className="rounded-xl text-xs">
               <Building2 className="mr-1 h-4 w-4" /> Công ty
             </TabsTrigger>
             <TabsTrigger value="factories" className="rounded-xl text-xs">
               <Factory className="mr-1 h-4 w-4" /> Nhà máy
-            </TabsTrigger>
-            <TabsTrigger value="users" className="rounded-xl text-xs">
-              <Users className="mr-1 h-4 w-4" /> Người dùng
             </TabsTrigger>
           </TabsList>
           <TabsContent value="company" className="mt-4">
@@ -72,9 +76,6 @@ function AdminSettingsPage() {
           </TabsContent>
           <TabsContent value="factories" className="mt-4">
             <FactoriesTab />
-          </TabsContent>
-          <TabsContent value="users" className="mt-4">
-            <UsersTab />
           </TabsContent>
         </Tabs>
       </div>
@@ -107,6 +108,7 @@ function CompanyTab() {
       about: settings.about || "",
       advance_limit: formatMoneyInput(settings.advance_limit || 0),
       advance_rules: settings.advance_rules || "",
+      account_code_prefix: settings.account_code_prefix || "",
     });
     setLogoPreview(logoUrl);
   }, [settings.id]);
@@ -194,6 +196,28 @@ function CompanyTab() {
         onChange={(v) => setForm({ ...form, hotline: v })}
       />
       <Field label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
+      <div>
+        <Label className="text-xs">Tiền tố UID</Label>
+        <Input
+          className="mt-1 rounded-xl uppercase"
+          placeholder="VD: HL"
+          maxLength={6}
+          value={form.account_code_prefix || ""}
+          onChange={(e) =>
+            setForm({
+              ...form,
+              account_code_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
+            })
+          }
+        />
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          UID sẽ có dạng{" "}
+          <span className="font-mono font-semibold">
+            {(form.account_code_prefix || "HL") + "000001"}
+          </span>{" "}
+          và tăng dần. Đổi tiền tố chỉ áp dụng cho UID cấp mới.
+        </p>
+      </div>
       <div>
         <Label className="text-xs">Hạn mức Ứng lương</Label>
         <Input
@@ -329,6 +353,7 @@ interface Factory {
   hotline?: string;
   note?: string;
   attendance_cutoff_day?: number;
+  status?: string;
 }
 
 interface RecruitmentArea {
@@ -337,21 +362,64 @@ interface RecruitmentArea {
   note?: string;
 }
 
+interface MainHouse {
+  id: string;
+  name: string;
+  address?: string;
+  hotline?: string;
+  note?: string;
+}
+
 function FactoriesTab() {
+  const currentUser = pb.authStore.record as UserRecord | null;
   const [items, setItems] = useState<Factory[]>([]);
   const [areas, setAreas] = useState<RecruitmentArea[]>([]);
+  const [mainHouses, setMainHouses] = useState<MainHouse[]>([]);
   const [editing, setEditing] = useState<Partial<Factory> | null>(null);
   const [editingArea, setEditingArea] = useState<Partial<RecruitmentArea> | null>(null);
+  const [editingMainHouse, setEditingMainHouse] = useState<Partial<MainHouse> | null>(null);
   const [loading, setLoading] = useState(false);
   const [areasLoading, setAreasLoading] = useState(false);
+  const [mainHousesLoading, setMainHousesLoading] = useState(false);
   const [factoriesOpen, setFactoriesOpen] = useState(true);
   const [areasOpen, setAreasOpen] = useState(true);
+  const [mainHousesOpen, setMainHousesOpen] = useState(true);
+  const [managingFactory, setManagingFactory] = useState<Factory | null>(null);
+  const [factorySearch, setFactorySearch] = useState("");
+  const [areaSearch, setAreaSearch] = useState("");
+  const [mainHouseSearch, setMainHouseSearch] = useState("");
+
+  const filteredFactories = items.filter((f) => {
+    if (!factorySearch.trim()) return true;
+    const q = factorySearch.toLowerCase();
+    return (
+      f.name.toLowerCase().includes(q) ||
+      (f.address || "").toLowerCase().includes(q) ||
+      (f.hotline || "").toLowerCase().includes(q)
+    );
+  });
+
+  const filteredAreas = areas.filter((a) => {
+    if (!areaSearch.trim()) return true;
+    const q = areaSearch.toLowerCase();
+    return a.name.toLowerCase().includes(q) || (a.note || "").toLowerCase().includes(q);
+  });
+
+  const filteredMainHouses = mainHouses.filter((h) => {
+    if (!mainHouseSearch.trim()) return true;
+    const q = mainHouseSearch.toLowerCase();
+    return (
+      h.name.toLowerCase().includes(q) ||
+      (h.address || "").toLowerCase().includes(q) ||
+      (h.hotline || "").toLowerCase().includes(q)
+    );
+  });
 
   const loadFactories = async () => {
     setLoading(true);
     try {
-      const res = await pb.collection("factories").getFullList({ sort: "name" });
-      setItems(res as any);
+      const res = await pb.collection("factories").getList(1, 300, { sort: "name" });
+      setItems(res.items as any);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải nhà máy. Hãy tạo collection 'factories'.");
     } finally {
@@ -362,8 +430,8 @@ function FactoriesTab() {
   const loadAreas = async () => {
     setAreasLoading(true);
     try {
-      const res = await pb.collection("recruitment_areas").getFullList({ sort: "name" });
-      setAreas(res as any);
+      const res = await pb.collection("recruitment_areas").getList(1, 300, { sort: "name" });
+      setAreas(res.items as any);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải khu vực. Hãy tạo collection 'recruitment_areas'.");
     } finally {
@@ -371,14 +439,34 @@ function FactoriesTab() {
     }
   };
 
+  const loadMainHouses = async () => {
+    setMainHousesLoading(true);
+    try {
+      const res = await pb.collection("main_houses").getList(1, 300, { sort: "name" });
+      setMainHouses(res.items as any);
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi tải nhà chính. Hãy tạo collection 'main_houses'.");
+    } finally {
+      setMainHousesLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadFactories();
     loadAreas();
+    loadMainHouses();
   }, []);
 
   const save = async () => {
     if (!editing?.name?.trim()) {
       toast.error("Tên nhà máy bắt buộc");
+      return;
+    }
+    const duplicate = items.find(
+      (f) => f.name.toLowerCase() === editing.name!.trim().toLowerCase() && f.id !== editing.id,
+    );
+    if (duplicate) {
+      toast.error(`Nhà máy "${duplicate.name}" đã tồn tại`);
       return;
     }
     try {
@@ -388,11 +476,30 @@ function FactoriesTab() {
         hotline: editing.hotline || "",
         note: editing.note || "",
         attendance_cutoff_day: Number(editing.attendance_cutoff_day) || 31,
+        status: editing.status || "active",
       };
       if (editing.id) {
+        const before = items.find((it) => it.id === editing.id);
         await pb.collection("factories").update(editing.id, payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "factories",
+          targetRecord: editing.id,
+          action: "update",
+          before,
+          after: payload,
+          note: "Admin cập nhật nhà máy",
+        });
       } else {
-        await pb.collection("factories").create(payload);
+        const created = await pb.collection("factories").create(payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "factories",
+          targetRecord: created.id,
+          action: "create",
+          after: payload,
+          note: "Admin tạo nhà máy mới",
+        });
       }
       toast.success("Đã lưu");
       setEditing(null);
@@ -405,7 +512,16 @@ function FactoriesTab() {
   const remove = async (id: string) => {
     if (!confirm("Xoá nhà máy này?")) return;
     try {
+      const before = items.find((it) => it.id === id);
       await pb.collection("factories").delete(id);
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "factories",
+        targetRecord: id,
+        action: "delete",
+        before,
+        note: "Admin xoá nhà máy",
+      });
       toast.success("Đã xoá");
       loadFactories();
     } catch (e: any) {
@@ -425,9 +541,27 @@ function FactoriesTab() {
         note: editingArea?.note || "",
       };
       if (editingArea?.id) {
+        const before = areas.find((a) => a.id === editingArea.id);
         await pb.collection("recruitment_areas").update(editingArea.id, payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "recruitment_areas",
+          targetRecord: editingArea.id,
+          action: "update",
+          before,
+          after: payload,
+          note: "Admin cập nhật khu vực tuyển dụng",
+        });
       } else {
-        await pb.collection("recruitment_areas").create(payload);
+        const created = await pb.collection("recruitment_areas").create(payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "recruitment_areas",
+          targetRecord: created.id,
+          action: "create",
+          after: payload,
+          note: "Admin tạo khu vực tuyển dụng",
+        });
       }
       toast.success("Đã lưu khu vực");
       setEditingArea(null);
@@ -440,11 +574,91 @@ function FactoriesTab() {
   const removeArea = async (id: string) => {
     if (!confirm("Xoá khu vực này?")) return;
     try {
+      const before = areas.find((a) => a.id === id);
       await pb.collection("recruitment_areas").delete(id);
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "recruitment_areas",
+        targetRecord: id,
+        action: "delete",
+        before,
+        note: "Admin xoá khu vực tuyển dụng",
+      });
       toast.success("Đã xoá khu vực");
       loadAreas();
     } catch (e: any) {
       toast.error(e?.message || "Lỗi xoá khu vực");
+    }
+  };
+
+  const saveMainHouse = async () => {
+    const name = editingMainHouse?.name?.trim();
+    if (!name) {
+      toast.error("Tên nhà chính bắt buộc");
+      return;
+    }
+    const duplicate = mainHouses.find(
+      (h) => h.name.toLowerCase() === name.toLowerCase() && h.id !== editingMainHouse?.id,
+    );
+    if (duplicate) {
+      toast.error(`Nhà chính "${duplicate.name}" đã tồn tại`);
+      return;
+    }
+    try {
+      const payload = {
+        name,
+        address: editingMainHouse?.address || "",
+        hotline: editingMainHouse?.hotline || "",
+        note: editingMainHouse?.note || "",
+      };
+      if (editingMainHouse?.id) {
+        const before = mainHouses.find((m) => m.id === editingMainHouse.id);
+        await pb.collection("main_houses").update(editingMainHouse.id, payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "main_houses",
+          targetRecord: editingMainHouse.id,
+          action: "update",
+          before,
+          after: payload,
+          note: "Admin cập nhật nhà chính",
+        });
+      } else {
+        const created = await pb.collection("main_houses").create(payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "main_houses",
+          targetRecord: created.id,
+          action: "create",
+          after: payload,
+          note: "Admin tạo nhà chính mới",
+        });
+      }
+      toast.success("Đã lưu nhà chính");
+      setEditingMainHouse(null);
+      loadMainHouses();
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi lưu nhà chính");
+    }
+  };
+
+  const removeMainHouse = async (id: string) => {
+    if (!confirm("Xoá nhà chính này?")) return;
+    try {
+      const before = mainHouses.find((m) => m.id === id);
+      await pb.collection("main_houses").delete(id);
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "main_houses",
+        targetRecord: id,
+        action: "delete",
+        before,
+        note: "Admin xoá nhà chính",
+      });
+      toast.success("Đã xoá nhà chính");
+      loadMainHouses();
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi xoá nhà chính");
     }
   };
 
@@ -477,6 +691,17 @@ function FactoriesTab() {
           </div>
 
           <CollapsibleContent className="mt-3 space-y-3">
+            {items.length > 3 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="rounded-xl pl-9 text-xs"
+                  placeholder="Tìm nhà máy..."
+                  value={factorySearch}
+                  onChange={(e) => setFactorySearch(e.target.value)}
+                />
+              </div>
+            )}
             {loading && (
               <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
             )}
@@ -485,7 +710,12 @@ function FactoriesTab() {
                 Chưa có nhà máy. Bấm nút + để thêm.
               </div>
             )}
-            {items.map((f) => (
+            {!loading && items.length > 0 && filteredFactories.length === 0 && (
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                Không tìm thấy nhà máy phù hợp
+              </div>
+            )}
+            {filteredFactories.map((f) => (
               <div
                 key={f.id}
                 className="list-card border-l-[color:var(--status-info)] flex items-start gap-3"
@@ -501,7 +731,7 @@ function FactoriesTab() {
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="mt-0.5 block text-[11px] text-muted-foreground hover:text-primary hover:underline"
+                      className="mt-0.5 block truncate text-[11px] text-muted-foreground hover:text-primary hover:underline"
                     >
                       📍 {f.address}
                     </a>
@@ -515,6 +745,14 @@ function FactoriesTab() {
                   </div>
                 </div>
                 <div className="flex gap-1">
+                  <button
+                    onClick={() => setManagingFactory(f)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
+                    aria-label="Cấp quyền quản lý"
+                    title="Cấp quyền quản lý"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                  </button>
                   <button
                     onClick={() => setEditing(f)}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
@@ -596,6 +834,13 @@ function FactoriesTab() {
         </DialogContent>
       </Dialog>
 
+      <FactoryManagersDialog
+        factoryId={managingFactory?.id || null}
+        factoryName={managingFactory?.name || ""}
+        open={!!managingFactory}
+        onOpenChange={(open) => !open && setManagingFactory(null)}
+      />
+
       <Collapsible open={areasOpen} onOpenChange={setAreasOpen}>
         <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
           <div className="flex items-center justify-between gap-2">
@@ -623,6 +868,17 @@ function FactoriesTab() {
           </div>
 
           <CollapsibleContent className="mt-3 space-y-3">
+            {areas.length > 3 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="rounded-xl pl-9 text-xs"
+                  placeholder="Tìm khu vực..."
+                  value={areaSearch}
+                  onChange={(e) => setAreaSearch(e.target.value)}
+                />
+              </div>
+            )}
             {areasLoading && (
               <div className="py-6 text-center text-sm text-muted-foreground">
                 Đang tải khu vực...
@@ -633,7 +889,12 @@ function FactoriesTab() {
                 Chưa có khu vực. Bấm nút + để thêm.
               </div>
             )}
-            {areas.map((area) => (
+            {!areasLoading && areas.length > 0 && filteredAreas.length === 0 && (
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                Không tìm thấy khu vực phù hợp
+              </div>
+            )}
+            {filteredAreas.map((area) => (
               <div
                 key={area.id}
                 className="list-card border-l-[color:var(--status-success)] flex items-start gap-3"
@@ -700,312 +961,155 @@ function FactoriesTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
 
-/* ───────── USERS ───────── */
-
-function UsersTab() {
-  const [users, setUsers] = useState<any[]>([]);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [requireApproval, setRequireApproval] = useState(true);
-  const [settingsId, setSettingsId] = useState<string | null>(null);
-  const [pendingApprovalValue, setPendingApprovalValue] = useState<boolean | null>(null);
-  const [adminPassword, setAdminPassword] = useState("");
-  const [confirmingApproval, setConfirmingApproval] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await pb.collection("users").getFullList({ sort: "-created" });
-      setUsers(res as any);
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi tải user");
-    } finally {
-      setLoading(false);
-    }
-
-    try {
-      const s = await pb.collection("settings").getList(1, 1);
-      if (s.items[0]) {
-        setSettingsId(s.items[0].id);
-        setRequireApproval(Boolean(s.items[0].require_approval));
-      }
-    } catch {
-      // Settings collection may be initialized later by another admin screen.
-    }
-  };
-  useEffect(() => {
-    load();
-  }, []);
-
-  const toggleApproved = async (u: any) => {
-    const approved = isUserApproved(u);
-    try {
-      await pb.collection("users").update(u.id, {
-        approvalStatus: approved ? "pending" : "approved",
-        approved: approved ? "false" : "true",
-        status: approved ? "disabled" : "active",
-      });
-      toast.success(approved ? "Đã huỷ duyệt" : "Đã duyệt");
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
-    }
-  };
-
-  const toggleRole = async (u: any) => {
-    const newRole = u.role === "admin" ? "user" : "admin";
-    if (!confirm(`Đổi vai trò sang ${newRole}?`)) return;
-    try {
-      await pb.collection("users").update(u.id, { role: newRole });
-      toast.success("Đã đổi vai trò");
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
-    }
-  };
-
-  const remove = async (u: any) => {
-    if (!confirm(`Xoá user ${u.username || u.full_name}?`)) return;
-    try {
-      await pb.collection("users").delete(u.id);
-      toast.success("Đã xoá");
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
-    }
-  };
-
-  const toggleApprovalRequirement = async (val: boolean) => {
-    setRequireApproval(val);
-    try {
-      if (settingsId) {
-        await pb.collection("settings").update(settingsId, { require_approval: val });
-      } else {
-        const r = await pb.collection("settings").create({ require_approval: val });
-        setSettingsId(r.id);
-      }
-      toast.success("Đã cập nhật kiểm duyệt đăng ký");
-    } catch (e: any) {
-      setRequireApproval((prev) => !prev);
-      toast.error(e?.message || "Lỗi cập nhật");
-    }
-  };
-
-  const requestToggleApprovalRequirement = (val: boolean) => {
-    setPendingApprovalValue(val);
-    setAdminPassword("");
-  };
-
-  const closeApprovalConfirm = () => {
-    if (confirmingApproval) return;
-    setPendingApprovalValue(null);
-    setAdminPassword("");
-  };
-
-  const confirmToggleApprovalRequirement = async () => {
-    if (pendingApprovalValue === null) return;
-    const admin = pb.authStore.record as any;
-    const identity = admin?.username || admin?.email;
-    if (!identity) {
-      toast.error("Không xác định được tài khoản admin");
-      return;
-    }
-    if (!adminPassword) {
-      toast.error("Nhập mật khẩu admin");
-      return;
-    }
-
-    setConfirmingApproval(true);
-    try {
-      const res = await fetch("/api/public/pocketbase-auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identity, password: adminPassword }),
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload?.message || "Mật khẩu admin không đúng");
-      if (payload?.record?.id !== admin.id || payload?.record?.role !== "admin") {
-        throw new Error("Tài khoản xác thực không phải admin hiện tại");
-      }
-
-      await toggleApprovalRequirement(pendingApprovalValue);
-      closeApprovalConfirm();
-    } catch (e: any) {
-      toast.error(e?.message || "Không xác thực được mật khẩu admin");
-    } finally {
-      setConfirmingApproval(false);
-    }
-  };
-
-  const filtered = users.filter((u) => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return (
-      (u.username || "").toLowerCase().includes(s) ||
-      (u.full_name || "").toLowerCase().includes(s) ||
-      (u.phone || "").toLowerCase().includes(s)
-    );
-  });
-
-  return (
-    <Tabs defaultValue="accounts" className="space-y-3">
-      <TabsList className="grid h-10 w-full grid-cols-2 rounded-2xl">
-        <TabsTrigger value="accounts" className="rounded-xl text-xs">
-          Tài khoản
-        </TabsTrigger>
-        <TabsTrigger value="delegations" className="rounded-xl text-xs">
-          Ủy quyền
-        </TabsTrigger>
-      </TabsList>
-
-      <TabsContent value="accounts" className="mt-0 space-y-3">
-        <Card className="flex items-center gap-3 rounded-2xl border-border/60 p-3.5 shadow-soft">
-          <div className="rounded-xl bg-primary/10 p-2 text-primary">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <Label className="text-sm font-semibold">Yêu cầu duyệt khi đăng ký</Label>
-            <div className="text-[11px] text-muted-foreground">
-              Tắt để user tạo tài khoản và sử dụng ngay.
-            </div>
-          </div>
-          <Switch checked={requireApproval} onCheckedChange={requestToggleApprovalRequirement} />
-        </Card>
-
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="rounded-full pl-9"
-            placeholder="Tìm theo tên / username / SĐT"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        <div className="px-1 text-xs text-muted-foreground">
-          Tổng: {users.length} · Hiển thị: {filtered.length}
-        </div>
-
-        {loading && (
-          <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
-        )}
-        {!loading && filtered.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
-            Không có user.
-          </div>
-        )}
-        {filtered.map((u) => {
-          const avatar = u.avatar ? fileUrl(u, u.avatar) : "";
-          const approved = isUserApproved(u);
-          const borderTone = approved
-            ? "border-l-[color:var(--status-success)]"
-            : "border-l-[color:var(--status-warning)]";
-          return (
-            <div key={u.id} className={`list-card flex items-start gap-3 ${borderTone}`}>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
-                {avatar ? (
-                  <img src={avatar} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="text-sm font-semibold text-muted-foreground">
-                    {(u.full_name || u.username || "?").slice(0, 1).toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  @{u.username} {u.phone && `· ${u.phone}`}
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  <span className={`chip ${u.role === "admin" ? "chip-info" : "chip-neutral"}`}>
-                    {u.role === "admin" && <ShieldCheck className="h-3 w-3" />}
-                    {u.role === "admin" ? "Admin" : "User"}
-                  </span>
-                  <span className={`chip ${approved ? "chip-success" : "chip-warning"}`}>
-                    {approved ? "Đã duyệt" : "Chờ duyệt"}
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1">
-                <button
-                  onClick={() => toggleApproved(u)}
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                    approved
-                      ? "text-[color:var(--status-warning-fg)] hover:bg-[color:var(--status-warning-bg)]"
-                      : "text-[color:var(--status-success-fg)] hover:bg-[color:var(--status-success-bg)]"
-                  }`}
-                  title={approved ? "Huỷ duyệt" : "Duyệt"}
-                >
-                  {approved ? <X className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                </button>
-                <button
-                  onClick={() => toggleRole(u)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
-                  title="Đổi vai trò"
-                >
-                  <ShieldCheck className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => remove(u)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
-                  title="Xoá"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-
-        <Dialog
-          open={pendingApprovalValue !== null}
-          onOpenChange={(open) => !open && closeApprovalConfirm()}
-        >
-          <DialogContent className="rounded-2xl">
-            <DialogHeader>
-              <DialogTitle>Xác nhận mật khẩu admin</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Label className="text-xs">Mật khẩu admin</Label>
-              <Input
-                type="password"
-                className="rounded-xl"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") confirmToggleApprovalRequirement();
-                }}
-                autoComplete="current-password"
-                autoFocus
-              />
-              <div className="text-xs text-muted-foreground">
-                Sau khi xác thực, hệ thống sẽ {pendingApprovalValue ? "bật" : "tắt"} yêu cầu duyệt
-                khi đăng ký.
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={closeApprovalConfirm} className="rounded-xl">
-                Huỷ
-              </Button>
-              <Button
-                onClick={confirmToggleApprovalRequirement}
-                disabled={confirmingApproval}
-                className="rounded-xl"
+      <Collapsible open={mainHousesOpen} onOpenChange={setMainHousesOpen}>
+        <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
+          <div className="flex items-center justify-between gap-2">
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                aria-label="Thu gọn hoặc mở rộng danh sách nhà chính"
               >
-                {confirmingApproval ? "Đang xác thực..." : "Xác nhận"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </TabsContent>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${mainHousesOpen ? "rotate-0" : "-rotate-90"}`}
+                />
+                <h2 className="text-sm font-semibold">
+                  Nhà chính <span className="text-muted-foreground">({mainHouses.length})</span>
+                </h2>
+              </button>
+            </CollapsibleTrigger>
+            <button
+              onClick={() => setEditingMainHouse({})}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-soft active:scale-95"
+              aria-label="Thêm nhà chính"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
 
-      <TabsContent value="delegations" className="mt-0">
-        <DelegationPanel mode="admin" />
-      </TabsContent>
-    </Tabs>
+          <CollapsibleContent className="mt-3 space-y-3">
+            {mainHouses.length > 3 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="rounded-xl pl-9 text-xs"
+                  placeholder="Tìm nhà chính..."
+                  value={mainHouseSearch}
+                  onChange={(e) => setMainHouseSearch(e.target.value)}
+                />
+              </div>
+            )}
+            {mainHousesLoading && (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                Đang tải nhà chính...
+              </div>
+            )}
+            {!mainHousesLoading && mainHouses.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
+                Chưa có nhà chính. Bấm nút + để thêm.
+              </div>
+            )}
+            {!mainHousesLoading && mainHouses.length > 0 && filteredMainHouses.length === 0 && (
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                Không tìm thấy nhà chính phù hợp
+              </div>
+            )}
+            {filteredMainHouses.map((house) => (
+              <div
+                key={house.id}
+                className="list-card border-l-[color:var(--status-warning)] flex items-start gap-3"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Home className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{house.name}</div>
+                  {house.address && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(house.address)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-0.5 block text-[11px] text-muted-foreground hover:text-primary hover:underline"
+                    >
+                      📍 {house.address}
+                    </a>
+                  )}
+                  {house.hotline && (
+                    <div className="text-[11px] text-muted-foreground">📞 {house.hotline}</div>
+                  )}
+                  {house.note && (
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">{house.note}</div>
+                  )}
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setEditingMainHouse(house)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+                    aria-label="Sửa nhà chính"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => removeMainHouse(house.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
+                    aria-label="Xoá nhà chính"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+
+      <Dialog open={!!editingMainHouse} onOpenChange={(o) => !o && setEditingMainHouse(null)}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingMainHouse?.id ? "Sửa nhà chính" : "Thêm nhà chính"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Field
+              label="Tên nhà chính *"
+              value={editingMainHouse?.name || ""}
+              onChange={(v) => setEditingMainHouse({ ...editingMainHouse, name: v })}
+            />
+            <Field
+              label="Địa chỉ"
+              value={editingMainHouse?.address || ""}
+              onChange={(v) => setEditingMainHouse({ ...editingMainHouse, address: v })}
+            />
+            <Field
+              label="Hotline"
+              value={editingMainHouse?.hotline || ""}
+              onChange={(v) => setEditingMainHouse({ ...editingMainHouse, hotline: v })}
+            />
+            <div>
+              <Label className="text-xs">Ghi chú</Label>
+              <Textarea
+                className="mt-1 rounded-xl"
+                rows={3}
+                value={editingMainHouse?.note || ""}
+                onChange={(e) => setEditingMainHouse({ ...editingMainHouse, note: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditingMainHouse(null)}
+              className="rounded-xl"
+            >
+              Huỷ
+            </Button>
+            <Button onClick={saveMainHouse} className="rounded-xl">
+              <Save className="h-4 w-4" /> Lưu
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

@@ -10,7 +10,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UserCombobox } from "@/components/users/UserCombobox";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +19,9 @@ import {
 } from "@/components/ui/dialog";
 import { formatVND, type AttendanceRow, type RateBuckets, type Shift } from "@/lib/salary";
 import { exportToExcel } from "@/lib/excel";
-import { fetchReceivedDelegations, relationInFilter } from "@/lib/delegations";
+import { escapePb } from "@/lib/delegations";
+import { accountIdentityKey } from "@/lib/account-identity";
+import { markSeen } from "@/lib/seen";
 import {
   buildPayrollCalendarCells,
   fetchFactoryAttendanceCutoffDay,
@@ -113,6 +114,7 @@ type SalaryItemRecord = {
 
 type UserRecord = {
   id: string;
+  uid?: string;
   full_name?: string;
   username?: string;
   phone?: string;
@@ -123,18 +125,20 @@ type UserRecord = {
 type CheckAttendanceRow = AttendanceRow;
 
 type ParsedRow = CheckAttendanceRow & {
+  uid: string;
   employeeCode: string;
   company: string;
   rates: RateBuckets;
 };
 
 type ParsedSalaryRow = {
+  uid: string;
   employeeCode: string;
   company: string;
   personal: SalaryPersonalInfo;
-  wageLine?: SalaryWageLine;
-  allowanceLine?: SalaryMoneyLine;
-  deductionLine?: SalaryMoneyLine;
+  wageLines: SalaryWageLine[];
+  allowanceLines: SalaryMoneyLine[];
+  deductionLines: SalaryMoneyLine[];
 };
 
 const EMPTY_CHECK_BUCKETS = (): RateBuckets => ({
@@ -288,7 +292,10 @@ async function readAttendanceExcel(file: File): Promise<ParsedRow[]> {
 
   return rawRows
     .map((row) => {
-      const employeeCode = String(pick(row, ["Mã NV", "Ma NV", "employee_code"])).trim();
+      const uid = String(pick(row, ["Mã tài khoản (UID)", "uid", "UID", "userId", "user_id"])).trim();
+      const employeeCode = String(
+        pick(row, ["Mã nhân viên", "Mã NV", "Ma NV", "employee_code"]),
+      ).trim();
       const rates = {
         r100: parseNumber(pick(row, ["100%", "100", "r100"])),
         r130: parseNumber(pick(row, ["130%", "130", "r130"])),
@@ -299,6 +306,7 @@ async function readAttendanceExcel(file: File): Promise<ParsedRow[]> {
         r390: parseNumber(pick(row, ["390%", "390", "r390"])),
       };
       return {
+        uid,
         employeeCode,
         company: String(pick(row, ["Nhà máy", "Công ty", "company", "factory"])).trim(),
         rates,
@@ -309,7 +317,23 @@ async function readAttendanceExcel(file: File): Promise<ParsedRow[]> {
         ot_hours: parseNumber(pick(row, ["Giờ TC", "TC", "ot_hours", "Giờ tăng ca"])),
       };
     })
-    .filter((row) => row.employeeCode && row.company && (row.date || hasRateValues(row.rates)));
+    .filter(
+      (row) =>
+        (row.uid || (row.employeeCode && row.company)) && (row.date || hasRateValues(row.rates)),
+    );
+}
+
+function parseRateNumber(rate: string) {
+  const match = rate.replace(/\s/g, "").match(/-?\d+(?:[.,]\d+)?/);
+  if (!match) return 0;
+  const value = Number(match[0].replace(",", "."));
+  return Number.isFinite(value) ? value : 0;
+}
+
+function stripPrefix(key: string, prefix: "HC" | "PC" | "KT") {
+  const pattern = new RegExp(`^${prefix}[_\\s-]+(.+)$`, "i");
+  const match = key.trim().match(pattern);
+  return match ? match[1].trim() : null;
 }
 
 async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
@@ -321,30 +345,48 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
 
   return rawRows
     .map((row) => {
-      const employeeCode = String(pick(row, ["Mã NV", "Ma NV", "employee_code"])).trim();
+      const uid = String(pick(row, ["Mã tài khoản (UID)", "uid", "UID", "userId", "user_id"])).trim();
+      const employeeCode = String(
+        pick(row, ["Mã nhân viên", "Mã NV", "Ma NV", "employee_code"]),
+      ).trim();
       const company = String(pick(row, ["Nhà máy", "Công ty", "company", "factory"])).trim();
-      const wageLine = {
-        rate: formatSalaryRate(pick(row, ["Hệ số", "He so", "rate", "coefficient"])),
-        hours: parseNumber(pick(row, ["Số giờ", "So gio", "hours"])),
-        amount: parseNumber(pick(row, ["Thành tiền", "Thanh tien", "Tiền lương", "wage_amount"])),
-      };
-      const allowanceLine = {
-        label: String(
-          pick(row, ["Loại phụ cấp", "Loai phu cap", "Phụ cấp", "allowance_type"]),
-        ).trim(),
-        amount: parseNumber(
-          pick(row, ["Tiền phụ cấp", "Tien phu cap", "Số tiền phụ cấp", "allowance_amount"]),
-        ),
-      };
-      const deductionLine = {
-        label: String(
-          pick(row, ["Loại khấu trừ", "Loai khau tru", "Khấu trừ", "deduction_type"]),
-        ).trim(),
-        amount: parseNumber(
-          pick(row, ["Tiền khấu trừ", "Tien khau tru", "Số tiền khấu trừ", "deduction_amount"]),
-        ),
-      };
+      const baseSalary = parseNumber(pick(row, ["Lương cơ bản", "Luong co ban", "base_salary"]));
+      const unit = baseSalary / 26 / 8;
+
+      const wageLines: SalaryWageLine[] = [];
+      const allowanceLines: SalaryMoneyLine[] = [];
+      const deductionLines: SalaryMoneyLine[] = [];
+
+      for (const [key, value] of Object.entries(row)) {
+        const hcLabel = stripPrefix(key, "HC");
+        if (hcLabel) {
+          const hours = parseNumber(value);
+          if (hours > 0) {
+            const rate = formatSalaryRate(hcLabel);
+            const ratePercent = parseRateNumber(rate);
+            wageLines.push({
+              rate,
+              hours,
+              amount: Math.round(unit * (ratePercent / 100) * hours),
+            });
+          }
+          continue;
+        }
+        const pcLabel = stripPrefix(key, "PC");
+        if (pcLabel) {
+          const amount = parseNumber(value);
+          if (amount > 0) allowanceLines.push({ label: pcLabel, amount });
+          continue;
+        }
+        const ktLabel = stripPrefix(key, "KT");
+        if (ktLabel) {
+          const amount = parseNumber(value);
+          if (amount > 0) deductionLines.push({ label: ktLabel, amount });
+        }
+      }
+
       return {
+        uid,
         employeeCode,
         company,
         personal: {
@@ -352,19 +394,20 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
           company,
           start_date: parseExcelDate(pick(row, ["Ngày vào làm", "Ngay vao lam", "start_date"])),
           end_date: parseExcelDate(pick(row, ["Ngày nghỉ", "Ngay nghi", "end_date"])),
-          base_salary: parseNumber(pick(row, ["Lương cơ bản", "Luong co ban", "base_salary"])),
+          base_salary: baseSalary,
           standard_workdays: parseNumber(
             pick(row, ["Số công HC", "So cong HC", "standard_workdays"]),
           ),
         },
-        wageLine: wageLine.rate || wageLine.hours || wageLine.amount ? wageLine : undefined,
-        allowanceLine: allowanceLine.label || allowanceLine.amount ? allowanceLine : undefined,
-        deductionLine: deductionLine.label || deductionLine.amount ? deductionLine : undefined,
+        wageLines,
+        allowanceLines,
+        deductionLines,
       };
     })
     .filter(
       (row) =>
-        row.employeeCode && row.company && (row.wageLine || row.allowanceLine || row.deductionLine),
+        (row.uid || (row.employeeCode && row.company)) &&
+        (row.wageLines.length || row.allowanceLines.length || row.deductionLines.length),
     );
 }
 
@@ -392,16 +435,19 @@ function AdminCheckAttendance() {
 
   const load = async () => {
     const [batchRes, userRes] = await Promise.all([
-      pb.collection("check_attendance_batches").getFullList({ sort: "-created" }),
-      pb.collection("users").getFullList({ sort: "full_name" }),
+      pb.collection("check_attendance_batches").getList(1, 100, {
+        filter: `month="${month}"`,
+        sort: "-created",
+      }),
+      pb.collection("users").getList(1, 500, { sort: "full_name" }),
     ]);
-    setBatches(batchRes as unknown as BatchRecord[]);
-    setUsers(userRes as unknown as UserRecord[]);
+    setBatches(batchRes.items as unknown as BatchRecord[]);
+    setUsers(userRes.items as unknown as UserRecord[]);
     try {
       const salaryBatchRes = await pb
         .collection("check_salary_batches")
-        .getFullList({ sort: "-created" });
-      setSalaryBatches(salaryBatchRes as unknown as BatchRecord[]);
+        .getList(1, 100, { filter: `month="${salaryMonth}"`, sort: "-created" });
+      setSalaryBatches(salaryBatchRes.items as unknown as BatchRecord[]);
     } catch {
       setSalaryBatches([]);
     }
@@ -409,7 +455,7 @@ function AdminCheckAttendance() {
 
   useEffect(() => {
     load().catch((error) => toast.error(error?.message || "Không tải được dữ liệu check công"));
-  }, []);
+  }, [month, salaryMonth]);
 
   const monthBatches = batches.filter((batch) => batch.month === month);
   const nextRound =
@@ -421,17 +467,18 @@ function AdminCheckAttendance() {
   const downloadTemplate = () => {
     const sampleUser = users[0];
     exportToExcel(`mau_check_cong_${month}`, {
-      "Check công": [
+      "Bảng kiểm công": [
         {
-          "Mã NV": sampleUser?.employee_code || "NV001",
+          "Mã tài khoản (UID)": sampleUser?.uid || "HL000000",
+          "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
-          SĐT: sampleUser?.phone || "0900000000",
+          "Số điện thoại": sampleUser?.phone || "0900000000",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
           Ngày: formatTemplateDate(month, 1),
           Ca: "Ngày",
           Lễ: "",
-          "Giờ HC": 8,
-          "Giờ TC": 2,
+          "Giờ hành chính": 8,
+          "Giờ tăng ca": 2,
           "100%": 10,
           "130%": 6,
           "150%": 2,
@@ -441,15 +488,16 @@ function AdminCheckAttendance() {
           "390%": 0,
         },
         {
-          "Mã NV": sampleUser?.employee_code || "NV001",
+          "Mã tài khoản (UID)": sampleUser?.uid || "HL000000",
+          "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
-          SĐT: sampleUser?.phone || "0900000000",
+          "Số điện thoại": sampleUser?.phone || "0900000000",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
           Ngày: formatTemplateDate(month, 2),
           Ca: "Đêm",
           Lễ: "",
-          "Giờ HC": 8,
-          "Giờ TC": 1,
+          "Giờ hành chính": 8,
+          "Giờ tăng ca": 1,
           "100%": "",
           "130%": "",
           "150%": "",
@@ -459,15 +507,16 @@ function AdminCheckAttendance() {
           "390%": "",
         },
         {
-          "Mã NV": sampleUser?.employee_code || "NV001",
+          "Mã tài khoản (UID)": sampleUser?.uid || "HL000000",
+          "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
-          SĐT: sampleUser?.phone || "0900000000",
+          "Số điện thoại": sampleUser?.phone || "0900000000",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
           Ngày: formatTemplateDate(month, 3),
           Ca: "Ngày",
           Lễ: "x",
-          "Giờ HC": 8,
-          "Giờ TC": 0,
+          "Giờ hành chính": 8,
+          "Giờ tăng ca": 0,
           "100%": "",
           "130%": "",
           "150%": "",
@@ -490,8 +539,11 @@ function AdminCheckAttendance() {
         return;
       }
 
+      const allUsers = await pb.collection("users").getFullList<UserRecord>({ sort: "full_name" });
       const employeeMap = new Map<string, UserRecord>();
-      for (const user of users) {
+      const userIdMap = new Map<string, UserRecord>();
+      for (const user of allUsers) {
+        if (user.uid) userIdMap.set(accountIdentityKey(user.uid), user);
         const employeeKey = employeeCompanyKey(user.employee_code, user.company);
         if (employeeKey) employeeMap.set(employeeKey, user);
       }
@@ -500,12 +552,20 @@ function AdminCheckAttendance() {
         string,
         { user: UserRecord; rows: CheckAttendanceRow[]; summary: RateBuckets }
       >();
-      const unmatched = new Set<string>();
+      const unmatchedRows: Array<Record<string, unknown>> = [];
 
       for (const row of parsedRows) {
-        const user = employeeMap.get(employeeCompanyKey(row.employeeCode, row.company));
+        const user = row.uid
+          ? userIdMap.get(accountIdentityKey(row.uid))
+          : employeeMap.get(employeeCompanyKey(row.employeeCode, row.company));
         if (!user) {
-          unmatched.add(`${row.employeeCode} - ${row.company}`);
+          unmatchedRows.push({
+            "Lý do lỗi": "Không khớp được nhân sự theo UID hoặc mã nhân viên + nhà máy",
+            "Mã tài khoản (UID)": row.uid,
+            "Mã nhân viên": row.employeeCode,
+            "Nhà máy": row.company,
+            "Ngày": formatDisplayDate(row.date),
+          });
           continue;
         }
         const current = grouped.get(user.id) || { user, rows: [], summary: EMPTY_CHECK_BUCKETS() };
@@ -555,9 +615,13 @@ function AdminCheckAttendance() {
 
       toast.success(
         `Đã gửi check công lần ${nextRound} cho ${grouped.size} nhân sự${
-          unmatched.size ? `, ${unmatched.size} dòng chưa khớp` : ""
+          unmatchedRows.length ? `, ${unmatchedRows.length} dòng chưa khớp` : ""
         }`,
       );
+      if (unmatchedRows.length) {
+        exportToExcel(`check_cong_loi_${month}_${Date.now()}`, { "Dòng lỗi": unmatchedRows });
+        toast.warning("Đã xuất file các dòng check công chưa khớp");
+      }
       setNote("");
       await load();
     } catch (error: unknown) {
@@ -570,38 +634,27 @@ function AdminCheckAttendance() {
   const downloadSalaryTemplate = () => {
     const sampleUser = users[0];
     exportToExcel(`mau_check_luong_${salaryMonth}`, {
-      "Check lương": [
+      "Bảng kiểm lương": [
         {
-          "Mã NV": sampleUser?.employee_code || "NV001",
+          "Mã tài khoản (UID)": sampleUser?.uid || "HL000000",
+          "Mã nhân viên": sampleUser?.employee_code || "NV001",
           "Nhà máy": sampleUser?.company || "Nhà máy A",
           "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
           "Ngày vào làm": formatTemplateDate(salaryMonth, 1),
           "Ngày nghỉ": "",
           "Lương cơ bản": 5000000,
           "Số công HC": 26,
-          "Hệ số": "100%",
-          "Số giờ": 208,
-          "Thành tiền": 5000000,
-          "Loại phụ cấp": "Chuyên cần",
-          "Tiền phụ cấp": 500000,
-          "Loại khấu trừ": "BHXH",
-          "Tiền khấu trừ": 525000,
-        },
-        {
-          "Mã NV": sampleUser?.employee_code || "NV001",
-          "Nhà máy": sampleUser?.company || "Nhà máy A",
-          "Họ tên": sampleUser?.full_name || "Nguyễn Văn A",
-          "Ngày vào làm": "",
-          "Ngày nghỉ": "",
-          "Lương cơ bản": "",
-          "Số công HC": "",
-          "Hệ số": "150%",
-          "Số giờ": 10,
-          "Thành tiền": 360577,
-          "Loại phụ cấp": "Đời sống",
-          "Tiền phụ cấp": 300000,
-          "Loại khấu trừ": "Tạm ứng",
-          "Tiền khấu trừ": 200000,
+          "HC_100%": 208,
+          "HC_130%": 12,
+          "HC_150%": 10,
+          "HC_200%": "",
+          "HC_270%": "",
+          "HC_300%": "",
+          "HC_390%": "",
+          "PC_Đời sống": 300000,
+          "PC_Chuyên cần": 500000,
+          "KT_BHXH": 525000,
+          "KT_Ứng": 200000,
         },
       ],
     });
@@ -617,8 +670,11 @@ function AdminCheckAttendance() {
         return;
       }
 
+      const allUsers = await pb.collection("users").getFullList<UserRecord>({ sort: "full_name" });
       const employeeMap = new Map<string, UserRecord>();
-      for (const user of users) {
+      const userIdMap = new Map<string, UserRecord>();
+      for (const user of allUsers) {
+        if (user.uid) userIdMap.set(accountIdentityKey(user.uid), user);
         const employeeKey = employeeCompanyKey(user.employee_code, user.company);
         if (employeeKey) employeeMap.set(employeeKey, user);
       }
@@ -633,12 +689,21 @@ function AdminCheckAttendance() {
           deductionLines: SalaryMoneyLine[];
         }
       >();
-      const unmatched = new Set<string>();
+      const unmatchedRows: Array<Record<string, unknown>> = [];
 
       for (const row of parsedRows) {
-        const user = employeeMap.get(employeeCompanyKey(row.employeeCode, row.company));
+        const user = row.uid
+          ? userIdMap.get(accountIdentityKey(row.uid))
+          : employeeMap.get(employeeCompanyKey(row.employeeCode, row.company));
         if (!user) {
-          unmatched.add(`${row.employeeCode} - ${row.company}`);
+          unmatchedRows.push({
+            "Lý do lỗi": "Không khớp được nhân sự theo UID hoặc mã nhân viên + nhà máy",
+            "Mã tài khoản (UID)": row.uid,
+            "Mã nhân viên": row.employeeCode,
+            "Nhà máy": row.company,
+            "Ngày vào làm": formatDisplayDate(row.personal.start_date),
+            "Ngày nghỉ": formatDisplayDate(row.personal.end_date),
+          });
           continue;
         }
         const current =
@@ -665,9 +730,9 @@ function AdminCheckAttendance() {
           base_salary: current.personal.base_salary || row.personal.base_salary,
           standard_workdays: current.personal.standard_workdays || row.personal.standard_workdays,
         };
-        if (row.wageLine) current.wageLines.push(row.wageLine);
-        if (row.allowanceLine) current.allowanceLines.push(row.allowanceLine);
-        if (row.deductionLine) current.deductionLines.push(row.deductionLine);
+        current.wageLines.push(...row.wageLines);
+        current.allowanceLines.push(...row.allowanceLines);
+        current.deductionLines.push(...row.deductionLines);
         grouped.set(user.id, current);
       }
 
@@ -709,9 +774,15 @@ function AdminCheckAttendance() {
 
       toast.success(
         `Đã gửi check lương lần ${nextSalaryRound} cho ${grouped.size} nhân sự${
-          unmatched.size ? `, ${unmatched.size} dòng chưa khớp` : ""
+          unmatchedRows.length ? `, ${unmatchedRows.length} dòng chưa khớp` : ""
         }`,
       );
+      if (unmatchedRows.length) {
+        exportToExcel(`check_luong_loi_${salaryMonth}_${Date.now()}`, {
+          "Dòng lỗi": unmatchedRows,
+        });
+        toast.warning("Đã xuất file các dòng check lương chưa khớp");
+      }
       setSalaryNote("");
       await load();
     } catch (error: unknown) {
@@ -807,6 +878,11 @@ function AdminCheckAttendance() {
                   <div className="text-sm font-semibold">Gửi check lương</div>
                   <div className="text-[11px] text-muted-foreground">
                     Tháng {salaryMonth} · lần gửi tiếp theo: {nextSalaryRound}
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    Cột động: <code>HC_&lt;hệ số&gt;</code> (số giờ),{" "}
+                    <code>PC_&lt;tên&gt;</code> (tiền phụ cấp), <code>KT_&lt;tên&gt;</code> (tiền
+                    khấu trừ). Thành tiền tự tính = Lương cơ bản / 26 / 8 × hệ số × số giờ.
                   </div>
                 </div>
               </div>
@@ -1045,8 +1121,6 @@ function AdminBatchHistory({
 
 function UserCheckAttendance() {
   const { user } = useAuth();
-  const [checkUsers, setCheckUsers] = useState<UserRecord[]>([]);
-  const [activeUserId, setActiveUserId] = useState(user?.id || "");
   const [items, setItems] = useState<CheckItemRecord[]>([]);
   const [selected, setSelected] = useState<CheckItemRecord | null>(null);
   const [salaryItems, setSalaryItems] = useState<SalaryItemRecord[]>([]);
@@ -1058,32 +1132,23 @@ function UserCheckAttendance() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const delegations = await fetchReceivedDelegations(user.id, "check").catch(() => []);
-      const visibleUsers = [
-        user as UserRecord,
-        ...(delegations.map((item) => item.expand?.grantor).filter(Boolean) as UserRecord[]),
-      ];
-      const uniqueUsers = [...new Map(visibleUsers.map((item) => [item.id, item])).values()];
-      const visibleUserIds = uniqueUsers.map((item) => item.id);
-      setCheckUsers(uniqueUsers);
-      const nextActiveUserId = visibleUserIds.includes(activeUserId) ? activeUserId : user.id;
-      setActiveUserId(nextActiveUserId);
-      const res = await pb.collection("check_attendance_items").getFullList({
-        filter: relationInFilter("user", visibleUserIds),
+      const res = await pb.collection("check_attendance_items").getList(1, 100, {
+        filter: `user="${escapePb(user.id)}"`,
         sort: "-created",
         expand: "batch",
       });
       let salaryRes: unknown[] = [];
       try {
-        salaryRes = await pb.collection("check_salary_items").getFullList({
-          filter: relationInFilter("user", visibleUserIds),
+        const salaryList = await pb.collection("check_salary_items").getList(1, 100, {
+          filter: `user="${escapePb(user.id)}"`,
           sort: "-created",
           expand: "batch",
         });
+        salaryRes = salaryList.items;
       } catch {
         salaryRes = [];
       }
-      const normalized = (res as unknown as CheckItemRecord[]).map((item) => ({
+      const normalized = (res.items as unknown as CheckItemRecord[]).map((item) => ({
         ...item,
         rows: Array.isArray(item.rows) ? item.rows : [],
       }));
@@ -1096,31 +1161,33 @@ function UserCheckAttendance() {
       }));
       setItems(normalized);
       setSalaryItems(normalizedSalary);
-      setSelected(normalized.find((item) => item.user === nextActiveUserId) || null);
-      setSelectedSalary(normalizedSalary.find((item) => item.user === nextActiveUserId) || null);
+      setSelected(normalized.find((item) => item.user === user.id) || null);
+      setSelectedSalary(normalizedSalary.find((item) => item.user === user.id) || null);
+      const latest = [...normalized, ...normalizedSalary].reduce(
+        (max, item) => Math.max(max, item.created ? new Date(item.created).getTime() : 0),
+        0,
+      );
+      markSeen("check-attendance", user.id, latest || Date.now());
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Không tải được check công");
     } finally {
       setLoading(false);
     }
-  }, [activeUserId, user]);
+  }, [user]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const activeItems = useMemo(
-    () => items.filter((item) => item.user === activeUserId),
-    [activeUserId, items],
+    () => items.filter((item) => item.user === user?.id),
+    [items, user?.id],
   );
   const activeSalaryItems = useMemo(
-    () => salaryItems.filter((item) => item.user === activeUserId),
-    [activeUserId, salaryItems],
+    () => salaryItems.filter((item) => item.user === user?.id),
+    [salaryItems, user?.id],
   );
-  const activeCheckUser = useMemo(
-    () => checkUsers.find((item) => item.id === activeUserId),
-    [activeUserId, checkUsers],
-  );
+  const activeCheckUser = user as UserRecord | null;
 
   useEffect(() => {
     let cancelled = false;
@@ -1162,19 +1229,6 @@ function UserCheckAttendance() {
       <div className="space-y-4 p-4">
         {loading && <div className="p-4 text-sm text-muted-foreground">Đang tải...</div>}
 
-        {checkUsers.length > 1 && (
-          <div className="space-y-1">
-            <Label className="text-xs">Người cần xem</Label>
-            <UserCombobox
-              value={activeUserId}
-              onChange={setActiveUserId}
-              users={checkUsers}
-              currentUserId={user?.id}
-              placeholder="Chọn người cần xem"
-            />
-          </div>
-        )}
-
         <Tabs defaultValue="attendance" className="space-y-4">
           <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl">
             <TabsTrigger value="attendance" className="rounded-lg text-xs">
@@ -1207,7 +1261,7 @@ function UserCheckAttendance() {
                           : "border-border bg-card text-muted-foreground",
                       )}
                     >
-                      {item.month} · Lần {item.round_no}
+                      {item.month} · {item.expand?.batch?.note || `Lần ${item.round_no}`}
                     </button>
                   ))}
                 </div>
@@ -1218,19 +1272,14 @@ function UserCheckAttendance() {
                       <div className="gradient-accent p-4 text-accent-foreground">
                         <div className="text-xs uppercase opacity-80">Bảng check công</div>
                         <div className="mt-0.5 text-xl font-bold">
-                          {selected.month} · Lần {selected.round_no}
+                          {selected.month} · {selected.expand?.batch?.note || `Lần ${selected.round_no}`}
                         </div>
-                        {selected.expand?.batch?.note && (
-                          <div className="mt-1 text-xs opacity-80">
-                            {selected.expand.batch.note}
-                          </div>
-                        )}
                       </div>
                       <div className="grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
                         {visibleRateCells.map((cell) => (
                           <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
                         ))}
-                        <RateCell label={"Ng\u00e0y"} hours={selected.rows.length} suffix="" />
+                        <RateCell label={"Ngày"} hours={selected.rows.length} suffix="" />
                       </div>
                     </Card>
 
@@ -1302,7 +1351,7 @@ function SalaryCheckPanel({
                 : "border-border bg-card text-muted-foreground",
             )}
           >
-            {item.month} · Lần {item.round_no}
+            {item.month} · {item.expand?.batch?.note || `Lần ${item.round_no}`}
           </button>
         ))}
       </div>
@@ -1313,11 +1362,8 @@ function SalaryCheckPanel({
             <div className="text-xs uppercase opacity-80">Bảng check lương</div>
             <div className="mt-0.5 text-xl font-bold">{formatVND(selectedTotals?.net || 0)}</div>
             <div className="mt-1 text-xs opacity-80">
-              {selected.month} · Lần {selected.round_no}
+              {selected.month} · {selected.expand?.batch?.note || `Lần ${selected.round_no}`}
             </div>
-            {selected.expand?.batch?.note && (
-              <div className="mt-1 text-xs opacity-80">{selected.expand.batch.note}</div>
-            )}
           </div>
 
           <div className="space-y-4 p-3">

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { escapePb } from "@/lib/delegations";
 import { cn } from "@/lib/utils";
 import { BusFront, Clock3, Pencil, Phone, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -59,31 +60,29 @@ function TransportPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await pb.collection("transport_contacts").getFullList({
+      const q = escapePb(search.trim());
+      const res = await pb.collection("transport_contacts").getList(1, 200, {
+        filter: q
+          ? `(${["carrier_name", "title", "run_time", "phone"]
+              .map((field) => `${field}~"${q}"`)
+              .join(" || ")})`
+          : "",
         sort: "-created",
         expand: "user,edited_by",
       });
-      setItems(res as unknown as TransportRecord[]);
+      setItems(res.items as unknown as TransportRecord[]);
     } catch (error) {
       toast.error(getErrorMessage(error, "Lỗi tải danh sách nhà xe"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [search]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((item) =>
-      [item.carrier_name, item.title, item.run_time, item.phone].some((value) =>
-        value?.toLowerCase().includes(q),
-      ),
-    );
-  }, [items, search]);
+  const filtered = items;
 
   const resetForm = () => {
     setCarrierName("");

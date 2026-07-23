@@ -29,8 +29,8 @@ export function BottomNav() {
       ? [
           { to: "/staff", label: "Staff", icon: BriefcaseBusiness },
           { to: "/staff/workers", label: "Lao động", icon: Users },
-          { to: "/staff/export", label: "Xuất file", icon: Download },
           { to: "/account", label: "Tài khoản", icon: User },
+          { to: "/staff/export", label: "Xuất file", icon: Download },
         ]
       : user?.role === "admin"
         ? [
@@ -55,11 +55,14 @@ export function BottomNav() {
         <ul
           className={cn(
             "gap-2 px-3 pb-2 pt-2",
-            items.length === 4 ? "grid grid-cols-4" : "grid grid-cols-3",
+            items.length === 5 ? "grid grid-cols-5" : items.length === 4 ? "grid grid-cols-4" : "grid grid-cols-3",
           )}
         >
           {items.map((item) => {
-            const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+            const active = item.to === "/"
+              ? pathname === "/"
+              : pathname.startsWith(item.to) &&
+                !items.some(other => other.to !== item.to && pathname.startsWith(other.to) && other.to.length > item.to.length);
             const Icon = item.icon;
 
             return (

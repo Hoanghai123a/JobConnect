@@ -5,6 +5,7 @@ import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
 import { isUserApproved } from "@/lib/user-approval";
+import { getSeen } from "@/lib/seen";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { FeatureTile } from "@/components/dashboard/FeatureTile";
 import {
@@ -12,14 +13,33 @@ import {
   Clock,
   BookOpen,
   MessageSquareWarning,
-  User,
   Settings,
   Building2,
   CalendarCheck,
   Wallet,
   MessagesSquare,
   BusFront,
+  Bell,
+  ShieldCheck,
+  Sprout,
+  History,
+  Users,
+  LayoutGrid,
+  Gamepad2,
+  Gem,
+  Bomb,
+  ChevronRight,
+  RefreshCw,
+  NotebookPen,
+  ClipboardCheck,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => {
@@ -32,11 +52,27 @@ export const Route = createFileRoute("/")({
   component: DashboardPage,
 });
 
+type UtilKey = "utilities" | "entertainment" | null;
+
 function DashboardPage() {
   const { loading, user, isAdmin } = useAuth();
   const { data: settings, logoUrl } = useAppSettings();
   const [pendingComplaintCount, setPendingComplaintCount] = useState(0);
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+  const [unread, setUnread] = useState({ news: 0, chat: 0, check: 0, advances: 0 });
+  const [openUtil, setOpenUtil] = useState<UtilKey>(null);
+  const [reloading, setReloading] = useState(false);
   const nav = useNavigate();
+
+  const handleReload = async () => {
+    if (reloading) return;
+    setReloading(true);
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+    window.location.reload();
+  };
 
   useEffect(() => {
     if (loading) return;
@@ -73,6 +109,91 @@ function DashboardPage() {
     };
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (!isAdmin || !user?.id) return;
+    let alive = true;
+
+    (async () => {
+      try {
+        const res = await pb.collection("approval_responses").getList(1, 1, {
+          filter: `admin = "${user.id}" && status = "pending"`,
+        });
+        if (alive) setPendingApprovalCount(res.totalItems || 0);
+      } catch {
+        if (alive) setPendingApprovalCount(0);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let alive = true;
+
+    const since = (scope: string) => {
+      const ts = getSeen(scope, user.id);
+      return ts ? new Date(ts).toISOString().replace("T", " ") : "";
+    };
+    const countNewer = async (
+      collection: string,
+      field: string,
+      scope: string,
+      extraFilter = "",
+    ) => {
+      const seen = since(scope);
+      const parts = [extraFilter, seen ? `${field} > "${seen}"` : ""].filter(Boolean);
+      const res = await pb.collection(collection).getList(1, 1, {
+        filter: parts.join(" && "),
+      });
+      return res.totalItems || 0;
+    };
+
+    (async () => {
+      const me = `user = "${user.id}"`;
+      const chatCount = async () => {
+        try {
+          const memberships = await pb.collection("chat_room_members").getFullList({
+            filter: `user = "${user.id}"`,
+          });
+          const roomIds = (memberships as any[]).map((m) => m.room);
+          if (!roomIds.length) return 0;
+          let total = 0;
+          for (const roomId of roomIds) {
+            const seen = getSeen(`chat:${roomId}`, user.id);
+            const seenIso = seen ? new Date(seen).toISOString().replace("T", " ") : "";
+            const filter = [
+              `room = "${roomId}"`,
+              `user != "${user.id}"`,
+              seenIso ? `created > "${seenIso}"` : "",
+            ]
+              .filter(Boolean)
+              .join(" && ");
+            const res = await pb.collection("group_chat_messages").getList(1, 1, { filter });
+            total += res.totalItems || 0;
+          }
+          return total;
+        } catch {
+          return 0;
+        }
+      };
+      const [news, chat, check, salary, advances] = await Promise.all([
+        countNewer("recruitments", "created", "news", "is_active = true").catch(() => 0),
+        chatCount(),
+        countNewer("check_attendance_items", "created", "check-attendance", me).catch(() => 0),
+        countNewer("check_salary_items", "created", "check-attendance", me).catch(() => 0),
+        countNewer("advances", "resolved_at", "advances", me).catch(() => 0),
+      ]);
+      if (alive) setUnread({ news, chat, check: check + salary, advances });
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [user?.id]);
+
   if (loading || !user || !isUserApproved(user)) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center px-4 text-sm text-muted-foreground">
@@ -81,64 +202,200 @@ function DashboardPage() {
     );
   }
 
+  const hasEmployment = Boolean(user?.employee_code?.trim() && user?.company?.trim());
+  const workDisabled = !isAdmin && !hasEmployment;
+  const workDisabledReason =
+    "Tính năng này chỉ dùng được khi bạn đã được admin gắn mã NV và nhà máy. Vui lòng liên hệ admin để cập nhật hồ sơ.";
+
+  const toBadge = (count: number) => (count > 0 ? (count > 9 ? "9+" : String(count)) : undefined);
+
+  const summaryParts: string[] = [];
+  if (unread.news > 0) summaryParts.push(`${unread.news} tin tuyển dụng mới`);
+  if (!workDisabled) {
+    if (unread.check > 0) summaryParts.push(`${unread.check} bảng công/lương mới`);
+    if (unread.advances > 0) summaryParts.push(`${unread.advances} phản hồi ứng lương`);
+  }
+  if (unread.chat > 0) summaryParts.push(`${unread.chat} tin nhắn chưa đọc`);
+  const summaryText = summaryParts.join(" · ");
+
   return (
     <div className="pb-nav">
-      <div className="gradient-hero relative overflow-hidden px-5 pb-10 pt-6 text-white">
-        <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/20 blur-2xl" />
-        <div className="absolute -bottom-16 -left-8 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
+      <div className="sticky top-0 z-10 px-4 pb-2 pt-4">
+        <div className="gradient-hero relative overflow-hidden rounded-[1.75rem] px-5 py-5 text-white shadow-soft">
+          <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/20 blur-2xl" />
+          <div className="absolute -bottom-16 -left-8 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
 
-        <div className="relative flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-white/95 shadow-soft">
-            {logoUrl ? (
-              <img src={logoUrl} alt="logo" className="logo-fit" />
-            ) : (
-              <Building2 className="h-6 w-6 text-primary" />
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-base font-semibold leading-tight">
-              {settings.company_name}
+          <div className="relative flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-white/95 shadow-soft">
+              {logoUrl ? (
+                <img src={logoUrl} alt="logo" className="logo-fit" />
+              ) : (
+                <Building2 className="h-6 w-6 text-primary" />
+              )}
             </div>
-            {settings.slogan && (
-              <div className="truncate text-xs text-white/80">{settings.slogan}</div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-base font-semibold leading-tight">
+                {settings.company_name}
+              </div>
+              {settings.slogan && (
+                <div className="truncate text-xs text-white/80">{settings.slogan}</div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleReload}
+              disabled={reloading}
+              aria-label="Tải lại trang"
+              title="Tải lại trang"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20 text-white shadow-sm backdrop-blur transition hover:bg-white/30 active:scale-95 disabled:opacity-70"
+            >
+              <RefreshCw className={reloading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+            </button>
+          </div>
+
+          <div className="relative mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <div className="text-sm text-white/80">Xin chào,</div>
+            <div className="text-base font-semibold leading-tight">
+              {user?.full_name || user?.username || "Bạn"}
+            </div>
+
+            <div className="inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-[8px] uppercase tracking-wider backdrop-blur">
+              {isAdmin ? "Quản trị viên" : "Nhân viên"}
+            </div>
+            {!isAdmin && hasEmployment && (
+              <div className="inline-flex items-center rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] backdrop-blur">
+                {user.company}
+              </div>
             )}
           </div>
-        </div>
 
-        <div className="relative mt-2 flex">
-          <div className="text-sm text-white/80">Xin chào,</div>
-          <div className="text-base ml-2 font-semibold leading-tight">
-            {user?.full_name || user?.username || "Bạn"} 👋
-          </div>
-
-          <div className="ml-5 inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-[8px] uppercase tracking-wider backdrop-blur">
-            {isAdmin ? "Quản trị viên" : "Nhân viên"}
-          </div>
+          {summaryText && (
+            <div className="relative mt-3 flex items-start gap-2 rounded-2xl bg-white/15 px-3 py-2 backdrop-blur">
+              <Bell className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="text-xs leading-snug">{summaryText}</div>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="-mt-6 px-4">
-        <div className="rounded-3xl bg-card p-3 shadow-soft">
+      <div className="space-y-4 px-4 pt-2">
+        {isAdmin && (
+          <section className="rounded-3xl bg-card p-3 shadow-soft">
+            <div className="flex items-center justify-between px-1 pb-2 pt-1">
+              <div>
+                <div className="text-sm font-semibold tracking-tight">Quản trị</div>
+                <div className="text-[11px] text-muted-foreground">Chỉ dành cho admin</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <FeatureTile
+                to="/admin/workforce"
+                label="Nhân sự đi làm"
+                description="Tuyển dụng & danh sách NLĐ"
+                icon={Users}
+              />
+              <FeatureTile
+                to="/staff/approvals"
+                label="Phê duyệt"
+                description="Yêu cầu từ staff"
+                icon={ClipboardCheck}
+                badge={toBadge(pendingApprovalCount)}
+              />
+              <FeatureTile
+                to="/staff/salary-holds"
+                label="Giữ lương"
+                description="Duyệt và giải ngân yêu cầu"
+                icon={Wallet}
+              />
+              <FeatureTile
+                to="/admin/staff"
+                label="Quản lý staff"
+                description="Tạo, import tài khoản staff"
+                icon={ShieldCheck}
+              />
+              <FeatureTile
+                to="/admin/settings"
+                label="Cài đặt"
+                description="Quản trị hệ thống"
+                icon={Settings}
+              />
+            </div>
+          </section>
+        )}
+
+        <section>
           <div className="grid grid-cols-2 gap-3">
-            <FeatureTile to="/news" label="Bảng tin" description="Tin tuyển dụng mới" icon={Newspaper} />
+            <button
+              type="button"
+              onClick={() => setOpenUtil("utilities")}
+              className="group relative overflow-hidden rounded-3xl border bg-card p-4 text-left shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-card)] active:scale-[0.98]"
+            >
+              <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary/10 blur-2xl transition-transform group-hover:scale-110" />
+              <div className="relative flex items-start justify-between gap-2">
+                <div className="gradient-primary flex h-11 w-11 items-center justify-center rounded-2xl text-primary-foreground shadow-sm">
+                  <LayoutGrid className="h-5 w-5" />
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              </div>
+              <div className="relative mt-3">
+                <div className="text-sm font-semibold tracking-tight">Tiện ích</div>
+                <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  Bảng tin, nhà xe, trò chuyện, hướng dẫn
+                </div>
+              </div>
+              {(unread.news > 0 || unread.chat > 0) && (
+                <span className="absolute right-3 top-3 inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+                  {(() => {
+                    const total = unread.news + unread.chat;
+                    return total > 9 ? "9+" : total;
+                  })()}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setOpenUtil("entertainment")}
+              className="group relative overflow-hidden rounded-3xl border bg-card p-4 text-left shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-card)] active:scale-[0.98]"
+            >
+              <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-accent/40 blur-2xl transition-transform group-hover:scale-110" />
+              <div className="relative flex items-start justify-between gap-2">
+                <div className="gradient-accent flex h-11 w-11 items-center justify-center rounded-2xl text-accent-foreground shadow-sm">
+                  <Gamepad2 className="h-5 w-5" />
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              </div>
+              <div className="relative mt-3">
+                <div className="text-sm font-semibold tracking-tight">Giải trí</div>
+                <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  Vườn cây và các trò chơi thư giãn
+                </div>
+              </div>
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-3xl bg-card p-3 shadow-soft">
+          <div className="flex items-center justify-between px-1 pb-2 pt-1">
+            <div>
+              <div className="text-sm font-semibold tracking-tight">Khi bạn đã đi làm</div>
+              <div className="text-[11px] text-muted-foreground">
+                {workDisabled
+                  ? "Cần admin gắn mã NV để mở khoá"
+                  : "Dành cho nhân sự đã được admin xác nhận"}
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <FeatureTile
-              to="/attendance"
-              label="Chấm công"
-              description="Ghi nhận giờ làm"
-              icon={Clock}
-            />
-            <FeatureTile
-              to="/check-attendance"
-              label="Check công/lương"
-              description="Kiểm tra bảng công"
-              icon={CalendarCheck}
-            />
-            <FeatureTile
-              to="/guides"
-              label="Hướng dẫn"
-              description="Tài liệu, biểu mẫu"
-              icon={BookOpen}
+              to="/advances"
+              label="Ứng lương"
+              description="Xin ứng lương"
+              icon={Wallet}
               variant="accent"
+              disabled={workDisabled}
+              disabledReason={workDisabledReason}
+              badge={workDisabled ? undefined : toBadge(unread.advances)}
             />
             <FeatureTile
               to="/complaints"
@@ -146,8 +403,10 @@ function DashboardPage() {
               description="Gửi phản ánh"
               icon={MessageSquareWarning}
               variant="accent"
+              disabled={workDisabled}
+              disabledReason={workDisabledReason}
               badge={
-                isAdmin && pendingComplaintCount > 0
+                !workDisabled && isAdmin && pendingComplaintCount > 0
                   ? pendingComplaintCount > 9
                     ? "9+"
                     : String(pendingComplaintCount)
@@ -155,52 +414,137 @@ function DashboardPage() {
               }
             />
             <FeatureTile
-              to="/advances"
-              label="Ứng lương"
-              description="Xin ứng lương"
-              icon={Wallet}
-            />
-            <FeatureTile
-              to="/chat"
-              label="Trò chuyện"
-              description="Nhắn tin nhóm"
-              icon={MessagesSquare}
+              to="/check-attendance"
+              label="Check công/lương"
+              description="Kiểm tra bảng công"
+              icon={CalendarCheck}
               variant="accent"
+              disabled={workDisabled}
+              disabledReason={workDisabledReason}
+              badge={workDisabled ? undefined : toBadge(unread.check)}
             />
             <FeatureTile
-              to="/transport"
-              label="Tìm nhà xe"
-              description="Thông tin cộng đồng"
-              icon={BusFront}
+              to="/attendance"
+              label="Tự chấm công"
+              description="Ghi nhận giờ làm"
+              icon={Clock}
+              variant="accent"
+              disabled={workDisabled}
+              disabledReason={workDisabledReason}
             />
-            <FeatureTile
-              to="/account"
-              label="Tài khoản"
-              description="Thông tin cá nhân"
-              icon={User}
-            />
-            {isAdmin && (
+            {!isAdmin && (
               <FeatureTile
-                to="/admin/settings"
-                label="Cài đặt"
-                description="Quản trị hệ thống"
-                icon={Settings}
+                to="/work-history"
+                label="Lịch sử đi làm"
+                description="Nhà máy, ngày vào/nghỉ"
+                icon={History}
                 variant="accent"
-              />
-            )}
-            {isAdmin && (
-              <FeatureTile
-                to="/admin/staff"
-                label="Staff"
-                description="Role staff và phân nhà máy"
-                icon={MessagesSquare}
+                disabled={workDisabled}
+                disabledReason={workDisabledReason}
               />
             )}
           </div>
-        </div>
+        </section>
       </div>
 
       <BottomNav />
+
+      <Dialog open={openUtil !== null} onOpenChange={(o) => !o && setOpenUtil(null)}>
+        <DialogContent className="rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {openUtil === "utilities" ? (
+                <>
+                  <div className="gradient-primary flex h-8 w-8 items-center justify-center rounded-xl text-primary-foreground shadow-sm">
+                    <LayoutGrid className="h-4 w-4" />
+                  </div>
+                  Tiện ích
+                </>
+              ) : (
+                <>
+                  <div className="gradient-accent flex h-8 w-8 items-center justify-center rounded-xl text-accent-foreground shadow-sm">
+                    <Gamepad2 className="h-4 w-4" />
+                  </div>
+                  Giải trí
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {openUtil === "utilities"
+                ? "Các tiện ích dành cho mọi người dùng"
+                : "Chơi và thư giãn"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {openUtil === "utilities" && (
+            <div className="grid grid-cols-3 gap-2" onClick={() => setOpenUtil(null)}>
+              <FeatureTile
+                to="/news"
+                label="Bảng tin"
+                icon={Newspaper}
+                size="compact"
+                badge={toBadge(unread.news)}
+              />
+              <FeatureTile
+                to="/transport"
+                label="Tìm nhà xe"
+                icon={BusFront}
+                size="compact"
+              />
+              <FeatureTile
+                to="/chat"
+                label="Trò chuyện"
+                icon={MessagesSquare}
+                size="compact"
+                badge={toBadge(unread.chat)}
+              />
+              <FeatureTile
+                to="/guides"
+                label="Hướng dẫn"
+                icon={BookOpen}
+                size="compact"
+              />
+              <FeatureTile
+                to="/notebook"
+                label="Sổ tay"
+                icon={NotebookPen}
+                size="compact"
+              />
+              {isAdmin && (
+                <FeatureTile
+                  to="/admin/accounts/stats"
+                  label="Thống kê TK"
+                  icon={Users}
+                  size="compact"
+                />
+              )}
+            </div>
+          )}
+
+          {openUtil === "entertainment" && (
+            <div className="grid grid-cols-3 gap-2" onClick={() => setOpenUtil(null)}>
+              <FeatureTile
+                to="/garden"
+                label="Vườn cây"
+                icon={Sprout}
+                size="compact"
+              />
+              <FeatureTile
+                to="/gems"
+                label="Xếp kim cương"
+                icon={Gem}
+                size="compact"
+              />
+              <FeatureTile
+                to="/minesweeper"
+                label="Dò mìn"
+                icon={Bomb}
+                size="compact"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

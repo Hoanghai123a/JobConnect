@@ -44,11 +44,16 @@ export async function fetchFactoryManagers(staffId?: string) {
   })) as unknown as FactoryManagerRecord[];
 }
 
-export function isFactoryAssignmentActive(record: FactoryManagerRecord, referenceDate = new Date()) {
+export function isFactoryAssignmentActive(
+  record: FactoryManagerRecord,
+  referenceDate = new Date(),
+) {
   if (record.status === "inactive") return false;
 
   const refTime = referenceDate.getTime();
-  const fromTime = record.active_from ? new Date(record.active_from).getTime() : Number.NEGATIVE_INFINITY;
+  const fromTime = record.active_from
+    ? new Date(record.active_from).getTime()
+    : Number.NEGATIVE_INFINITY;
   const toTime = record.active_to ? new Date(record.active_to).getTime() : Number.POSITIVE_INFINITY;
 
   return fromTime <= refTime && toTime >= refTime;

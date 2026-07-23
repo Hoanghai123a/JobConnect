@@ -14,12 +14,14 @@ export interface UserRecord {
   phone?: string;
   full_name?: string;
   cccd?: string;
+  uid?: string;
   role?: Role;
   approved?: boolean | string;
   approvalStatus?: "pending" | "approved" | "rejected";
   status?: "active" | "disabled";
   default_hc_hours?: number;
   default_ot_hours?: number;
+  attendance_cutoff_day?: number;
   company?: string;
   employee_code?: string;
   lcb?: number;
@@ -32,6 +34,13 @@ export interface UserRecord {
   collectionId?: string;
   collectionName?: string;
   avatar?: string;
+  cccd_front?: string;
+  cccd_back?: string;
+  gender?: string;
+  date_of_birth?: string;
+  address?: string;
+  must_change_password?: boolean;
+  last_login?: string;
 }
 
 /** Convert base64 dataURL to File (per HRJob skill rule #1) */

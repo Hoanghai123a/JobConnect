@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/layout/BottomNav";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,6 +14,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -23,11 +25,11 @@ import { aggregate, calcSalary, formatVND, type AttendanceRow, type Shift } from
 import {
   addDaysToDateKey,
   buildPayrollCalendarCells,
-  fetchFactoryAttendanceCutoffDay,
+  normalizeCutoffDay,
   getPayrollPeriod,
   type PayrollPeriod,
 } from "@/lib/payroll-cycle";
-import { exportToExcel } from "@/lib/excel";
+import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -40,6 +42,8 @@ import {
   Users,
   Clock,
   ClipboardList,
+  Settings,
+  Save,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/attendance")({
@@ -93,13 +97,13 @@ function AdminAttendance() {
       const next = new Date(monthDate);
       next.setMonth(next.getMonth() + 1);
       const last = ym(next) + "-01";
-      const res = await pb.collection("attendance").getFullList({
+      const res = await pb.collection("attendance").getList(1, 500, {
         filter: `date>="${first}" && date<"${last}"`,
         sort: "date",
         expand: "user",
       });
       setRows(
-        res.map((r: any) => ({
+        res.items.map((r: any) => ({
           id: r.id,
           user: r.user,
           date: (r.date as string).substring(0, 10),
@@ -163,13 +167,13 @@ function AdminAttendance() {
       const u = r.expand?.user || {};
       return {
         "Họ tên": u.full_name || "",
-        SĐT: u.phone || "",
+        "Số điện thoại": u.phone || "",
         "Nhà máy": u.company || "",
-        Ngày: r.date,
+        Ngày: formatDateOnly(r.date),
         Ca: r.shift === "day" ? "Ngày" : "Đêm",
         Lễ: r.is_holiday ? "x" : "",
-        "Giờ HC": r.hc_hours,
-        "Giờ TC": r.ot_hours,
+        "Giờ hành chính": r.hc_hours,
+        "Giờ tăng ca": r.ot_hours,
       };
     });
     const summary = grouped.map(({ user, rows: rs }) => {
@@ -179,16 +183,18 @@ function AdminAttendance() {
         chuyen_can: user.chuyen_can || 0,
         doi_song: user.doi_song || 0,
         tham_nien: user.tham_nien || 0,
+        rows: rs,
+        periodStart: ym(monthDate) + "-01",
       });
       const hc = rs.reduce((a, r) => a + r.hc_hours, 0);
       const ot = rs.reduce((a, r) => a + r.ot_hours, 0);
       return {
         "Họ tên": user.full_name || "",
-        SĐT: user.phone || "",
+        "Số điện thoại": user.phone || "",
         "Nhà máy": user.company || "",
-        "Số ngày": rs.length,
-        "Giờ HC": hc,
-        "Giờ TC": ot,
+        "Số ngày công": rs.length,
+        "Giờ hành chính": hc,
+        "Giờ tăng ca": ot,
         "Lương tạm tính": Math.round(s.total),
       };
     });
@@ -197,7 +203,7 @@ function AdminAttendance() {
 
   return (
     <PageContainer
-      title="Chấm công"
+      title="Tự chấm công"
       subtitle={`Tháng ${String(monthDate.getMonth() + 1).padStart(2, "0")}/${monthDate.getFullYear()}`}
       right={
         <button
@@ -288,6 +294,7 @@ function AdminAttendance() {
             <UserDetailMonth
               user={detailUser}
               rows={rows.filter((r) => r.user === detailUser.id)}
+              periodStart={ym(monthDate) + "-01"}
             />
           )}
         </DialogContent>
@@ -296,13 +303,23 @@ function AdminAttendance() {
   );
 }
 
-function UserDetailMonth({ user, rows }: { user: any; rows: RowWithUser[] }) {
+function UserDetailMonth({
+  user,
+  rows,
+  periodStart,
+}: {
+  user: any;
+  rows: RowWithUser[];
+  periodStart: string;
+}) {
   const buckets = aggregate(rows);
   const salary = calcSalary(buckets, {
     lcb: user.lcb || 0,
     chuyen_can: user.chuyen_can || 0,
     doi_song: user.doi_song || 0,
     tham_nien: user.tham_nien || 0,
+    rows,
+    periodStart,
   });
   return (
     <div className="space-y-3">
@@ -344,7 +361,7 @@ function UserDetailMonth({ user, rows }: { user: any; rows: RowWithUser[] }) {
 /* ─────────────────────────── USER ─────────────────────────── */
 
 function UserAttendance() {
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
   const [monthDate, setMonthDate] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -352,7 +369,7 @@ function UserAttendance() {
   });
   const [rows, setRows] = useState<(AttendanceRow & { id: string })[]>([]);
   const [loading, setLoading] = useState(false);
-  const [factoryCutoffDay, setFactoryCutoffDay] = useState<number | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [date, setDate] = useState(todayStr());
   const [shift, setShift] = useState<Shift>("day");
@@ -367,26 +384,21 @@ function UserAttendance() {
     setOtHours(user?.default_ot_hours ?? 0);
   }, [user?.id, user?.default_hc_hours, user?.default_ot_hours]);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchFactoryAttendanceCutoffDay(user?.company).then((day) => {
-      if (!cancelled) setFactoryCutoffDay(day);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.company]);
+  const userCutoffDay = useMemo(
+    () => normalizeCutoffDay(user?.attendance_cutoff_day),
+    [user?.attendance_cutoff_day],
+  );
 
   const payrollPeriod = useMemo(
-    () => getPayrollPeriod(monthDate, factoryCutoffDay),
-    [monthDate, factoryCutoffDay],
+    () => getPayrollPeriod(monthDate, userCutoffDay),
+    [monthDate, userCutoffDay],
   );
 
   const fetchMonth = async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const res = await pb.collection("attendance").getFullList({
+      const res = await pb.collection("attendance").getList(1, 100, {
         filter: `user="${user.id}" && date>="${payrollPeriod.start}" && date<"${addDaysToDateKey(
           payrollPeriod.end,
           1,
@@ -394,7 +406,7 @@ function UserAttendance() {
         sort: "date",
       });
       setRows(
-        res.map((r: any) => ({
+        res.items.map((r: any) => ({
           id: r.id,
           date: (r.date as string).substring(0, 10),
           shift: r.shift,
@@ -421,8 +433,18 @@ function UserAttendance() {
         chuyen_can: user?.chuyen_can || 0,
         doi_song: user?.doi_song || 0,
         tham_nien: user?.tham_nien || 0,
+        rows,
+        periodStart: payrollPeriod.start,
       }),
-    [buckets, user?.lcb, user?.chuyen_can, user?.doi_song, user?.tham_nien],
+    [
+      buckets,
+      user?.lcb,
+      user?.chuyen_can,
+      user?.doi_song,
+      user?.tham_nien,
+      rows,
+      payrollPeriod.start,
+    ],
   );
   const visibleRateCells = [
     { label: "100%", hours: buckets.r100 },
@@ -488,7 +510,7 @@ function UserAttendance() {
 
   return (
     <div>
-      <AppHeader title="Chấm công" />
+      <AppHeader title="Tự chấm công" />
       <div className="space-y-4 p-4">
         <Card className="overflow-hidden">
           <div className="gradient-accent p-4 text-accent-foreground">
@@ -497,6 +519,13 @@ function UserAttendance() {
                 <div className="text-xs uppercase opacity-80">Bảng lương tạm tính</div>
                 <div className="text-xl font-bold">{user?.company || "—"}</div>
               </div>
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition"
+                aria-label="Cài đặt chấm công"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
             </div>
             <div className="mt-3 text-3xl font-extrabold tracking-tight">
               {formatVND(salary.total)}
@@ -554,7 +583,7 @@ function UserAttendance() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Ngày</Label>
-                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                  <DateInput value={date} onChange={(v) => setDate(v)} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Ca</Label>
@@ -618,6 +647,12 @@ function UserAttendance() {
             </form>
           </DialogContent>
         </Dialog>
+
+        <AttendanceSettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          onSaved={refresh}
+        />
       </div>
     </div>
   );
@@ -774,6 +809,221 @@ function ShiftToggle({ value, onChange }: { value: Shift; onChange: (v: Shift) =
       >
         <Moon className="h-3.5 w-3.5" /> Đêm
       </button>
+    </div>
+  );
+}
+
+/* ─────────────── ATTENDANCE SETTINGS DIALOG ─────────────── */
+
+function AttendanceSettingsDialog({
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => Promise<void>;
+}) {
+  const { user } = useAuth();
+  const [form, setForm] = useState({
+    attendance_cutoff_day: 0,
+    lcb: 0,
+    chuyen_can: 0,
+    doi_song: 0,
+    tham_nien: 0,
+    default_hc_hours: 8,
+    default_ot_hours: 0,
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open && user) {
+      setForm({
+        attendance_cutoff_day: user.attendance_cutoff_day || 0,
+        lcb: user.lcb ?? 0,
+        chuyen_can: user.chuyen_can ?? 0,
+        doi_song: user.doi_song ?? 0,
+        tham_nien: user.tham_nien ?? 0,
+        default_hc_hours: user.default_hc_hours ?? 8,
+        default_ot_hours: user.default_ot_hours ?? 0,
+      });
+    }
+  }, [open, user?.id]);
+
+  const save = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const cutoff = form.attendance_cutoff_day;
+      await pb.collection("users").update(user.id, {
+        attendance_cutoff_day: cutoff >= 1 && cutoff <= 31 ? cutoff : null,
+        lcb: Number(form.lcb) || 0,
+        chuyen_can: Number(form.chuyen_can) || 0,
+        doi_song: Number(form.doi_song) || 0,
+        tham_nien: Number(form.tham_nien) || 0,
+        default_hc_hours: Number(form.default_hc_hours) || 0,
+        default_ot_hours: Number(form.default_ot_hours) || 0,
+      });
+      await onSaved();
+      toast.success("Đã lưu cài đặt");
+      onOpenChange(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi lưu cài đặt");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+        <DialogHeader>
+          <DialogTitle>Cài đặt chấm công</DialogTitle>
+          <DialogDescription>
+            Các thông số phục vụ tính lương tạm tính khi tự chấm công.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Nhà máy hiện tại</span>
+              <span className="text-sm font-semibold">{user?.company || "Chưa có"}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Mã NV</span>
+              <span className="text-sm font-semibold">{user?.employee_code || "Chưa có"}</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Muốn đổi nhà máy → vào Lịch sử đi làm → Báo nghỉ, rồi được tuyển vào nhà máy mới.
+            </p>
+          </div>
+
+          <SettingsNumberField
+            label="Ngày chốt công (1–31, để trống = theo tháng dương lịch)"
+            value={form.attendance_cutoff_day || ""}
+            onChange={(v) => setForm({ ...form, attendance_cutoff_day: v })}
+            min={0}
+            max={31}
+            placeholder="Để trống"
+          />
+
+          <SettingsMoneyField
+            label="LCB (Lương cơ bản)"
+            value={form.lcb}
+            onChange={(v) => setForm({ ...form, lcb: v })}
+          />
+          <SettingsMoneyField
+            label="Chuyên cần"
+            value={form.chuyen_can}
+            onChange={(v) => setForm({ ...form, chuyen_can: v })}
+          />
+          <SettingsMoneyField
+            label="Đời sống"
+            value={form.doi_song}
+            onChange={(v) => setForm({ ...form, doi_song: v })}
+          />
+          <SettingsMoneyField
+            label="Thâm niên"
+            value={form.tham_nien}
+            onChange={(v) => setForm({ ...form, tham_nien: v })}
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <SettingsNumberField
+              label="Giờ HC mặc định"
+              value={form.default_hc_hours}
+              onChange={(v) => setForm({ ...form, default_hc_hours: v })}
+            />
+            <SettingsNumberField
+              label="Giờ TC mặc định"
+              value={form.default_ot_hours}
+              onChange={(v) => setForm({ ...form, default_ot_hours: v })}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Đóng
+            </Button>
+            <Button type="submit" disabled={saving}>
+              <Save className="h-4 w-4" /> {saving ? "Đang lưu..." : "Lưu cài đặt"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SettingsNumberField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  placeholder,
+}: {
+  label: string;
+  value: number | string;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      <Input
+        type="number"
+        inputMode="numeric"
+        step="1"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value) || 0)}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
+
+function SettingsMoneyField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const [text, setText] = useState(() =>
+    Number.isFinite(value) ? new Intl.NumberFormat("vi-VN").format(value) : "",
+  );
+  useEffect(() => {
+    const formatted = Number.isFinite(value) ? new Intl.NumberFormat("vi-VN").format(value) : "";
+    const currentDigits = text.replace(/\D/g, "");
+    if (currentDigits !== String(value)) setText(formatted);
+  }, [value]);
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      <Input
+        inputMode="numeric"
+        value={text}
+        onChange={(e) => {
+          const digits = e.target.value.replace(/\D/g, "");
+          const n = digits ? Number(digits) : 0;
+          setText(digits ? new Intl.NumberFormat("vi-VN").format(n) : "");
+          onChange(n);
+        }}
+      />
     </div>
   );
 }

@@ -1,11 +1,14 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
 import { pb, type UserRecord } from "./pocketbase";
 import { getPBUpstream } from "./pocketbase-config";
+import { clearStaffCache } from "./staff-cache";
+import { stopStaffRealtimeSync } from "./realtime-sync";
 
 interface AuthCtx {
   user: UserRecord | null;
   loading: boolean;
   isAdmin: boolean;
+  isStaff: boolean;
   login: (identity: string, password: string) => Promise<UserRecord>;
   logout: () => void;
   refresh: () => Promise<void>;
@@ -97,7 +100,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    stopStaffRealtimeSync().catch((error) => console.warn("[auth] stopRealtime failed", error));
     pb.authStore.clear();
+    clearStaffCache();
   }, []);
 
   const refresh = useCallback(async () => {
@@ -112,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         loading,
         isAdmin: user?.role === "admin",
+        isStaff: user?.role === "staff",
         login,
         logout,
         refresh,

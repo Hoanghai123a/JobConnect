@@ -14,6 +14,26 @@ Collection `users` đã có sẵn nên không import đè ở đây.
    - Tuỳ chọn, dùng làm mã NV mặc định khi user chưa gắn với nhà máy nào.
 4. Các field ngân hàng (`bank_name`, `bank_account_number`, `bank_account_name`):
    - Đảm bảo đã tồn tại để staff có thể cập nhật STK cho user khi cần.
+5. Các field ảnh CCCD (`cccd_front`, `cccd_back`):
+   - Kiểu File, không bắt buộc, chấp nhận `image/jpeg`, `image/png`, `image/webp`.
+   - Dùng cho luồng tạo nhanh NLĐ và quản lý ảnh CCCD trên hồ sơ.
+
+## Rule cần có cho luồng tạo nhanh NLĐ
+
+Luồng tạo nhanh trong mục NLĐ tạo trực tiếp bản ghi `users`, sau đó tạo
+`employment_histories` và `cccd_versions`. Vì lựa chọn hiện tại là mở rule
+PocketBase trực tiếp cho staff, collection `users` cần:
+
+- `createRule`: `@request.auth.role = "admin" || @request.auth.role = "staff"`
+- `updateRule`: `@request.auth.role = "admin" || @request.auth.role = "staff" || id = @request.auth.id`
+
+Lưu ý: rule này mở quyền backend rộng hơn proxy/server endpoint có kiểm soát
+field. Nếu cần siết tuyệt đối theo nhà máy/QLNM, nên chuyển luồng tạo nhanh sang
+API server hoặc PocketBase hook để validate phạm vi trước khi tạo user.
+
+Khuyến nghị thêm unique index/constraint cho `uid` và `username` nếu instance
+PocketBase hiện tại chưa có, để tránh trùng tài khoản khi nhiều người tạo nhanh
+cùng lúc.
 
 ## Ghi chú
 
