@@ -86,8 +86,14 @@ async function handleHistoryEvent(
     return;
   }
 
-  const changed = await upsertCachedHistoryIfNewer(record);
-  if (!changed) {
+  let relatedUser = record.expand?.user;
+  if (!relatedUser && record.user) {
+    relatedUser = await pb.collection("users").getOne<UserRecord>(record.user).catch(() => undefined);
+  }
+
+  const userChanged = relatedUser ? await upsertCachedUserIfNewer(relatedUser) : false;
+  const historyChanged = await upsertCachedHistoryIfNewer(record);
+  if (!historyChanged && !userChanged) {
     console.debug("[realtime-sync] skip stale echo history", record.id);
     return;
   }

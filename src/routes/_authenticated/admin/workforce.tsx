@@ -75,7 +75,7 @@ import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import {
   fetchCachedStaffWorkspace,
-  fetchStaffWorkspace,
+  fetchFreshStaffWorkspace,
   hasActiveOrRecentlyLeftEmployment,
 } from "@/lib/staff-permissions";
 import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
@@ -211,7 +211,7 @@ function WorkforcePage() {
     setLoading(true);
     try {
       const [workspace, staffAdminUsers, factoryList, mainHouseList] = await Promise.all([
-        fetchStaffWorkspace(currentUser),
+        fetchFreshStaffWorkspace(currentUser),
         pb.collection("users").getFullList<UserRecord>({
           filter: `role="staff" || role="admin"`,
           sort: "full_name,username",

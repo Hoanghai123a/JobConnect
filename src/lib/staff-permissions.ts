@@ -76,8 +76,10 @@ export function buildScopedHistoryFilter(viewer: UserRecord, managedFactoryIds: 
   const referenceDate = new Date();
   const windowStart = new Date(referenceDate);
   windowStart.setDate(windowStart.getDate() - 180);
+  const tomorrow = new Date(referenceDate);
+  tomorrow.setDate(tomorrow.getDate() + 1);
   const scopeFilter = [
-    `join_date <= "${toDateOnly(referenceDate)}"`,
+    `join_date < "${toDateOnly(tomorrow)}"`,
     `(status="working" || leave_date >= "${toDateOnly(windowStart)}")`,
   ].join(" && ");
 

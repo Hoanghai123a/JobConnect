@@ -14,7 +14,7 @@ import { WorkforceInsightsCharts } from "@/components/workforce/WorkforceInsight
 import { FinanceDashboard } from "@/components/dashboard/FinanceDashboard";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import type { EmploymentHistoryRecord } from "@/lib/employment";
-import { fetchStaffWorkspace } from "@/lib/staff-permissions";
+import { fetchFreshStaffWorkspace } from "@/lib/staff-permissions";
 import { escapePb } from "@/lib/delegations";
 import {
   Bar,
@@ -275,11 +275,23 @@ function DashboardPage() {
     setWorkforceLoading(true);
     setWorkforceError("");
 
-    Promise.all([fetchStaffWorkspace(user as UserRecord), fetchFactories()])
-      .then(([workspace, factories]) => {
+    Promise.all([
+      fetchFreshStaffWorkspace(user as UserRecord),
+      pb.collection("users").getFullList<UserRecord>({
+        filter: `role="staff" || role="admin"`,
+        sort: "full_name,username",
+      }),
+      fetchFactories(),
+    ])
+      .then(([workspace, staffAdminUsers, factories]) => {
         if (!alive) return;
+        const workerUsers = workspace.workers.map((worker) => worker.user);
+        const workerIds = new Set(workerUsers.map((worker) => worker.id));
         setWorkforceHistories(workspace.workers.flatMap((worker) => worker.histories));
-        setWorkforceUsers(workspace.workers.map((worker) => worker.user));
+        setWorkforceUsers([
+          ...workerUsers,
+          ...staffAdminUsers.filter((staff) => !workerIds.has(staff.id)),
+        ]);
         setWorkforceFactories(factories);
       })
       .catch(() => {

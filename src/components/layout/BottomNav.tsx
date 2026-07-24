@@ -13,7 +13,6 @@ import {
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { InstallFloatingBanner } from "./InstallFloatingBanner";
-import { ReloadButton } from "./ReloadButton";
 
 type NavItem = {
   to: string;
@@ -149,7 +148,6 @@ export function AppHeader({
         )}
       </div>
       {right}
-      <ReloadButton className="desktop:hidden" />
     </header>
   );
 }
