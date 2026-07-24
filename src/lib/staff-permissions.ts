@@ -59,7 +59,10 @@ function compareRecentHistories(a: EmploymentHistoryRecord, b: EmploymentHistory
   const joinDiff = toTimestamp(b.join_date) - toTimestamp(a.join_date);
   if (joinDiff !== 0) return joinDiff;
 
-  return toTimestamp(b.leave_date || b.created) - toTimestamp(a.leave_date || a.created);
+  const createdDiff = toTimestamp(b.created) - toTimestamp(a.created);
+  if (createdDiff !== 0) return createdDiff;
+
+  return toTimestamp(b.leave_date) - toTimestamp(a.leave_date);
 }
 
 function toDateOnly(value: Date) {

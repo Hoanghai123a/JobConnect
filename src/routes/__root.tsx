@@ -16,6 +16,7 @@ import { installPwaPromptListeners } from "@/lib/pwa-install";
 import { RoamingPet } from "@/components/garden/RoamingPet";
 import { BrandHeadLinks } from "@/components/layout/BrandHeadLinks";
 import { PushPermissionPrompt } from "@/components/layout/PushPermissionPrompt";
+import { DEVICE_PROFILE_BOOTSTRAP } from "@/lib/device-profile";
 
 const CHUNK_RELOAD_KEY = "jobconnect.chunk-reload-path";
 
@@ -113,8 +114,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="vi">
+    <html lang="vi" data-ui-device="mobile">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: DEVICE_PROFILE_BOOTSTRAP }} />
         <HeadContent />
       </head>
       <body>

@@ -8,7 +8,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { StatusChip, toneBorder } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ApprovalForm } from "@/components/approvals/ApprovalForm";
 import { ApprovalDetail } from "@/components/approvals/ApprovalDetail";

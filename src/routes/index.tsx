@@ -1,13 +1,31 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { pb } from "@/lib/pocketbase";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
 import { isUserApproved } from "@/lib/user-approval";
 import { getSeen } from "@/lib/seen";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { FeatureTile } from "@/components/dashboard/FeatureTile";
+import { DesktopAppShell } from "@/components/layout/DesktopAppShell";
+import { RecruitmentChart } from "@/components/workforce/RecruitmentChart";
+import { WorkforceInsightsCharts } from "@/components/workforce/WorkforceInsightsCharts";
+import { FinanceDashboard } from "@/components/dashboard/FinanceDashboard";
+import { fetchFactories, type FactoryRecord } from "@/lib/factories";
+import type { EmploymentHistoryRecord } from "@/lib/employment";
+import { fetchStaffWorkspace } from "@/lib/staff-permissions";
+import { escapePb } from "@/lib/delegations";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import {
   Newspaper,
   Clock,
@@ -44,8 +62,8 @@ import {
 export const Route = createFileRoute("/")({
   beforeLoad: () => {
     if (typeof window === "undefined") return;
-    if (!pb.authStore.isValid) throw redirect({ to: "/login", search: { redirect: "/" } as any });
-    const u = pb.authStore.record as any;
+    if (!pb.authStore.isValid) throw redirect({ to: "/login", search: { redirect: "/" } as never });
+    const u = pb.authStore.record as UserRecord | null;
     if (u && !isUserApproved(u)) throw redirect({ to: "/pending" });
     if (u?.role === "staff") throw redirect({ to: "/staff" });
   },
@@ -53,6 +71,48 @@ export const Route = createFileRoute("/")({
 });
 
 type UtilKey = "utilities" | "entertainment" | null;
+
+const APPROVAL_STATUSES = ["pending", "approved", "completed", "rejected"] as const;
+
+type ApprovalStatusKey = (typeof APPROVAL_STATUSES)[number];
+
+type ApprovalStats = Record<ApprovalStatusKey, number> & {
+  totalAmount: number;
+  amountByStatus: Record<ApprovalStatusKey, number>;
+};
+
+type ApprovalRequestSummary = {
+  status?: string;
+  amount?: number | string;
+};
+
+const APPROVAL_STATUS_META: Array<{
+  key: ApprovalStatusKey;
+  label: string;
+  color: string;
+}> = [
+  { key: "pending", label: "Chờ duyệt", color: "#f59e0b" },
+  { key: "approved", label: "Đã duyệt", color: "#10b981" },
+  { key: "completed", label: "Hoàn thành", color: "#3b82f6" },
+  { key: "rejected", label: "Từ chối", color: "#ef4444" },
+];
+
+const createEmptyApprovalStats = (): ApprovalStats => ({
+  pending: 0,
+  approved: 0,
+  completed: 0,
+  rejected: 0,
+  totalAmount: 0,
+  amountByStatus: {
+    pending: 0,
+    approved: 0,
+    completed: 0,
+    rejected: 0,
+  },
+});
+
+const isApprovalStatus = (value?: string): value is ApprovalStatusKey =>
+  Boolean(value && APPROVAL_STATUSES.includes(value as ApprovalStatusKey));
 
 function DashboardPage() {
   const { loading, user, isAdmin } = useAuth();
@@ -62,7 +122,18 @@ function DashboardPage() {
   const [unread, setUnread] = useState({ news: 0, chat: 0, check: 0, advances: 0 });
   const [openUtil, setOpenUtil] = useState<UtilKey>(null);
   const [reloading, setReloading] = useState(false);
+  const [workforceHistories, setWorkforceHistories] = useState<EmploymentHistoryRecord[]>([]);
+  const [workforceUsers, setWorkforceUsers] = useState<UserRecord[]>([]);
+  const [workforceFactories, setWorkforceFactories] = useState<FactoryRecord[]>([]);
+  const [workforceLoading, setWorkforceLoading] = useState(true);
+  const [workforceError, setWorkforceError] = useState("");
+  const [workforceReloadToken, setWorkforceReloadToken] = useState(0);
+  const [approvalStats, setApprovalStats] = useState<ApprovalStats>(createEmptyApprovalStats);
   const nav = useNavigate();
+  const { hash } = useLocation();
+  const normalizedHash = hash.startsWith("#") ? hash.slice(1) : hash;
+  const desktopSection: DesktopDashboardSection =
+    normalizedHash === "tai-chinh" ? "tai-chinh" : normalizedHash === "khac" ? "khac" : "nhan-luc";
 
   const handleReload = async () => {
     if (reloading) return;
@@ -158,7 +229,7 @@ function DashboardPage() {
           const memberships = await pb.collection("chat_room_members").getFullList({
             filter: `user = "${user.id}"`,
           });
-          const roomIds = (memberships as any[]).map((m) => m.room);
+          const roomIds = (memberships as Array<{ room: string }>).map((m) => m.room);
           if (!roomIds.length) return 0;
           let total = 0;
           for (const roomId of roomIds) {
@@ -194,6 +265,78 @@ function DashboardPage() {
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!isAdmin || !user?.id || desktopSection !== "nhan-luc" || typeof window === "undefined") {
+      return;
+    }
+    if (!window.matchMedia("(min-width: 1024px)").matches) return;
+
+    let alive = true;
+    setWorkforceLoading(true);
+    setWorkforceError("");
+
+    Promise.all([fetchStaffWorkspace(user as UserRecord), fetchFactories()])
+      .then(([workspace, factories]) => {
+        if (!alive) return;
+        setWorkforceHistories(workspace.workers.flatMap((worker) => worker.histories));
+        setWorkforceUsers(workspace.workers.map((worker) => worker.user));
+        setWorkforceFactories(factories);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setWorkforceHistories([]);
+        setWorkforceUsers([]);
+        setWorkforceFactories([]);
+        setWorkforceError("Không tải được dữ liệu nhân lực. Vui lòng thử lại.");
+      })
+      .finally(() => {
+        if (alive) setWorkforceLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [desktopSection, isAdmin, user, workforceReloadToken]);
+
+  useEffect(() => {
+    if (!isAdmin || !user?.id || desktopSection !== "khac" || typeof window === "undefined") {
+      return;
+    }
+    if (!window.matchMedia("(min-width: 1024px)").matches) return;
+
+    let alive = true;
+    const userId = escapePb(user.id);
+    const rolePart = `(admins ~ "${userId}" || creator = "${userId}")`;
+
+    pb.collection("approval_requests")
+      .getFullList<ApprovalRequestSummary>({
+        filter: rolePart,
+        fields: "status,amount",
+      })
+      .then((requests) => {
+        if (!alive) return;
+        const nextStats = createEmptyApprovalStats();
+
+        for (const request of requests) {
+          if (!isApprovalStatus(request.status)) continue;
+          const status = request.status;
+          const amount = Math.max(0, Number(request.amount) || 0);
+          nextStats[status] += 1;
+          nextStats.amountByStatus[status] += amount;
+          nextStats.totalAmount += amount;
+        }
+
+        setApprovalStats(nextStats);
+      })
+      .catch(() => {
+        if (alive) setApprovalStats(createEmptyApprovalStats());
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [desktopSection, isAdmin, user?.id]);
+
   if (loading || !user || !isUserApproved(user)) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center px-4 text-sm text-muted-foreground">
@@ -220,7 +363,21 @@ function DashboardPage() {
 
   return (
     <div className="pb-nav">
-      <div className="sticky top-0 z-10 px-4 pb-2 pt-4">
+      {isAdmin && (
+        <DesktopAppShell>
+          <DesktopAdminDashboard
+            section={desktopSection}
+            histories={workforceHistories}
+            users={workforceUsers}
+            factories={workforceFactories}
+            loading={workforceLoading}
+            error={workforceError}
+            approvalStats={approvalStats}
+            onRetry={() => setWorkforceReloadToken((value) => value + 1)}
+          />
+        </DesktopAppShell>
+      )}
+      <div className="sticky top-0 z-10 px-4 pb-2 pt-4 desktop:hidden">
         <div className="gradient-hero relative overflow-hidden rounded-[1.75rem] px-5 py-5 text-white shadow-soft">
           <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/20 blur-2xl" />
           <div className="absolute -bottom-16 -left-8 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
@@ -278,7 +435,7 @@ function DashboardPage() {
         </div>
       </div>
 
-      <div className="space-y-4 px-4 pt-2">
+      <div className="space-y-4 px-4 pt-2 desktop:hidden">
         {isAdmin && (
           <section className="rounded-3xl bg-card p-3 shadow-soft">
             <div className="flex items-center justify-between px-1 pb-2 pt-1">
@@ -485,12 +642,7 @@ function DashboardPage() {
                 size="compact"
                 badge={toBadge(unread.news)}
               />
-              <FeatureTile
-                to="/transport"
-                label="Tìm nhà xe"
-                icon={BusFront}
-                size="compact"
-              />
+              <FeatureTile to="/transport" label="Tìm nhà xe" icon={BusFront} size="compact" />
               <FeatureTile
                 to="/chat"
                 label="Trò chuyện"
@@ -498,18 +650,8 @@ function DashboardPage() {
                 size="compact"
                 badge={toBadge(unread.chat)}
               />
-              <FeatureTile
-                to="/guides"
-                label="Hướng dẫn"
-                icon={BookOpen}
-                size="compact"
-              />
-              <FeatureTile
-                to="/notebook"
-                label="Sổ tay"
-                icon={NotebookPen}
-                size="compact"
-              />
+              <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
+              <FeatureTile to="/notebook" label="Sổ tay" icon={NotebookPen} size="compact" />
               {isAdmin && (
                 <FeatureTile
                   to="/admin/accounts/stats"
@@ -523,28 +665,310 @@ function DashboardPage() {
 
           {openUtil === "entertainment" && (
             <div className="grid grid-cols-3 gap-2" onClick={() => setOpenUtil(null)}>
-              <FeatureTile
-                to="/garden"
-                label="Vườn cây"
-                icon={Sprout}
-                size="compact"
-              />
-              <FeatureTile
-                to="/gems"
-                label="Xếp kim cương"
-                icon={Gem}
-                size="compact"
-              />
-              <FeatureTile
-                to="/minesweeper"
-                label="Dò mìn"
-                icon={Bomb}
-                size="compact"
-              />
+              <FeatureTile to="/garden" label="Vườn cây" icon={Sprout} size="compact" />
+              <FeatureTile to="/gems" label="Xếp kim cương" icon={Gem} size="compact" />
+              <FeatureTile to="/minesweeper" label="Dò mìn" icon={Bomb} size="compact" />
             </div>
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+type DesktopDashboardSection = "nhan-luc" | "tai-chinh" | "khac";
+
+function DesktopAdminDashboard({
+  section,
+  histories,
+  users,
+  factories,
+  loading,
+  error,
+  approvalStats,
+  onRetry,
+}: {
+  section: DesktopDashboardSection;
+  histories: EmploymentHistoryRecord[];
+  users: UserRecord[];
+  factories: FactoryRecord[];
+  loading: boolean;
+  error: string;
+  approvalStats: ApprovalStats;
+  onRetry: () => void;
+}) {
+  const workingUsers = new Set(
+    histories
+      .filter((history) => history.status === "working" && !history.leave_date)
+      .map((history) => history.user),
+  ).size;
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  sevenDaysAgo.setHours(0, 0, 0, 0);
+  const recruitedLastSevenDays = histories.filter((history) => {
+    if (!history.join_date) return false;
+    const joinDate = new Date(history.join_date);
+    return !Number.isNaN(joinDate.getTime()) && joinDate >= sevenDaysAgo;
+  }).length;
+
+  const sectionMeta = {
+    "nhan-luc": {
+      title: "Nhân lực",
+      description: "Theo dõi tình hình tuyển dụng và lao động trong 7 ngày gần nhất.",
+      icon: Users,
+    },
+    "tai-chinh": {
+      title: "Tài chính",
+      description: "Không gian tổng hợp các chức năng tài chính.",
+      icon: Wallet,
+    },
+    khac: {
+      title: "Khác",
+      description: "Các thông tin và tiện ích quản trị khác.",
+      icon: LayoutGrid,
+    },
+  }[section];
+  const SectionIcon = sectionMeta.icon;
+
+  return (
+    <main
+      data-admin-dashboard-content={section}
+      className="hidden min-h-[calc(100dvh-5rem)] min-w-0 bg-background desktop:block"
+    >
+      <div className="mx-auto w-full max-w-[110rem] space-y-6 px-8 py-7">
+        <section id={section} className="space-y-4 scroll-mt-28">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <SectionIcon className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold tracking-tight">{sectionMeta.title}</h2>
+              <p className="text-sm text-muted-foreground">{sectionMeta.description}</p>
+            </div>
+          </div>
+
+          {section === "nhan-luc" ? (
+            <>
+              <div className="sticky top-20 z-20 -mx-2 bg-background/95 px-2 py-2 backdrop-blur">
+                <div className="grid grid-cols-4 gap-4">
+                  <DesktopSummaryCard label="Tổng lao động" value={users.length} icon={Users} />
+                  <DesktopSummaryCard
+                    label="Còn đi làm"
+                    value={workingUsers}
+                    icon={CalendarCheck}
+                  />
+                  <DesktopSummaryCard
+                    label="Tuyển mới 7 ngày"
+                    value={recruitedLastSevenDays}
+                    icon={ClipboardCheck}
+                  />
+                  <DesktopSummaryCard label="Nhà máy" value={factories.length} icon={Building2} />
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold">Biểu đồ tuyển dụng 7 ngày</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Cột thể hiện tuyển mới, đường thể hiện số lao động còn đi làm.
+                    </p>
+                  </div>
+                  <Link
+                    to="/admin/workforce"
+                    className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  >
+                    Xem chi tiết
+                  </Link>
+                </div>
+
+                {loading ? (
+                  <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+                    Đang tải dữ liệu nhân lực...
+                  </div>
+                ) : error ? (
+                  <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-destructive/40 bg-destructive/5 text-center">
+                    <p className="text-sm text-destructive">{error}</p>
+                    <button
+                      type="button"
+                      onClick={onRetry}
+                      className="rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+                    >
+                      Thử lại
+                    </button>
+                  </div>
+                ) : histories.length === 0 ? (
+                  <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">
+                    Chưa có dữ liệu nhân lực.
+                  </div>
+                ) : (
+                  <RecruitmentChart histories={histories} users={users} factories={factories} />
+                )}
+              </div>
+
+              {!loading && !error && (
+                <WorkforceInsightsCharts
+                  histories={histories}
+                  users={users}
+                  factories={factories}
+                />
+              )}
+            </>
+          ) : section === "tai-chinh" ? (
+            <FinanceDashboard />
+          ) : (
+            <ApprovalDashboard stats={approvalStats} />
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function formatApprovalMoney(value: number) {
+  return `${Math.round(value).toLocaleString("vi-VN")} đ`;
+}
+
+function formatCompactMoney(value: number) {
+  if (value >= 1_000_000_000) {
+    return `${(value / 1_000_000_000).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} tỷ`;
+  }
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} tr`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toLocaleString("vi-VN", { maximumFractionDigits: 0 })} nghìn`;
+  }
+  return value.toLocaleString("vi-VN");
+}
+
+function ApprovalDashboard({ stats }: { stats: ApprovalStats }) {
+  const totalRequests = APPROVAL_STATUSES.reduce((total, status) => total + stats[status], 0);
+  const chartData = APPROVAL_STATUS_META.map((item) => ({
+    ...item,
+    count: stats[item.key],
+    amount: stats.amountByStatus[item.key],
+  }));
+  const tooltipStyle = {
+    borderRadius: "12px",
+    borderColor: "var(--border)",
+    backgroundColor: "var(--card)",
+    color: "var(--foreground)",
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold">Thống kê phê duyệt</h3>
+            <p className="text-xs text-muted-foreground">
+              Trực quan hóa số lượng và số tiền theo trạng thái yêu cầu.
+            </p>
+          </div>
+          <Link
+            to="/staff/approvals"
+            className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            Xem chi tiết
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-6">
+          <DesktopSummaryCard label="Tổng yêu cầu" value={totalRequests} icon={ClipboardCheck} />
+          <DesktopSummaryCard
+            label="Tổng số tiền"
+            value={formatApprovalMoney(stats.totalAmount)}
+            icon={Wallet}
+          />
+          <DesktopSummaryCard label="Chờ duyệt" value={stats.pending} icon={Clock} />
+          <DesktopSummaryCard label="Đã duyệt" value={stats.approved} icon={ShieldCheck} />
+          <DesktopSummaryCard label="Hoàn thành" value={stats.completed} icon={CalendarCheck} />
+          <DesktopSummaryCard label="Từ chối" value={stats.rejected} icon={MessageSquareWarning} />
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className="min-w-0 rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">Số lượng theo trạng thái</h3>
+            <p className="text-xs text-muted-foreground">Mỗi cột là tổng số yêu cầu.</p>
+          </div>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="label" axisLine={false} tickLine={false} fontSize={12} />
+                <YAxis axisLine={false} tickLine={false} allowDecimals={false} fontSize={12} />
+                <RechartsTooltip
+                  cursor={{ fill: "var(--muted)" }}
+                  contentStyle={tooltipStyle}
+                  formatter={(value) => [Number(value || 0).toLocaleString("vi-VN"), "Số yêu cầu"]}
+                />
+                <Bar dataKey="count" radius={[8, 8, 0, 0]} maxBarSize={58}>
+                  {chartData.map((item) => (
+                    <Cell key={item.key} fill={item.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="min-w-0 rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">Số tiền theo trạng thái</h3>
+            <p className="text-xs text-muted-foreground">
+              Tổng tiền của các yêu cầu có khai báo số tiền.
+            </p>
+          </div>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="label" axisLine={false} tickLine={false} fontSize={12} />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  fontSize={12}
+                  width={58}
+                  tickFormatter={(value) => formatCompactMoney(Number(value))}
+                />
+                <RechartsTooltip
+                  cursor={{ fill: "var(--muted)" }}
+                  contentStyle={tooltipStyle}
+                  formatter={(value) => [formatApprovalMoney(Number(value || 0)), "Số tiền"]}
+                />
+                <Bar dataKey="amount" radius={[8, 8, 0, 0]} maxBarSize={58}>
+                  {chartData.map((item) => (
+                    <Cell key={item.key} fill={item.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DesktopSummaryCard({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: number | string;
+  icon: React.ComponentType<{ className?: string }>;
+}) {
+  return (
+    <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-soft">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-muted-foreground">{label}</span>
+        <Icon className="h-4 w-4 text-primary" />
+      </div>
+      <div className="mt-2 text-2xl font-bold tabular-nums">{value}</div>
     </div>
   );
 }

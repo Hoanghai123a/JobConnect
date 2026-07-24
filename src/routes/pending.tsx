@@ -15,7 +15,7 @@ function PendingPage() {
   const nav = useNavigate();
 
   return (
-    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-4 px-6 text-center desktop:mx-auto desktop:max-w-xl desktop:rounded-3xl desktop:bg-card desktop:shadow-card">
       <BackButton className="absolute left-4 top-4 text-muted-foreground" />
 
       <div className="rounded-full bg-warning/20 p-5 text-warning-foreground">

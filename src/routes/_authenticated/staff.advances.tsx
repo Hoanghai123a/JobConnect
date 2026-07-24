@@ -9,6 +9,7 @@ import {
   type StaffWorkerRecord,
 } from "@/lib/staff-permissions";
 import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
+import { escapePb } from "@/lib/delegations";
 import {
   type AdvanceRecord,
   type AdvanceStatus,
@@ -44,6 +45,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   Check,
+  ChevronRight,
+  CircleDollarSign,
   Clock,
   Landmark,
   Plus,
@@ -95,6 +98,83 @@ async function loadAdvanceSummary(filter: string): Promise<AdvanceSummary> {
     }),
     { count: 0, total: 0 },
   );
+}
+
+type OutstandingAdvance = AdvanceRecord & {
+  expand?: AdvanceRecord["expand"] & {
+    requested_by?: UserRecord;
+  };
+};
+
+type OutstandingWorkerSummary = {
+  workerId: string;
+  fullName: string;
+  employeeCode: string;
+  company: string;
+  count: number;
+  total: number;
+  advances: OutstandingAdvance[];
+};
+
+const OUTSTANDING_ADVANCE_FILTER =
+  '(status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))';
+
+function groupOutstandingAdvances(rows: OutstandingAdvance[]): OutstandingWorkerSummary[] {
+  const grouped = new Map<string, OutstandingWorkerSummary>();
+
+  for (const row of rows) {
+    const workerId = row.user || `missing-${row.id}`;
+    const current = grouped.get(workerId);
+    if (current) {
+      current.count += 1;
+      current.total += Number(row.amount || 0);
+      current.advances.push(row);
+      continue;
+    }
+
+    grouped.set(workerId, {
+      workerId,
+      fullName: row.full_name || "Chưa có tên",
+      employeeCode: row.employee_code || "",
+      company: row.company || "",
+      count: 1,
+      total: Number(row.amount || 0),
+      advances: [row],
+    });
+  }
+
+  return [...grouped.values()]
+    .map((worker) => ({
+      ...worker,
+      advances: [...worker.advances].sort(
+        (a, b) => new Date(b.created || 0).getTime() - new Date(a.created || 0).getTime(),
+      ),
+    }))
+    .sort((a, b) => b.total - a.total || a.fullName.localeCompare(b.fullName, "vi"));
+}
+
+async function loadStaffOutstandingWorkers(staffId: string) {
+  const rows = await pb.collection("advances").getFullList<OutstandingAdvance>({
+    filter: joinPbFilters([
+      `recruiter_id="${escapePb(staffId)}"`,
+      `user!="${escapePb(staffId)}"`,
+      OUTSTANDING_ADVANCE_FILTER,
+    ]),
+    sort: "-created",
+    expand: "requested_by",
+  });
+  return groupOutstandingAdvances(rows);
+}
+
+function outstandingStatusMeta(row: OutstandingAdvance) {
+  if (row.status === "pending") return { label: "Chờ người tuyển duyệt", tone: "warning" as const };
+  if (row.status === "recruiter_approved") return { label: "Chờ admin duyệt", tone: "primary" as const };
+  return { label: "Chờ thu hồi", tone: "neutral" as const };
+}
+
+function getOutstandingRequesterName(row: OutstandingAdvance) {
+  const requester = row.expand?.requested_by;
+  return requester?.full_name || requester?.username || requester?.phone || "Không xác định";
 }
 
 // PLACEHOLDER_CONTINUE
@@ -160,6 +240,11 @@ function WorkerAdvancesView() {
   const [loadingOutstanding, setLoadingOutstanding] = useState(false);
   const [creatingAdvance, setCreatingAdvance] = useState(false);
   const [stats, setStats] = useState<Record<AdminTab, AdvanceSummary>>(emptyAdvanceSummaries);
+  const [showMobileStats, setShowMobileStats] = useState(false);
+  const [outstandingWorkers, setOutstandingWorkers] = useState<OutstandingWorkerSummary[]>([]);
+  const [loadingOutstandingStats, setLoadingOutstandingStats] = useState(false);
+  const [showOutstandingStats, setShowOutstandingStats] = useState(false);
+  const [selectedOutstandingWorkerId, setSelectedOutstandingWorkerId] = useState<string | null>(null);
 
   const eligibleWorkers = useMemo(
     () =>
@@ -220,6 +305,22 @@ function WorkerAdvancesView() {
     }
   }, [isAdmin, isStaff, tab, user?.id]);
 
+  const loadOutstandingStats = useCallback(async () => {
+    if (isAdmin || !isStaff || !user?.id) {
+      setShowOutstandingStats(false);
+      setSelectedOutstandingWorkerId(null);
+      setOutstandingWorkers([]);
+      return;
+    }
+
+    setLoadingOutstandingStats(true);
+    try {
+      setOutstandingWorkers(await loadStaffOutstandingWorkers(user.id));
+    } finally {
+      setLoadingOutstandingStats(false);
+    }
+  }, [isAdmin, isStaff, user?.id]);
+
   const loadStats = useCallback(async () => {
     const base = buildAdvanceFilter({
       isAdmin,
@@ -237,7 +338,27 @@ function WorkerAdvancesView() {
     setStats((s) => ({ ...s, pending, recruiter_approved, accepted, rejected, all }));
   }, [isAdmin, isStaff, user?.id]);
 
-  useEffect(() => { load(); loadStats().catch(() => {}); }, [load, loadStats]);
+  useEffect(() => {
+    load();
+    loadStats().catch(() => {});
+    loadOutstandingStats().catch((error: unknown) =>
+      toast.error((error as { message?: string })?.message || "Không tải được thống kê tồn ứng"),
+    );
+  }, [load, loadStats, loadOutstandingStats]);
+
+  const outstandingTotal = useMemo(
+    () => outstandingWorkers.reduce((sum, worker) => sum + worker.total, 0),
+    [outstandingWorkers],
+  );
+  const selectedOutstandingWorker = outstandingWorkers.find(
+    (worker) => worker.workerId === selectedOutstandingWorkerId,
+  ) || null;
+
+  useEffect(() => {
+    if (selectedOutstandingWorkerId && !selectedOutstandingWorker) {
+      setSelectedOutstandingWorkerId(null);
+    }
+  }, [selectedOutstandingWorker, selectedOutstandingWorkerId]);
 
   useEffect(() => {
     if (!showCreateForm || !user?.id) return;
@@ -306,6 +427,7 @@ function WorkerAdvancesView() {
       toast.success(newStatus === "recruiter_approved" ? "Đã chấp nhận" : "Đã từ chối");
       load();
       loadStats().catch(() => {});
+      loadOutstandingStats().catch(() => {});
     } catch (error: unknown) {
       toast.error((error as any)?.message || "Lỗi xử lý");
     }
@@ -321,11 +443,13 @@ function WorkerAdvancesView() {
       setAdvanceDetail(null);
       await load();
       await loadStats();
+      await loadOutstandingStats();
     } catch (error: unknown) {
       toast.error(getWithdrawErrorMessage(error));
       setWithdrawTarget(null);
       await load();
       await loadStats().catch(() => {});
+      await loadOutstandingStats().catch(() => {});
     } finally {
       setWithdrawing(false);
     }
@@ -420,6 +544,7 @@ function WorkerAdvancesView() {
       setTab("recruiter_approved");
       await load();
       await loadStats();
+      await loadOutstandingStats();
     } catch (error: unknown) {
       toast.error((error as { message?: string })?.message || "Không thể tạo yêu cầu ứng lương");
     } finally {
@@ -429,11 +554,47 @@ function WorkerAdvancesView() {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-2">
+      <button
+        type="button"
+        onClick={() => setShowMobileStats((current) => !current)}
+        aria-expanded={showMobileStats}
+        aria-controls="staff-advance-statistics"
+        className="w-full text-right text-xs font-medium text-primary md:hidden"
+      >
+        {showMobileStats ? "Ẩn thống kê" : "Hiện thống kê"}
+      </button>
+
+      <div
+        id="staff-advance-statistics"
+        className={showMobileStats ? "grid grid-cols-2 gap-2" : "hidden grid-cols-2 gap-2 md:grid"}
+      >
         <StatCard label="Chờ duyệt" value={statValue(stats.pending)} icon={Clock} tone="warning" />
         <StatCard label="Đã chuyển admin" value={statValue(stats.recruiter_approved)} icon={Check} tone="primary" />
         <StatCard label="Đã duyệt" value={statValue(stats.accepted)} icon={Check} tone="success" />
         <StatCard label="Từ chối" value={statValue(stats.rejected)} icon={X} tone="danger" />
+        {isStaff && !isAdmin && (
+          <button
+            type="button"
+            className="col-span-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          onClick={() => setShowOutstandingStats(true)}
+          aria-label="Xem NLĐ tồn ứng chưa thu"
+        >
+          <StatCard
+            label="NLĐ tồn ứng chưa thu"
+            value={
+              <span className="block text-[15px] leading-tight sm:text-base">
+                {loadingOutstandingStats
+                  ? "Đang tải..."
+                  : `${outstandingWorkers.length} NLĐ - ${formatMoney(outstandingTotal)}đ`}
+              </span>
+            }
+            hint="Bấm để xem danh sách và chi tiết từng lần ứng"
+            icon={CircleDollarSign}
+            tone="warning"
+            className="h-full transition hover:border-primary/50 hover:shadow-soft"
+          />
+          </button>
+        )}
       </div>
 
       <FilterBar
@@ -535,6 +696,24 @@ function WorkerAdvancesView() {
         })
       )}
 
+      {isStaff && !isAdmin && (
+        <>
+          <OutstandingWorkersDialog
+            open={showOutstandingStats}
+            workers={outstandingWorkers}
+            totalAmount={outstandingTotal}
+            onClose={() => {
+              setShowOutstandingStats(false);
+              setSelectedOutstandingWorkerId(null);
+            }}
+            onSelectWorker={(workerId) => setSelectedOutstandingWorkerId(workerId)}
+          />
+          <OutstandingWorkerDetailDialog
+            worker={selectedOutstandingWorker}
+            onClose={() => setSelectedOutstandingWorkerId(null)}
+          />
+        </>
+      )}
       <AdvanceQuickDetail
         detail={advanceDetail}
         onClose={() => setAdvanceDetail(null)}
@@ -595,6 +774,139 @@ function WorkerAdvancesView() {
   );
 }
 
+function OutstandingWorkersDialog({
+  open,
+  workers,
+  totalAmount,
+  onClose,
+  onSelectWorker,
+}: {
+  open: boolean;
+  workers: OutstandingWorkerSummary[];
+  totalAmount: number;
+  onClose: () => void;
+  onSelectWorker: (workerId: string) => void;
+}) {
+  const totalAdvances = workers.reduce((sum, worker) => sum + worker.count, 0);
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="shrink-0 border-b border-border/60 p-5 pr-14 text-left">
+          <DialogTitle>NLĐ đang tồn ứng chưa thu</DialogTitle>
+          <DialogDescription>Danh sách được sắp xếp từ số tiền tồn ứng nhiều đến ít.</DialogDescription>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl bg-muted/50 p-2">
+              <div className="text-lg font-semibold">{workers.length}</div>
+              <div className="text-[11px] text-muted-foreground">NLĐ</div>
+            </div>
+            <div className="rounded-xl bg-muted/50 p-2">
+              <div className="text-lg font-semibold">{totalAdvances}</div>
+              <div className="text-[11px] text-muted-foreground">Lần ứng</div>
+            </div>
+            <div className="rounded-xl bg-warning/10 p-2 text-warning-foreground">
+              <div className="text-lg font-semibold">{formatMoney(totalAmount)}đ</div>
+              <div className="text-[11px]">Tổng tiền</div>
+            </div>
+          </div>
+        </DialogHeader>
+        <div className="min-h-0 space-y-2 overflow-y-auto p-5">
+          {workers.length === 0 ? (
+            <EmptyState
+              icon={CircleDollarSign}
+              title="Không có NLĐ tồn ứng"
+              description="Hiện chưa có khoản ứng nào đang chờ thu hồi."
+            />
+          ) : (
+            workers.map((worker, index) => (
+              <div key={worker.workerId} className="rounded-2xl border border-border/60 bg-card p-3 shadow-soft">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">{index + 1}. {worker.fullName}</div>
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      {worker.employeeCode || "Chưa có mã NV"} · {worker.company || "Chưa có nhà máy"}
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">{worker.count} lần ứng chưa thu</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onSelectWorker(worker.workerId)}
+                    className="flex shrink-0 items-center gap-1 rounded-xl border border-primary/30 bg-primary/5 px-2.5 py-2 text-right text-primary transition hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    aria-label={`Xem chi tiết tồn ứng của ${worker.fullName}`}
+                  >
+                    <span>
+                      <span className="block text-sm font-bold">{formatMoney(worker.total)}đ</span>
+                      <span className="block text-[10px] font-medium">Xem chi tiết</span>
+                    </span>
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function OutstandingWorkerDetailDialog({
+  worker,
+  onClose,
+}: {
+  worker: OutstandingWorkerSummary | null;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open={!!worker} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="shrink-0 border-b border-border/60 p-5 pr-14 text-left">
+          <DialogTitle>Chi tiết tồn ứng – {worker?.fullName || "NLĐ"}</DialogTitle>
+          <DialogDescription>
+            {worker?.employeeCode || "Chưa có mã NV"} · {worker?.company || "Chưa có nhà máy"}
+          </DialogDescription>
+          {worker && (
+            <div className="mt-3 rounded-xl bg-warning/10 p-3 text-sm text-warning-foreground">
+              <span className="font-semibold">{worker.count} lần ứng</span> · Tổng cộng {formatMoney(worker.total)}đ chưa thu
+            </div>
+          )}
+        </DialogHeader>
+        <div className="min-h-0 space-y-2 overflow-y-auto p-5">
+          {worker?.advances.map((advance, index) => {
+            const meta = outstandingStatusMeta(advance);
+            const notes = [
+              advance.recruiter_note && `Ghi chú người tuyển: ${advance.recruiter_note}`,
+              advance.admin_note && `Ghi chú admin: ${advance.admin_note}`,
+              advance.recovery_note && `Ghi chú thu hồi: ${advance.recovery_note}`,
+            ].filter(Boolean);
+            return (
+              <div key={advance.id} className={cn("rounded-2xl border bg-card p-3", toneBorder[meta.tone])}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">Lần ứng #{worker.advances.length - index}</div>
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      {advance.created ? new Date(advance.created).toLocaleString("vi-VN") : "Chưa có thời gian"}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-base font-bold text-primary">{formatMoney(advance.amount)}đ</div>
+                    <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
+                  </div>
+                </div>
+                <div className="mt-2 space-y-1 text-[12px]">
+                  <div><span className="font-semibold">Lý do:</span> {advance.reason || "Không có lý do"}</div>
+                  <div className="text-muted-foreground"><span className="font-semibold">Người yêu cầu:</span> {getOutstandingRequesterName(advance)}</div>
+                  {notes.map((note) => <div key={note} className="rounded-lg bg-muted/60 p-2 text-muted-foreground">{note}</div>)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // PLACEHOLDER_MY_ADVANCES
 
 function MyAdvancesView() {
@@ -614,6 +926,7 @@ function MyAdvancesView() {
   const [selectedAdmins, setSelectedAdmins] = useState<string[]>([]);
   const [withdrawTarget, setWithdrawTarget] = useState<AdvanceRecord | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [showMobileStats, setShowMobileStats] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -729,7 +1042,20 @@ function MyAdvancesView() {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-2">
+      <button
+        type="button"
+        onClick={() => setShowMobileStats((current) => !current)}
+        aria-expanded={showMobileStats}
+        aria-controls="staff-own-advance-statistics"
+        className="w-full text-right text-xs font-medium text-primary md:hidden"
+      >
+        {showMobileStats ? "Ẩn thống kê" : "Hiện thống kê"}
+      </button>
+
+      <div
+        id="staff-own-advance-statistics"
+        className={showMobileStats ? "grid grid-cols-2 gap-2" : "hidden grid-cols-2 gap-2 md:grid"}
+      >
         <StatCard label="Chờ admin duyệt" value={statValue(myStats.recruiter_approved)} icon={Clock} tone="warning" />
         <StatCard label="Đã tiếp nhận" value={statValue(myStats.accepted)} icon={Check} tone="success" />
         <StatCard label="Từ chối" value={statValue(myStats.rejected)} icon={X} tone="danger" />

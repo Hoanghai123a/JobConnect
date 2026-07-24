@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { isUserApproved } from "@/lib/user-approval";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { StaffRealtimeSyncGate } from "@/components/staff/StaffRealtimeSyncGate";
+import { DesktopAppShell } from "@/components/layout/DesktopAppShell";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: ({ location }) => {
@@ -51,7 +52,9 @@ function AuthLayout() {
       ) : (
         <>
           <StaffRealtimeSyncGate />
-          <Outlet />
+          <DesktopAppShell>
+            <Outlet />
+          </DesktopAppShell>
         </>
       )}
       <BottomNav />

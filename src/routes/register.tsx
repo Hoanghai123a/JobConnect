@@ -81,8 +81,9 @@ function RegisterPage() {
       return;
     }
 
-    if (form.phone && !/^[0-9]{9,11}$/.test(form.phone)) {
-      toast.error("Số điện thoại không hợp lệ");
+    const phoneDigits = form.phone.replace(/\D/g, "");
+    if (form.phone && phoneDigits.length !== 10) {
+      toast.error("Số điện thoại phải có đúng 10 chữ số; có thể thêm ký tự phía sau");
       return;
     }
 
@@ -174,8 +175,8 @@ function RegisterPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background">
-      <div className="gradient-primary relative px-6 pb-16 pt-16 text-primary-foreground">
+    <div className="min-h-[100dvh] bg-background desktop:grid desktop:grid-cols-[minmax(22rem,0.85fr)_minmax(28rem,1fr)] desktop:items-center desktop:gap-12 desktop:px-12">
+      <div className="gradient-primary relative px-6 pb-16 pt-16 text-primary-foreground desktop:rounded-3xl desktop:px-12 desktop:py-16 desktop:shadow-card">
         <BackButton className="absolute left-4 top-4 text-primary-foreground active:bg-white/15" />
         <h1 className="text-2xl font-bold">Tạo tài khoản</h1>
         <p className="mt-1 text-sm text-primary-foreground/80">
@@ -184,7 +185,7 @@ function RegisterPage() {
       </div>
       <form
         onSubmit={onSubmit}
-        className="card-soft mx-4 -mt-8 space-y-4 rounded-[1.75rem] border border-border/70 bg-card/95 p-6 shadow-[0_20px_45px_-24px_rgba(15,23,42,0.28)] backdrop-blur"
+        className="card-soft mx-4 -mt-8 space-y-4 rounded-[1.75rem] border border-border/70 bg-card/95 p-6 shadow-[0_20px_45px_-24px_rgba(15,23,42,0.28)] backdrop-blur desktop:mx-0 desktop:mt-0 desktop:w-full desktop:max-w-xl desktop:justify-self-start desktop:p-8"
       >
         <Field
           label="Tên đăng nhập"

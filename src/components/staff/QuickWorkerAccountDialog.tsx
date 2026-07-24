@@ -7,7 +7,7 @@ import {
   type ChangeEvent,
   type FormEvent,
   type HTMLAttributes,
-  type RefObject,
+  type RefCallback,
 } from "react";
 import {
   BriefcaseBusiness,
@@ -15,6 +15,8 @@ import {
   Check,
   ChevronsUpDown,
   IdCard,
+  Plus,
+  Trash2,
   ScanLine,
   X,
 } from "lucide-react";
@@ -81,6 +83,34 @@ type QuickWorkerForm = {
   note: string;
 };
 
+type QuickWorkerEntry = {
+  id: string;
+  form: QuickWorkerForm;
+  frontFile: File | null;
+  backFile: File | null;
+  frontPreview: string;
+  backPreview: string;
+};
+
+let quickWorkerEntrySequence = 0;
+
+function createQuickWorkerEntry(recruiterStaff = ""): QuickWorkerEntry {
+  quickWorkerEntrySequence += 1;
+  return {
+    id: `quick-worker-${Date.now()}-${quickWorkerEntrySequence}`,
+    form: { ...emptyForm(), recruiter_staff: recruiterStaff },
+    frontFile: null,
+    backFile: null,
+    frontPreview: "",
+    backPreview: "",
+  };
+}
+
+function releaseEntryPreviews(entry: QuickWorkerEntry) {
+  if (entry.frontPreview) URL.revokeObjectURL(entry.frontPreview);
+  if (entry.backPreview) URL.revokeObjectURL(entry.backPreview);
+}
+
 function todayIso() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -105,8 +135,16 @@ const emptyForm = (): QuickWorkerForm => ({
   note: "",
 });
 
+function digitsOnly(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function hasRequiredDigits(value: string, count: number) {
+  return digitsOnly(value).length === count;
+}
+
 function buildUsername(phone: string, cccd: string) {
-  const base = (phone.replace(/\D/g, "") || cccd.replace(/\D/g, "")).trim();
+  const base = (digitsOnly(phone) || digitsOnly(cccd)).trim();
   return normalizeAccountUsername(base);
 }
 
@@ -148,83 +186,109 @@ export function QuickWorkerAccountDialog({
   staffUsers: UserRecord[];
   onCreated: (userId: string) => void | Promise<void>;
 }) {
-  const [form, setForm] = useState<QuickWorkerForm>(() => emptyForm());
-  const [frontFile, setFrontFile] = useState<File | null>(null);
-  const [backFile, setBackFile] = useState<File | null>(null);
-  const [frontPreview, setFrontPreview] = useState("");
-  const [backPreview, setBackPreview] = useState("");
-  const [scanningSide, setScanningSide] = useState<"front" | "back" | null>(null);
+  const [entries, setEntries] = useState<QuickWorkerEntry[]>(() => [createQuickWorkerEntry()]);
+  const [scanningEntrySide, setScanningEntrySide] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const frontCameraInputRef = useRef<HTMLInputElement | null>(null);
-  const frontLibraryInputRef = useRef<HTMLInputElement | null>(null);
-  const backCameraInputRef = useRef<HTMLInputElement | null>(null);
-  const backLibraryInputRef = useRef<HTMLInputElement | null>(null);
+  const [recordErrors, setRecordErrors] = useState<Record<string, string[]>>({});
+  const entriesRef = useRef(entries);
+  const frontCameraInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const frontLibraryInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const backCameraInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const backLibraryInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  useEffect(() => {
+    entriesRef.current = entries;
+  }, [entries]);
 
   const resetFormState = useCallback(() => {
-    setForm(emptyForm());
-    setFrontFile(null);
-    setBackFile(null);
-    setFrontPreview("");
-    setBackPreview("");
-    setScanningSide(null);
+    setEntries((current) => {
+      current.forEach(releaseEntryPreviews);
+      return [createQuickWorkerEntry()];
+    });
+    setScanningEntrySide(null);
+    setRecordErrors({});
     setSubmitting(false);
   }, []);
 
   useEffect(() => {
-    if (!open) {
-      resetFormState();
-      return;
-    }
-
-    setForm((current) => ({
-      ...current,
-      recruiter_staff: current.recruiter_staff || actor?.id || "",
-    }));
-  }, [actor?.id, open, resetFormState]);
+    if (!open) resetFormState();
+  }, [open, resetFormState]);
 
   useEffect(() => {
-    return () => {
-      if (frontPreview) URL.revokeObjectURL(frontPreview);
-      if (backPreview) URL.revokeObjectURL(backPreview);
-    };
-  }, [backPreview, frontPreview]);
+    return () => entriesRef.current.forEach(releaseEntryPreviews);
+  }, []);
 
-  const selectedFactory = useMemo(
-    () => factories.find((factory) => factory.id === form.factory),
-    [factories, form.factory],
-  );
-
-  const setField = <K extends keyof QuickWorkerForm>(key: K, value: QuickWorkerForm[K]) => {
-    setForm((current) => ({ ...current, [key]: value }));
-  };
-
-  const applyQrData = (data: CccdQrData) => {
-    setForm((current) => {
+  const clearRecordError = (entryId: string) => {
+    setRecordErrors((current) => {
+      if (!current[entryId]) return current;
       const next = { ...current };
-      const changes: Partial<QuickWorkerForm> = {
-        cccd: data.cccd || "",
-        real_name: data.fullName || "",
-        worker_name_snapshot: data.fullName || "",
-        date_of_birth: data.dateOfBirth ? displayDateToPocketBase(data.dateOfBirth) : "",
-        gender: data.gender || "",
-        address: data.address || "",
-      };
-
-      for (const [key, value] of Object.entries(changes) as Array<
-        [keyof QuickWorkerForm, string]
-      >) {
-        if (!value) continue;
-        if (!next[key] || window.confirm(`Ghi đè ${fieldLabels[key]} bằng dữ liệu QR?`)) {
-          next[key] = value;
-        }
-      }
-
+      delete next[entryId];
       return next;
     });
   };
 
+  const setField = <K extends keyof QuickWorkerForm>(
+    entryId: string,
+    key: K,
+    value: QuickWorkerForm[K],
+  ) => {
+    setEntries((current) =>
+      current.map((entry) =>
+        entry.id === entryId ? { ...entry, form: { ...entry.form, [key]: value } } : entry,
+      ),
+    );
+    clearRecordError(entryId);
+  };
+
+  const applyQrData = (entryId: string, data: CccdQrData) => {
+    setEntries((current) =>
+      current.map((entry) => {
+        if (entry.id !== entryId) return entry;
+        const next = { ...entry.form };
+        const changes: Partial<QuickWorkerForm> = {
+          cccd: data.cccd || "",
+          real_name: data.fullName || "",
+          worker_name_snapshot: data.fullName || "",
+          date_of_birth: data.dateOfBirth ? displayDateToPocketBase(data.dateOfBirth) : "",
+          gender: data.gender || "",
+          address: data.address || "",
+        };
+
+        for (const [key, value] of Object.entries(changes) as Array<
+          [keyof QuickWorkerForm, string]
+        >) {
+          if (!value) continue;
+          if (!next[key] || window.confirm(`Ghi đè ${fieldLabels[key]} bằng dữ liệu QR?`)) {
+            next[key] = value;
+          }
+        }
+
+        return { ...entry, form: next };
+      }),
+    );
+    clearRecordError(entryId);
+  };
+
+  const scanImage = async (entryId: string, file: File, side: "front" | "back") => {
+    const scanningKey = `${entryId}:${side}`;
+    setScanningEntrySide(scanningKey);
+    try {
+      const data = await scanCccdQrFromFile(file);
+      if (!data) {
+        toast.warning("Không đọc được QR, vui lòng nhập tay");
+        return;
+      }
+      applyQrData(entryId, data);
+      toast.success("Đã đọc thông tin CCCD từ QR");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Không đọc được QR, vui lòng nhập tay"));
+    } finally {
+      setScanningEntrySide((current) => (current === scanningKey ? null : current));
+    }
+  };
+
   const pickCccdImage =
-    (side: "front" | "back") => async (event: ChangeEvent<HTMLInputElement>) => {
+    (entryId: string, side: "front" | "back") => async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0] || null;
       event.target.value = "";
       if (!file) return;
@@ -234,206 +298,320 @@ export function QuickWorkerAccountDialog({
       }
 
       const preview = URL.createObjectURL(file);
-      if (side === "front") {
-        if (frontPreview) URL.revokeObjectURL(frontPreview);
-        setFrontFile(file);
-        setFrontPreview(preview);
-      } else {
-        if (backPreview) URL.revokeObjectURL(backPreview);
-        setBackFile(file);
-        setBackPreview(preview);
-      }
-
-      await scanImage(file, side);
+      setEntries((current) =>
+        current.map((entry) => {
+          if (entry.id !== entryId) return entry;
+          if (side === "front") {
+            if (entry.frontPreview) URL.revokeObjectURL(entry.frontPreview);
+            return { ...entry, frontFile: file, frontPreview: preview };
+          }
+          if (entry.backPreview) URL.revokeObjectURL(entry.backPreview);
+          return { ...entry, backFile: file, backPreview: preview };
+        }),
+      );
+      clearRecordError(entryId);
+      await scanImage(entryId, file, side);
     };
 
-  const scanImage = async (file: File, side: "front" | "back") => {
-    setScanningSide(side);
-    try {
-      const data = await scanCccdQrFromFile(file);
-      if (!data) {
-        toast.warning("Không đọc được QR, vui lòng nhập tay");
-        return;
-      }
-      applyQrData(data);
-      toast.success("Đã đọc thông tin CCCD từ QR");
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Không đọc được QR, vui lòng nhập tay"));
-    } finally {
-      setScanningSide(null);
+  const clearCccdImage = (entryId: string, side: "front" | "back") => {
+    setEntries((current) =>
+      current.map((entry) => {
+        if (entry.id !== entryId) return entry;
+        if (side === "front") {
+          if (entry.frontPreview) URL.revokeObjectURL(entry.frontPreview);
+          return { ...entry, frontFile: null, frontPreview: "" };
+        }
+        if (entry.backPreview) URL.revokeObjectURL(entry.backPreview);
+        return { ...entry, backFile: null, backPreview: "" };
+      }),
+    );
+  };
+
+  const addEntry = () => {
+    setEntries((current) => [...current, createQuickWorkerEntry()]);
+  };
+
+  const removeEntry = (entryId: string) => {
+    setEntries((current) => {
+      if (current.length === 1) return current;
+      const entry = current.find((item) => item.id === entryId);
+      if (entry) releaseEntryPreviews(entry);
+      return current.filter((item) => item.id !== entryId);
+    });
+    clearRecordError(entryId);
+  };
+
+  const validateEntry = (entry: QuickWorkerEntry) => {
+    const { form } = entry;
+    const realName = form.real_name.trim();
+    const cccd = form.cccd;
+    const phone = form.phone;
+    const cccdForValidation = cccd.trim();
+    const phoneForValidation = phone.trim();
+    const cccdDigits = digitsOnly(cccdForValidation);
+    const username = buildUsername(phone, cccd);
+    const birthForPb = displayDateToPocketBase(form.date_of_birth);
+    const errors: string[] = [];
+
+    if (!realName) errors.push("Nhập tên thật");
+    if (!cccd && !phone) errors.push("Nhập CCCD hoặc số điện thoại");
+    if (phoneForValidation && !hasRequiredDigits(phoneForValidation, 10)) {
+      errors.push("Số điện thoại phải có đúng 10 chữ số; có thể thêm ký tự phía sau");
     }
+    if (cccdForValidation && !hasRequiredDigits(cccdForValidation, 12)) {
+      errors.push("CCCD phải có đúng 12 chữ số; có thể thêm ký tự phía sau");
+    }
+    if (!username) errors.push("Không tạo được tên đăng nhập từ SĐT/CCCD");
+    if (form.date_of_birth.trim() && !birthForPb) errors.push("Ngày sinh không hợp lệ");
+    if ((entry.frontFile || entry.backFile) && ![9, 12].includes(cccdDigits.length)) {
+      errors.push("Nhập số CMND/CCCD hợp lệ trước khi lưu ảnh CCCD");
+    }
+    if (!form.factory) errors.push("Chọn công ty/nhà máy");
+    if (!form.main_house) errors.push("Chọn nhà chính");
+    if (!form.recruiter_staff) errors.push("Chọn người tuyển");
+    if (!form.join_date) errors.push("Nhập ngày vào làm");
+
+    return { errors, username };
+  };
+
+  const createWorker = async (entry: QuickWorkerEntry) => {
+    const { form } = entry;
+    const realName = form.real_name.trim();
+    const workerName = form.worker_name_snapshot.trim() || realName;
+    const cccd = form.cccd;
+    const phone = form.phone;
+    const username = buildUsername(phone, cccd);
+    const birthForPb = displayDateToPocketBase(form.date_of_birth);
+    const selectedFactory = factories.find((factory) => factory.id === form.factory);
+
+    const existing = await findUserByUsernameInsensitive(username);
+    if (existing) throw new Error("Tên đăng nhập đã tồn tại. Hãy đổi SĐT hoặc CCCD.");
+
+    const [uid, compressedFront, compressedBack] = await Promise.all([
+      generateUid(),
+      entry.frontFile ? compressImage(entry.frontFile) : Promise.resolve(null),
+      entry.backFile ? compressImage(entry.backFile) : Promise.resolve(null),
+    ]);
+
+    const fd = new FormData();
+    fd.append("full_name", realName);
+    fd.append("phone", phone);
+    fd.append("username", username);
+    fd.append("uid", uid);
+    fd.append("password", "12345678");
+    fd.append("passwordConfirm", "12345678");
+    fd.append("role", "user");
+    fd.append("approvalStatus", "approved");
+    fd.append("approved", "true");
+    fd.append("status", "active");
+    fd.append("must_change_password", "true");
+    fd.append("cccd", cccd);
+    fd.append("gender", form.gender.trim());
+    if (birthForPb) fd.append("date_of_birth", birthForPb);
+    fd.append("address", form.address.trim());
+    fd.append("bank_name", resolveBankName(form.bank_name.trim()));
+    fd.append("bank_account_number", form.bank_account_number.replace(/\D/g, ""));
+    fd.append("bank_account_name", form.bank_account_name.trim());
+    fd.append("employee_code", form.employee_code.trim());
+    fd.append("company", selectedFactory?.name || "");
+    if (compressedFront) fd.append("cccd_front", compressedFront);
+    if (compressedBack) fd.append("cccd_back", compressedBack);
+
+    const createdUser = await pb.collection("users").create<UserRecord>(fd);
+    const secondaryWarnings: string[] = [];
+    const cacheUser: UserRecord = {
+      ...createdUser,
+      full_name: realName,
+      phone,
+      username,
+      cccd,
+      company: selectedFactory?.name || "",
+      employee_code: form.employee_code.trim(),
+    };
+
+    try {
+      await updateCachedUser(cacheUser);
+    } catch {
+      secondaryWarnings.push("chưa cập nhật được cache tài khoản");
+    }
+
+    let cccdVersionId: string | undefined;
+    if (cccd && (compressedFront || compressedBack)) {
+      try {
+        const version = await findOrCreateCccdVersion(
+          createdUser.id,
+          cccd,
+          compressedFront,
+          compressedBack,
+        );
+        cccdVersionId = version.id;
+      } catch (error) {
+        secondaryWarnings.push(
+          `chưa lưu được phiên bản CCCD (${getErrorMessage(error, "lỗi không rõ")})`,
+        );
+      }
+    }
+
+    let historyId: string | undefined;
+    try {
+      const history = await createEmploymentHistory({
+        user: createdUser.id,
+        factory: form.factory,
+        main_house: form.main_house,
+        employee_code: form.employee_code.trim(),
+        worker_name_snapshot: workerName,
+        worker_cccd_snapshot: cccd,
+        recruiter_staff: form.recruiter_staff,
+        cccd_version: cccdVersionId,
+        join_date: form.join_date,
+        status: "working",
+        note: form.note.trim(),
+      });
+      historyId = history.id;
+      await syncLegacyUserWorkFields(createdUser.id, history);
+    } catch (error) {
+      secondaryWarnings.push(
+        `chưa tạo được lịch sử đi làm (${getErrorMessage(error, "lỗi không rõ")})`,
+      );
+    }
+
+    try {
+      await createStaffActionLog({
+        actor,
+        targetUserId: createdUser.id,
+        targetCollection: "users",
+        targetRecord: createdUser.id,
+        action: "create",
+        after: { id: createdUser.id, username, uid, full_name: realName, cccd },
+        note: "Tạo nhanh tài khoản NLĐ từ mục NLĐ",
+      });
+      if (historyId) {
+        await createStaffActionLog({
+          actor,
+          targetUserId: createdUser.id,
+          targetCollection: "employment_histories",
+          targetRecord: historyId,
+          action: "report_join",
+          after: { id: historyId },
+          note: "Tạo nhanh lịch sử đi làm từ mục NLĐ",
+        });
+      }
+    } catch {
+      secondaryWarnings.push("chưa ghi được nhật ký thao tác");
+    }
+
+    return { userId: createdUser.id, secondaryWarnings };
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!actor?.id) return toast.error("Không xác định người thao tác");
 
-    const realName = form.real_name.trim();
-    const workerName = form.worker_name_snapshot.trim() || realName;
-    const cccd = form.cccd.replace(/\D/g, "");
-    const phone = form.phone.replace(/\s/g, "").trim();
-    const username = buildUsername(phone, cccd);
-    const birthForPb = displayDateToPocketBase(form.date_of_birth);
+    const validationErrors: Record<string, string[]> = {};
+    const usernames = new Map<string, number[]>();
+    entries.forEach((entry, index) => {
+      const { errors, username } = validateEntry(entry);
+      if (errors.length > 0) validationErrors[entry.id] = errors;
+      if (username) usernames.set(username, [...(usernames.get(username) || []), index + 1]);
+    });
+    usernames.forEach((indexes) => {
+      if (indexes.length < 2) return;
+      indexes.forEach((index) => {
+        const entry = entries[index - 1];
+        validationErrors[entry.id] = [
+          ...(validationErrors[entry.id] || []),
+          `Tên đăng nhập trùng với NLĐ #${indexes.filter((item) => item !== index).join(", #")}`,
+        ];
+      });
+    });
 
-    if (!realName) return toast.warning("Nhập tên thật");
-    if (!cccd && !phone) return toast.warning("Nhập CCCD hoặc số điện thoại");
-    if (!username) return toast.warning("Không tạo được tên đăng nhập từ SĐT/CCCD");
-    if (form.date_of_birth.trim() && !birthForPb) {
-      return toast.warning("Ngày sinh không hợp lệ");
+    if (Object.keys(validationErrors).length > 0) {
+      setRecordErrors(validationErrors);
+      const details = entries
+        .map((entry, index) =>
+          validationErrors[entry.id]?.length
+            ? `NLĐ #${index + 1}: ${validationErrors[entry.id].join("; ")}`
+            : "",
+        )
+        .filter(Boolean)
+        .join(" | ");
+      toast.error(details);
+      return;
     }
-    if ((frontFile || backFile) && ![9, 12].includes(cccd.length)) {
-      return toast.warning("Nhập số CMND/CCCD hợp lệ trước khi lưu ảnh CCCD");
-    }
-    if (!form.factory) return toast.warning("Chọn công ty/nhà máy");
-    if (!form.main_house) return toast.warning("Chọn nhà chính");
-    if (!form.recruiter_staff) return toast.warning("Chọn người tuyển");
-    if (!form.join_date) return toast.warning("Nhập ngày vào làm");
 
     setSubmitting(true);
-    try {
-      const existing = await findUserByUsernameInsensitive(username);
-      if (existing) {
-        toast.error("Tên đăng nhập đã tồn tại. Hãy đổi SĐT hoặc CCCD.");
-        return;
-      }
+    setRecordErrors({});
+    const created: Array<{ entry: QuickWorkerEntry; userId: string; warnings: string[] }> = [];
+    const failed: Record<string, string[]> = {};
 
-      const [uid, compressedFront, compressedBack] = await Promise.all([
-        generateUid(),
-        frontFile ? compressImage(frontFile) : Promise.resolve(null),
-        backFile ? compressImage(backFile) : Promise.resolve(null),
-      ]);
-
-      const fd = new FormData();
-      fd.append("full_name", realName);
-      fd.append("phone", phone);
-      fd.append("username", username);
-      fd.append("uid", uid);
-      fd.append("password", "12345678");
-      fd.append("passwordConfirm", "12345678");
-      fd.append("role", "user");
-      fd.append("approvalStatus", "approved");
-      fd.append("approved", "true");
-      fd.append("status", "active");
-      fd.append("must_change_password", "true");
-      fd.append("cccd", cccd);
-      fd.append("gender", form.gender.trim());
-      if (birthForPb) fd.append("date_of_birth", birthForPb);
-      fd.append("address", form.address.trim());
-      fd.append("bank_name", resolveBankName(form.bank_name.trim()));
-      fd.append("bank_account_number", form.bank_account_number.replace(/\D/g, ""));
-      fd.append("bank_account_name", form.bank_account_name.trim());
-      fd.append("employee_code", form.employee_code.trim());
-      fd.append("company", selectedFactory?.name || "");
-      if (compressedFront) fd.append("cccd_front", compressedFront);
-      if (compressedBack) fd.append("cccd_back", compressedBack);
-
-      const createdUser = await pb.collection("users").create<UserRecord>(fd);
-      const secondaryWarnings: string[] = [];
-      const cacheUser: UserRecord = {
-        ...createdUser,
-        full_name: realName,
-        phone,
-        username,
-        cccd,
-        company: selectedFactory?.name || "",
-        employee_code: form.employee_code.trim(),
-      };
-
+    for (const entry of entries) {
       try {
-        await updateCachedUser(cacheUser);
-      } catch {
-        secondaryWarnings.push("chưa cập nhật được cache tài khoản");
-      }
-
-      let cccdVersionId: string | undefined;
-      if (cccd && (compressedFront || compressedBack)) {
-        try {
-          const version = await findOrCreateCccdVersion(
-            createdUser.id,
-            cccd,
-            compressedFront,
-            compressedBack,
-          );
-          cccdVersionId = version.id;
-        } catch (error) {
-          secondaryWarnings.push(
-            `chưa lưu được phiên bản CCCD (${getErrorMessage(error, "lỗi không rõ")})`,
-          );
-        }
-      }
-
-      let historyId: string | undefined;
-      try {
-        const history = await createEmploymentHistory({
-          user: createdUser.id,
-          factory: form.factory,
-          main_house: form.main_house,
-          employee_code: form.employee_code.trim(),
-          worker_name_snapshot: workerName,
-          worker_cccd_snapshot: cccd,
-          recruiter_staff: form.recruiter_staff,
-          cccd_version: cccdVersionId,
-          join_date: form.join_date,
-          status: "working",
-          note: form.note.trim(),
-        });
-        historyId = history.id;
-        await syncLegacyUserWorkFields(createdUser.id, history);
+        const result = await createWorker(entry);
+        created.push({ entry, userId: result.userId, warnings: result.secondaryWarnings });
       } catch (error) {
-        secondaryWarnings.push(
-          `chưa tạo được lịch sử đi làm (${getErrorMessage(error, "lỗi không rõ")})`,
-        );
+        const message =
+          getPocketBaseFieldErrors(error) ||
+          getErrorMessage(error, "Không tạo được tài khoản nhanh");
+        failed[entry.id] = [message];
       }
+    }
 
+    let refreshWarning = "";
+    if (created.length > 0) {
       try {
-        await createStaffActionLog({
-          actor,
-          targetUserId: createdUser.id,
-          targetCollection: "users",
-          targetRecord: createdUser.id,
-          action: "create",
-          after: { id: createdUser.id, username, uid, full_name: realName, cccd },
-          note: "Tạo nhanh tài khoản NLĐ từ mục NLĐ",
-        });
-        if (historyId) {
-          await createStaffActionLog({
-            actor,
-            targetUserId: createdUser.id,
-            targetCollection: "employment_histories",
-            targetRecord: historyId,
-            action: "report_join",
-            after: { id: historyId },
-            note: "Tạo nhanh lịch sử đi làm từ mục NLĐ",
-          });
-        }
+        await Promise.all(created.map(({ userId }) => onCreated(userId)));
       } catch {
-        secondaryWarnings.push("chưa ghi được nhật ký thao tác");
+        refreshWarning = "Đã tạo tài khoản nhưng chưa tải lại được danh sách";
       }
+    }
 
+    const createdIds = new Set(created.map(({ entry }) => entry.id));
+    if (Object.keys(failed).length > 0) {
+      setRecordErrors(failed);
+      setEntries((current) => {
+        current.filter((entry) => createdIds.has(entry.id)).forEach(releaseEntryPreviews);
+        return current.filter((entry) => !createdIds.has(entry.id));
+      });
+      const failureDetails = entries
+        .map((entry, index) =>
+          failed[entry.id]?.length ? `NLĐ #${index + 1}: ${failed[entry.id].join("; ")}` : "",
+        )
+        .filter(Boolean)
+        .join(" | ");
+      toast.error(
+        created.length > 0
+          ? `Đã tạo ${created.length} NLĐ. ${failureDetails}`
+          : `Chưa tạo được NLĐ. ${failureDetails}`,
+      );
+      if (refreshWarning) toast.warning(refreshWarning);
+    } else {
+      const warnings = created.flatMap(({ entry, warnings: entryWarnings }, index) =>
+        entryWarnings.map(
+          (warning) => `NLĐ #${entries.findIndex((item) => item.id === entry.id) + 1}: ${warning}`,
+        ),
+      );
+      if (refreshWarning) warnings.push(refreshWarning);
       resetFormState();
       onOpenChange(false);
-      try {
-        await onCreated(createdUser.id);
-      } catch {
-        secondaryWarnings.push("chưa tải lại được danh sách");
+      if (warnings.length > 0) {
+        toast.warning(`Đã tạo ${created.length} NLĐ, nhưng ${warnings.join("; ")}.`);
+      } else {
+        toast.success(
+          created.length === 1 ? "Đã tạo nhanh tài khoản NLĐ" : `Đã tạo ${created.length} NLĐ`,
+        );
       }
-
-      if (secondaryWarnings.length > 0) {
-        toast.warning(`Tài khoản đã tạo, nhưng ${secondaryWarnings.join(", ")}.`);
-      }
-      toast.success("Đã tạo nhanh tài khoản NLĐ");
-    } catch (error) {
-      const fieldErrors = getPocketBaseFieldErrors(error);
-      toast.error(fieldErrors || getErrorMessage(error, "Không tạo được tài khoản nhanh"));
-    } finally {
-      setSubmitting(false);
     }
+
+    setSubmitting(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={(value) => !submitting && onOpenChange(value)}>
-      <DialogContent className="flex h-[92dvh] max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
-        <DialogHeader className="shrink-0 border-b bg-background px-5 py-4 pr-14">
+      <DialogContent
+        overlayClassName="desktop:left-[var(--desktop-workspace-left,17.5rem)] desktop:top-20 desktop:right-0 desktop:bottom-0 desktop:bg-black/50"
+        className="fixed flex h-[92dvh] max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl desktop:left-[var(--desktop-workspace-left,17.5rem)] desktop:top-20 desktop:right-0 desktop:bottom-0 desktop:h-auto desktop:max-h-none desktop:w-auto desktop:max-w-none desktop:translate-x-0 desktop:translate-y-0 desktop:rounded-none"
+      >
+        <DialogHeader className="shrink-0 border-b bg-background px-5 py-4 pr-14 desktop:px-5 desktop:py-3 desktop:pr-14">
           <DialogTitle>Tạo nhanh tài khoản NLĐ</DialogTitle>
           <DialogDescription>
             Tạo tài khoản user và ghi nhận lịch sử đang đi làm trong một bước.
@@ -441,168 +619,77 @@ export function QuickWorkerAccountDialog({
         </DialogHeader>
 
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
-            <div className="grid gap-3 sm:grid-cols-[220px_1fr]">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-1">
-                <CccdImageBox
-                  label="CCCD trước"
-                  preview={frontPreview}
-                  scanning={scanningSide === "front"}
-                  cameraInputRef={frontCameraInputRef}
-                  libraryInputRef={frontLibraryInputRef}
-                  onPick={pickCccdImage("front")}
-                  onScan={() => frontFile && scanImage(frontFile, "front")}
-                  onClear={() => {
-                    if (frontPreview) URL.revokeObjectURL(frontPreview);
-                    setFrontFile(null);
-                    setFrontPreview("");
-                  }}
-                />
-                <CccdImageBox
-                  label="CCCD sau"
-                  preview={backPreview}
-                  scanning={scanningSide === "back"}
-                  cameraInputRef={backCameraInputRef}
-                  libraryInputRef={backLibraryInputRef}
-                  onPick={pickCccdImage("back")}
-                  onScan={() => backFile && scanImage(backFile, "back")}
-                  onClear={() => {
-                    if (backPreview) URL.revokeObjectURL(backPreview);
-                    setBackFile(null);
-                    setBackPreview("");
-                  }}
-                />
-              </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 desktop:px-5 desktop:py-3">
+            <div className="space-y-3">
+              {entries.map((entry, index) => (
+                <section
+                  key={entry.id}
+                  className="desktop:rounded-xl desktop:border desktop:border-border desktop:bg-muted/15 desktop:p-3"
+                >
+                  <div className="mb-3 hidden items-center justify-between gap-3 desktop:flex">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">NLĐ #{index + 1}</p>
+                      {recordErrors[entry.id]?.length ? (
+                        <p
+                          className="mt-0.5 truncate text-xs text-destructive"
+                          title={recordErrors[entry.id].join("; ")}
+                        >
+                          {recordErrors[entry.id].join("; ")}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Nhập thông tin người lao động
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 shrink-0 text-destructive hover:text-destructive"
+                      onClick={() => removeEntry(entry.id)}
+                      disabled={submitting || entries.length === 1}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Xóa
+                    </Button>
+                  </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <TextField
-                  label="Tên thật"
-                  value={form.real_name}
-                  onChange={(value) => setField("real_name", value)}
-                  placeholder="Nguyễn Văn A"
-                />
-                <TextField
-                  label="Họ tên theo nhà máy"
-                  value={form.worker_name_snapshot}
-                  onChange={(value) => setField("worker_name_snapshot", value)}
-                  placeholder="Tên hiển thị tại nhà máy"
-                />
-                <TextField
-                  label="CMND/CCCD"
-                  value={form.cccd}
-                  onChange={(value) => setField("cccd", value.replace(/\D/g, ""))}
-                  placeholder="001099012345"
-                  inputMode="numeric"
-                />
-                <TextField
-                  label="Số điện thoại"
-                  value={form.phone}
-                  onChange={(value) => setField("phone", value.replace(/[^\d+]/g, ""))}
-                  placeholder="0900000001"
-                  inputMode="tel"
-                />
-                <TextField
-                  label="Ngày sinh"
-                  type="date"
-                  value={form.date_of_birth}
-                  onChange={(value) => setField("date_of_birth", value)}
-                />
-                <div className="flex flex-col gap-1">
-                  <Label className="text-xs">Giới tính</Label>
-                  <Select value={form.gender} onValueChange={(value) => setField("gender", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Giới tính" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Nam">Nam</SelectItem>
-                      <SelectItem value="Nữ">Nữ</SelectItem>
-                      <SelectItem value="Khác">Khác</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <TextField
-                  label="Ngân hàng"
-                  value={form.bank_name}
-                  onChange={(value) => setField("bank_name", value)}
-                  placeholder="Ngân hàng"
-                  list="quick-worker-bank-list"
-                />
-                <TextField
-                  label="Số tài khoản"
-                  value={form.bank_account_number}
-                  onChange={(value) => setField("bank_account_number", value.replace(/\D/g, ""))}
-                  placeholder="Số tài khoản"
-                  inputMode="numeric"
-                />
-                <TextField
-                  label="Chủ tài khoản"
-                  value={form.bank_account_name}
-                  onChange={(value) => setField("bank_account_name", value)}
-                  placeholder="Chủ tài khoản"
-                />
-                <div className="sm:col-span-2">
-                  <TextField
-                    label="Địa chỉ"
-                    value={form.address}
-                    onChange={(value) => setField("address", value)}
-                    placeholder="Địa chỉ theo CCCD"
+                  <QuickWorkerEntryFields
+                    entry={entry}
+                    scanningEntrySide={scanningEntrySide}
+                    staffUsers={staffUsers}
+                    mainHouses={mainHouses}
+                    factories={factories}
+                    frontCameraInputRef={(node) => {
+                      frontCameraInputRefs.current[entry.id] = node;
+                    }}
+                    frontLibraryInputRef={(node) => {
+                      frontLibraryInputRefs.current[entry.id] = node;
+                    }}
+                    backCameraInputRef={(node) => {
+                      backCameraInputRefs.current[entry.id] = node;
+                    }}
+                    backLibraryInputRef={(node) => {
+                      backLibraryInputRefs.current[entry.id] = node;
+                    }}
+                    onSetField={setField}
+                    onPick={pickCccdImage}
+                    onScan={scanImage}
+                    onClear={clearCccdImage}
+                    onRequestCamera={(side) =>
+                      (side === "front" ? frontCameraInputRefs : backCameraInputRefs).current[
+                        entry.id
+                      ]?.click()
+                    }
+                    onRequestLibrary={(side) =>
+                      (side === "front" ? frontLibraryInputRefs : backLibraryInputRefs).current[
+                        entry.id
+                      ]?.click()
+                    }
                   />
-                </div>
-                <ComboboxField
-                  label="Người tuyển"
-                  placeholder="Chọn người tuyển"
-                  options={staffUsers.map((staff) => ({
-                    value: staff.id,
-                    label: staff.full_name || staff.username || staff.id,
-                    description: staff.username || staff.phone || "",
-                  }))}
-                  value={form.recruiter_staff}
-                  onChange={(value) => setField("recruiter_staff", value)}
-                />
-                <TextField
-                  label="Ngày vào làm"
-                  type="date"
-                  value={form.join_date}
-                  onChange={(value) => setField("join_date", value)}
-                />
-                <ComboboxField
-                  label="Nhà chính"
-                  placeholder="Chọn nhà chính"
-                  options={mainHouses.map((house) => ({
-                    value: house.id,
-                    label: house.name,
-                    description: house.note || "",
-                  }))}
-                  value={form.main_house}
-                  onChange={(value) => setField("main_house", value)}
-                />
-                <ComboboxField
-                  label="Công ty"
-                  placeholder="Chọn công ty"
-                  options={factories.map((factory) => ({
-                    value: factory.id,
-                    label: factory.name,
-                    description: factory.code || "",
-                  }))}
-                  value={form.factory}
-                  onChange={(value) => setField("factory", value)}
-                />
-                <TextField
-                  label="Mã nhân viên"
-                  value={form.employee_code}
-                  onChange={(value) => setField("employee_code", value)}
-                  placeholder="Mã nhân viên"
-                />
-                <div className="sm:col-span-2 lg:col-span-4">
-                  <Label className="text-xs">Ghi chú</Label>
-                  <Textarea
-                    rows={2}
-                    value={form.note}
-                    onChange={(event) => setField("note", event.target.value)}
-                    placeholder="Ghi chú thêm nếu có"
-                  />
-                </div>
-              </div>
+                </section>
+              ))}
             </div>
           </div>
 
@@ -614,7 +701,7 @@ export function QuickWorkerAccountDialog({
             ))}
           </datalist>
 
-          <DialogFooter className="shrink-0 border-t bg-background px-5 py-4">
+          <DialogFooter className="shrink-0 border-t bg-background px-5 py-4 desktop:px-5 desktop:py-3">
             <Button
               type="button"
               variant="outline"
@@ -623,14 +710,238 @@ export function QuickWorkerAccountDialog({
             >
               Hủy
             </Button>
-            <Button type="submit" disabled={submitting || scanningSide !== null}>
+            <Button
+              type="button"
+              variant="outline"
+              className="hidden desktop:inline-flex"
+              onClick={addEntry}
+              disabled={submitting}
+            >
+              <Plus className="h-4 w-4" />
+              Bổ sung NLĐ
+            </Button>
+            <Button type="submit" disabled={submitting || scanningEntrySide !== null}>
               <BriefcaseBusiness className="h-4 w-4" />
-              {submitting ? "Đang lưu..." : "Tạo nhanh"}
+              {submitting
+                ? "Đang lưu..."
+                : entries.length === 1
+                  ? "Tạo nhanh"
+                  : `Tạo ${entries.length} NLĐ`}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function QuickWorkerEntryFields({
+  entry,
+  scanningEntrySide,
+  staffUsers,
+  mainHouses,
+  factories,
+  frontCameraInputRef,
+  frontLibraryInputRef,
+  backCameraInputRef,
+  backLibraryInputRef,
+  onSetField,
+  onPick,
+  onScan,
+  onClear,
+  onRequestCamera,
+  onRequestLibrary,
+}: {
+  entry: QuickWorkerEntry;
+  scanningEntrySide: string | null;
+  staffUsers: UserRecord[];
+  mainHouses: MainHouseRecord[];
+  factories: FactoryRecord[];
+  frontCameraInputRef: RefCallback<HTMLInputElement>;
+  frontLibraryInputRef: RefCallback<HTMLInputElement>;
+  backCameraInputRef: RefCallback<HTMLInputElement>;
+  backLibraryInputRef: RefCallback<HTMLInputElement>;
+  onSetField: <K extends keyof QuickWorkerForm>(
+    entryId: string,
+    key: K,
+    value: QuickWorkerForm[K],
+  ) => void;
+  onPick: (
+    entryId: string,
+    side: "front" | "back",
+  ) => (event: ChangeEvent<HTMLInputElement>) => void;
+  onScan: (entryId: string, file: File, side: "front" | "back") => Promise<void>;
+  onClear: (entryId: string, side: "front" | "back") => void;
+  onRequestCamera: (side: "front" | "back") => void;
+  onRequestLibrary: (side: "front" | "back") => void;
+}) {
+  const { form } = entry;
+  const setField = <K extends keyof QuickWorkerForm>(key: K, value: QuickWorkerForm[K]) =>
+    onSetField(entry.id, key, value);
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-[220px_1fr] desktop:grid-cols-[240px_minmax(0,1fr)] desktop:gap-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-1 desktop:grid-cols-2 desktop:gap-2">
+        <CccdImageBox
+          label="CCCD trước"
+          preview={entry.frontPreview}
+          scanning={scanningEntrySide === `${entry.id}:front`}
+          cameraInputRef={frontCameraInputRef}
+          libraryInputRef={frontLibraryInputRef}
+          onPick={onPick(entry.id, "front")}
+          onScan={() => entry.frontFile && onScan(entry.id, entry.frontFile, "front")}
+          onClear={() => onClear(entry.id, "front")}
+          onRequestCamera={() => onRequestCamera("front")}
+          onRequestLibrary={() => onRequestLibrary("front")}
+        />
+        <CccdImageBox
+          label="CCCD sau"
+          preview={entry.backPreview}
+          scanning={scanningEntrySide === `${entry.id}:back`}
+          cameraInputRef={backCameraInputRef}
+          libraryInputRef={backLibraryInputRef}
+          onPick={onPick(entry.id, "back")}
+          onScan={() => entry.backFile && onScan(entry.id, entry.backFile, "back")}
+          onClear={() => onClear(entry.id, "back")}
+          onRequestCamera={() => onRequestCamera("back")}
+          onRequestLibrary={() => onRequestLibrary("back")}
+        />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 desktop:grid-cols-8 desktop:gap-2">
+        <TextField
+          label="Tên thật"
+          value={form.real_name}
+          onChange={(value) => setField("real_name", value)}
+          placeholder="Họ và tên"
+        />
+        <TextField
+          label="Họ tên theo nhà máy"
+          value={form.worker_name_snapshot}
+          onChange={(value) => setField("worker_name_snapshot", value)}
+          placeholder="Họ tên theo nhà máy"
+        />
+        <TextField
+          label="CMND/CCCD"
+          value={form.cccd}
+          onChange={(value) => setField("cccd", value)}
+          placeholder="CMND/CCCD"
+          inputMode="text"
+        />
+        <TextField
+          label="Số điện thoại"
+          value={form.phone}
+          onChange={(value) => setField("phone", value)}
+          placeholder="Số điện thoại"
+          inputMode="tel"
+        />
+        <TextField
+          label="Ngày sinh"
+          type="date"
+          value={form.date_of_birth}
+          onChange={(value) => setField("date_of_birth", value)}
+          placeholder="Ngày sinh"
+        />
+        <div className="flex min-w-0 flex-col gap-1 desktop:gap-0 desktop:max-w-none">
+          <Label className="truncate text-xs desktop:hidden">Giới tính</Label>
+          <Select value={form.gender} onValueChange={(value) => setField("gender", value)}>
+            <SelectTrigger className="desktop:h-9 desktop:rounded-lg desktop:px-2.5 desktop:text-sm">
+              <SelectValue placeholder="Giới tính" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Nam">Nam</SelectItem>
+              <SelectItem value="Nữ">Nữ</SelectItem>
+              <SelectItem value="Khác">Khác</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <TextField
+          label="Ngân hàng"
+          value={form.bank_name}
+          onChange={(value) => setField("bank_name", value)}
+          placeholder="Ngân hàng"
+          list="quick-worker-bank-list"
+        />
+        <TextField
+          label="Số tài khoản"
+          value={form.bank_account_number}
+          onChange={(value) => setField("bank_account_number", value.replace(/\D/g, ""))}
+          placeholder="Số tài khoản"
+          inputMode="numeric"
+        />
+        <TextField
+          label="Chủ tài khoản"
+          value={form.bank_account_name}
+          onChange={(value) => setField("bank_account_name", value)}
+          placeholder="Chủ tài khoản"
+        />
+        <div className="sm:col-span-2 desktop:col-span-1 desktop:max-w-none">
+          <TextField
+            label="Địa chỉ"
+            value={form.address}
+            onChange={(value) => setField("address", value)}
+            placeholder="Địa chỉ theo CCCD"
+          />
+        </div>
+        <ComboboxField
+          label="Người tuyển"
+          placeholder="Chọn người tuyển"
+          options={staffUsers.map((staff) => ({
+            value: staff.id,
+            label: staff.full_name || staff.username || staff.id,
+            description: staff.username || staff.phone || "",
+          }))}
+          value={form.recruiter_staff}
+          onChange={(value) => setField("recruiter_staff", value)}
+        />
+        <TextField
+          label="Ngày vào làm"
+          type="date"
+          value={form.join_date}
+          onChange={(value) => setField("join_date", value)}
+          placeholder="Ngày vào làm"
+        />
+        <ComboboxField
+          label="Nhà chính"
+          placeholder="Chọn nhà chính"
+          options={mainHouses.map((house) => ({
+            value: house.id,
+            label: house.name,
+            description: house.note || "",
+          }))}
+          value={form.main_house}
+          onChange={(value) => setField("main_house", value)}
+        />
+        <ComboboxField
+          label="Công ty"
+          placeholder="Chọn công ty"
+          options={factories.map((factory) => ({
+            value: factory.id,
+            label: factory.name,
+            description: factory.code || "",
+          }))}
+          value={form.factory}
+          onChange={(value) => setField("factory", value)}
+        />
+        <TextField
+          label="Mã nhân viên"
+          value={form.employee_code}
+          onChange={(value) => setField("employee_code", value)}
+          placeholder="Mã nhân viên"
+        />
+        <div className="sm:col-span-2 lg:col-span-4 desktop:col-span-1">
+          <Label className="text-xs desktop:hidden">Ghi chú</Label>
+          <Textarea
+            rows={1}
+            value={form.note}
+            onChange={(event) => setField("note", event.target.value)}
+            placeholder="Ghi chú"
+            title={form.note || "Ghi chú"}
+            className="truncate desktop:h-9 desktop:min-h-9 desktop:resize-none desktop:rounded-lg desktop:px-2.5 desktop:py-2 desktop:text-sm"
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -671,10 +982,17 @@ function TextField({
   list?: string;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <Label className="text-xs">{label}</Label>
+    <div className="flex min-w-0 flex-col gap-1 desktop:gap-0">
+      <Label className="truncate text-xs desktop:hidden" title={label}>
+        {label}
+      </Label>
       {type === "date" ? (
-        <DateInput value={value} onChange={onChange} placeholder={placeholder} />
+        <DateInput
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          className="desktop:[&_button]:h-7 desktop:[&_button]:w-7 desktop:[&_input]:h-9 desktop:[&_input]:rounded-lg desktop:[&_input]:px-2.5 desktop:[&_input]:pr-8 desktop:[&_input]:text-sm"
+        />
       ) : (
         <Input
           type={type}
@@ -683,6 +1001,8 @@ function TextField({
           placeholder={placeholder}
           inputMode={inputMode}
           list={list}
+          title={value || placeholder}
+          className="truncate desktop:h-9 desktop:rounded-lg desktop:px-2.5 desktop:text-sm"
         />
       )}
     </div>
@@ -698,33 +1018,40 @@ function CccdImageBox({
   onPick,
   onScan,
   onClear,
+  onRequestCamera,
+  onRequestLibrary,
 }: {
   label: string;
   preview: string;
   scanning: boolean;
-  cameraInputRef: RefObject<HTMLInputElement | null>;
-  libraryInputRef: RefObject<HTMLInputElement | null>;
+  cameraInputRef: RefCallback<HTMLInputElement>;
+  libraryInputRef: RefCallback<HTMLInputElement>;
   onPick: (event: ChangeEvent<HTMLInputElement>) => void;
   onScan: () => void;
   onClear: () => void;
+  onRequestCamera: () => void;
+  onRequestLibrary: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <Label className="text-xs">{label}</Label>
+    <div className="flex flex-col gap-1 desktop:gap-0">
+      <Label className="text-xs desktop:hidden">{label}</Label>
       <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-muted/40">
+        <span className="pointer-events-none absolute left-2 top-2 z-10 hidden rounded bg-background/85 px-1.5 py-0.5 text-xs font-medium text-foreground shadow-sm desktop:inline">
+          {label}
+        </span>
         {preview ? (
           <img src={preview} alt={label} className="size-full object-cover" />
         ) : (
           <div className="flex size-full flex-col items-center justify-center gap-2 p-2 text-xs text-muted-foreground">
-            <IdCard className="h-6 w-6" />
-            <span>{label}</span>
-            <div className="grid w-full grid-cols-2 gap-1">
+            <IdCard className="h-6 w-6 desktop:hidden" />
+            <span className="desktop:hidden">{label}</span>
+            <div className="grid w-full grid-cols-2 gap-1 desktop:hidden">
               <Button
                 type="button"
                 size="sm"
                 variant="secondary"
                 className="h-8 px-2 text-xs"
-                onClick={() => cameraInputRef.current?.click()}
+                onClick={() => onRequestCamera()}
               >
                 <Camera className="h-4 w-4" />
                 Chụp
@@ -734,15 +1061,26 @@ function CccdImageBox({
                 size="sm"
                 variant="secondary"
                 className="h-8 px-2 text-xs"
-                onClick={() => libraryInputRef.current?.click()}
+                onClick={() => onRequestLibrary()}
               >
                 Thư viện
               </Button>
             </div>
           </div>
         )}
+        <Button
+          type="button"
+          size="icon"
+          variant="secondary"
+          className="absolute bottom-2 right-2 hidden h-8 w-8 desktop:inline-flex"
+          aria-label={`Tải ảnh ${label} từ thư viện`}
+          title={`Tải ảnh ${label} từ thư viện`}
+          onClick={() => onRequestLibrary()}
+        >
+          <Camera className="h-4 w-4" />
+        </Button>
         {preview && (
-          <div className="absolute inset-x-2 bottom-2 flex gap-1">
+          <div className="absolute inset-x-2 bottom-2 flex gap-1 desktop:right-12">
             <Button
               type="button"
               size="sm"
@@ -766,27 +1104,29 @@ function CccdImageBox({
         )}
       </div>
       {preview && (
-        <div className="grid grid-cols-2 gap-1">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 px-2 text-xs"
-            onClick={() => cameraInputRef.current?.click()}
-          >
-            <Camera className="h-4 w-4" />
-            Chụp lại
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 px-2 text-xs"
-            onClick={() => libraryInputRef.current?.click()}
-          >
-            Thư viện
-          </Button>
-        </div>
+        <>
+          <div className="grid grid-cols-2 gap-1 desktop:hidden">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 px-2 text-xs"
+              onClick={() => onRequestCamera()}
+            >
+              <Camera className="h-4 w-4" />
+              Chụp lại
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 px-2 text-xs"
+              onClick={() => onRequestLibrary()}
+            >
+              Thư viện
+            </Button>
+          </div>
+        </>
       )}
       <input
         ref={cameraInputRef}
@@ -824,13 +1164,15 @@ function ComboboxField({
   const selected = options.find((option) => option.value === value);
 
   return (
-    <div className="flex flex-col gap-1">
-      <Label className="text-xs">{label}</Label>
+    <div className="flex min-w-0 flex-col gap-1 desktop:gap-0">
+      <Label className="truncate text-xs desktop:hidden" title={label}>
+        {label}
+      </Label>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-left text-sm"
+            className="flex h-10 w-full min-w-0 items-center justify-between rounded-md border border-input bg-background px-3 text-left text-sm desktop:h-9 desktop:rounded-lg desktop:px-2.5"
           >
             <span className={cn("truncate", !selected && "text-muted-foreground")}>
               {selected ? selected.label : placeholder}

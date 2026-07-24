@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { createApprovalRequest } from "@/lib/approval-requests";
+import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { userDisplayName } from "@/lib/delegations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ export function ApprovalForm({
 }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [amountText, setAmountText] = useState("");
   const [images, setImages] = useState<File[]>([]);
   const [excelFiles, setExcelFiles] = useState<File[]>([]);
   const [adminList, setAdminList] = useState<UserRecord[]>([]);
@@ -50,6 +52,7 @@ export function ApprovalForm({
   function reset() {
     setTitle("");
     setContent("");
+    setAmountText("");
     setImages([]);
     setExcelFiles([]);
     setSelectedAdmins([]);
@@ -59,12 +62,14 @@ export function ApprovalForm({
     e.preventDefault();
     if (!title.trim()) return toast.error("Vui lòng nhập tiêu đề");
     if (!selectedAdmins.length) return toast.error("Vui lòng chọn ít nhất 1 quản trị viên");
+    const amount = parseMoneyInput(amountText);
 
     setSubmitting(true);
     try {
       await createApprovalRequest({
         title: title.trim(),
         content: content.trim(),
+        amount: amount > 0 ? amount : undefined,
         images,
         excelFiles,
         adminIds: selectedAdmins,
@@ -125,6 +130,18 @@ export function ApprovalForm({
               placeholder="Mô tả chi tiết yêu cầu"
               className="min-h-24 rounded-xl"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Số tiền (tùy chọn)</Label>
+            <Input
+              value={amountText}
+              onChange={(e) => setAmountText(formatMoneyInput(e.target.value))}
+              placeholder="Nhập số tiền nếu có"
+              inputMode="numeric"
+              className="rounded-xl"
+            />
+            <p className="text-xs text-muted-foreground">Đơn vị: đồng</p>
           </div>
 
           <div className="space-y-1.5">

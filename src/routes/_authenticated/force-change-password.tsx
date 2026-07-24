@@ -60,8 +60,8 @@ function ForceChangePasswordPage() {
   };
 
   return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-sm space-y-5 p-6">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4 desktop:bg-transparent">
+      <Card className="w-full max-w-sm space-y-5 p-6 desktop:max-w-xl desktop:p-8 desktop:shadow-card">
         <div className="text-center">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
             <KeyRound className="h-7 w-7 text-primary" />

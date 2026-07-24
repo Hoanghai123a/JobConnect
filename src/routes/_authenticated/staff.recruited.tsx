@@ -160,13 +160,23 @@ function StaffRecruitedPage() {
         return true;
       })
       .sort((a, b) => {
-        const aTime = new Date(a.latestHistory?.join_date || "").getTime();
-        const bTime = new Date(b.latestHistory?.join_date || "").getTime();
-        const aValid = !Number.isNaN(aTime);
-        const bValid = !Number.isNaN(bTime);
-        if (aValid && bValid && aTime !== bTime) return bTime - aTime;
-        if (!aValid && bValid) return 1;
-        if (aValid && !bValid) return -1;
+        const aJoinTime = new Date(a.latestHistory?.join_date || "").getTime();
+        const bJoinTime = new Date(b.latestHistory?.join_date || "").getTime();
+        const aJoinValid = !Number.isNaN(aJoinTime);
+        const bJoinValid = !Number.isNaN(bJoinTime);
+        if (aJoinValid && bJoinValid && aJoinTime !== bJoinTime) return bJoinTime - aJoinTime;
+        if (!aJoinValid && bJoinValid) return 1;
+        if (aJoinValid && !bJoinValid) return -1;
+
+        const aCreatedTime = new Date(a.latestHistory?.created || "").getTime();
+        const bCreatedTime = new Date(b.latestHistory?.created || "").getTime();
+        const aCreatedValid = !Number.isNaN(aCreatedTime);
+        const bCreatedValid = !Number.isNaN(bCreatedTime);
+        if (aCreatedValid && bCreatedValid && aCreatedTime !== bCreatedTime) {
+          return bCreatedTime - aCreatedTime;
+        }
+        if (!aCreatedValid && bCreatedValid) return 1;
+        if (aCreatedValid && !bCreatedValid) return -1;
         return a.user.id.localeCompare(b.user.id);
       });
   }, [scope, search, workers]);

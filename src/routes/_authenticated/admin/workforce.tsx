@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   BarChart3,
   BriefcaseBusiness,
@@ -84,6 +84,7 @@ import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
 import { WorkerEmploymentDrawer } from "@/components/employment/WorkerEmploymentDrawer";
 import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
+import { WorkerDesktopCard } from "@/components/staff/WorkerDesktopCard";
 import { RecruitChartDialog } from "@/components/workforce/RecruitChartDialog";
 import { RegisterDialog as SharedRegisterDialog } from "@/components/workforce/RegisterDialog";
 import { VN_BANKS } from "@/lib/vn-banks";
@@ -1088,36 +1089,63 @@ function WorkerList({
           const isWorking = !!latest && isCurrentlyWorking(latest);
           const factoryName =
             latest?.expand?.factory?.name || factoryById.get(latest?.factory || "")?.name;
+          const recruiterName =
+            latest?.expand?.recruiter_staff?.full_name || latest?.expand?.recruiter_staff?.username;
+          const mainHouseName = latest?.expand?.main_house?.name;
+
           return (
-            <button
-              key={user.id}
-              type="button"
-              onClick={() => onSelectWorker(user.id)}
-              className="list-card border-l-primary flex w-full items-start justify-between gap-3 text-left"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">
-                  {user.full_name || user.username || "Người lao động"}
+            <Fragment key={user.id}>
+              <WorkerDesktopCard
+                name={user.full_name || user.username || "Người lao động"}
+                username={user.username}
+                uid={latest?.uid || user.uid}
+                employeeCode={latest?.employee_code || user.employee_code}
+                cccd={maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
+                taxCode={latest?.worker_tax_code_snapshot}
+                phone={user.phone}
+                dateOfBirth={user.date_of_birth ? formatDate(user.date_of_birth) : undefined}
+                gender={user.gender}
+                address={user.address}
+                factoryName={factoryName || user.company}
+                mainHouseName={mainHouseName}
+                recruiterName={recruiterName}
+                joinDate={formatDate(latest?.join_date)}
+                leaveDate={latest?.leave_date ? formatDate(latest.leave_date) : undefined}
+                isWorking={isWorking}
+                onClick={() => onSelectWorker(user.id)}
+              />
+
+              <button
+                key={`${user.id}-mobile`}
+                type="button"
+                onClick={() => onSelectWorker(user.id)}
+                className="list-card border-l-primary flex w-full items-start justify-between gap-3 text-left desktop:hidden"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">
+                    {user.full_name || user.username || "Người lao động"}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    {user.uid && (
+                      <>
+                        <span className="font-medium text-primary">{user.uid}</span> ·{" "}
+                      </>
+                    )}
+                    Mã NV: {latest?.employee_code || user.employee_code || "—"} · CCCD:{" "}
+                    {maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
+                    {latest?.worker_tax_code_snapshot &&
+                      ` · MST: ${latest.worker_tax_code_snapshot}`}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    {factoryName || "Chưa có nhà máy"} · Vào {formatDate(latest?.join_date)}
+                    {latest?.leave_date && ` · Nghỉ ${formatDate(latest.leave_date)}`}
+                  </div>
                 </div>
-                <div className="mt-0.5 text-[11px] text-muted-foreground">
-                  {user.uid && (
-                    <>
-                      <span className="text-primary font-medium">{user.uid}</span> ·{" "}
-                    </>
-                  )}
-                  Mã NV: {latest?.employee_code || user.employee_code || "—"} · CCCD:{" "}
-                  {maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
-                  {latest?.worker_tax_code_snapshot && ` · MST: ${latest.worker_tax_code_snapshot}`}
-                </div>
-                <div className="mt-0.5 text-[11px] text-muted-foreground">
-                  {factoryName || "Chưa có nhà máy"} · Vào {formatDate(latest?.join_date)}
-                  {latest?.leave_date && ` · Nghỉ ${formatDate(latest.leave_date)}`}
-                </div>
-              </div>
-              <StatusChip tone={isWorking ? "success" : "neutral"}>
-                {isWorking ? "Đang làm" : "Đã nghỉ"}
-              </StatusChip>
-            </button>
+                <StatusChip tone={isWorking ? "success" : "neutral"}>
+                  {isWorking ? "Đang làm" : "Đã nghỉ"}
+                </StatusChip>
+              </button>
+            </Fragment>
           );
         })
       )}
@@ -1751,36 +1779,62 @@ function MyRecruitedTab({
             const user = userById.get(userId);
             const factory = factoryById.get(latest.factory);
             const isWorking = isCurrentlyWorking(latest);
+            const recruiterName =
+              latest.expand?.recruiter_staff?.full_name || latest.expand?.recruiter_staff?.username;
+            const mainHouseName = latest.expand?.main_house?.name;
+            const factoryName = latest.expand?.factory?.name || factory?.name;
+
             return (
-              <button
-                key={userId}
-                type="button"
-                onClick={() => onSelectWorker(userId)}
-                className="w-full rounded-2xl border border-border/60 bg-card p-3 text-left shadow-soft transition-colors hover:bg-muted/30 active:scale-[0.99]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">
-                      {latest.worker_name_snapshot || user?.full_name || "Người lao động"}
+              <Fragment key={userId}>
+                <WorkerDesktopCard
+                  name={latest.worker_name_snapshot || user?.full_name || "Người lao động"}
+                  username={user?.username}
+                  uid={latest.uid || user?.uid}
+                  employeeCode={latest.employee_code || user?.employee_code}
+                  cccd={maskCccd(latest.worker_cccd_snapshot || user?.cccd)}
+                  taxCode={latest.worker_tax_code_snapshot}
+                  phone={user?.phone}
+                  dateOfBirth={user?.date_of_birth ? formatDate(user.date_of_birth) : undefined}
+                  gender={user?.gender}
+                  address={user?.address}
+                  factoryName={factoryName || user?.company}
+                  mainHouseName={mainHouseName}
+                  recruiterName={recruiterName}
+                  joinDate={formatDate(latest.join_date)}
+                  leaveDate={latest.leave_date ? formatDate(latest.leave_date) : undefined}
+                  isWorking={isWorking}
+                  onClick={() => onSelectWorker(userId)}
+                />
+
+                <button
+                  key={`${userId}-mobile`}
+                  type="button"
+                  onClick={() => onSelectWorker(userId)}
+                  className="w-full rounded-2xl border border-border/60 bg-card p-3 text-left shadow-soft transition-colors hover:bg-muted/30 active:scale-[0.99] desktop:hidden"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">
+                        {latest.worker_name_snapshot || user?.full_name || "Người lao động"}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        Mã NV: {latest.employee_code || user?.employee_code || "Chưa có"} · CCCD:{" "}
+                        {maskCccd(latest.worker_cccd_snapshot || user?.cccd)}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        {factoryName || "Chưa có nhà máy"} · Vào: {formatDate(latest.join_date)}
+                        {latest.leave_date ? ` · Nghỉ: ${formatDate(latest.leave_date)}` : ""}
+                      </div>
                     </div>
-                    <div className="mt-0.5 text-[11px] text-muted-foreground">
-                      Mã NV: {latest.employee_code || user?.employee_code || "Chưa có"} · CCCD:{" "}
-                      {maskCccd(latest.worker_cccd_snapshot || user?.cccd)}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-muted-foreground">
-                      {latest.expand?.factory?.name || factory?.name || "Chưa có nhà máy"} · Vào:{" "}
-                      {formatDate(latest.join_date)}
-                      {latest.leave_date ? ` · Nghỉ: ${formatDate(latest.leave_date)}` : ""}
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <StatusChip tone={isWorking ? "success" : "neutral"}>
+                        {isWorking ? "Đang làm" : "Đã nghỉ"}
+                      </StatusChip>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <StatusChip tone={isWorking ? "success" : "neutral"}>
-                      {isWorking ? "Đang làm" : "Đã nghỉ"}
-                    </StatusChip>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </div>
-              </button>
+                </button>
+              </Fragment>
             );
           })}
           {visibleCount < filtered.length && (

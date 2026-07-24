@@ -207,6 +207,7 @@ export function AdvancesPage() {
     DEFAULT_TRANSFER_DESCRIPTION_TEMPLATE,
   );
   const [showAllStats, setShowAllStats] = useState(false);
+  const [showMobileStats, setShowMobileStats] = useState(false);
   const [showFilters, setShowFilters] = useState(Boolean(storedFilters.showFilters));
 
   const selectedAdvanceUser = user as UserRecord | null;
@@ -994,8 +995,21 @@ export function AdvancesPage() {
           Ứng Staff
         </button>
       </div>
-      <div className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
+      <button
+        type="button"
+        onClick={() => setShowMobileStats((current) => !current)}
+        aria-expanded={showMobileStats}
+        aria-controls="admin-advance-statistics"
+        className="w-full text-right text-xs font-medium text-primary md:hidden"
+      >
+        {showMobileStats ? "Ẩn thống kê" : "Hiện thống kê"}
+      </button>
+      <div
+        id="admin-advance-statistics"
+        className={showMobileStats ? "space-y-2" : "hidden space-y-2 md:block"}
+      >
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
           <StatCard
             label="Chờ duyệt"
             value={statValue(stats.recruiter_approved)}
@@ -1047,6 +1061,7 @@ export function AdvancesPage() {
             <SlidersHorizontal className="h-3.5 w-3.5" />
             Bộ lọc
           </button>
+          </div>
         </div>
       </div>
 

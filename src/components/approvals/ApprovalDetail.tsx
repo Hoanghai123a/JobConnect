@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ApprovalRequestRecord, ApprovalResponseRecord } from "@/lib/approval-requests";
 import { respondToApproval, markRequestCompleted, withdrawApprovalRequest, getRequestFileUrl } from "@/lib/approval-requests";
 import { userDisplayName } from "@/lib/delegations";
+import { formatMoneyInput } from "@/lib/money";
 import type { UserRecord } from "@/lib/pocketbase";
 import { StatusChip, type ChipTone } from "@/components/ui/status-chip";
 import { ImageViewer } from "./ImageViewer";
@@ -147,6 +148,15 @@ export function ApprovalDetail({
         <div className="space-y-4 pt-2">
           {request.content && (
             <div className="whitespace-pre-wrap text-sm">{request.content}</div>
+          )}
+
+          {Number(request.amount) > 0 && (
+            <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 dark:border-emerald-900/60 dark:bg-emerald-950/30">
+              <span className="text-sm text-muted-foreground">Số tiền</span>
+              <span className="text-base font-semibold text-emerald-700 dark:text-emerald-300">
+                {formatMoneyInput(request.amount)}đ
+              </span>
+            </div>
           )}
 
           <ImageViewer images={images} />

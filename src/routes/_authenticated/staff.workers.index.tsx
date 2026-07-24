@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { BriefcaseBusiness, Plus, Search, ShieldCheck, UserRoundSearch } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -8,6 +8,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
 import { ScopeChip } from "@/components/staff/WorkerQuickDrawer";
 import { WorkerEmploymentDrawer } from "@/components/employment/WorkerEmploymentDrawer";
+import { WorkerDesktopCard } from "@/components/staff/WorkerDesktopCard";
 import { RegisterDialog } from "@/components/workforce/RegisterDialog";
 import {
   fetchCachedStaffWorkspace,
@@ -254,61 +255,104 @@ function StaffWorkersPage() {
           const latest = worker.latestHistory;
           const statusTone = latest?.status === "working" ? "success" : "neutral";
 
+          const recruiterName =
+            latest?.expand?.recruiter_staff?.full_name || latest?.expand?.recruiter_staff?.username;
+          const mainHouseName = latest?.expand?.main_house?.name;
+          const isWorking = latest?.status === "working";
+          const desktopBadges = (
+            <>
+              {worker.reasons.includes("qlnm") && (
+                <StatusChip tone="info">Thuộc nhà máy phụ trách</StatusChip>
+              )}
+              {worker.reasons.includes("nvtd") && (
+                <StatusChip tone="primary">Bạn là người tuyển</StatusChip>
+              )}
+              {(worker.canReportAdvance || worker.canReportLeave || worker.canReportJoin) && (
+                <StatusChip tone="success">Có thể thao tác</StatusChip>
+              )}
+            </>
+          );
+          const hasDesktopBadges =
+            worker.reasons.length > 0 ||
+            worker.canReportAdvance ||
+            worker.canReportLeave ||
+            worker.canReportJoin;
+
           return (
-            <button
-              key={worker.user.id}
-              type="button"
-              onClick={() => openWorker(worker)}
-              className="list-card border-l-primary block w-full text-left"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">
-                    {worker.user.full_name || worker.user.username || "Người lao động"}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    Mã NV: {latest?.employee_code || worker.user.employee_code || "Chưa có"} · CCCD:{" "}
-                    {maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)}
-                    {latest?.worker_tax_code_snapshot &&
-                      ` · MST: ${latest.worker_tax_code_snapshot}`}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    {latest?.expand?.factory?.name || "Chưa có nhà máy"} · Người tuyển:{" "}
-                    {latest?.expand?.recruiter_staff?.full_name ||
-                      latest?.expand?.recruiter_staff?.username ||
-                      "Chưa gán"}
-                  </div>
-                  {latest?.expand?.main_house?.name && (
-                    <div className="mt-0.5 text-[11px] text-muted-foreground">
-                      Nhà chính: {latest.expand.main_house.name}
+            <Fragment key={worker.user.id}>
+              <WorkerDesktopCard
+                name={worker.user.full_name || worker.user.username || "Người lao động"}
+                username={worker.user.username}
+                uid={latest?.uid || worker.user.uid}
+                employeeCode={latest?.employee_code || worker.user.employee_code}
+                cccd={maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)}
+                taxCode={latest?.worker_tax_code_snapshot}
+                phone={worker.user.phone}
+                dateOfBirth={
+                  worker.user.date_of_birth ? formatDate(worker.user.date_of_birth) : undefined
+                }
+                gender={worker.user.gender}
+                address={worker.user.address}
+                factoryName={latest?.expand?.factory?.name || worker.user.company}
+                mainHouseName={mainHouseName}
+                recruiterName={recruiterName}
+                joinDate={formatDate(latest?.join_date)}
+                leaveDate={latest?.leave_date ? formatDate(latest.leave_date) : undefined}
+                isWorking={isWorking}
+                badges={hasDesktopBadges ? desktopBadges : undefined}
+                onClick={() => openWorker(worker)}
+              />
+
+              <button
+                key={`${worker.user.id}-mobile`}
+                type="button"
+                onClick={() => openWorker(worker)}
+                className="list-card border-l-primary block w-full text-left desktop:hidden"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">
+                      {worker.user.full_name || worker.user.username || "Người lao động"}
                     </div>
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      Mã NV: {latest?.employee_code || worker.user.employee_code || "Chưa có"} ·
+                      CCCD: {maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)}
+                      {latest?.worker_tax_code_snapshot &&
+                        ` · MST: ${latest.worker_tax_code_snapshot}`}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      {latest?.expand?.factory?.name || "Chưa có nhà máy"} · Người tuyển:{" "}
+                      {recruiterName || "Chưa gán"}
+                    </div>
+                    {mainHouseName && (
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        Nhà chính: {mainHouseName}
+                      </div>
+                    )}
+                  </div>
+
+                  {user?.role === "admin" ? (
+                    <StatusChip tone="info" icon={ShieldCheck}>
+                      Admin
+                    </StatusChip>
+                  ) : (
+                    <StatusChip tone={statusTone}>{isWorking ? "Đang làm" : "Đã nghỉ"}</StatusChip>
                   )}
                 </div>
 
-                {user?.role === "admin" ? (
-                  <StatusChip tone="info" icon={ShieldCheck}>
-                    Admin
-                  </StatusChip>
-                ) : (
-                  <StatusChip tone={statusTone}>
-                    {latest?.status === "working" ? "Đang làm" : "Đã nghỉ"}
-                  </StatusChip>
-                )}
-              </div>
-
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {worker.reasons.includes("qlnm") && (
-                  <StatusChip tone="info">Thuộc nhà máy phụ trách</StatusChip>
-                )}
-                {worker.reasons.includes("nvtd") && (
-                  <StatusChip tone="primary">Bạn là người tuyển</StatusChip>
-                )}
-                {(worker.canReportAdvance || worker.canReportLeave || worker.canReportJoin) && (
-                  <StatusChip tone="success">Có thể thao tác</StatusChip>
-                )}
-              </div>
-
-            </button>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {worker.reasons.includes("qlnm") && (
+                    <StatusChip tone="info">Thuộc nhà máy phụ trách</StatusChip>
+                  )}
+                  {worker.reasons.includes("nvtd") && (
+                    <StatusChip tone="primary">Bạn là người tuyển</StatusChip>
+                  )}
+                  {(worker.canReportAdvance || worker.canReportLeave || worker.canReportJoin) && (
+                    <StatusChip tone="success">Có thể thao tác</StatusChip>
+                  )}
+                </div>
+              </button>
+            </Fragment>
           );
         })
       )}

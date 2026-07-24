@@ -10,6 +10,7 @@ export function PageContainer({
   children,
   showNav = false,
   className,
+  desktopWidth = "default",
 }: {
   title: string;
   subtitle?: string;
@@ -18,11 +19,26 @@ export function PageContainer({
   children: ReactNode;
   showNav?: boolean;
   className?: string;
+  desktopWidth?: "default" | "wide" | "full";
 }) {
+  const desktopWidthClass = {
+    default: "desktop:max-w-[90rem]",
+    wide: "desktop:max-w-[110rem]",
+    full: "desktop:max-w-none",
+  }[desktopWidth];
+
   return (
-    <div className="pb-nav">
+    <div className="pb-nav desktop:pb-8">
       <AppHeader title={title} subtitle={subtitle} right={right} back={back} />
-      <main className={cn("space-y-3 px-4 pt-3", className)}>{children}</main>
+      <main
+        className={cn(
+          "space-y-3 px-4 pt-3 desktop:mx-auto desktop:w-full desktop:px-8 desktop:pt-6",
+          desktopWidthClass,
+          className,
+        )}
+      >
+        {children}
+      </main>
       {showNav && <BottomNav />}
     </div>
   );

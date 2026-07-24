@@ -49,20 +49,30 @@ export function BottomNav() {
     <>
       <InstallFloatingBanner />
       <nav
-        className="fixed bottom-0 left-1/2 z-40 w-full max-w-[30rem] -translate-x-1/2 border-t border-border/60 bg-card/90 backdrop-blur-xl"
+        className="fixed bottom-0 left-1/2 z-40 w-full max-w-[30rem] -translate-x-1/2 border-t border-border/60 bg-card/90 backdrop-blur-xl desktop:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <ul
           className={cn(
             "gap-2 px-3 pb-2 pt-2",
-            items.length === 5 ? "grid grid-cols-5" : items.length === 4 ? "grid grid-cols-4" : "grid grid-cols-3",
+            items.length === 5
+              ? "grid grid-cols-5"
+              : items.length === 4
+                ? "grid grid-cols-4"
+                : "grid grid-cols-3",
           )}
         >
           {items.map((item) => {
-            const active = item.to === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.to) &&
-                !items.some(other => other.to !== item.to && pathname.startsWith(other.to) && other.to.length > item.to.length);
+            const active =
+              item.to === "/"
+                ? pathname === "/"
+                : pathname.startsWith(item.to) &&
+                  !items.some(
+                    (other) =>
+                      other.to !== item.to &&
+                      pathname.startsWith(other.to) &&
+                      other.to.length > item.to.length,
+                  );
             const Icon = item.icon;
 
             return (
@@ -74,7 +84,9 @@ export function BottomNav() {
                     active ? "bg-primary/12 text-primary" : "text-muted-foreground active:bg-muted",
                   )}
                 >
-                  <Icon className={cn("h-[22px] w-[22px] transition-transform", active && "scale-110")} />
+                  <Icon
+                    className={cn("h-[22px] w-[22px] transition-transform", active && "scale-110")}
+                  />
                   <span className="leading-none">{item.label}</span>
                   <span
                     className={cn(
@@ -117,7 +129,7 @@ export function AppHeader({
 
   return (
     <header
-      className="sticky top-0 z-30 flex items-center gap-2 border-b border-border/60 bg-card/90 px-3 backdrop-blur-xl"
+      className="sticky top-0 z-30 flex items-center gap-2 border-b border-border/60 bg-card/90 px-3 backdrop-blur-xl desktop:static desktop:z-auto desktop:mx-6 desktop:mt-3 desktop:rounded-2xl desktop:border desktop:px-5 desktop:shadow-soft"
       style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.5rem)", paddingBottom: "0.5rem" }}
     >
       {showBack && (
@@ -131,7 +143,9 @@ export function AppHeader({
       )}
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-base font-semibold leading-tight tracking-tight">{title}</h1>
-        {subtitle && <div className="truncate text-[11px] leading-tight text-muted-foreground">{subtitle}</div>}
+        {subtitle && (
+          <div className="truncate text-[11px] leading-tight text-muted-foreground">{subtitle}</div>
+        )}
       </div>
       {right}
     </header>

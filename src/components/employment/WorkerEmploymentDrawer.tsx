@@ -185,6 +185,8 @@ export function WorkerEmploymentDrawer({
   const [advanceOpen, setAdvanceOpen] = useState(false);
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [advanceReason, setAdvanceReason] = useState("");
+  const [advanceOutstanding, setAdvanceOutstanding] = useState(0);
+  const [advanceOutstandingLoading, setAdvanceOutstandingLoading] = useState(false);
   const [advanceBankChoice, setAdvanceBankChoice] = useState<"worker" | "actor">("worker");
   const [form, setForm] = useState({
     employee_code: "",
@@ -212,6 +214,37 @@ export function WorkerEmploymentDrawer({
   const [saving, setSaving] = useState(false);
   const [submittingAdvance, setSubmittingAdvance] = useState(false);
   const [bankEditing, setBankEditing] = useState(false);
+  useEffect(() => {
+    if (!advanceOpen || !user?.id) return;
+
+    let active = true;
+    setAdvanceOutstandingLoading(true);
+    pb.collection("advances")
+      .getList(1, 500, {
+        filter: `user="${user.id}" && (status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))`,
+        fields: "amount",
+      })
+      .then((result) => {
+        if (!active) return;
+        setAdvanceOutstanding(
+          result.items.reduce(
+            (sum: number, item: { amount?: number }) => sum + Number(item.amount || 0),
+            0,
+          ),
+        );
+      })
+      .catch(() => {
+        if (active) setAdvanceOutstanding(0);
+      })
+      .finally(() => {
+        if (active) setAdvanceOutstandingLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [advanceOpen, user?.id]);
+
   const [bankForm, setBankForm] = useState({
     bank_name: "",
     bank_account_number: "",
@@ -1345,10 +1378,21 @@ export function WorkerEmploymentDrawer({
             </div>
 
             {advanceLimit > 0 && (
-              <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
-                Hạn mức ứng lương:{" "}
-                <span className="font-semibold text-foreground">
-                  {advanceLimit.toLocaleString("vi-VN")} đ
+              <div className="flex flex-wrap items-center gap-x-1 rounded-xl border border-dashed border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+                <span>
+                  Hạn mức:{" "}
+                  <span className="font-semibold text-foreground">
+                    {advanceLimit.toLocaleString("vi-VN")} đ
+                  </span>
+                </span>
+                <span aria-hidden="true">·</span>
+                <span>
+                  Tồn ứng:{" "}
+                  <span className="font-semibold text-foreground">
+                    {advanceOutstandingLoading
+                      ? "Đang tải..."
+                      : `${advanceOutstanding.toLocaleString("vi-VN")} đ`}
+                  </span>
                 </span>
               </div>
             )}

@@ -7,6 +7,7 @@ import { normalizeAccountIdentity } from "@/lib/account-identity";
 import { pb } from "@/lib/pocketbase";
 import { isProfileComplete } from "@/lib/profile";
 import { isUserApproved } from "@/lib/user-approval";
+import { getClientDeviceProfile } from "@/lib/device-profile";
 import { BackButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +25,15 @@ import { Separator } from "@/components/ui/separator";
 export const Route = createFileRoute("/login")({
   beforeLoad: () => {
     if (typeof window === "undefined") return;
-    if (pb.authStore.isValid) throw redirect({ to: "/" });
+    if (pb.authStore.isValid) {
+      const role = pb.authStore.record?.role;
+      const isDesktop = getClientDeviceProfile() === "desktop";
+      if (role === "admin" && isDesktop) throw redirect({ to: "/admin/workforce" });
+      if (role === "staff") {
+        throw redirect({ to: isDesktop ? "/staff/workers" : "/staff" });
+      }
+      throw redirect({ to: "/" });
+    }
   },
   component: LoginPage,
 });
@@ -89,12 +98,12 @@ function LoginPage() {
       });
 
       if (role === "admin") {
-        nav({ to: "/" });
+        nav({ to: getClientDeviceProfile() === "desktop" ? "/admin/workforce" : "/" });
         return;
       }
 
       if (role === "staff") {
-        nav({ to: "/staff" });
+        nav({ to: getClientDeviceProfile() === "desktop" ? "/staff/workers" : "/staff" });
         return;
       }
 
@@ -128,13 +137,13 @@ function LoginPage() {
   };
 
   return (
-    <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-background lg:fixed lg:inset-0 lg:z-40 lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(32rem,0.8fr)]">
+    <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-background desktop:fixed desktop:inset-0 desktop:z-40 desktop:grid desktop:grid-cols-[minmax(0,1.2fr)_minmax(32rem,0.8fr)]">
       {loading ? <LoginLoadingOverlay /> : null}
 
       <MobileBrandHeader />
       <DesktopBrandPanel />
 
-      <section className="relative flex flex-1 lg:items-center lg:justify-center lg:bg-muted/30 lg:px-12">
+      <section className="relative flex flex-1 desktop:items-center desktop:justify-center desktop:bg-muted/30 desktop:px-12">
         <LoginFormCard
           identity={identity}
           password={password}
@@ -167,7 +176,7 @@ function LoginLoadingOverlay() {
 
 function MobileBrandHeader() {
   return (
-    <header className="gradient-primary relative px-6 pb-16 pt-16 text-primary-foreground lg:hidden">
+    <header className="gradient-primary relative px-6 pb-16 pt-16 text-primary-foreground desktop:hidden">
       <BackButton className="absolute left-4 top-4 text-primary-foreground active:bg-white/15" />
       <h1 className="text-3xl font-bold tracking-tight">Hoàng Long DJC</h1>
       <p className="mt-1 text-sm text-primary-foreground/80">
@@ -179,7 +188,7 @@ function MobileBrandHeader() {
 
 function DesktopBrandPanel() {
   return (
-    <section className="relative hidden min-h-[100dvh] overflow-hidden border-r border-border bg-background lg:flex lg:flex-col">
+    <section className="relative hidden min-h-[100dvh] overflow-hidden border-r border-border bg-background desktop:flex desktop:flex-col">
       <header className="relative z-10 flex items-center gap-4 px-12 py-10 xl:px-16">
         <BackButton className="border border-border bg-card shadow-soft hover:bg-muted" />
         <DesktopAppLogo />
@@ -267,16 +276,16 @@ function LoginFormCard({
   onSubmit: (event: React.FormEvent) => void;
 }) {
   return (
-    <Card className="mx-4 -mt-8 flex flex-1 rounded-[1.75rem] border-border/70 bg-card/95 shadow-soft backdrop-blur lg:mx-0 lg:mt-0 lg:w-full lg:max-w-[460px] lg:flex-none lg:rounded-2xl">
+    <Card className="mx-4 -mt-8 flex flex-1 rounded-[1.75rem] border-border/70 bg-card/95 shadow-soft backdrop-blur desktop:mx-0 desktop:mt-0 desktop:w-full desktop:max-w-[460px] desktop:flex-none desktop:rounded-2xl">
       <form onSubmit={onSubmit} noValidate className="flex h-full flex-col">
-        <CardHeader className="hidden px-8 pb-2 pt-8 text-center lg:flex">
+        <CardHeader className="hidden px-8 pb-2 pt-8 text-center desktop:flex">
           <CardTitle className="text-3xl font-bold tracking-tight">Chào mừng trở lại</CardTitle>
           <CardDescription className="text-base">
             Đăng nhập để tiếp tục công việc của bạn.
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="flex flex-col gap-5 p-6 lg:px-8 lg:pb-6 lg:pt-6">
+        <CardContent className="flex flex-col gap-5 p-6 desktop:px-8 desktop:pb-6 desktop:pt-6">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="identity">Tên đăng nhập</Label>
             <Input
@@ -332,8 +341,8 @@ function LoginFormCard({
           </Button>
         </CardContent>
 
-        <CardFooter className="flex flex-col px-6 pb-6 pt-0 lg:px-8 lg:pb-8">
-          <Separator className="mb-5 hidden lg:block" />
+        <CardFooter className="flex flex-col px-6 pb-6 pt-0 desktop:px-8 desktop:pb-8">
+          <Separator className="mb-5 hidden desktop:block" />
           <p className="text-center text-sm text-muted-foreground">
             Chưa có tài khoản?{" "}
             <Link

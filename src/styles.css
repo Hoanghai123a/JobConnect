@@ -3,6 +3,8 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant desktop (&:where(html[data-ui-device="desktop"] *));
+@custom-variant mobile (&:where(html[data-ui-device="mobile"] *));
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
@@ -178,6 +180,32 @@
     position: relative;
     /* Respect notch / status bar on mobile when content goes edge-to-edge */
   }
+  html[data-ui-device="desktop"] .app-shell {
+    max-width: none;
+    margin-inline: 0;
+    min-height: 100dvh;
+    background:
+      radial-gradient(circle at top right, color-mix(in oklab, var(--color-primary) 10%, transparent), transparent 35%),
+      var(--color-background);
+  }
+  html[data-ui-device="desktop"] .pb-nav {
+    padding-bottom: 2rem;
+  }
+  @media (max-width: 960px) {
+    html[data-ui-device="desktop"] .desktop-shell {
+      --desktop-sidebar-width: 5.5rem !important;
+    }
+    html[data-ui-device="desktop"] .desktop-sidebar-label {
+      display: none;
+    }
+    html[data-ui-device="desktop"] .desktop-sidebar-brand,
+    html[data-ui-device="desktop"] .desktop-sidebar-link,
+    html[data-ui-device="desktop"] .desktop-sidebar-user {
+      justify-content: center;
+      padding-inline: 0;
+    }
+  }
+
   .safe-top {
     padding-top: env(safe-area-inset-top);
   }

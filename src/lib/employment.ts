@@ -162,9 +162,21 @@ export function sortEmploymentHistories(histories: EmploymentHistoryRecord[]) {
     const bCurrent = isCurrentlyWorking(b) ? 1 : 0;
     if (aCurrent !== bCurrent) return bCurrent - aCurrent;
 
-    const aTime = new Date(a.leave_date || a.join_date || a.created || 0).getTime();
-    const bTime = new Date(b.leave_date || b.join_date || b.created || 0).getTime();
-    return bTime - aTime;
+    const aJoinTime = new Date(a.join_date || 0).getTime();
+    const bJoinTime = new Date(b.join_date || 0).getTime();
+    const aJoinValid = !Number.isNaN(aJoinTime);
+    const bJoinValid = !Number.isNaN(bJoinTime);
+    if (aJoinValid && bJoinValid && aJoinTime !== bJoinTime) return bJoinTime - aJoinTime;
+    if (!aJoinValid && bJoinValid) return 1;
+    if (aJoinValid && !bJoinValid) return -1;
+
+    const aCreatedTime = new Date(a.created || 0).getTime();
+    const bCreatedTime = new Date(b.created || 0).getTime();
+    if (aCreatedTime !== bCreatedTime) return bCreatedTime - aCreatedTime;
+
+    const aLeaveTime = new Date(a.leave_date || 0).getTime();
+    const bLeaveTime = new Date(b.leave_date || 0).getTime();
+    return bLeaveTime - aLeaveTime;
   });
 }
 

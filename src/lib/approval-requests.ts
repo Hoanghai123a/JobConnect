@@ -9,6 +9,7 @@ export interface ApprovalRequestRecord {
   id: string;
   title: string;
   content: string;
+  amount?: number;
   images: string[];
   excel_files: string[];
   creator: string;
@@ -41,6 +42,7 @@ export interface ApprovalResponseRecord {
 export async function createApprovalRequest(data: {
   title: string;
   content: string;
+  amount?: number;
   images: File[];
   excelFiles: File[];
   adminIds: string[];
@@ -49,6 +51,9 @@ export async function createApprovalRequest(data: {
   const formData = new FormData();
   formData.append("title", data.title);
   formData.append("content", data.content);
+  if (data.amount !== undefined && data.amount > 0) {
+    formData.append("amount", String(data.amount));
+  }
   formData.append("creator", data.creatorId);
   formData.append("status", "pending");
   for (const id of data.adminIds) formData.append("admins", id);

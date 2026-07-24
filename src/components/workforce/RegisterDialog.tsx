@@ -142,6 +142,11 @@ export function RegisterDialog({
     if (!mainHouseId) return toast.error("Chọn nhà chính");
     if (!selectedUser) return;
 
+    const workerCccdDigits = workerCccd.replace(/\D/g, "");
+    if (workerCccd && workerCccdDigits.length !== 12) {
+      return toast.error("CCCD phải có đúng 12 chữ số; có thể thêm ký tự phía sau");
+    }
+
     setSubmitting(true);
     try {
       const latestHistories = await fetchEmploymentHistories([userId]);
@@ -180,7 +185,7 @@ export function RegisterDialog({
         employee_code: employeeCode.trim() || undefined,
         worker_name_snapshot:
           workerName.trim() || selectedUser.full_name || selectedUser.username || "",
-        worker_cccd_snapshot: workerCccd.trim() || selectedUser.cccd || "",
+        worker_cccd_snapshot: workerCccd || selectedUser.cccd || "",
         worker_tax_code_snapshot: workerTaxCode.trim(),
         recruiter_staff: recruiterId,
         join_date: joinDate,
@@ -263,9 +268,9 @@ export function RegisterDialog({
               <Label className="text-xs">CCCD (theo nhà máy)</Label>
               <Input
                 value={workerCccd}
-                onChange={(e) => setWorkerCccd(e.target.value.replace(/[^\d]/g, ""))}
-                inputMode="numeric"
-                placeholder="CCCD ghi nhận"
+                onChange={(e) => setWorkerCccd(e.target.value)}
+                inputMode="text"
+                placeholder="12 số, có thể kèm ký tự"
               />
             </div>
           </div>
