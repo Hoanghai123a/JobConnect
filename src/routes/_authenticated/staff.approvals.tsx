@@ -197,6 +197,7 @@ function ApprovalsPage() {
         </div>
 
         <FilterBar
+          desktopSearchAfterChips
           search={search}
           onSearchChange={setSearch}
           placeholder="Tìm theo tiêu đề..."

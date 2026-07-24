@@ -206,34 +206,36 @@ function StaffWorkersPage() {
         </div>
       }
     >
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Tìm mã NV, họ tên, CCCD, nhà máy..."
-          className="rounded-full pl-9"
-        />
-      </div>
+      <div className="flex flex-col gap-2 desktop:flex-row desktop:items-center">
+        <div className="relative order-1 desktop:order-2 desktop:ml-auto desktop:w-80">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Tìm mã NV, họ tên, CCCD, nhà máy..."
+            className="rounded-full pl-9"
+          />
+        </div>
 
-      <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        <ScopeChip label="Tất cả" active={scope === "all"} onClick={() => setScope("all")} />
-        <ScopeChip
-          label="Nhà máy tôi quản lý"
-          active={scope === "qlnm"}
-          onClick={() => setScope("qlnm")}
-        />
-        <ScopeChip
-          label="Người tôi tuyển"
-          active={scope === "nvtd"}
-          onClick={() => setScope("nvtd")}
-        />
-        <ScopeChip
-          label="Đang làm"
-          active={scope === "working"}
-          onClick={() => setScope("working")}
-        />
-        <ScopeChip label="Đã nghỉ" active={scope === "left"} onClick={() => setScope("left")} />
+        <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 order-2 desktop:order-1 desktop:min-w-0 desktop:flex-1">
+          <ScopeChip label="Tất cả" active={scope === "all"} onClick={() => setScope("all")} />
+          <ScopeChip
+            label="Nhà máy tôi quản lý"
+            active={scope === "qlnm"}
+            onClick={() => setScope("qlnm")}
+          />
+          <ScopeChip
+            label="Người tôi tuyển"
+            active={scope === "nvtd"}
+            onClick={() => setScope("nvtd")}
+          />
+          <ScopeChip
+            label="Đang làm"
+            active={scope === "working"}
+            onClick={() => setScope("working")}
+          />
+          <ScopeChip label="Đã nghỉ" active={scope === "left"} onClick={() => setScope("left")} />
+        </div>
       </div>
 
       <div className="text-xs text-muted-foreground">

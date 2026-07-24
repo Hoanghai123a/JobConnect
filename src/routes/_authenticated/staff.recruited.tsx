@@ -198,24 +198,30 @@ function StaffRecruitedPage() {
 
   return (
     <PageContainer title="Người tôi tuyển" subtitle="Lao động bạn trực tiếp tuyển vào">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(event) => updateSearch(event.target.value)}
-          placeholder="Tìm mã NV, họ tên, CCCD, nhà máy..."
-          className="rounded-full pl-9"
-        />
-      </div>
+      <div className="flex flex-col gap-2 desktop:flex-row desktop:items-center">
+        <div className="relative order-1 desktop:order-2 desktop:ml-auto desktop:w-80">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => updateSearch(event.target.value)}
+            placeholder="Tìm mã NV, họ tên, CCCD, nhà máy..."
+            className="rounded-full pl-9"
+          />
+        </div>
 
-      <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        <ScopeChip label="Tất cả" active={scope === "all"} onClick={() => updateScope("all")} />
-        <ScopeChip
-          label="Đang làm"
-          active={scope === "working"}
-          onClick={() => updateScope("working")}
-        />
-        <ScopeChip label="Đã nghỉ" active={scope === "left"} onClick={() => updateScope("left")} />
+        <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 order-2 desktop:order-1 desktop:min-w-0 desktop:flex-1">
+          <ScopeChip label="Tất cả" active={scope === "all"} onClick={() => updateScope("all")} />
+          <ScopeChip
+            label="Đang làm"
+            active={scope === "working"}
+            onClick={() => updateScope("working")}
+          />
+          <ScopeChip
+            label="Đã nghỉ"
+            active={scope === "left"}
+            onClick={() => updateScope("left")}
+          />
+        </div>
       </div>
 
       <div className="text-xs text-muted-foreground">

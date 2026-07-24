@@ -206,7 +206,6 @@ export function AdvancesPage() {
   const [transferDescriptionTemplate, setTransferDescriptionTemplate] = useState(
     DEFAULT_TRANSFER_DESCRIPTION_TEMPLATE,
   );
-  const [showAllStats, setShowAllStats] = useState(false);
   const [showMobileStats, setShowMobileStats] = useState(false);
   const [showFilters, setShowFilters] = useState(Boolean(storedFilters.showFilters));
 
@@ -1009,63 +1008,76 @@ export function AdvancesPage() {
         className={showMobileStats ? "space-y-2" : "hidden space-y-2 md:block"}
       >
         <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-          <StatCard
-            label="Chờ duyệt"
-            value={statValue(stats.recruiter_approved)}
-            icon={Clock}
-            tone="warning"
-          />
-          <StatCard
-            label="Đã tiếp nhận"
-            value={statValue(stats.accepted)}
-            icon={Check}
-            tone="success"
-          />
-          {showAllStats && (
-            <>
-              <StatCard label="Từ chối" value={statValue(stats.rejected)} icon={X} tone="danger" />
+          <div className="grid grid-cols-2 gap-2 desktop:grid-cols-6">
+            <StatCard
+              label="Chờ duyệt"
+              value={statValue(stats.recruiter_approved)}
+              icon={Clock}
+              tone="warning"
+              className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
+            />
+            <StatCard
+              label="Đã tiếp nhận"
+              value={statValue(stats.accepted)}
+              icon={Check}
+              tone="success"
+              className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
+            />
+            <div className={showMobileStats ? "contents" : "hidden desktop:contents"}>
+              <StatCard
+                label="Từ chối"
+                value={statValue(stats.rejected)}
+                icon={X}
+                tone="danger"
+                className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
+              />
               <StatCard
                 label="Đã thu hồi"
                 value={statValue(stats.recovered)}
                 icon={ShieldCheck}
                 tone="primary"
+                className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
               />
               <StatCard
                 label="Không thu hồi"
                 value={statValue(stats.unrecoverable)}
                 icon={X}
                 tone="danger"
+                className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
               />
-            </>
-          )}
-        </div>
-        <div className="relative flex min-h-8 items-center justify-center">
-          <button
-            type="button"
-            className="text-xs font-medium text-primary underline-offset-4 hover:underline"
-            onClick={() => setShowAllStats((value) => !value)}
-          >
-            {showAllStats ? "Thu gọn" : "Mở rộng"}
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "absolute right-0 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-soft transition",
-              showFilters
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-card text-primary",
-            )}
-            onClick={() => setShowFilters((value) => !value)}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Bộ lọc
-          </button>
+              <StatCard
+                label="Tổng đơn"
+                value={statValue(stats.all)}
+                icon={Wallet}
+                tone="primary"
+                className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-soft transition",
+                showFilters
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-primary",
+              )}
+              onClick={() => setShowFilters((value) => !value)}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Bộ lọc
+            </button>
           </div>
         </div>
       </div>
 
       <FilterBar
+        desktopSearchAfterChips
+        searchClassName="hidden desktop:flex"
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="T?m theo t?n, m? NV, s? ti?n?"
         chips={[
           { key: "pending", label: `Chờ duyệt (${stats.recruiter_approved.count})` },
           { key: "accepted", label: `Đã tiếp nhận (${stats.accepted.count})` },
@@ -1086,7 +1098,7 @@ export function AdvancesPage() {
               search={search}
               onSearchChange={setSearch}
               placeholder="Tìm theo tên, mã NV, số tiền…"
-              className="static -mx-0 bg-transparent px-0 py-0 backdrop-blur-0"
+              className="static -mx-0 bg-transparent px-0 py-0 backdrop-blur-0 desktop:hidden"
             />
 
             <div className="space-y-1">

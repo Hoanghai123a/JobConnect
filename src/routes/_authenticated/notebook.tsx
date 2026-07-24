@@ -41,6 +41,7 @@ import {
   CircleDashed,
   CircleHelp,
   NotebookPen,
+  Pencil,
   Plus,
   Settings2,
   Trash2,
@@ -123,6 +124,9 @@ function NotebookPage() {
   // Category manager
   const [newCatName, setNewCatName] = useState("");
   const [catSending, setCatSending] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<CategoryRecord | null>(null);
+  const [editingCatName, setEditingCatName] = useState("");
+  const [catUpdating, setCatUpdating] = useState(false);
 
   const loadCategories = useCallback(async () => {
     if (!user?.id) {
@@ -324,6 +328,41 @@ function NotebookPage() {
     }
   };
 
+  const openCategoryEditor = (category: CategoryRecord) => {
+    setEditingCategory(category);
+    setEditingCatName(category.name || "");
+  };
+
+  const closeCategoryEditor = () => {
+    if (catUpdating) return;
+    setEditingCategory(null);
+    setEditingCatName("");
+  };
+
+  const updateCategory = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingCategory || !editingCatName.trim()) return;
+
+    const name = editingCatName.trim();
+    if (name === editingCategory.name) {
+      closeCategoryEditor();
+      return;
+    }
+
+    setCatUpdating(true);
+    try {
+      await pb.collection("notebook_categories").update(editingCategory.id, { name });
+      await Promise.all([loadCategories(), loadEntries()]);
+      setEditingCategory(null);
+      setEditingCatName("");
+      toast.success("Đã cập nhật tên danh mục");
+    } catch (error: unknown) {
+      toast.error((error as { message?: string })?.message || "Lỗi cập nhật danh mục");
+    } finally {
+      setCatUpdating(false);
+    }
+  };
+
   const statusChips = [
     { key: "all", label: "Tất cả", count: entries.length },
     { key: "pending", label: "Đang xử lý" },
@@ -353,35 +392,40 @@ function NotebookPage() {
       }
     >
       {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-2 gap-2.5 desktop:mx-auto desktop:w-full desktop:max-w-4xl desktop:grid-cols-4">
         <StatCard
           label="Đang xử lý"
           value={stats.pending.toLocaleString("vi-VN")}
           icon={CircleDashed}
           tone="warning"
+          className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-lg"
         />
         <StatCard
           label="Đã xong"
           value={stats.done.toLocaleString("vi-VN")}
           icon={Check}
           tone="success"
+          className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-lg"
         />
         <StatCard
           label="Hủy"
           value={stats.cancelled.toLocaleString("vi-VN")}
           icon={Ban}
           tone="danger"
+          className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-lg"
         />
         <StatCard
           label="Khác"
           value={stats.other.toLocaleString("vi-VN")}
           icon={CircleHelp}
           tone="info"
+          className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-lg"
         />
       </div>
 
       {/* Filters */}
       <FilterBar
+        desktopSearchAfterChips
         search={search}
         onSearchChange={setSearch}
         placeholder="Tìm theo tên, ghi chú…"
@@ -558,18 +602,65 @@ function NotebookPage() {
                     className="flex items-center justify-between rounded-xl border border-border px-3 py-2"
                   >
                     <span className="text-sm">{c.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => deleteCategory(c)}
-                      className="text-muted-foreground hover:text-destructive transition"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openCategoryEditor(c)}
+                        className="text-muted-foreground transition hover:text-primary"
+                        title={`Sửa tên danh mục ${c.name}`}
+                        aria-label={`Sửa tên danh mục ${c.name}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteCategory(c)}
+                        className="text-muted-foreground hover:text-destructive transition"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingCategory} onOpenChange={(open) => !open && closeCategoryEditor()}>
+        <DialogContent className="rounded-2xl sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sửa tên danh mục</DialogTitle>
+            <DialogDescription>Cập nhật tên danh mục.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={updateCategory} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="notebook-category-edit-name">Tên danh mục</Label>
+              <Input
+                id="notebook-category-edit-name"
+                value={editingCatName}
+                onChange={(event) => setEditingCatName(event.target.value)}
+                placeholder="Tên danh mục"
+                autoFocus
+                required
+                disabled={catUpdating}
+              />
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeCategoryEditor}
+                disabled={catUpdating}
+              >
+                Hủy
+              </Button>
+              <Button type="submit" disabled={catUpdating || !editingCatName.trim()}>
+                {catUpdating ? "..." : "Cập nhật"}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </PageContainer>

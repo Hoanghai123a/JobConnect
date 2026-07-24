@@ -677,21 +677,51 @@ function WorkerAdvancesView() {
 
       <div
         id="staff-advance-statistics"
-        className={showMobileStats ? "grid grid-cols-2 gap-2" : "hidden grid-cols-2 gap-2 md:grid"}
+        className={
+          showMobileStats
+            ? "grid grid-cols-2 gap-2 desktop:grid-cols-6"
+            : "hidden grid-cols-2 gap-2 md:grid desktop:grid-cols-6"
+        }
       >
-        <StatCard label="Chờ duyệt" value={statValue(stats.pending)} icon={Clock} tone="warning" />
+        <StatCard
+          label="Chờ duyệt"
+          value={statValue(stats.pending)}
+          icon={Clock}
+          tone="warning"
+          className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
+        />
         <StatCard
           label="Đã chuyển admin"
           value={statValue(stats.recruiter_approved)}
           icon={Check}
           tone="primary"
+          className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
         />
-        <StatCard label="Đã duyệt" value={statValue(stats.accepted)} icon={Check} tone="success" />
-        <StatCard label="Từ chối" value={statValue(stats.rejected)} icon={X} tone="danger" />
+        <StatCard
+          label="Đã duyệt"
+          value={statValue(stats.accepted)}
+          icon={Check}
+          tone="success"
+          className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
+        />
+        <StatCard
+          label="Từ chối"
+          value={statValue(stats.rejected)}
+          icon={X}
+          tone="danger"
+          className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
+        />
+        <StatCard
+          label="Tổng đơn"
+          value={statValue(stats.all)}
+          icon={Wallet}
+          tone="primary"
+          className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
+        />
         {isStaff && !isAdmin && (
           <button
             type="button"
-            className="col-span-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            className="col-span-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 desktop:col-span-1"
             onClick={() => {
               setStatisticsTab("outstanding");
               setShowOutstandingStats(true);
@@ -703,20 +733,21 @@ function WorkerAdvancesView() {
               value={
                 <span className="block text-[15px] leading-tight sm:text-base">
                   {loadingOutstandingStats
-                    ? "Đang tải..."
+                    ? "?ang t?i..."
                     : `${outstandingWorkers.length} NLĐ - ${formatMoney(outstandingTotal)}đ`}
                 </span>
               }
               hint="Bấm để xem tồn ứng, lịch sử và biểu đồ 7 ngày"
               icon={CircleDollarSign}
               tone="warning"
-              className="h-full transition hover:border-primary/50 hover:shadow-soft"
+              className="h-full transition hover:border-primary/50 hover:shadow-soft desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
             />
           </button>
         )}
       </div>
 
       <FilterBar
+        desktopSearchAfterChips
         search={search}
         onSearchChange={setSearch}
         placeholder="Tìm theo tên, mã NV…"
@@ -1484,22 +1515,40 @@ function MyAdvancesView() {
 
       <div
         id="staff-own-advance-statistics"
-        className={showMobileStats ? "grid grid-cols-2 gap-2" : "hidden grid-cols-2 gap-2 md:grid"}
+        className={
+          showMobileStats
+            ? "grid grid-cols-2 gap-2 desktop:grid-cols-6"
+            : "hidden grid-cols-2 gap-2 md:grid desktop:grid-cols-6"
+        }
       >
         <StatCard
           label="Chờ admin duyệt"
           value={statValue(myStats.recruiter_approved)}
           icon={Clock}
           tone="warning"
+          className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
         />
         <StatCard
           label="Đã tiếp nhận"
           value={statValue(myStats.accepted)}
           icon={Check}
           tone="success"
+          className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
         />
-        <StatCard label="Từ chối" value={statValue(myStats.rejected)} icon={X} tone="danger" />
-        <StatCard label="Tổng đơn" value={statValue(myStats.all)} icon={Wallet} tone="primary" />
+        <StatCard
+          label="Từ chối"
+          value={statValue(myStats.rejected)}
+          icon={X}
+          tone="danger"
+          className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
+        />
+        <StatCard
+          label="Tổng đơn"
+          value={statValue(myStats.all)}
+          icon={Wallet}
+          tone="primary"
+          className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
+        />
       </div>
 
       {items.length === 0 ? (
