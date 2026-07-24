@@ -189,6 +189,8 @@ export function WorkerEmploymentDrawer({
   const [advanceOutstandingLoading, setAdvanceOutstandingLoading] = useState(false);
   const [advanceBankChoice, setAdvanceBankChoice] = useState<"worker" | "actor">("worker");
   const [form, setForm] = useState({
+    factory: "",
+    address: "",
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
@@ -298,6 +300,8 @@ export function WorkerEmploymentDrawer({
     if (!permissions.canEditHistory) return;
     setEditingId(h.id);
     setForm({
+      factory: h.factory || "",
+      address: user?.address || h.expand?.user?.address || "",
       employee_code: h.employee_code || "",
       worker_name_snapshot: h.worker_name_snapshot || "",
       worker_cccd_snapshot: h.worker_cccd_snapshot || "",
@@ -522,10 +526,15 @@ export function WorkerEmploymentDrawer({
 
   const saveEdit = async () => {
     if (!editingId) return;
+    if (!form.factory) {
+      toast.warning("Chọn nhà máy");
+      return;
+    }
     setSaving(true);
     try {
       const before = histories.find((item) => item.id === editingId) || null;
       const updated = await updateEmploymentHistory(editingId, {
+        factory: form.factory,
         employee_code: form.employee_code.trim(),
         worker_name_snapshot: form.worker_name_snapshot.trim(),
         worker_cccd_snapshot: form.worker_cccd_snapshot.trim(),
@@ -538,6 +547,7 @@ export function WorkerEmploymentDrawer({
         note: form.note.trim(),
       });
       if (user) {
+        await updateUserAndCache(user.id, { address: form.address.trim() });
         const updatedHistories = await fetchEmploymentHistories([user.id]);
         const latest = getLatestEmploymentHistory(updatedHistories);
         await syncLegacyUserWorkFields(user.id, latest);
@@ -1227,21 +1237,47 @@ export function WorkerEmploymentDrawer({
             </DialogDescription>
           </DialogHeader>
           <form
-            className="space-y-3"
+            className="space-y-3 desktop:grid desktop:grid-cols-6 desktop:gap-2 desktop:space-y-0"
             onSubmit={(e) => {
               e.preventDefault();
               void saveEdit();
             }}
           >
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
+            <div className="space-y-1 desktop:order-1 desktop:col-span-3">
+              <Label className="text-xs">Nhà máy *</Label>
+              <Select
+                value={form.factory}
+                onValueChange={(v) => setForm((f) => ({ ...f, factory: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn nhà máy" />
+                </SelectTrigger>
+                <SelectContent>
+                  {factories.map((factory) => (
+                    <SelectItem key={factory.id} value={factory.id}>
+                      {factory.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1 desktop:order-6 desktop:col-span-6">
+              <Label className="text-xs">Địa chỉ NLĐ</Label>
+              <Input
+                value={form.address}
+                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                placeholder="Nhập địa chỉ người lao động"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2 desktop:contents">
+              <div className="space-y-1 desktop:order-3 desktop:col-span-2">
                 <Label className="text-xs">Họ tên (NM)</Label>
                 <Input
                   value={form.worker_name_snapshot}
                   onChange={(e) => setForm((f) => ({ ...f, worker_name_snapshot: e.target.value }))}
                 />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 desktop:order-4 desktop:col-span-3">
                 <Label className="text-xs">CCCD (NM)</Label>
                 <Input
                   value={form.worker_cccd_snapshot}
@@ -1253,14 +1289,14 @@ export function WorkerEmploymentDrawer({
                   }
                 />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 desktop:order-2 desktop:col-span-1">
                 <Label className="text-xs">Mã NV</Label>
                 <Input
                   value={form.employee_code}
                   onChange={(e) => setForm((f) => ({ ...f, employee_code: e.target.value }))}
                 />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 desktop:order-5 desktop:col-span-3">
                 <Label className="text-xs">Mã số thuế</Label>
                 <Input
                   value={form.worker_tax_code_snapshot}
@@ -1273,14 +1309,14 @@ export function WorkerEmploymentDrawer({
                   inputMode="numeric"
                 />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 desktop:order-7 desktop:col-span-2">
                 <Label className="text-xs">Ngày vào</Label>
                 <DateInput
                   value={form.join_date}
                   onChange={(v) => setForm((f) => ({ ...f, join_date: v }))}
                 />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 desktop:order-8 desktop:col-span-2">
                 <Label className="text-xs">Ngày nghỉ</Label>
                 <DateInput
                   value={form.leave_date}
@@ -1288,7 +1324,7 @@ export function WorkerEmploymentDrawer({
                 />
               </div>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 desktop:order-9 desktop:col-span-2">
               <Label className="text-xs">Người tuyển</Label>
               <Select
                 value={form.recruiter_staff}
@@ -1306,7 +1342,7 @@ export function WorkerEmploymentDrawer({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 desktop:order-10 desktop:col-span-2">
               <Label className="text-xs">Nhà chính</Label>
               <Select
                 value={form.main_house}
@@ -1324,7 +1360,7 @@ export function WorkerEmploymentDrawer({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 desktop:order-11 desktop:col-span-4">
               <Label className="text-xs">Ghi chú</Label>
               <Input
                 value={form.note}
@@ -1333,13 +1369,13 @@ export function WorkerEmploymentDrawer({
               />
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 desktop:order-12 desktop:col-span-6">
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Ảnh CCCD
               </Label>
               <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} />
             </div>
-            <DialogFooter>
+            <DialogFooter className="desktop:order-13 desktop:col-span-6">
               <Button type="button" variant="outline" onClick={() => setEditingId(null)}>
                 Huỷ
               </Button>

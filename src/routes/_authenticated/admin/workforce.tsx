@@ -211,7 +211,7 @@ function WorkforcePage() {
     setLoading(true);
     try {
       const [workspace, staffAdminUsers, factoryList, mainHouseList] = await Promise.all([
-        fetchFreshStaffWorkspace(currentUser),
+        fetchFreshStaffWorkspace(currentUser, { hydrateCache: true }),
         pb.collection("users").getFullList<UserRecord>({
           filter: `role="staff" || role="admin"`,
           sort: "full_name,username",

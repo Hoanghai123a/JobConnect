@@ -368,7 +368,7 @@ export async function fetchCachedStaffWorkspace(viewer: UserRecord) {
 
 export async function fetchFreshStaffWorkspace(
   viewer: UserRecord,
-  opts?: { bypassScope?: boolean },
+  opts?: { bypassScope?: boolean; hydrateCache?: boolean },
 ) {
   const managedFactoryIds = await getManagedFactoryIds(viewer);
   const historyFilter = opts?.bypassScope
@@ -378,6 +378,7 @@ export async function fetchFreshStaffWorkspace(
     historyFilter,
     useCache: false,
     includeCccdVersions: false,
+    hydrateCache: opts?.hydrateCache,
   });
 
   const userIds = [...new Set(synced.histories.map((h) => h.user).filter(Boolean))];
@@ -386,6 +387,10 @@ export async function fetchFreshStaffWorkspace(
   if (missingIds.length) {
     const extra = await fetchUsersBatched(missingIds);
     synced.users.push(...extra);
+  }
+
+  if (opts?.hydrateCache) {
+    await saveScopeFingerprint(buildScopeFingerprint(viewer.id, managedFactoryIds));
   }
 
   return buildWorkspace(viewer, synced.histories, synced.users, managedFactoryIds, {

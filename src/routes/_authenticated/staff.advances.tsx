@@ -23,7 +23,9 @@ import {
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
-import { StatusChip, toneBorder } from "@/components/ui/status-chip";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
+import { type ChipTone, StatusChip, toneBorder } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -44,6 +46,7 @@ import { VN_BANKS, resolveBankName } from "@/lib/vn-banks";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
+  BarChart3,
   Check,
   ChevronRight,
   CircleDollarSign,
@@ -56,6 +59,7 @@ import {
   Wallet,
   X,
 } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 export const Route = createFileRoute("/_authenticated/staff/advances")({
   component: StaffAdvancesPage,
@@ -84,6 +88,20 @@ function statValue(summary: AdvanceSummary) {
       SL:{summary.count} - {formatMoney(summary.total)}đ
     </span>
   );
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message
+  ) {
+    return error.message;
+  }
+  return fallback;
 }
 
 async function loadAdvanceSummary(filter: string): Promise<AdvanceSummary> {
@@ -115,9 +133,6 @@ type OutstandingWorkerSummary = {
   total: number;
   advances: OutstandingAdvance[];
 };
-
-const OUTSTANDING_ADVANCE_FILTER =
-  '(status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))';
 
 function groupOutstandingAdvances(rows: OutstandingAdvance[]): OutstandingWorkerSummary[] {
   const grouped = new Map<string, OutstandingWorkerSummary>();
@@ -153,23 +168,104 @@ function groupOutstandingAdvances(rows: OutstandingAdvance[]): OutstandingWorker
     .sort((a, b) => b.total - a.total || a.fullName.localeCompare(b.fullName, "vi"));
 }
 
-async function loadStaffOutstandingWorkers(staffId: string) {
-  const rows = await pb.collection("advances").getFullList<OutstandingAdvance>({
-    filter: joinPbFilters([
-      `recruiter_id="${escapePb(staffId)}"`,
-      `user!="${escapePb(staffId)}"`,
-      OUTSTANDING_ADVANCE_FILTER,
-    ]),
+async function loadStaffAdvanceHistory(staffId: string) {
+  return pb.collection("advances").getFullList<OutstandingAdvance>({
+    filter: joinPbFilters([`recruiter_id="${escapePb(staffId)}"`, `user!="${escapePb(staffId)}"`]),
     sort: "-created",
     expand: "requested_by",
   });
-  return groupOutstandingAdvances(rows);
+}
+
+function isOutstandingAdvance(row: OutstandingAdvance) {
+  return (
+    row.status === "pending" ||
+    row.status === "recruiter_approved" ||
+    (row.status === "accepted" && (!row.recovery_status || row.recovery_status === "none"))
+  );
+}
+
+function advanceStatisticsStatusMeta(row: OutstandingAdvance) {
+  if (row.status === "pending")
+    return { label: "Ch\u1edd ng\u01b0\u1eddi tuy\u1ec3n duy\u1ec7t", tone: "warning" as const };
+  if (row.status === "recruiter_approved")
+    return { label: "Ch\u1edd admin duy\u1ec7t", tone: "primary" as const };
+  if (row.status === "accepted" && row.recovery_status === "recovered") {
+    return { label: "\u0110\u00e3 thu h\u1ed3i", tone: "success" as const };
+  }
+  if (row.status === "accepted" && row.recovery_status === "unrecoverable") {
+    return { label: "Kh\u00f4ng thu h\u1ed3i", tone: "danger" as const };
+  }
+  if (row.status === "accepted")
+    return { label: "Ch\u1edd thu h\u1ed3i", tone: "neutral" as const };
+  if (row.status === "rejected")
+    return { label: "\u0110\u00e3 t\u1eeb ch\u1ed1i", tone: "danger" as const };
+  return { label: "Ch\u01b0a x\u00e1c \u0111\u1ecbnh", tone: "neutral" as const };
 }
 
 function outstandingStatusMeta(row: OutstandingAdvance) {
   if (row.status === "pending") return { label: "Chờ người tuyển duyệt", tone: "warning" as const };
-  if (row.status === "recruiter_approved") return { label: "Chờ admin duyệt", tone: "primary" as const };
+  if (row.status === "recruiter_approved")
+    return { label: "Chờ admin duyệt", tone: "primary" as const };
   return { label: "Chờ thu hồi", tone: "neutral" as const };
+}
+
+type AdvanceDaySummary = {
+  key: string;
+  label: string;
+  count: number;
+  total: number;
+  advances: OutstandingAdvance[];
+};
+
+const advanceSevenDayChartConfig = {
+  count: { label: "Số lần ứng", color: "oklch(0.68 0.17 55)" },
+} satisfies ChartConfig;
+
+function localAdvanceDateKey(value: string | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    .map((part, index) => (index === 0 ? String(part) : String(part).padStart(2, "0")))
+    .join("-");
+}
+
+function buildAdvanceDaySummaries(
+  rows: OutstandingAdvance[],
+  now = new Date(),
+): AdvanceDaySummary[] {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() - (6 - index));
+    return {
+      key: localAdvanceDateKey(date),
+      label: date.toLocaleDateString("vi-VN", {
+        weekday: "short",
+        day: "2-digit",
+        month: "2-digit",
+      }),
+      count: 0,
+      total: 0,
+      advances: [] as OutstandingAdvance[],
+    };
+  });
+  const byKey = new Map(days.map((day) => [day.key, day]));
+
+  for (const row of rows) {
+    const day = byKey.get(localAdvanceDateKey(row.created));
+    if (!day) continue;
+    day.count += 1;
+    day.total += Number(row.amount || 0);
+    day.advances.push(row);
+  }
+
+  return days.map((day) => ({
+    ...day,
+    advances: [...day.advances].sort(
+      (a, b) => new Date(b.created || 0).getTime() - new Date(a.created || 0).getTime(),
+    ),
+  }));
 }
 
 function getOutstandingRequesterName(row: OutstandingAdvance) {
@@ -189,7 +285,9 @@ function StaffAdvancesPage() {
           type="button"
           className={cn(
             "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-            segment === "workers" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground",
+            segment === "workers"
+              ? "bg-background shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
           )}
           onClick={() => setSegment("workers")}
         >
@@ -199,7 +297,9 @@ function StaffAdvancesPage() {
           type="button"
           className={cn(
             "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-            segment === "mine" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground",
+            segment === "mine"
+              ? "bg-background shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
           )}
           onClick={() => setSegment("mine")}
         >
@@ -207,11 +307,7 @@ function StaffAdvancesPage() {
         </button>
       </div>
 
-      {segment === "workers" ? (
-        <WorkerAdvancesView />
-      ) : (
-        <MyAdvancesView />
-      )}
+      {segment === "workers" ? <WorkerAdvancesView /> : <MyAdvancesView />}
     </PageContainer>
   );
 }
@@ -242,9 +338,16 @@ function WorkerAdvancesView() {
   const [stats, setStats] = useState<Record<AdminTab, AdvanceSummary>>(emptyAdvanceSummaries);
   const [showMobileStats, setShowMobileStats] = useState(false);
   const [outstandingWorkers, setOutstandingWorkers] = useState<OutstandingWorkerSummary[]>([]);
+  const [advanceHistory, setAdvanceHistory] = useState<OutstandingAdvance[]>([]);
   const [loadingOutstandingStats, setLoadingOutstandingStats] = useState(false);
   const [showOutstandingStats, setShowOutstandingStats] = useState(false);
-  const [selectedOutstandingWorkerId, setSelectedOutstandingWorkerId] = useState<string | null>(null);
+  const [statisticsTab, setStatisticsTab] = useState<"outstanding" | "history" | "chart">(
+    "outstanding",
+  );
+  const [selectedOutstandingWorkerId, setSelectedOutstandingWorkerId] = useState<string | null>(
+    null,
+  );
+  const [selectedAdvanceDate, setSelectedAdvanceDate] = useState<string | null>(null);
 
   const eligibleWorkers = useMemo(
     () =>
@@ -258,8 +361,7 @@ function WorkerAdvancesView() {
   const selectedWorker =
     eligibleWorkers.find((worker) => worker.user.id === selectedWorkerId) || null;
   const workerLimit = Number(settings.advance_limit || 0);
-  const workerAvailable =
-    workerLimit > 0 ? Math.max(0, workerLimit - workerOutstanding) : 0;
+  const workerAvailable = workerLimit > 0 ? Math.max(0, workerLimit - workerOutstanding) : 0;
 
   const filteredWorkers = useMemo(() => {
     const keyword = removeVietnameseTone(workerSearch.trim().toLowerCase());
@@ -299,7 +401,7 @@ function WorkerAdvancesView() {
       });
       setItems(res.items as unknown as AdvanceRecord[]);
     } catch (error: unknown) {
-      toast.error((error as any)?.message || "Lỗi tải Ứng lương");
+      toast.error(getErrorMessage(error, "Lỗi tải Ứng lương"));
     } finally {
       setLoading(false);
     }
@@ -309,13 +411,17 @@ function WorkerAdvancesView() {
     if (isAdmin || !isStaff || !user?.id) {
       setShowOutstandingStats(false);
       setSelectedOutstandingWorkerId(null);
+      setSelectedAdvanceDate(null);
       setOutstandingWorkers([]);
+      setAdvanceHistory([]);
       return;
     }
 
     setLoadingOutstandingStats(true);
     try {
-      setOutstandingWorkers(await loadStaffOutstandingWorkers(user.id));
+      const rows = await loadStaffAdvanceHistory(user.id);
+      setAdvanceHistory(rows);
+      setOutstandingWorkers(groupOutstandingAdvances(rows.filter(isOutstandingAdvance)));
     } finally {
       setLoadingOutstandingStats(false);
     }
@@ -350,9 +456,14 @@ function WorkerAdvancesView() {
     () => outstandingWorkers.reduce((sum, worker) => sum + worker.total, 0),
     [outstandingWorkers],
   );
-  const selectedOutstandingWorker = outstandingWorkers.find(
-    (worker) => worker.workerId === selectedOutstandingWorkerId,
-  ) || null;
+  const advanceDaySummaries = useMemo(
+    () => buildAdvanceDaySummaries(advanceHistory),
+    [advanceHistory],
+  );
+  const selectedAdvanceDay =
+    advanceDaySummaries.find((day) => day.key === selectedAdvanceDate) || null;
+  const selectedOutstandingWorker =
+    outstandingWorkers.find((worker) => worker.workerId === selectedOutstandingWorkerId) || null;
 
   useEffect(() => {
     if (selectedOutstandingWorkerId && !selectedOutstandingWorker) {
@@ -379,7 +490,7 @@ function WorkerAdvancesView() {
       if (ws) setWorkers(ws.workers);
     }, 150);
     return () => clearTimeout(timer);
-  }, [cacheSignal, showCreateForm, user?.id]);
+  }, [cacheSignal, showCreateForm, user]);
 
   useEffect(() => {
     if (!selectedWorkerId) {
@@ -422,14 +533,17 @@ function WorkerAdvancesView() {
         action: "update",
         before: { status: row.status || "pending" },
         after,
-        note: newStatus === "recruiter_approved" ? "Người tuyển chấp nhận ứng lương" : "Người tuyển từ chối ứng lương",
+        note:
+          newStatus === "recruiter_approved"
+            ? "Người tuyển chấp nhận ứng lương"
+            : "Người tuyển từ chối ứng lương",
       });
       toast.success(newStatus === "recruiter_approved" ? "Đã chấp nhận" : "Đã từ chối");
       load();
       loadStats().catch(() => {});
       loadOutstandingStats().catch(() => {});
     } catch (error: unknown) {
-      toast.error((error as any)?.message || "Lỗi xử lý");
+      toast.error(getErrorMessage(error, "Lỗi xử lý"));
     }
   };
 
@@ -483,9 +597,7 @@ function WorkerAdvancesView() {
     setCreatingAdvance(true);
     try {
       const workspace = await fetchStaffWorkspace(user as UserRecord);
-      const currentWorker = workspace.workers.find(
-        (worker) => worker.user.id === selectedWorkerId,
-      );
+      const currentWorker = workspace.workers.find((worker) => worker.user.id === selectedWorkerId);
       const activeHistory = currentWorker ? getActiveWorkerHistory(currentWorker) : null;
       if (!currentWorker?.canReportAdvance || !activeHistory) {
         throw new Error("Bạn không còn quyền báo ứng hoặc NLĐ đã ngừng làm");
@@ -514,8 +626,7 @@ function WorkerAdvancesView() {
         requested_by: user.id,
         recruiter_id: user.id,
         employee_code: activeHistory.employee_code || currentWorker.user.employee_code || "",
-        full_name:
-          activeHistory.worker_name_snapshot || currentWorker.user.full_name || "",
+        full_name: activeHistory.worker_name_snapshot || currentWorker.user.full_name || "",
         company: activeHistory.expand?.factory?.name || currentWorker.user.company || "",
         phone: currentWorker.user.phone || "",
         join_date: activeHistory.join_date || "",
@@ -569,30 +680,38 @@ function WorkerAdvancesView() {
         className={showMobileStats ? "grid grid-cols-2 gap-2" : "hidden grid-cols-2 gap-2 md:grid"}
       >
         <StatCard label="Chờ duyệt" value={statValue(stats.pending)} icon={Clock} tone="warning" />
-        <StatCard label="Đã chuyển admin" value={statValue(stats.recruiter_approved)} icon={Check} tone="primary" />
+        <StatCard
+          label="Đã chuyển admin"
+          value={statValue(stats.recruiter_approved)}
+          icon={Check}
+          tone="primary"
+        />
         <StatCard label="Đã duyệt" value={statValue(stats.accepted)} icon={Check} tone="success" />
         <StatCard label="Từ chối" value={statValue(stats.rejected)} icon={X} tone="danger" />
         {isStaff && !isAdmin && (
           <button
             type="button"
             className="col-span-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-          onClick={() => setShowOutstandingStats(true)}
-          aria-label="Xem NLĐ tồn ứng chưa thu"
-        >
-          <StatCard
-            label="NLĐ tồn ứng chưa thu"
-            value={
-              <span className="block text-[15px] leading-tight sm:text-base">
-                {loadingOutstandingStats
-                  ? "Đang tải..."
-                  : `${outstandingWorkers.length} NLĐ - ${formatMoney(outstandingTotal)}đ`}
-              </span>
-            }
-            hint="Bấm để xem danh sách và chi tiết từng lần ứng"
-            icon={CircleDollarSign}
-            tone="warning"
-            className="h-full transition hover:border-primary/50 hover:shadow-soft"
-          />
+            onClick={() => {
+              setStatisticsTab("outstanding");
+              setShowOutstandingStats(true);
+            }}
+            aria-label="Mở thống kê báo ứng"
+          >
+            <StatCard
+              label="Thống kê báo ứng"
+              value={
+                <span className="block text-[15px] leading-tight sm:text-base">
+                  {loadingOutstandingStats
+                    ? "Đang tải..."
+                    : `${outstandingWorkers.length} NLĐ - ${formatMoney(outstandingTotal)}đ`}
+                </span>
+              }
+              hint="Bấm để xem tồn ứng, lịch sử và biểu đồ 7 ngày"
+              icon={CircleDollarSign}
+              tone="warning"
+              className="h-full transition hover:border-primary/50 hover:shadow-soft"
+            />
           </button>
         )}
       </div>
@@ -603,7 +722,10 @@ function WorkerAdvancesView() {
         placeholder="Tìm theo tên, mã NV…"
         chips={[
           { key: "pending", label: `Chờ duyệt (${stats.pending.count})` },
-          { key: "recruiter_approved", label: `Đã chuyển admin (${stats.recruiter_approved.count})` },
+          {
+            key: "recruiter_approved",
+            label: `Đã chuyển admin (${stats.recruiter_approved.count})`,
+          },
           { key: "accepted", label: `Đã duyệt (${stats.accepted.count})` },
           { key: "rejected", label: `Từ chối (${stats.rejected.count})` },
           { key: "all", label: "Tất cả" },
@@ -650,7 +772,7 @@ function WorkerAdvancesView() {
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
-                  <StatusChip tone={STATUS_META[status].tone as any}>
+                  <StatusChip tone={STATUS_META[status].tone as ChipTone}>
                     {STATUS_META[status].label}
                   </StatusChip>
                   {status === "pending" && (
@@ -659,7 +781,10 @@ function WorkerAdvancesView() {
                         size="icon"
                         className="h-7 w-7"
                         title="Chấp nhận"
-                        onClick={(e) => { e.stopPropagation(); staffResolve(row, "recruiter_approved"); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          staffResolve(row, "recruiter_approved");
+                        }}
                       >
                         <Check className="h-3.5 w-3.5" />
                       </Button>
@@ -668,7 +793,10 @@ function WorkerAdvancesView() {
                         variant="destructive"
                         className="h-7 w-7"
                         title="Từ chối"
-                        onClick={(e) => { e.stopPropagation(); staffResolve(row, "rejected"); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          staffResolve(row, "rejected");
+                        }}
                       >
                         <X className="h-3.5 w-3.5" />
                       </Button>
@@ -700,17 +828,28 @@ function WorkerAdvancesView() {
         <>
           <OutstandingWorkersDialog
             open={showOutstandingStats}
+            tab={statisticsTab}
+            onTabChange={setStatisticsTab}
             workers={outstandingWorkers}
             totalAmount={outstandingTotal}
+            history={advanceHistory}
+            days={advanceDaySummaries}
+            loading={loadingOutstandingStats}
             onClose={() => {
               setShowOutstandingStats(false);
               setSelectedOutstandingWorkerId(null);
+              setSelectedAdvanceDate(null);
             }}
             onSelectWorker={(workerId) => setSelectedOutstandingWorkerId(workerId)}
+            onSelectDay={(dayKey) => setSelectedAdvanceDate(dayKey)}
           />
           <OutstandingWorkerDetailDialog
             worker={selectedOutstandingWorker}
             onClose={() => setSelectedOutstandingWorkerId(null)}
+          />
+          <AdvanceDateDetailDialog
+            day={selectedAdvanceDay}
+            onClose={() => setSelectedAdvanceDate(null)}
           />
         </>
       )}
@@ -718,8 +857,7 @@ function WorkerAdvancesView() {
         detail={advanceDetail}
         onClose={() => setAdvanceDetail(null)}
         canWithdraw={
-          advanceDetail?.status === "recruiter_approved" &&
-          advanceDetail.recruiter_id === user?.id
+          advanceDetail?.status === "recruiter_approved" && advanceDetail.recruiter_id === user?.id
         }
         onWithdraw={(advance) => {
           setAdvanceDetail(null);
@@ -776,25 +914,37 @@ function WorkerAdvancesView() {
 
 function OutstandingWorkersDialog({
   open,
+  tab,
+  onTabChange,
   workers,
   totalAmount,
+  history,
+  days,
+  loading,
   onClose,
   onSelectWorker,
+  onSelectDay,
 }: {
   open: boolean;
+  tab: "outstanding" | "history" | "chart";
+  onTabChange: (value: "outstanding" | "history" | "chart") => void;
   workers: OutstandingWorkerSummary[];
   totalAmount: number;
+  history: OutstandingAdvance[];
+  days: AdvanceDaySummary[];
+  loading: boolean;
   onClose: () => void;
   onSelectWorker: (workerId: string) => void;
+  onSelectDay: (dayKey: string) => void;
 }) {
   const totalAdvances = workers.reduce((sum, worker) => sum + worker.count, 0);
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
         <DialogHeader className="shrink-0 border-b border-border/60 p-5 pr-14 text-left">
-          <DialogTitle>NLĐ đang tồn ứng chưa thu</DialogTitle>
-          <DialogDescription>Danh sách được sắp xếp từ số tiền tồn ứng nhiều đến ít.</DialogDescription>
+          <DialogTitle>Thống kê báo ứng</DialogTitle>
+          <DialogDescription>Thông tin báo ứng của NLĐ do bạn phụ trách.</DialogDescription>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             <div className="rounded-xl bg-muted/50 p-2">
               <div className="text-lg font-semibold">{workers.length}</div>
@@ -810,39 +960,293 @@ function OutstandingWorkersDialog({
             </div>
           </div>
         </DialogHeader>
-        <div className="min-h-0 space-y-2 overflow-y-auto p-5">
-          {workers.length === 0 ? (
-            <EmptyState
-              icon={CircleDollarSign}
-              title="Không có NLĐ tồn ứng"
-              description="Hiện chưa có khoản ứng nào đang chờ thu hồi."
-            />
-          ) : (
-            workers.map((worker, index) => (
-              <div key={worker.workerId} className="rounded-2xl border border-border/60 bg-card p-3 shadow-soft">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold">{index + 1}. {worker.fullName}</div>
-                    <div className="mt-0.5 text-[11px] text-muted-foreground">
-                      {worker.employeeCode || "Chưa có mã NV"} · {worker.company || "Chưa có nhà máy"}
-                    </div>
-                    <div className="mt-1 text-[11px] text-muted-foreground">{worker.count} lần ứng chưa thu</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onSelectWorker(worker.workerId)}
-                    className="flex shrink-0 items-center gap-1 rounded-xl border border-primary/30 bg-primary/5 px-2.5 py-2 text-right text-primary transition hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    aria-label={`Xem chi tiết tồn ứng của ${worker.fullName}`}
-                  >
-                    <span>
-                      <span className="block text-sm font-bold">{formatMoney(worker.total)}đ</span>
-                      <span className="block text-[10px] font-medium">Xem chi tiết</span>
-                    </span>
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
+        <Tabs
+          value={tab}
+          onValueChange={(value) => onTabChange(value as "outstanding" | "history" | "chart")}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <TabsList className="mx-4 mt-3 grid h-auto shrink-0 grid-cols-3 gap-1 p-1 sm:mx-5">
+            <TabsTrigger
+              value="outstanding"
+              className="h-auto min-h-9 whitespace-normal px-2 py-2 text-xs leading-tight"
+            >
+              Tồn ứng chưa thu
+            </TabsTrigger>
+            <TabsTrigger
+              value="history"
+              className="h-auto min-h-9 whitespace-normal px-2 py-2 text-xs leading-tight"
+            >
+              Lịch sử ứng chi tiết
+            </TabsTrigger>
+            <TabsTrigger
+              value="chart"
+              className="h-auto min-h-9 whitespace-normal px-2 py-2 text-xs leading-tight"
+            >
+              Biểu đồ báo ứng 7 ngày
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent
+            value="outstanding"
+            className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 pb-5"
+          >
+            {loading ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                Đang tải thống kê...
               </div>
-            ))
+            ) : workers.length === 0 ? (
+              <EmptyState
+                icon={CircleDollarSign}
+                title="Không có NLĐ tồn ứng"
+                description="Hiện chưa có khoản ứng nào đang chờ thu hồi."
+              />
+            ) : (
+              workers.map((worker, index) => (
+                <div
+                  key={worker.workerId}
+                  className="rounded-2xl border border-border/60 bg-card p-3 shadow-soft"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold">
+                        {index + 1}. {worker.fullName}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        {worker.employeeCode || "Chưa có mã NV"} ·{" "}
+                        {worker.company || "Chưa có nhà máy"}
+                      </div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        {worker.count} lần ứng chưa thu
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onSelectWorker(worker.workerId)}
+                      className="flex shrink-0 items-center gap-1 rounded-xl border border-primary/30 bg-primary/5 px-2.5 py-2 text-right text-primary transition hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      aria-label={`Xem chi tiết tồn ứng của ${worker.fullName}`}
+                    >
+                      <span>
+                        <span className="block text-sm font-bold">
+                          {formatMoney(worker.total)}đ
+                        </span>
+                        <span className="block text-[10px] font-medium">Xem chi tiết</span>
+                      </span>
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </TabsContent>
+          <TabsContent value="history" className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+            {loading ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                Đang tải lịch sử ứng...
+              </div>
+            ) : history.length === 0 ? (
+              <EmptyState
+                icon={Wallet}
+                title="Chưa có lịch sử báo ứng"
+                description="Các lần Staff báo ứng cho NLĐ sẽ hiển thị tại đây."
+              />
+            ) : (
+              <div className="space-y-2">
+                {history.map((advance, index) => (
+                  <AdvanceHistoryCard key={advance.id} advance={advance} index={index} />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+          <TabsContent value="chart" className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+            {loading ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                Đang tải biểu đồ...
+              </div>
+            ) : (
+              <AdvanceSevenDayChart days={days} onSelectDay={onSelectDay} />
+            )}
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AdvanceHistoryCard({ advance, index }: { advance: OutstandingAdvance; index: number }) {
+  const meta = advanceStatisticsStatusMeta(advance);
+  const notes = [
+    advance.recruiter_note && `Ghi chú người tuyển: ${advance.recruiter_note}`,
+    advance.admin_note && `Ghi chú admin: ${advance.admin_note}`,
+    advance.recovery_note && `Ghi chú thu hồi: ${advance.recovery_note}`,
+  ].filter(Boolean);
+
+  return (
+    <div className={cn("rounded-2xl border bg-card p-3", toneBorder[meta.tone])}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold">
+            {index + 1}. {advance.full_name || "Chưa có tên"}
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted-foreground">
+            {advance.employee_code || "Chưa có mã NV"} · {advance.company || "Chưa có nhà máy"}
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted-foreground">
+            {advance.created
+              ? new Date(advance.created).toLocaleString("vi-VN")
+              : "Chưa có thời gian"}
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-base font-bold text-primary">{formatMoney(advance.amount)}đ</div>
+          <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
+        </div>
+      </div>
+      <div className="mt-2 space-y-1 text-[12px]">
+        <div>
+          <span className="font-semibold">Lý do:</span> {advance.reason || "Không có lý do"}
+        </div>
+        <div className="text-muted-foreground">
+          <span className="font-semibold">Người yêu cầu:</span>{" "}
+          {getOutstandingRequesterName(advance)}
+        </div>
+        {notes.map((note) => (
+          <div key={note} className="rounded-lg bg-muted/60 p-2 text-muted-foreground">
+            {note}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdvanceSevenDayTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: AdvanceDaySummary }>;
+}) {
+  const day = payload?.[0]?.payload;
+  if (!active || !day) return null;
+
+  return (
+    <div className="min-w-36 rounded-lg border border-border/50 bg-background px-3 py-2 text-xs shadow-xl">
+      <div className="font-semibold">{day.label}</div>
+      <div className="mt-1 flex justify-between gap-4 text-muted-foreground">
+        <span>Số lần ứng</span>
+        <span className="font-medium text-foreground">{day.count}</span>
+      </div>
+      <div className="mt-1 flex justify-between gap-4 text-muted-foreground">
+        <span>Tổng tiền</span>
+        <span className="font-medium text-foreground">{formatMoney(day.total)}đ</span>
+      </div>
+    </div>
+  );
+}
+
+function AdvanceSevenDayChart({
+  days,
+  onSelectDay,
+}: {
+  days: AdvanceDaySummary[];
+  onSelectDay: (dayKey: string) => void;
+}) {
+  const hasAdvances = days.some((day) => day.count > 0);
+
+  return (
+    <div className="space-y-4 pt-3">
+      <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+        <BarChart3 className="h-4 w-4 shrink-0 text-primary" />
+        <span>Bấm vào cột hoặc ngày để xem các lần báo ứng, theo thứ tự mới nhất trước.</span>
+      </div>
+
+      <ChartContainer config={advanceSevenDayChartConfig} className="h-[240px] w-full">
+        <BarChart data={days} margin={{ top: 16, right: 4, bottom: 0, left: -14 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+          <YAxis
+            allowDecimals={false}
+            tick={{ fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+            width={28}
+          />
+          <ChartTooltip content={<AdvanceSevenDayTooltip />} />
+          <Bar
+            dataKey="count"
+            name="Số lần ứng"
+            fill="var(--color-count)"
+            radius={[5, 5, 0, 0]}
+            cursor="pointer"
+            onClick={(_: unknown, index: number) => {
+              const day = days[index];
+              if (day) onSelectDay(day.key);
+            }}
+          />
+        </BarChart>
+      </ChartContainer>
+
+      {!hasAdvances ? (
+        <p className="text-center text-sm text-muted-foreground">
+          Chưa có lần báo ứng nào trong 7 ngày gần nhất.
+        </p>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {days.map((day) => (
+          <button
+            key={day.key}
+            type="button"
+            onClick={() => onSelectDay(day.key)}
+            className="rounded-xl border border-border/60 bg-card p-2.5 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            aria-label={`Xem báo ứng ngày ${day.label}`}
+          >
+            <div className="truncate text-xs font-semibold">{day.label}</div>
+            <div className="mt-1 text-lg font-bold text-primary">{day.count}</div>
+            <div className="truncate text-[11px] text-muted-foreground">
+              {formatMoney(day.total)}đ
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdvanceDateDetailDialog({
+  day,
+  onClose,
+}: {
+  day: AdvanceDaySummary | null;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open={!!day} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="shrink-0 border-b border-border/60 p-5 pr-14 text-left">
+          <DialogTitle>Danh sách ứng – {day?.label || ""}</DialogTitle>
+          <DialogDescription>
+            Các lần báo ứng trong ngày, mới nhất hiển thị trước.
+          </DialogDescription>
+          {day ? (
+            <div className="mt-3 rounded-xl bg-primary/5 p-3 text-sm text-primary">
+              <span className="font-semibold">{day.count} lần ứng</span> · Tổng cộng{" "}
+              {formatMoney(day.total)}đ
+            </div>
+          ) : null}
+        </DialogHeader>
+        <div className="min-h-0 overflow-y-auto p-5">
+          {day?.advances.length ? (
+            <div className="space-y-2">
+              {day.advances.map((advance, index) => (
+                <AdvanceHistoryCard key={advance.id} advance={advance} index={index} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={Wallet}
+              title="Không có lần báo ứng"
+              description="Ngày này chưa phát sinh báo ứng nào."
+            />
           )}
         </div>
       </DialogContent>
@@ -867,7 +1271,8 @@ function OutstandingWorkerDetailDialog({
           </DialogDescription>
           {worker && (
             <div className="mt-3 rounded-xl bg-warning/10 p-3 text-sm text-warning-foreground">
-              <span className="font-semibold">{worker.count} lần ứng</span> · Tổng cộng {formatMoney(worker.total)}đ chưa thu
+              <span className="font-semibold">{worker.count} lần ứng</span> · Tổng cộng{" "}
+              {formatMoney(worker.total)}đ chưa thu
             </div>
           )}
         </DialogHeader>
@@ -880,23 +1285,42 @@ function OutstandingWorkerDetailDialog({
               advance.recovery_note && `Ghi chú thu hồi: ${advance.recovery_note}`,
             ].filter(Boolean);
             return (
-              <div key={advance.id} className={cn("rounded-2xl border bg-card p-3", toneBorder[meta.tone])}>
+              <div
+                key={advance.id}
+                className={cn("rounded-2xl border bg-card p-3", toneBorder[meta.tone])}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold">Lần ứng #{worker.advances.length - index}</div>
+                    <div className="text-sm font-semibold">
+                      Lần ứng #{worker.advances.length - index}
+                    </div>
                     <div className="mt-0.5 text-[11px] text-muted-foreground">
-                      {advance.created ? new Date(advance.created).toLocaleString("vi-VN") : "Chưa có thời gian"}
+                      {advance.created
+                        ? new Date(advance.created).toLocaleString("vi-VN")
+                        : "Chưa có thời gian"}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
-                    <div className="text-base font-bold text-primary">{formatMoney(advance.amount)}đ</div>
+                    <div className="text-base font-bold text-primary">
+                      {formatMoney(advance.amount)}đ
+                    </div>
                     <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
                   </div>
                 </div>
                 <div className="mt-2 space-y-1 text-[12px]">
-                  <div><span className="font-semibold">Lý do:</span> {advance.reason || "Không có lý do"}</div>
-                  <div className="text-muted-foreground"><span className="font-semibold">Người yêu cầu:</span> {getOutstandingRequesterName(advance)}</div>
-                  {notes.map((note) => <div key={note} className="rounded-lg bg-muted/60 p-2 text-muted-foreground">{note}</div>)}
+                  <div>
+                    <span className="font-semibold">Lý do:</span>{" "}
+                    {advance.reason || "Không có lý do"}
+                  </div>
+                  <div className="text-muted-foreground">
+                    <span className="font-semibold">Người yêu cầu:</span>{" "}
+                    {getOutstandingRequesterName(advance)}
+                  </div>
+                  {notes.map((note) => (
+                    <div key={note} className="rounded-lg bg-muted/60 p-2 text-muted-foreground">
+                      {note}
+                    </div>
+                  ))}
                 </div>
               </div>
             );
@@ -927,15 +1351,19 @@ function MyAdvancesView() {
   const [withdrawTarget, setWithdrawTarget] = useState<AdvanceRecord | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
   const [showMobileStats, setShowMobileStats] = useState(false);
+  const userId = user?.id;
+  const bankName = user?.bank_name || "";
+  const bankAccountNumber = user?.bank_account_number || "";
+  const bankAccountName = user?.bank_account_name || "";
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     setBankForm({
-      bank_name: resolveBankName(user.bank_name || ""),
-      bank_account_number: user.bank_account_number || "",
-      bank_account_name: user.bank_account_name || "",
+      bank_name: resolveBankName(bankName),
+      bank_account_number: bankAccountNumber,
+      bank_account_name: bankAccountName,
     });
-  }, [user?.id, user?.bank_name, user?.bank_account_number, user?.bank_account_name]);
+  }, [bankAccountName, bankAccountNumber, bankName, userId]);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -953,13 +1381,15 @@ function MyAdvancesView() {
       });
       setItems(res.items as unknown as AdvanceRecord[]);
     } catch (error: unknown) {
-      toast.error((error as any)?.message || "Lỗi tải danh sách ứng");
+      toast.error(getErrorMessage(error, "Lỗi tải danh sách ứng"));
     } finally {
       setLoading(false);
     }
   }, [user?.id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   useEffect(() => {
     if (!showForm) return;
@@ -1002,7 +1432,7 @@ function MyAdvancesView() {
       setShowForm(false);
       load();
     } catch (error: unknown) {
-      toast.error((error as any)?.message || "Lỗi gửi ứng lương");
+      toast.error(getErrorMessage(error, "Lỗi gửi ứng lương"));
     } finally {
       setSending(false);
     }
@@ -1056,15 +1486,20 @@ function MyAdvancesView() {
         id="staff-own-advance-statistics"
         className={showMobileStats ? "grid grid-cols-2 gap-2" : "hidden grid-cols-2 gap-2 md:grid"}
       >
-        <StatCard label="Chờ admin duyệt" value={statValue(myStats.recruiter_approved)} icon={Clock} tone="warning" />
-        <StatCard label="Đã tiếp nhận" value={statValue(myStats.accepted)} icon={Check} tone="success" />
-        <StatCard label="Từ chối" value={statValue(myStats.rejected)} icon={X} tone="danger" />
         <StatCard
-          label="Tổng đơn"
-          value={statValue(myStats.all)}
-          icon={Wallet}
-          tone="primary"
+          label="Chờ admin duyệt"
+          value={statValue(myStats.recruiter_approved)}
+          icon={Clock}
+          tone="warning"
         />
+        <StatCard
+          label="Đã tiếp nhận"
+          value={statValue(myStats.accepted)}
+          icon={Check}
+          tone="success"
+        />
+        <StatCard label="Từ chối" value={statValue(myStats.rejected)} icon={X} tone="danger" />
+        <StatCard label="Tổng đơn" value={statValue(myStats.all)} icon={Wallet} tone="primary" />
       </div>
 
       {items.length === 0 ? (
@@ -1079,10 +1514,7 @@ function MyAdvancesView() {
           return (
             <div
               key={row.id}
-              className={cn(
-                "list-card px-3 py-2",
-                toneBorder[STATUS_META[status].tone] || "",
-              )}
+              className={cn("list-card px-3 py-2", toneBorder[STATUS_META[status].tone] || "")}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -1092,7 +1524,7 @@ function MyAdvancesView() {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  <StatusChip tone={STATUS_META[status].tone as any}>
+                  <StatusChip tone={STATUS_META[status].tone as ChipTone}>
                     {STATUS_META[status].label}
                   </StatusChip>
                   {status === "recruiter_approved" && row.requested_by === user?.id && (
@@ -1170,7 +1602,11 @@ function StaffAdvanceFormDialog({
   reason: string;
   setReason: (v: string) => void;
   bankForm: { bank_name: string; bank_account_number: string; bank_account_name: string };
-  setBankForm: (v: { bank_name: string; bank_account_number: string; bank_account_name: string }) => void;
+  setBankForm: (v: {
+    bank_name: string;
+    bank_account_number: string;
+    bank_account_name: string;
+  }) => void;
   adminList: UserRecord[];
   selectedAdmins: string[];
   setSelectedAdmins: (v: string[]) => void;
@@ -1195,7 +1631,6 @@ function StaffAdvanceFormDialog({
               className="rounded-xl"
             />
           </div>
-
           <div className="space-y-1.5">
             <Label>Lý do *</Label>
             <Textarea
@@ -1205,8 +1640,7 @@ function StaffAdvanceFormDialog({
               className="min-h-16 rounded-xl"
             />
           </div>
-// PLACEHOLDER_FORM_BANK
-
+          // PLACEHOLDER_FORM_BANK
           <div className="space-y-1.5">
             <Label>Ngân hàng</Label>
             <Input
@@ -1222,7 +1656,6 @@ function StaffAdvanceFormDialog({
               ))}
             </datalist>
           </div>
-
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label>Số tài khoản</Label>
@@ -1243,7 +1676,6 @@ function StaffAdvanceFormDialog({
               />
             </div>
           </div>
-
           <div className="space-y-1.5">
             <Label>Gửi tới admin duyệt * ({selectedAdmins.length} đã chọn)</Label>
             <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border p-2">
@@ -1272,7 +1704,6 @@ function StaffAdvanceFormDialog({
               )}
             </div>
           </div>
-
           <Button type="submit" disabled={sending} className="w-full gap-2 rounded-xl">
             <Send className="h-4 w-4" />
             {sending ? "Đang gửi…" : "Gửi yêu cầu"}
@@ -1313,7 +1744,10 @@ function AdvanceQuickDetail({
           </div>
           <div className="grid grid-cols-2 gap-1.5">
             <DetailCell label="Trạng thái" value={STATUS_META[status].label} />
-            <DetailCell label="Ngày gửi" value={new Date(detail.created).toLocaleDateString("vi-VN")} />
+            <DetailCell
+              label="Ngày gửi"
+              value={new Date(detail.created).toLocaleDateString("vi-VN")}
+            />
             <DetailCell label="Ngân hàng" value={detail.bank_name} />
             <DetailCell label="Số TK" value={detail.bank_account_number} />
           </div>
@@ -1468,7 +1902,11 @@ function WorkerAdvanceCreateDialog({
                             {worker.user.full_name || worker.user.username || "NLĐ"}
                           </div>
                           <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                            {[history?.employee_code, history?.expand?.factory?.name, worker.user.phone]
+                            {[
+                              history?.employee_code,
+                              history?.expand?.factory?.name,
+                              worker.user.phone,
+                            ]
                               .filter(Boolean)
                               .join(" · ") || "Chưa có thông tin"}
                           </div>

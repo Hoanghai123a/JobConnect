@@ -177,6 +177,7 @@ export async function syncStaffData(opts?: {
   historyFilter?: string;
   useCache?: boolean;
   includeCccdVersions?: boolean;
+  hydrateCache?: boolean;
 }): Promise<{
   histories: EmploymentHistoryRecord[];
   users: UserRecord[];
@@ -201,6 +202,20 @@ export async function syncStaffData(opts?: {
     const missingIds = userIds.filter((id) => !expandedUserIds.has(id));
     const fetched = await fetchUsersBatched(missingIds).catch(() => []);
     const users = [...expandedUsers, ...fetched];
+
+    if (opts?.hydrateCache) {
+      if (freshHistories.length) {
+        await idbPutMany(db, STORE_HISTORIES, freshHistories);
+      }
+      if (users.length) {
+        await idbPutMany(db, STORE_USERS, users);
+      }
+      const latestHistoryUpdate = getLatestUpdatedAt(freshHistories);
+      if (latestHistoryUpdate) {
+        await setLastSyncAt(db, latestHistoryUpdate);
+      }
+    }
+
     return { histories: freshHistories, users };
   }
 

@@ -18,7 +18,6 @@ import {
   Plus,
   Trash2,
   ScanLine,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -241,29 +240,44 @@ export function QuickWorkerAccountDialog({
   };
 
   const applyQrData = (entryId: string, data: CccdQrData) => {
+    const currentEntry = entriesRef.current.find((entry) => entry.id === entryId);
+    if (!currentEntry) return;
+
+    const changes: Partial<QuickWorkerForm> = {
+      cccd: data.cccd || "",
+      real_name: data.fullName || "",
+      worker_name_snapshot: data.fullName || "",
+      date_of_birth: data.dateOfBirth ? displayDateToPocketBase(data.dateOfBirth) : "",
+      gender: data.gender || "",
+      address: data.address || "",
+    };
+    const changeEntries = Object.entries(changes) as Array<[keyof QuickWorkerForm, string]>;
+    const overwriteKeys = changeEntries
+      .filter(
+        ([key, value]) =>
+          Boolean(value) && Boolean(currentEntry.form[key]) && currentEntry.form[key] !== value,
+      )
+      .map(([key]) => key);
+    const overwriteKeySet = new Set(overwriteKeys);
+    const overwriteConfirmed =
+      overwriteKeys.length === 0 ||
+      window.confirm(
+        `QR c\u00f3 d\u1eef li\u1ec7u m\u1edbi cho ${overwriteKeys
+          .map((key) => fieldLabels[key])
+          .join(", ")}. B\u1ea1n c\u00f3 mu\u1ed1n ghi \u0111\u00e8 to\u00e0n b\u1ed9 kh\u00f4ng?`,
+      );
+
     setEntries((current) =>
       current.map((entry) => {
         if (entry.id !== entryId) return entry;
-        const next = { ...entry.form };
-        const changes: Partial<QuickWorkerForm> = {
-          cccd: data.cccd || "",
-          real_name: data.fullName || "",
-          worker_name_snapshot: data.fullName || "",
-          date_of_birth: data.dateOfBirth ? displayDateToPocketBase(data.dateOfBirth) : "",
-          gender: data.gender || "",
-          address: data.address || "",
-        };
-
-        for (const [key, value] of Object.entries(changes) as Array<
-          [keyof QuickWorkerForm, string]
-        >) {
+        const nextForm = { ...entry.form };
+        for (const [key, value] of changeEntries) {
           if (!value) continue;
-          if (!next[key] || window.confirm(`Ghi đè ${fieldLabels[key]} bằng dữ liệu QR?`)) {
-            next[key] = value;
+          if (!nextForm[key] || !overwriteKeySet.has(key) || overwriteConfirmed) {
+            nextForm[key] = value;
           }
         }
-
-        return { ...entry, form: next };
+        return { ...entry, form: nextForm };
       }),
     );
     clearRecordError(entryId);
@@ -808,32 +822,36 @@ function QuickWorkerEntryFields({
         />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 desktop:grid-cols-8 desktop:gap-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 desktop:grid-cols-[1.55fr_1.1fr_1.05fr_1.35fr_0.82fr_0.95fr] desktop:grid-rows-3 desktop:items-stretch desktop:gap-2">
         <TextField
-          label="Tên thật"
+          label="Họ tên"
           value={form.real_name}
           onChange={(value) => setField("real_name", value)}
-          placeholder="Họ và tên"
+          placeholder="Họ tên"
+          desktopClassName="desktop:col-start-1 desktop:row-start-1"
         />
         <TextField
-          label="Họ tên theo nhà máy"
+          label="Tên đi làm"
           value={form.worker_name_snapshot}
           onChange={(value) => setField("worker_name_snapshot", value)}
-          placeholder="Họ tên theo nhà máy"
+          placeholder="Tên đi làm"
+          desktopClassName="desktop:col-start-2 desktop:row-start-1"
         />
         <TextField
           label="CMND/CCCD"
           value={form.cccd}
           onChange={(value) => setField("cccd", value)}
-          placeholder="CMND/CCCD"
+          placeholder="CCCD"
           inputMode="text"
+          desktopClassName="desktop:col-start-2 desktop:row-start-2"
         />
         <TextField
-          label="Số điện thoại"
+          label="SĐT"
           value={form.phone}
           onChange={(value) => setField("phone", value)}
-          placeholder="Số điện thoại"
+          placeholder="SĐT"
           inputMode="tel"
+          desktopClassName="desktop:col-start-3 desktop:row-start-1"
         />
         <TextField
           label="Ngày sinh"
@@ -841,8 +859,9 @@ function QuickWorkerEntryFields({
           value={form.date_of_birth}
           onChange={(value) => setField("date_of_birth", value)}
           placeholder="Ngày sinh"
+          desktopClassName="desktop:col-start-3 desktop:row-start-2"
         />
-        <div className="flex min-w-0 flex-col gap-1 desktop:gap-0 desktop:max-w-none">
+        <div className="flex min-w-0 flex-col gap-1 desktop:col-start-4 desktop:row-start-2 desktop:gap-0 desktop:max-w-none">
           <Label className="truncate text-xs desktop:hidden">Giới tính</Label>
           <Select value={form.gender} onValueChange={(value) => setField("gender", value)}>
             <SelectTrigger className="desktop:h-9 desktop:rounded-lg desktop:px-2.5 desktop:text-sm">
@@ -861,31 +880,34 @@ function QuickWorkerEntryFields({
           onChange={(value) => setField("bank_name", value)}
           placeholder="Ngân hàng"
           list="quick-worker-bank-list"
+          desktopClassName="desktop:col-start-4 desktop:row-start-1"
         />
         <TextField
-          label="Số tài khoản"
+          label="STK"
           value={form.bank_account_number}
           onChange={(value) => setField("bank_account_number", value.replace(/\D/g, ""))}
-          placeholder="Số tài khoản"
+          placeholder="STK"
           inputMode="numeric"
+          desktopClassName="desktop:col-start-5 desktop:row-start-1"
         />
         <TextField
-          label="Chủ tài khoản"
+          label="Chủ TK"
           value={form.bank_account_name}
           onChange={(value) => setField("bank_account_name", value)}
-          placeholder="Chủ tài khoản"
+          placeholder="Chủ TK"
+          desktopClassName="desktop:col-start-6 desktop:row-start-1"
         />
-        <div className="sm:col-span-2 desktop:col-span-1 desktop:max-w-none">
+        <div className="sm:col-span-2 desktop:col-span-1 desktop:col-start-5 desktop:row-start-2 desktop:max-w-none">
           <TextField
             label="Địa chỉ"
             value={form.address}
             onChange={(value) => setField("address", value)}
-            placeholder="Địa chỉ theo CCCD"
+            placeholder="Địa chỉ"
           />
         </div>
         <ComboboxField
           label="Người tuyển"
-          placeholder="Chọn người tuyển"
+          placeholder="Người tuyển"
           options={staffUsers.map((staff) => ({
             value: staff.id,
             label: staff.full_name || staff.username || staff.id,
@@ -893,17 +915,19 @@ function QuickWorkerEntryFields({
           }))}
           value={form.recruiter_staff}
           onChange={(value) => setField("recruiter_staff", value)}
+          desktopClassName="desktop:col-start-1 desktop:row-start-2"
         />
         <TextField
-          label="Ngày vào làm"
+          label="Ngày vào"
           type="date"
           value={form.join_date}
           onChange={(value) => setField("join_date", value)}
-          placeholder="Ngày vào làm"
+          placeholder="Ngày vào"
+          desktopClassName="desktop:col-start-1 desktop:row-start-3"
         />
         <ComboboxField
           label="Nhà chính"
-          placeholder="Chọn nhà chính"
+          placeholder="Nhà chính"
           options={mainHouses.map((house) => ({
             value: house.id,
             label: house.name,
@@ -911,10 +935,11 @@ function QuickWorkerEntryFields({
           }))}
           value={form.main_house}
           onChange={(value) => setField("main_house", value)}
+          desktopClassName="desktop:col-start-2 desktop:row-start-3"
         />
         <ComboboxField
           label="Công ty"
-          placeholder="Chọn công ty"
+          placeholder="Công ty"
           options={factories.map((factory) => ({
             value: factory.id,
             label: factory.name,
@@ -922,14 +947,16 @@ function QuickWorkerEntryFields({
           }))}
           value={form.factory}
           onChange={(value) => setField("factory", value)}
+          desktopClassName="desktop:col-start-3 desktop:row-start-3"
         />
         <TextField
-          label="Mã nhân viên"
+          label="Mã NV"
           value={form.employee_code}
           onChange={(value) => setField("employee_code", value)}
-          placeholder="Mã nhân viên"
+          placeholder="Mã NV"
+          desktopClassName="desktop:col-start-4 desktop:row-start-3"
         />
-        <div className="sm:col-span-2 lg:col-span-4 desktop:col-span-1">
+        <div className="sm:col-span-2 lg:col-span-4 desktop:col-span-1 desktop:col-start-5 desktop:row-start-3">
           <Label className="text-xs desktop:hidden">Ghi chú</Label>
           <Textarea
             rows={1}
@@ -972,6 +999,7 @@ function TextField({
   type = "text",
   inputMode,
   list,
+  desktopClassName,
 }: {
   label: string;
   value: string;
@@ -980,9 +1008,10 @@ function TextField({
   type?: string;
   inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
   list?: string;
+  desktopClassName?: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 desktop:gap-0">
+    <div className={cn("flex min-w-0 flex-col gap-1 desktop:gap-0", desktopClassName)}>
       <Label className="truncate text-xs desktop:hidden" title={label}>
         {label}
       </Label>
@@ -1033,12 +1062,34 @@ function CccdImageBox({
   onRequestLibrary: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-1 desktop:gap-0">
+    <div className="flex flex-col gap-1 desktop:h-full desktop:gap-0">
       <Label className="text-xs desktop:hidden">{label}</Label>
-      <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-muted/40">
-        <span className="pointer-events-none absolute left-2 top-2 z-10 hidden rounded bg-background/85 px-1.5 py-0.5 text-xs font-medium text-foreground shadow-sm desktop:inline">
+      <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-muted/40 desktop:aspect-auto desktop:h-full">
+        <span className="pointer-events-none absolute left-2 top-2 z-30 hidden rounded bg-background/85 px-1.5 py-0.5 text-xs font-medium text-foreground shadow-sm desktop:inline">
           {label}
         </span>
+        <button
+          type="button"
+          className="absolute inset-0 z-10 hidden cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset desktop:block"
+          aria-label={preview ? `Đổi ảnh ${label}` : `Chọn ảnh ${label}`}
+          title={preview ? `Đổi ảnh ${label}` : `Chọn ảnh ${label}`}
+          onClick={onRequestLibrary}
+          disabled={scanning}
+        />
+        {preview && (
+          <Button
+            type="button"
+            size="icon"
+            variant="secondary"
+            className="absolute right-2 top-2 z-30 hidden h-8 w-8 desktop:inline-flex"
+            onClick={onClear}
+            disabled={scanning}
+            aria-label={`Xóa ảnh ${label}`}
+            title={`Xóa ảnh ${label}`}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
         {preview ? (
           <img src={preview} alt={label} className="size-full object-cover" />
         ) : (
@@ -1052,6 +1103,7 @@ function CccdImageBox({
                 variant="secondary"
                 className="h-8 px-2 text-xs"
                 onClick={() => onRequestCamera()}
+                disabled={scanning}
               >
                 <Camera className="h-4 w-4" />
                 Chụp
@@ -1062,43 +1114,39 @@ function CccdImageBox({
                 variant="secondary"
                 className="h-8 px-2 text-xs"
                 onClick={() => onRequestLibrary()}
+                disabled={scanning}
               >
                 Thư viện
               </Button>
             </div>
           </div>
         )}
-        <Button
-          type="button"
-          size="icon"
-          variant="secondary"
-          className="absolute bottom-2 right-2 hidden h-8 w-8 desktop:inline-flex"
-          aria-label={`Tải ảnh ${label} từ thư viện`}
-          title={`Tải ảnh ${label} từ thư viện`}
-          onClick={() => onRequestLibrary()}
-        >
-          <Camera className="h-4 w-4" />
-        </Button>
         {preview && (
-          <div className="absolute inset-x-2 bottom-2 flex gap-1 desktop:right-12">
+          <div className="absolute inset-x-2 bottom-2 z-30 flex gap-1 desktop:right-2">
             <Button
               type="button"
               size="sm"
               variant="secondary"
               className="h-8 flex-1"
               onClick={onScan}
+              disabled={scanning}
+              aria-busy={scanning}
+              title={scanning ? "Đang phân tích ảnh CCCD…" : "Quét QR"}
             >
               <ScanLine className="h-4 w-4" />
-              {scanning ? "Đang quét" : "Quét QR"}
+              {scanning ? "Đang phân tích ảnh CCCD…" : "Quét QR"}
             </Button>
             <Button
               type="button"
               size="icon"
               variant="secondary"
-              className="h-8 w-8"
+              className="h-8 w-8 desktop:hidden"
               onClick={onClear}
+              disabled={scanning}
+              aria-label={`Xóa ảnh ${label}`}
+              title={`Xóa ảnh ${label}`}
             >
-              <X className="h-4 w-4" />
+              <Trash2 className="h-4 w-4" />
             </Button>
           </div>
         )}
@@ -1112,6 +1160,7 @@ function CccdImageBox({
               variant="outline"
               className="h-8 px-2 text-xs"
               onClick={() => onRequestCamera()}
+              disabled={scanning}
             >
               <Camera className="h-4 w-4" />
               Chụp lại
@@ -1122,6 +1171,7 @@ function CccdImageBox({
               variant="outline"
               className="h-8 px-2 text-xs"
               onClick={() => onRequestLibrary()}
+              disabled={scanning}
             >
               Thư viện
             </Button>
@@ -1146,25 +1196,26 @@ function CccdImageBox({
     </div>
   );
 }
-
 function ComboboxField({
   label,
   placeholder,
   options,
   value,
   onChange,
+  desktopClassName,
 }: {
   label: string;
   placeholder: string;
   options: Array<{ value: string; label: string; description?: string }>;
   value: string;
   onChange: (value: string) => void;
+  desktopClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.value === value);
 
   return (
-    <div className="flex min-w-0 flex-col gap-1 desktop:gap-0">
+    <div className={cn("flex min-w-0 flex-col gap-1 desktop:gap-0", desktopClassName)}>
       <Label className="truncate text-xs desktop:hidden" title={label}>
         {label}
       </Label>
