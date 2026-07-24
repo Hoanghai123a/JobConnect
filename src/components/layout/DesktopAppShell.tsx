@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ReloadButton } from "@/components/layout/ReloadButton";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
@@ -135,7 +136,7 @@ const adminNavigation: readonly NavigationSection[] = [
     label: "Quản trị",
     items: [
       { to: "/admin/workforce", label: "Danh sách lao động", icon: Users },
-      { to: "/staff/advances", label: "Ứng lương", icon: Banknote },
+      { to: "/advances", label: "Ứng lương", icon: Banknote },
       { to: "/staff/approvals", label: "Phê duyệt", icon: ClipboardCheck },
       { to: "/staff/salary-holds", label: "Giữ lương", icon: Landmark },
     ],
@@ -441,6 +442,7 @@ export function DesktopAppShell({ children }: { children: ReactNode }) {
               <p className="text-xs text-muted-foreground">{roleLabel(user?.role)}</p>
             </div>
             <div className="flex items-center gap-3">
+              <ReloadButton showLabel />
               <div className="text-right">
                 <p className="max-w-56 truncate text-sm font-semibold">{userName}</p>
                 <p className="text-xs text-muted-foreground">{roleLabel(user?.role)}</p>

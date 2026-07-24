@@ -66,6 +66,7 @@ type StatusSlice = {
   key: string;
   label: string;
   value: number;
+  amount: number;
   color: string;
 };
 
@@ -285,11 +286,8 @@ export function FinanceDashboard() {
       { key: "unrecoverable", label: "Không thể thu hồi", color: "oklch(0.62 0.22 25)" },
       { key: "rejected", ...statusMeta.rejected },
     ]
-      .map<StatusSlice>((item) => ({
-        key: item.key,
-        label: item.label,
-        color: item.color,
-        value: requestedRows.filter((row) => {
+      .map<StatusSlice>((item) => {
+        const matchingRows = requestedRows.filter((row) => {
           const status = statusOf(row);
           const recovery = recoveryOf(row);
           if (item.key === "recovered") return status === "accepted" && recovery === "recovered";
@@ -298,8 +296,16 @@ export function FinanceDashboard() {
           if (item.key === "accepted")
             return status === "accepted" && (recovery === "" || recovery === "none");
           return status === item.key;
-        }).length,
-      }))
+        });
+
+        return {
+          key: item.key,
+          label: item.label,
+          color: item.color,
+          value: matchingRows.length,
+          amount: matchingRows.reduce((sum, row) => sum + amountOf(row), 0),
+        };
+      })
       .filter((item) => item.value > 0);
 
     return {
@@ -446,10 +452,17 @@ export function FinanceDashboard() {
                       <ChartTooltip
                         content={
                           <ChartTooltipContent
-                            formatter={(value) => (
-                              <span className="font-medium tabular-nums">
-                                {money(Number(value))}
-                              </span>
+                            formatter={(value, name) => (
+                              <div className="flex min-w-0 items-center justify-between gap-3">
+                                <span className="text-muted-foreground">
+                                  {financeChartConfig[name as keyof typeof financeChartConfig]
+                                    ?.label || name}
+                                  :
+                                </span>
+                                <span className="font-medium tabular-nums">
+                                  {money(Number(value))}
+                                </span>
+                              </div>
                             )}
                           />
                         }
@@ -499,7 +512,21 @@ export function FinanceDashboard() {
                               <Cell key={slice.key} fill={slice.color} />
                             ))}
                           </Pie>
-                          <ChartTooltip content={<ChartTooltipContent nameKey="label" />} />
+                          <ChartTooltip
+                            content={
+                              <ChartTooltipContent
+                                nameKey="label"
+                                formatter={(_value, name, item) => (
+                                  <div className="flex min-w-0 items-center justify-between gap-3">
+                                    <span className="text-muted-foreground">{name}:</span>
+                                    <span className="font-medium tabular-nums">
+                                      {money(Number((item?.payload as StatusSlice)?.amount ?? 0))}
+                                    </span>
+                                  </div>
+                                )}
+                              />
+                            }
+                          />
                         </PieChart>
                       </ChartContainer>
                       <div className="space-y-2">
@@ -530,7 +557,7 @@ export function FinanceDashboard() {
                     </p>
                   </div>
                   <Link
-                    to="/staff/advances"
+                    to="/advances"
                     className="inline-flex items-center gap-1 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
                   >
                     Xử lý báo ứng
