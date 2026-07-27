@@ -3,6 +3,13 @@ import { Bar, CartesianGrid, Cell, ComposedChart, LabelList, Line, XAxis, YAxis 
 import { Building2, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
@@ -38,6 +45,7 @@ const chartConfig = {
 
 export function RecruitmentChart({ histories, users, factories }: RecruitmentChartProps) {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [selectedFactoryId, setSelectedFactoryId] = useState<string | null>(null);
 
   const dailyData = useMemo(() => {
     const days: DailyRecruitment[] = [];
@@ -104,6 +112,15 @@ export function RecruitmentChart({ histories, users, factories }: RecruitmentCha
       .sort((a, b) => b.total - a.total);
   }, [factoryById, histories, selectedDay, userById]);
 
+  const selectedFactory = useMemo(
+    () => breakdown.find((group) => group.factoryId === selectedFactoryId) || null,
+    [breakdown, selectedFactoryId],
+  );
+
+  const selectedDayLabel = selectedDay
+    ? new Date(`${selectedDay}T00:00:00`).toLocaleDateString("vi-VN")
+    : "";
+
   return (
     <div className="space-y-4">
       <ChartContainer config={chartConfig} className="h-[240px] w-full">
@@ -124,7 +141,10 @@ export function RecruitmentChart({ histories, users, factories }: RecruitmentCha
             dataKey="joined"
             radius={[4, 4, 0, 0]}
             cursor="pointer"
-            onClick={(_: unknown, index: number) => setSelectedDay(dailyData[index]?.date || null)}
+            onClick={(_: unknown, index: number) => {
+              setSelectedDay(dailyData[index]?.date || null);
+              setSelectedFactoryId(null);
+            }}
           >
             <LabelList
               dataKey="joined"
@@ -175,67 +195,259 @@ export function RecruitmentChart({ histories, users, factories }: RecruitmentCha
             <p className="text-xs text-muted-foreground">Không có dữ liệu tuyển mới ngày này.</p>
           )}
 
-          {breakdown.map((group) => {
-            const internal = group.recruiters.filter((item) => !item.isVendor);
-            const vendors = group.recruiters.filter((item) => item.isVendor);
-            const internalTotal = internal.reduce((sum, item) => sum + item.count, 0);
-            const vendorTotal = vendors.reduce((sum, item) => sum + item.count, 0);
-            const internalPct = group.total ? Math.round((internalTotal / group.total) * 100) : 0;
-            const vendorPct = group.total ? Math.round((vendorTotal / group.total) * 100) : 0;
+          <div className="space-y-3 desktop:hidden">
+            {breakdown.map((group) => {
+              const internal = group.recruiters.filter((item) => !item.isVendor);
+              const vendors = group.recruiters.filter((item) => item.isVendor);
+              const internalTotal = internal.reduce((sum, item) => sum + item.count, 0);
+              const vendorTotal = vendors.reduce((sum, item) => sum + item.count, 0);
+              const internalPct = group.total ? Math.round((internalTotal / group.total) * 100) : 0;
+              const vendorPct = group.total ? Math.round((vendorTotal / group.total) * 100) : 0;
 
-            return (
-              <div key={group.factoryId} className="space-y-2 rounded-xl border bg-card p-3">
-                <div className="flex items-center gap-1.5 text-xs font-medium">
-                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>{group.factoryName}</span>
-                  <span className="text-muted-foreground">— {group.total}</span>
+              return (
+                <div key={group.factoryId} className="space-y-2 rounded-xl border bg-card p-3">
+                  <div className="flex items-center gap-1.5 text-xs font-medium">
+                    <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>{group.factoryName}</span>
+                    <span className="text-muted-foreground">— {group.total}</span>
+                  </div>
+
+                  {internal.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 pl-5 text-[11px] font-semibold text-muted-foreground">
+                        <span>Nội bộ</span>
+                        <span className="ml-auto tabular-nums">
+                          {internalTotal} ({internalPct}%)
+                        </span>
+                      </div>
+                      <div className="space-y-0.5 pl-5">
+                        {internal.map((item) => (
+                          <div key={item.id} className="flex items-center gap-1.5 text-xs">
+                            <span className="text-foreground">{item.name}</span>
+                            <span className="ml-auto font-medium tabular-nums">{item.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {vendors.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 pl-5 text-[11px] font-semibold text-purple-600">
+                        <span>Đối tác</span>
+                        <span className="ml-auto tabular-nums">
+                          {vendorTotal} ({vendorPct}%)
+                        </span>
+                      </div>
+                      <div className="space-y-0.5 pl-5">
+                        {vendors.map((item) => (
+                          <div key={item.id} className="flex items-center gap-1.5 text-xs">
+                            <span className="text-foreground">{item.name}</span>
+                            <span className="rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-medium leading-none text-white">
+                              Đối tác
+                            </span>
+                            <span className="ml-auto font-medium tabular-nums">{item.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
+              );
+            })}
+          </div>
 
-                {internal.length > 0 && (
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5 pl-5 text-[11px] font-semibold text-muted-foreground">
-                      <span>Nội bộ</span>
-                      <span className="ml-auto tabular-nums">
-                        {internalTotal} ({internalPct}%)
-                      </span>
-                    </div>
-                    <div className="space-y-0.5 pl-5">
-                      {internal.map((item) => (
-                        <div key={item.id} className="flex items-center gap-1.5 text-xs">
-                          <span className="text-foreground">{item.name}</span>
-                          <span className="ml-auto font-medium tabular-nums">{item.count}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+          <div className="hidden gap-3 overflow-x-auto pb-2 desktop:flex">
+            {breakdown.map((group) => {
+              const internal = group.recruiters.filter((item) => !item.isVendor);
+              const vendors = group.recruiters.filter((item) => item.isVendor);
+              const internalTotal = internal.reduce((sum, item) => sum + item.count, 0);
+              const vendorTotal = vendors.reduce((sum, item) => sum + item.count, 0);
+              const internalPct = group.total ? Math.round((internalTotal / group.total) * 100) : 0;
+              const vendorPct = group.total ? Math.round((vendorTotal / group.total) * 100) : 0;
 
-                {vendors.length > 0 && (
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5 pl-5 text-[11px] font-semibold text-purple-600">
-                      <span>Đối tác</span>
-                      <span className="ml-auto tabular-nums">
-                        {vendorTotal} ({vendorPct}%)
-                      </span>
-                    </div>
-                    <div className="space-y-0.5 pl-5">
-                      {vendors.map((item) => (
-                        <div key={item.id} className="flex items-center gap-1.5 text-xs">
-                          <span className="text-foreground">{item.name}</span>
-                          <span className="rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-medium leading-none text-white">
-                            Đối tác
-                          </span>
-                          <span className="ml-auto font-medium tabular-nums">{item.count}</span>
-                        </div>
-                      ))}
-                    </div>
+              return (
+                <button
+                  key={group.factoryId}
+                  type="button"
+                  onClick={() => setSelectedFactoryId(group.factoryId)}
+                  className="w-80 shrink-0 space-y-2 rounded-xl border bg-card p-3 text-left transition hover:border-primary/40 hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                >
+                  <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
+                    <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate" title={group.factoryName}>
+                      {group.factoryName}
+                    </span>
+                    <span className="shrink-0 text-muted-foreground">— {group.total}</span>
                   </div>
-                )}
-              </div>
-            );
-          })}
+
+                  {internal.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 pl-5 text-[11px] font-semibold text-muted-foreground">
+                        <span>Nội bộ</span>
+                        <span className="ml-auto tabular-nums">
+                          {internalTotal} ({internalPct}%)
+                        </span>
+                      </div>
+                      <div className="space-y-0.5 pl-5">
+                        {internal.slice(0, 5).map((item) => (
+                          <div key={item.id} className="flex min-w-0 items-center gap-1.5 text-xs">
+                            <span
+                              className="min-w-0 flex-1 truncate text-foreground"
+                              title={item.name}
+                            >
+                              {item.name}
+                            </span>
+                            <span className="shrink-0 font-medium tabular-nums">{item.count}</span>
+                          </div>
+                        ))}
+                        {internal.length > 5 && (
+                          <div className="text-[11px] font-medium text-muted-foreground">
+                            … và {internal.length - 5} người khác
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {vendors.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 pl-5 text-[11px] font-semibold text-purple-600">
+                        <span>Đối tác</span>
+                        <span className="ml-auto tabular-nums">
+                          {vendorTotal} ({vendorPct}%)
+                        </span>
+                      </div>
+                      <div className="space-y-0.5 pl-5">
+                        {vendors.slice(0, 5).map((item) => (
+                          <div key={item.id} className="flex min-w-0 items-center gap-1.5 text-xs">
+                            <span
+                              className="min-w-0 flex-1 truncate text-foreground"
+                              title={item.name}
+                            >
+                              {item.name}
+                            </span>
+                            <span className="shrink-0 rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-medium leading-none text-white">
+                              Đối tác
+                            </span>
+                            <span className="shrink-0 font-medium tabular-nums">{item.count}</span>
+                          </div>
+                        ))}
+                        {vendors.length > 5 && (
+                          <div className="text-[11px] font-medium text-purple-600">
+                            … và {vendors.length - 5} người khác
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="border-t pt-2 text-[11px] font-medium text-primary">
+                    Bấm để xem toàn bộ
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
+
+      <Dialog
+        open={Boolean(selectedFactory)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedFactoryId(null);
+        }}
+      >
+        <DialogContent className="hidden max-h-[82dvh] overflow-hidden p-0 desktop:grid desktop:max-w-2xl">
+          {selectedFactory &&
+            (() => {
+              const internal = selectedFactory.recruiters.filter((item) => !item.isVendor);
+              const vendors = selectedFactory.recruiters.filter((item) => item.isVendor);
+              const internalTotal = internal.reduce((sum, item) => sum + item.count, 0);
+              const vendorTotal = vendors.reduce((sum, item) => sum + item.count, 0);
+
+              return (
+                <>
+                  <DialogHeader className="border-b px-5 pb-4 pt-5 pr-14">
+                    <DialogTitle className="flex min-w-0 items-center gap-2">
+                      <Building2 className="h-5 w-5 shrink-0 text-primary" />
+                      <span className="min-w-0 truncate" title={selectedFactory.factoryName}>
+                        {selectedFactory.factoryName}
+                      </span>
+                    </DialogTitle>
+                    <DialogDescription>
+                      Chi tiết tuyển mới ngày {selectedDayLabel} · Tổng {selectedFactory.total} lao
+                      động
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="grid max-h-[65dvh] gap-4 overflow-y-auto px-5 pb-5 desktop:grid-cols-2">
+                    <section className="space-y-2 rounded-xl border bg-muted/20 p-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <span>Nội bộ</span>
+                        <span className="ml-auto tabular-nums text-muted-foreground">
+                          {internalTotal}
+                        </span>
+                      </div>
+                      {internal.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {internal.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex min-w-0 items-center gap-2 rounded-lg bg-background px-3 py-2 text-sm"
+                            >
+                              <span className="min-w-0 flex-1 break-words font-medium">
+                                {item.name}
+                              </span>
+                              <span className="shrink-0 font-semibold tabular-nums">
+                                {item.count}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Không có người tuyển nội bộ.
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="space-y-2 rounded-xl border border-purple-200 bg-purple-50/40 p-3 dark:border-purple-900 dark:bg-purple-950/20">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-purple-700 dark:text-purple-300">
+                        <span>Đối tác</span>
+                        <span className="ml-auto tabular-nums">{vendorTotal}</span>
+                      </div>
+                      {vendors.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {vendors.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex min-w-0 items-center gap-2 rounded-lg bg-background px-3 py-2 text-sm"
+                            >
+                              <span className="min-w-0 flex-1 break-words font-medium">
+                                {item.name}
+                              </span>
+                              <span className="shrink-0 rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-medium leading-none text-white">
+                                Đối tác
+                              </span>
+                              <span className="shrink-0 font-semibold tabular-nums">
+                                {item.count}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Không có đối tác tuyển dụng.
+                        </p>
+                      )}
+                    </section>
+                  </div>
+                </>
+              );
+            })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
