@@ -1077,7 +1077,7 @@ export function AdvancesPage() {
         searchClassName="hidden desktop:flex"
         search={search}
         onSearchChange={setSearch}
-        placeholder="T?m theo t?n, m? NV, s? ti?n?"
+        placeholder="Tìm theo tên, mã NV, số tiền?"
         chips={[
           { key: "pending", label: `Chờ duyệt (${stats.recruiter_approved.count})` },
           { key: "accepted", label: `Đã tiếp nhận (${stats.accepted.count})` },
