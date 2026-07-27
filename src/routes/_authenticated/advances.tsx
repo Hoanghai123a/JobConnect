@@ -507,8 +507,8 @@ export function AdvancesPage() {
         return false;
       }
       const recruiterId = employment.recruiter_staff || "";
-      const factoryName = employment.expand?.factory?.name || selectedAdvanceUser.company || "";
-      const employeeCode = employment.employee_code || selectedAdvanceUser.employee_code || "";
+      const factoryName = employment.expand?.factory?.name || "";
+      const employeeCode = employment.employee_code || "";
       const joinDate = employment.join_date || "";
       await pb.collection("advances").create({
         user: selectedAdvanceUser.id,
@@ -766,7 +766,7 @@ export function AdvancesPage() {
       "Ngày giải ngân": formatDateOnly(row.disbursed_at),
       "Ngày thu hồi": formatDateOnly(row.recovered_at),
     }));
-    exportToExcel(`ung_luong_${Date.now()}`, { "Ứng lương": rows });
+    exportToExcel(`ung_luong_${Date.now()}`, { "Ứng lương": rows }, { "Ứng lương": ["Ngày vào làm", "Ngày gửi", "Ngày duyệt", "Ngày giải ngân", "Ngày thu hồi"] });
   };
 
   if (!isAdmin && !isStaff) {
@@ -1838,7 +1838,7 @@ function getAdvanceRequesterMeta(row: AdvanceRecord) {
   const requester = row.expand?.requested_by;
   if (requester) {
     return (
-      [requester.employee_code, requester.company, requester.phone].filter(Boolean).join(" - ") ||
+      [requester.phone].filter(Boolean).join(" - ") ||
       "-"
     );
   }
@@ -1848,14 +1848,9 @@ function getAdvanceRequesterMeta(row: AdvanceRecord) {
   return row.requested_by || "-";
 }
 
-function getAdvanceRequesterField(
-  row: AdvanceRecord,
-  field: "employee_code" | "company" | "phone",
-) {
-  const requester = row.expand?.requested_by;
-  if (requester?.[field]) return String(requester[field]);
+function getAdvanceRequesterField(row: AdvanceRecord, field: "employee_code" | "company" | "phone") {
   if (row.requested_by && row.user && row.requested_by === row.user) return row[field] || "";
-  return "";
+  return field === "phone" ? row.expand?.requested_by?.phone || "" : "";
 }
 
 function AdvanceRulesCard({ rules }: { rules?: string }) {
@@ -1908,6 +1903,21 @@ function ReadOnlyField({ label, value }: { label: string; value?: string | null 
 
 function UserProfileCollapsible({ user }: { user: UserRecord | null }) {
   const [open, setOpen] = useState(false);
+  const [employment, setEmployment] = useState<Awaited<ReturnType<typeof findActiveEmploymentByUser>>>(null);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setEmployment(null);
+      return;
+    }
+    let active = true;
+    findActiveEmploymentByUser(user.id)
+      .then((history) => active && setEmployment(history))
+      .catch(() => active && setEmployment(null));
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
   return (
     <div className="rounded-xl border bg-muted/30">
       <button
@@ -1920,9 +1930,11 @@ function UserProfileCollapsible({ user }: { user: UserRecord | null }) {
       </button>
       {open && (
         <div className="space-y-2 border-t px-3 pb-3 pt-2">
-          <ReadOnlyField label="Mã NV" value={user?.employee_code} />
           <ReadOnlyField label="Họ và tên" value={user?.full_name} />
-          <ReadOnlyField label="Nhà máy đang làm" value={user?.company} />
+          <ReadOnlyField
+            label="Nhà máy đang làm"
+            value={employment?.expand?.factory?.name || "Chưa có lịch sử đi làm"}
+          />
           <ReadOnlyField label="Số điện thoại liên hệ" value={user?.phone} />
         </div>
       )}

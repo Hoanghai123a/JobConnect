@@ -60,7 +60,6 @@ import {
   findActiveEmploymentByUser,
   getLatestEmploymentHistory,
   maskCccd,
-  syncLegacyUserWorkFields,
   updateEmploymentHistory,
   updateUserAndCache,
   type EmploymentHistoryRecord,
@@ -244,7 +243,7 @@ function StaffWorkerDetailPage() {
         setAdvances(advanceRows as AdvanceItem[]);
         setJoinForm((prev) => ({
           ...prev,
-          employee_code: latest?.employee_code || userRecord?.employee_code || "",
+          employee_code: latest?.employee_code || "",
           worker_name_snapshot: latest?.worker_name_snapshot || userRecord?.full_name || "",
           worker_cccd_snapshot: latest?.worker_cccd_snapshot || userRecord?.cccd || "",
           worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
@@ -330,7 +329,6 @@ function StaffWorkerDetailPage() {
     setAllWorkerHistories(nextRows);
     setHistories(nextVisibleRows);
     const nextLatest = getLatestEmploymentHistory(nextRows);
-    await syncLegacyUserWorkFields(workerId, nextLatest);
   };
 
   const exportHistory = async () => {
@@ -356,7 +354,9 @@ function StaffWorkerDetailPage() {
         "Trạng thái": history.status === "working" ? "Đang làm" : "Đã nghỉ",
         "Ghi chú": history.note || "",
       })),
-    });
+    },
+    { "Lịch sử đi làm": ["Ngày vào", "Ngày nghỉ"] }
+    );
 
     toast.success("Đã xuất Excel");
   };
@@ -402,9 +402,9 @@ function StaffWorkerDetailPage() {
       user: workerUser.id,
       requested_by: viewer.id,
       recruiter_id: viewer.id,
-      employee_code: latestHistory.employee_code || workerUser.employee_code || "",
+      employee_code: latestHistory.employee_code || "",
       full_name: latestHistory.worker_name_snapshot || workerUser.full_name || "",
-      company: latestHistory.expand?.factory?.name || workerUser.company || "",
+      company: latestHistory.expand?.factory?.name || "",
       phone: workerUser.phone || "",
       bank_name: workerUser.bank_name || "",
       bank_account_number: workerUser.bank_account_number || "",
@@ -547,7 +547,6 @@ function StaffWorkerDetailPage() {
       note: joinForm.note.trim(),
     });
 
-    await syncLegacyUserWorkFields(workerUser.id, created);
     await reloadHistories();
     await createStaffActionLog({
       actor: viewer,
@@ -621,7 +620,7 @@ function StaffWorkerDetailPage() {
     setOldHistoryForm({
       factory: "",
       main_house: latest?.main_house || "",
-      employee_code: latest?.employee_code || workerUser.employee_code || "",
+      employee_code: latest?.employee_code || "",
       worker_name_snapshot:
         latest?.worker_name_snapshot || workerUser.full_name || workerUser.username || "",
       worker_cccd_snapshot: latest?.worker_cccd_snapshot || workerUser.cccd || "",

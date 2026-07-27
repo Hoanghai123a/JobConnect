@@ -1,6 +1,7 @@
 ﻿import { useMemo, useState } from "react";
 import { Bar, CartesianGrid, Cell, ComposedChart, LabelList, Line, XAxis, YAxis } from "recharts";
-import { Building2 } from "lucide-react";
+import { Building2, EyeOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   ChartContainer,
   ChartTooltip,
@@ -153,10 +154,22 @@ export function RecruitmentChart({ histories, users, factories }: RecruitmentCha
 
       {selectedDay && (
         <div className="space-y-3">
-          <p className="text-xs font-medium text-muted-foreground">
-            Chi tiết tuyển mới ngày{" "}
-            {new Date(`${selectedDay}T00:00:00`).toLocaleDateString("vi-VN")}
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Chi tiết tuyển mới ngày{" "}
+              {new Date(`${selectedDay}T00:00:00`).toLocaleDateString("vi-VN")}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="hidden desktop:inline-flex"
+              onClick={() => setSelectedDay(null)}
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+              Ẩn chi tiết
+            </Button>
+          </div>
 
           {breakdown.length === 0 && (
             <p className="text-xs text-muted-foreground">Không có dữ liệu tuyển mới ngày này.</p>

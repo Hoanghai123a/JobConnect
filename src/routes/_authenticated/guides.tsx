@@ -30,6 +30,11 @@ import {
 } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+import {
+  fetchEmploymentHistories,
+  findActiveEmploymentByUser,
+  getCurrentEmploymentHistory,
+} from "@/lib/employment";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import {
@@ -200,6 +205,7 @@ function GuidesPage() {
   const [items, setItems] = useState<Guide[]>([]);
   const [factories, setFactories] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [currentFactoryName, setCurrentFactoryName] = useState("");
   const [editing, setEditing] = useState<Guide | null>(null);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -224,9 +230,26 @@ function GuidesPage() {
       /* optional */
     }
     try {
-      const u = await pb.collection("users").getFullList({ sort: "-created" });
+      const [u, histories] = await Promise.all([
+        pb.collection("users").getFullList({ sort: "-created" }),
+        fetchEmploymentHistories(),
+      ]);
+      const historiesByUser = new Map<string, typeof histories>();
+      for (const history of histories) {
+        const list = historiesByUser.get(history.user) || [];
+        list.push(history);
+        historiesByUser.set(history.user, list);
+      }
       const workerUsers = (u as any[])
         .filter((item) => item.role !== "admin")
+        .map((item) => {
+          const employment = getCurrentEmploymentHistory(historiesByUser.get(item.id) || []);
+          return {
+            ...item,
+            employeeCode: employment?.employee_code || "",
+            factoryName: employment?.expand?.factory?.name || "",
+          };
+        })
         .sort((a, b) =>
           String(a.full_name || a.username || a.phone || "").localeCompare(
             String(b.full_name || b.username || b.phone || ""),
@@ -243,6 +266,24 @@ function GuidesPage() {
     load();
     loadAdminRefs(); /* eslint-disable-next-line */
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setCurrentFactoryName("");
+      return;
+    }
+    let active = true;
+    findActiveEmploymentByUser(user.id)
+      .then((history) => {
+        if (active) setCurrentFactoryName(history?.expand?.factory?.name || "");
+      })
+      .catch(() => {
+        if (active) setCurrentFactoryName("");
+      });
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   const [desktopGuideOpen, setDesktopGuideOpen] = useState(false);
 
@@ -321,7 +362,7 @@ function GuidesPage() {
       if (t === "factories") {
         const list = g.target_factories || [];
         if (!list.length) return false;
-        return list.some((f) => f === user?.company || f === (user as any)?.factory);
+        return list.includes(currentFactoryName);
       }
       if (t === "users") {
         const list = g.target_users || [];
@@ -329,7 +370,7 @@ function GuidesPage() {
       }
       return false;
     });
-  }, [items, isAdmin, user]);
+  }, [items, isAdmin, user?.id, currentFactoryName]);
 
   const filtered = useMemo(
     () =>
@@ -634,7 +675,7 @@ function GuidesPage() {
                         options={users.map((u) => ({
                           value: u.id,
                           label: u.full_name || u.username || u.phone || "Chưa có tên",
-                          description: `${u.company || "chưa có nhà máy"}${u.employee_code ? ` · ${u.employee_code}` : ""}`,
+                          description: `${u.factoryName || "chưa có lịch sử đi làm"}${u.employeeCode ? ` · ${u.employeeCode}` : ""}`,
                         }))}
                         selected={editing.target_users || []}
                         onChange={(values) => setEditing({ ...editing, target_users: values })}

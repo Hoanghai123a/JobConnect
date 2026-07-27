@@ -1025,8 +1025,12 @@ function RoomChatView({
                           <span className="font-medium text-foreground">
                             {author?.full_name || author?.username || "Ẩn danh"}
                           </span>
-                          <span>·</span>
-                          <span>{author?.role === "admin" ? "Admin" : author?.company || "—"}</span>
+                          {author?.role === "admin" && (
+                            <>
+                              <span>·</span>
+                              <span>Admin</span>
+                            </>
+                          )}
                           {author?.chat_blocked && (
                             <StatusChip tone="danger" className="h-5 px-2 text-[10px]">
                               Đã chặn

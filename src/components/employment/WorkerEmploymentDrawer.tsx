@@ -7,6 +7,7 @@ import {
   ChevronUp,
   Clock3,
   Hash,
+  IdCard,
   Landmark,
   Plus,
   Wallet,
@@ -45,7 +46,6 @@ import {
   getLatestEmploymentHistory,
   isCurrentlyWorking,
   maskCccd,
-  syncLegacyUserWorkFields,
   updateEmploymentHistory,
   updateUserAndCache,
   type EmploymentHistoryRecord,
@@ -106,28 +106,67 @@ function getPocketBaseFieldErrors(error: unknown) {
     .join("; ");
 }
 
+type ActionButtonTone = "primary" | "success" | "warning" | "danger" | "info";
+
+const actionButtonToneClasses: Record<ActionButtonTone, { button: string; icon: string }> = {
+  primary: {
+    button: "border-primary/25 bg-primary/5 hover:bg-primary/10",
+    icon: "bg-primary/15 text-primary",
+  },
+  success: {
+    button: "border-success/25 bg-success/5 hover:bg-success/10",
+    icon: "bg-success/15 text-success",
+  },
+  warning: {
+    button: "border-warning/25 bg-warning/5 hover:bg-warning/10",
+    icon: "bg-warning/15 text-warning",
+  },
+  danger: {
+    button: "border-destructive/25 bg-destructive/5 hover:bg-destructive/10",
+    icon: "bg-destructive/15 text-destructive",
+  },
+  info: {
+    button: "border-border/70 bg-card hover:bg-muted/60",
+    icon: "bg-primary/10 text-primary",
+  },
+};
+
 function ActionButton({
   icon: Icon,
   label,
+  tone = "info",
   onClick,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
+  tone?: ActionButtonTone;
   onClick: () => void;
 }) {
+  const colors = actionButtonToneClasses[tone];
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-border/60 bg-card px-2 py-2 text-center shadow-soft active:scale-[0.98]"
+      className={`flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border px-2 py-2 text-center shadow-soft transition-colors active:scale-[0.98] desktop:min-h-9 desktop:w-full desktop:flex-row desktop:justify-start desktop:gap-1.5 desktop:rounded-lg desktop:px-2.5 desktop:py-1.5 desktop:text-left ${colors.button}`}
     >
-      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        <Icon className="h-4 w-4" />
+      <div
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg desktop:h-6 desktop:w-6 desktop:rounded-md ${colors.icon}`}
+      >
+        <Icon className="h-4 w-4 desktop:h-3.5 desktop:w-3.5" />
       </div>
-      <div className="break-words text-[11px] font-medium leading-tight [overflow-wrap:anywhere]">
+      <div className="break-words text-[11px] font-medium leading-tight [overflow-wrap:anywhere] desktop:overflow-hidden desktop:text-ellipsis desktop:whitespace-nowrap desktop:text-xs">
         {label}
       </div>
     </button>
+  );
+}
+
+function CompactInfoCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div title={value || "—"} className="min-w-0 px-1 py-0.5">
+      <div className="text-[10px] font-medium text-muted-foreground">{label}</div>
+      <div className="mt-0.5 truncate text-xs font-semibold text-foreground">{value || "—"}</div>
+    </div>
   );
 }
 
@@ -191,6 +230,7 @@ export function WorkerEmploymentDrawer({
   const [form, setForm] = useState({
     factory: "",
     address: "",
+    phone: "",
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
@@ -216,6 +256,7 @@ export function WorkerEmploymentDrawer({
   const [saving, setSaving] = useState(false);
   const [submittingAdvance, setSubmittingAdvance] = useState(false);
   const [bankEditing, setBankEditing] = useState(false);
+  const [cccdViewerOpen, setCccdViewerOpen] = useState(false);
   useEffect(() => {
     if (!advanceOpen || !user?.id) return;
 
@@ -280,6 +321,7 @@ export function WorkerEmploymentDrawer({
       setLeaveNote("");
       setJoinOpen(false);
       setEmployeeCodeOpen(false);
+      setCccdViewerOpen(false);
       const latest = getLatestEmploymentHistory(histories);
       setJoinForm({
         factory: "",
@@ -292,16 +334,21 @@ export function WorkerEmploymentDrawer({
         join_date: todayIso(),
         note: "",
       });
-      setEmployeeCodeForm(latest?.employee_code || user.employee_code || "");
+      setEmployeeCodeForm(latest?.employee_code || "");
     }
   }, [user?.id]);
 
+  const latestHistory = useMemo(() => getLatestEmploymentHistory(histories), [histories]);
+  const canEditHistoryRecord = (history: EmploymentHistoryRecord) =>
+    permissions.canEditHistory && (actor?.role === "admin" || history.id === latestHistory?.id);
+
   const startEdit = (h: EmploymentHistoryRecord) => {
-    if (!permissions.canEditHistory) return;
+    if (!canEditHistoryRecord(h)) return;
     setEditingId(h.id);
     setForm({
       factory: h.factory || "",
       address: user?.address || h.expand?.user?.address || "",
+      phone: user?.phone || h.expand?.user?.phone || "",
       employee_code: h.employee_code || "",
       worker_name_snapshot: h.worker_name_snapshot || "",
       worker_cccd_snapshot: h.worker_cccd_snapshot || "",
@@ -333,7 +380,6 @@ export function WorkerEmploymentDrawer({
         note: leaveNote.trim(),
       });
       const updated = await fetchEmploymentHistories([user.id]);
-      await syncLegacyUserWorkFields(user.id, getLatestEmploymentHistory(updated));
       await createStaffActionLog({
         actor,
         targetUserId: user.id,
@@ -383,7 +429,6 @@ export function WorkerEmploymentDrawer({
         status: "working",
         note: joinForm.note.trim(),
       });
-      await syncLegacyUserWorkFields(user.id, created);
       await createStaffActionLog({
         actor,
         targetUserId: user.id,
@@ -412,11 +457,12 @@ export function WorkerEmploymentDrawer({
     }
     setEmployeeCodeSaving(true);
     try {
-      await updateUserAndCache(user.id, { employee_code: code });
       const latest = getLatestEmploymentHistory(histories);
-      if (latest) {
-        await updateEmploymentHistory(latest.id, { employee_code: code });
+      if (!latest) {
+        toast.error("Người lao động chưa có lịch sử đi làm để cập nhật mã NV");
+        return;
       }
+      await updateEmploymentHistory(latest.id, { employee_code: code });
       await createStaffActionLog({
         actor,
         targetUserId: user.id,
@@ -441,7 +487,7 @@ export function WorkerEmploymentDrawer({
     setOldHistoryForm({
       factory: "",
       main_house: latest?.main_house || "",
-      employee_code: latest?.employee_code || user.employee_code || "",
+      employee_code: latest?.employee_code || "",
       worker_name_snapshot: latest?.worker_name_snapshot || user.full_name || user.username || "",
       worker_cccd_snapshot: latest?.worker_cccd_snapshot || user.cccd || "",
       worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
@@ -503,7 +549,6 @@ export function WorkerEmploymentDrawer({
       });
 
       const updatedRows = await fetchEmploymentHistories([user.id]);
-      await syncLegacyUserWorkFields(user.id, getLatestEmploymentHistory(updatedRows));
       await createStaffActionLog({
         actor,
         targetUserId: user.id,
@@ -532,6 +577,18 @@ export function WorkerEmploymentDrawer({
     }
     setSaving(true);
     try {
+      if (actor?.role === "staff") {
+        if (!user?.id) return;
+        const latestHistories = await fetchEmploymentHistories([user.id]);
+        const latest = getLatestEmploymentHistory(latestHistories);
+        if (latest?.id !== editingId) {
+          toast.error("Staff chỉ được sửa lịch sử đi làm gần nhất");
+          setEditingId(null);
+          await onDataChanged();
+          return;
+        }
+      }
+
       const before = histories.find((item) => item.id === editingId) || null;
       const updated = await updateEmploymentHistory(editingId, {
         factory: form.factory,
@@ -547,10 +604,12 @@ export function WorkerEmploymentDrawer({
         note: form.note.trim(),
       });
       if (user) {
-        await updateUserAndCache(user.id, { address: form.address.trim() });
+        await updateUserAndCache(user.id, {
+          address: form.address.trim(),
+          phone: form.phone.trim(),
+        });
         const updatedHistories = await fetchEmploymentHistories([user.id]);
         const latest = getLatestEmploymentHistory(updatedHistories);
-        await syncLegacyUserWorkFields(user.id, latest);
       }
       await createStaffActionLog({
         actor,
@@ -629,9 +688,9 @@ export function WorkerEmploymentDrawer({
         user: user.id,
         requested_by: actor.id,
         recruiter_id: activeHistory.recruiter_staff || "",
-        employee_code: activeHistory.employee_code || user.employee_code || "",
+        employee_code: activeHistory.employee_code || "",
         full_name: activeHistory.worker_name_snapshot || user.full_name || "",
-        company: activeHistory.expand?.factory?.name || user.company || "",
+        company: activeHistory.expand?.factory?.name || "",
         phone: user.phone || "",
         join_date: activeHistory.join_date || "",
         bank_name: bankSource.bank_name || "",
@@ -735,14 +794,14 @@ export function WorkerEmploymentDrawer({
 
   const openEmployeeCodeDialog = () => {
     const latest = getLatestEmploymentHistory(histories);
-    setEmployeeCodeForm(latest?.employee_code || user.employee_code || "");
+    setEmployeeCodeForm(latest?.employee_code || "");
     setEmployeeCodeOpen(true);
   };
 
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-        <DialogContent className="flex max-h-[90dvh] min-w-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+        <DialogContent className="flex max-h-[90dvh] min-w-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-lg desktop:max-w-7xl">
           <DialogHeader className="min-w-0 shrink-0 border-b px-5 py-4 pr-14">
             <DialogTitle className="break-words [overflow-wrap:anywhere]">
               {user.full_name || user.username || "Người lao động"}
@@ -753,150 +812,149 @@ export function WorkerEmploymentDrawer({
           </DialogHeader>
 
           <div className="min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-            {((isWorking && permissions.canReportLeave) ||
-              permissions.canReportJoin ||
-              (isWorking && permissions.canReportAdvance) ||
-              permissions.canViewPayroll ||
-              permissions.canUpdateBank ||
-              permissions.canAddOldHistory) && (
-              <div className="grid grid-cols-3 gap-2">
-                {isWorking && permissions.canReportLeave && (
-                  <ActionButton icon={Clock3} label="Báo nghỉ" onClick={openLeaveDialog} />
-                )}
-                {permissions.canReportJoin && (
-                  <ActionButton icon={Plus} label="Báo đi làm mới" onClick={openJoinDialog} />
-                )}
-                {isWorking && permissions.canReportAdvance && (
-                  <ActionButton icon={Wallet} label="Báo ứng lương" onClick={openAdvanceDialog} />
-                )}
-                {permissions.canViewPayroll && (
-                  <ActionButton
-                    icon={CalendarRange}
-                    label="Check công lương"
-                    onClick={() => {
-                      const id = user.id;
-                      onClose();
-                      setTimeout(
-                        () =>
-                          navigate({
-                            to: "/staff/workers/$workerId/payroll",
-                            params: { workerId: id },
-                          }),
-                        150,
-                      );
-                    }}
-                  />
-                )}
-                {permissions.canUpdateBank && (
-                  <ActionButton
-                    icon={Landmark}
-                    label="Cập nhật ngân hàng"
-                    onClick={() => {
-                      setInfoOpen(true);
-                      setBankEditing(true);
-                    }}
-                  />
-                )}
-                {isWorking && (permissions.canReportLeave || permissions.canReportAdvance) && (
-                  <ActionButton
-                    icon={Hash}
-                    label="Cập nhật mã NV"
-                    onClick={openEmployeeCodeDialog}
-                  />
-                )}
-                {permissions.canAddOldHistory && (
-                  <ActionButton icon={Plus} label="Bổ sung lịch sử" onClick={openOldHistory} />
-                )}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Thông tin</span>
-              <button
-                type="button"
-                onClick={() => setInfoOpen((v) => !v)}
-                className="flex items-center gap-1 rounded-full border border-border/60 bg-card px-3 py-1 text-xs font-medium text-foreground active:scale-[0.98]"
-                aria-expanded={infoOpen}
-              >
-                {infoOpen ? (
-                  <ChevronUp className="h-3.5 w-3.5" />
-                ) : (
-                  <ChevronDown className="h-3.5 w-3.5" />
-                )}
-                {infoOpen ? "Thu gọn" : "Mở rộng"}
-              </button>
-            </div>
-
-            {infoOpen && (
-              <>
-                <div className="grid min-w-0 grid-cols-2 gap-2 text-sm">
-                  {user.uid && (
-                    <div className="col-span-2 min-w-0 overflow-hidden rounded-xl bg-primary/10 p-2.5">
-                      <div className="text-[10px] text-muted-foreground">Mã tài khoản</div>
-                      <div className="mt-0.5 break-words text-sm font-semibold text-primary [overflow-wrap:anywhere]">
-                        {user.uid}
-                      </div>
-                    </div>
-                  )}
-                  <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                    <div className="text-[10px] text-muted-foreground">Họ tên tài khoản</div>
-                    <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                      {user.full_name || "—"}
-                    </div>
+            <div className="desktop:grid desktop:grid-cols-[10.5rem_minmax(0,1fr)] desktop:items-stretch desktop:gap-3">
+              {((isWorking && permissions.canReportLeave) ||
+                permissions.canReportJoin ||
+                (isWorking && permissions.canReportAdvance) ||
+                permissions.canViewPayroll ||
+                permissions.canUpdateBank ||
+                permissions.canAddOldHistory) && (
+                <div className="desktop:col-start-1 desktop:row-start-1 desktop:self-stretch desktop:rounded-xl desktop:border desktop:border-border/60 desktop:bg-card/70 desktop:p-1.5">
+                  <div className="hidden px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground desktop:block">
+                    Chức năng
                   </div>
-                  <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                    <div className="text-[10px] text-muted-foreground">CCCD tài khoản</div>
-                    <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                      {maskCccd(user.cccd)}
-                    </div>
-                  </div>
-                  <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                    <div className="text-[10px] text-muted-foreground">SĐT</div>
-                    <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                      {user.phone || "—"}
-                    </div>
-                  </div>
-                  <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                    <div className="text-[10px] text-muted-foreground">Tên đăng nhập</div>
-                    <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                      {user.username || "—"}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      <Landmark className="h-3.5 w-3.5" />
-                      Tài khoản ngân hàng
-                    </div>
-                    {permissions.canUpdateBank && !bankEditing && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs"
-                        onClick={() => setBankEditing(true)}
-                      >
-                        Sửa STK
-                      </Button>
+                  <div className="grid grid-cols-3 gap-2 desktop:grid-cols-1 desktop:gap-1.5">
+                    {isWorking && permissions.canReportLeave && (
+                      <ActionButton
+                        icon={Clock3}
+                        label="Báo nghỉ"
+                        tone="danger"
+                        onClick={openLeaveDialog}
+                      />
+                    )}
+                    {permissions.canReportJoin && (
+                      <ActionButton
+                        icon={Plus}
+                        label="Báo đi làm mới"
+                        tone="success"
+                        onClick={openJoinDialog}
+                      />
+                    )}
+                    {isWorking && permissions.canReportAdvance && (
+                      <ActionButton
+                        icon={Wallet}
+                        label="Báo ứng lương"
+                        tone="warning"
+                        onClick={openAdvanceDialog}
+                      />
+                    )}
+                    {permissions.canViewPayroll && (
+                      <ActionButton
+                        icon={CalendarRange}
+                        label="Check công lương"
+                        tone="info"
+                        onClick={() => {
+                          const id = user.id;
+                          onClose();
+                          setTimeout(
+                            () =>
+                              navigate({
+                                to: "/staff/workers/$workerId/payroll",
+                                params: { workerId: id },
+                              }),
+                            150,
+                          );
+                        }}
+                      />
+                    )}
+                    {permissions.canUpdateBank && (
+                      <ActionButton
+                        icon={Landmark}
+                        label="Cập nhật ngân hàng"
+                        tone="info"
+                        onClick={() => {
+                          setInfoOpen(true);
+                          setBankEditing(true);
+                        }}
+                      />
+                    )}
+                    {isWorking && (permissions.canReportLeave || permissions.canReportAdvance) && (
+                      <ActionButton
+                        icon={Hash}
+                        label="Cập nhật mã NV"
+                        tone="primary"
+                        onClick={openEmployeeCodeDialog}
+                      />
+                    )}
+                    {permissions.canAddOldHistory && (
+                      <ActionButton
+                        icon={Plus}
+                        label="Bổ sung lịch sử"
+                        tone="success"
+                        onClick={openOldHistory}
+                      />
                     )}
                   </div>
-                  {bankEditing ? (
+                </div>
+              )}
+
+              <div className="min-w-0 space-y-4 desktop:col-start-2 desktop:row-start-1">
+                <div className="hidden rounded-xl border border-border/60 bg-card p-3 shadow-soft desktop:block">
+                  <div className="space-y-1.5">
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <CompactInfoCell label="Mã tài khoản" value={user.uid || "—"} />
+                      <CompactInfoCell label="Tên đăng nhập" value={user.username || "—"} />
+                      <CompactInfoCell label="CCCD" value={maskCccd(user.cccd)} />
+                      <CompactInfoCell label="SĐT" value={user.phone || "—"} />
+                    </div>
+                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.15fr)_auto] gap-1.5">
+                      <CompactInfoCell label="Ngân hàng" value={user.bank_name || "—"} />
+                      <CompactInfoCell
+                        label="Số tài khoản"
+                        value={user.bank_account_number || "—"}
+                      />
+                      <CompactInfoCell
+                        label="Tên chủ tài khoản"
+                        value={user.bank_account_name || "—"}
+                      />
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setCccdViewerOpen(true)}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                        >
+                          <IdCard className="h-3.5 w-3.5" />
+                          Xem CCCD
+                        </button>
+                        {permissions.canUpdateBank && !bankEditing && (
+                          <button
+                            type="button"
+                            onClick={() => setBankEditing(true)}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-success/25 bg-success/5 px-2.5 text-xs font-medium text-success transition-colors hover:bg-success/10"
+                          >
+                            <Landmark className="h-3.5 w-3.5" />
+                            Sửa STK
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {bankEditing && (
                     <form
-                      className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3"
+                      className="mt-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-1.5 border-t border-border/60 pt-2"
                       onSubmit={(e) => {
                         e.preventDefault();
                         void saveBankInfo();
                       }}
                     >
-                      <div className="space-y-1">
-                        <Label className="text-xs">Ngân hàng</Label>
+                      <div className="min-w-0 space-y-1">
+                        <Label className="text-[10px]">Ngân hàng</Label>
                         <Select
                           value={bankForm.bank_name}
                           onValueChange={(v) => setBankForm((c) => ({ ...c, bank_name: v }))}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs">
                             <SelectValue placeholder="Chọn ngân hàng" />
                           </SelectTrigger>
                           <SelectContent className="max-h-72">
@@ -908,9 +966,10 @@ export function WorkerEmploymentDrawer({
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Số tài khoản</Label>
+                      <div className="min-w-0 space-y-1">
+                        <Label className="text-[10px]">Số tài khoản</Label>
                         <Input
+                          className="h-8 text-xs"
                           value={bankForm.bank_account_number}
                           onChange={(e) =>
                             setBankForm((c) => ({
@@ -922,9 +981,10 @@ export function WorkerEmploymentDrawer({
                           placeholder="Nhập số tài khoản"
                         />
                       </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Tên chủ tài khoản</Label>
+                      <div className="min-w-0 space-y-1">
+                        <Label className="text-[10px]">Tên chủ tài khoản</Label>
                         <Input
+                          className="h-8 text-xs"
                           value={bankForm.bank_account_name}
                           onChange={(e) =>
                             setBankForm((c) => ({ ...c, bank_account_name: e.target.value }))
@@ -932,116 +992,331 @@ export function WorkerEmploymentDrawer({
                           placeholder="Nhập tên chủ tài khoản"
                         />
                       </div>
-                      <div className="flex gap-2 pt-1">
+                      <div className="flex gap-1.5">
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="flex-1"
+                          className="h-8 px-2 text-xs"
                           onClick={() => setBankEditing(false)}
                         >
                           Hủy
                         </Button>
-                        <Button type="submit" size="sm" className="flex-1" disabled={bankSaving}>
+                        <Button
+                          type="submit"
+                          size="sm"
+                          className="h-8 px-2 text-xs"
+                          disabled={bankSaving}
+                        >
                           {bankSaving ? "Đang lưu..." : "Lưu STK"}
                         </Button>
                       </div>
                     </form>
-                  ) : (
-                    <div className="grid min-w-0 grid-cols-1 gap-1.5 text-sm">
-                      <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                        <div className="text-[10px] text-muted-foreground">Ngân hàng</div>
-                        <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                          {user.bank_name || "—"}
-                        </div>
-                      </div>
-                      <div className="grid min-w-0 grid-cols-2 gap-1.5">
-                        <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                          <div className="text-[10px] text-muted-foreground">Số tài khoản</div>
-                          <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                            {user.bank_account_number || "—"}
-                          </div>
-                        </div>
-                        <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                          <div className="text-[10px] text-muted-foreground">Tên chủ TK</div>
-                          <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                            {user.bank_account_name || "—"}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
                   )}
                 </div>
+                <div className="flex items-center justify-between desktop:hidden">
+                  <span className="text-xs font-medium text-muted-foreground">Thông tin</span>
+                  <button
+                    type="button"
+                    onClick={() => setInfoOpen((v) => !v)}
+                    className="flex items-center gap-1 rounded-full border border-border/60 bg-card px-3 py-1 text-xs font-medium text-foreground active:scale-[0.98]"
+                    aria-expanded={infoOpen}
+                  >
+                    {infoOpen ? (
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    )}
+                    {infoOpen ? "Thu gọn" : "Mở rộng"}
+                  </button>
+                </div>
+
+                {infoOpen && (
+                  <div className="desktop:hidden">
+                    <>
+                      <div className="grid min-w-0 grid-cols-2 gap-2 text-sm">
+                        {user.uid && (
+                          <div className="col-span-2 min-w-0 overflow-hidden rounded-xl bg-primary/10 p-2.5">
+                            <div className="text-[10px] text-muted-foreground">Mã tài khoản</div>
+                            <div className="mt-0.5 break-words text-sm font-semibold text-primary [overflow-wrap:anywhere]">
+                              {user.uid}
+                            </div>
+                          </div>
+                        )}
+                        <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                          <div className="text-[10px] text-muted-foreground">Họ tên tài khoản</div>
+                          <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                            {user.full_name || "—"}
+                          </div>
+                        </div>
+                        <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                          <div className="text-[10px] text-muted-foreground">CCCD tài khoản</div>
+                          <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                            {maskCccd(user.cccd)}
+                          </div>
+                        </div>
+                        <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                          <div className="text-[10px] text-muted-foreground">SĐT</div>
+                          <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                            {user.phone || "—"}
+                          </div>
+                        </div>
+                        <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                          <div className="text-[10px] text-muted-foreground">Tên đăng nhập</div>
+                          <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                            {user.username || "—"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            <Landmark className="h-3.5 w-3.5" />
+                            Tài khoản ngân hàng
+                          </div>
+                          {permissions.canUpdateBank && !bankEditing && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => setBankEditing(true)}
+                            >
+                              Sửa STK
+                            </Button>
+                          )}
+                        </div>
+                        {bankEditing ? (
+                          <form
+                            className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3"
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              void saveBankInfo();
+                            }}
+                          >
+                            <div className="space-y-1">
+                              <Label className="text-xs">Ngân hàng</Label>
+                              <Select
+                                value={bankForm.bank_name}
+                                onValueChange={(v) => setBankForm((c) => ({ ...c, bank_name: v }))}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Chọn ngân hàng" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-72">
+                                  {VN_BANKS.map((bank) => (
+                                    <SelectItem key={bank.code} value={bank.name}>
+                                      {bank.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Số tài khoản</Label>
+                              <Input
+                                value={bankForm.bank_account_number}
+                                onChange={(e) =>
+                                  setBankForm((c) => ({
+                                    ...c,
+                                    bank_account_number: e.target.value.replace(/\D/g, ""),
+                                  }))
+                                }
+                                inputMode="numeric"
+                                placeholder="Nhập số tài khoản"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Tên chủ tài khoản</Label>
+                              <Input
+                                value={bankForm.bank_account_name}
+                                onChange={(e) =>
+                                  setBankForm((c) => ({ ...c, bank_account_name: e.target.value }))
+                                }
+                                placeholder="Nhập tên chủ tài khoản"
+                              />
+                            </div>
+                            <div className="flex gap-2 pt-1">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() => setBankEditing(false)}
+                              >
+                                Hủy
+                              </Button>
+                              <Button
+                                type="submit"
+                                size="sm"
+                                className="flex-1"
+                                disabled={bankSaving}
+                              >
+                                {bankSaving ? "Đang lưu..." : "Lưu STK"}
+                              </Button>
+                            </div>
+                          </form>
+                        ) : (
+                          <div className="grid min-w-0 grid-cols-1 gap-1.5 text-sm">
+                            <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                              <div className="text-[10px] text-muted-foreground">Ngân hàng</div>
+                              <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                                {user.bank_name || "—"}
+                              </div>
+                            </div>
+                            <div className="grid min-w-0 grid-cols-2 gap-1.5">
+                              <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                                <div className="text-[10px] text-muted-foreground">
+                                  Số tài khoản
+                                </div>
+                                <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                                  {user.bank_account_number || "—"}
+                                </div>
+                              </div>
+                              <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                                <div className="text-[10px] text-muted-foreground">Tên chủ TK</div>
+                                <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                                  {user.bank_account_name || "—"}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Ảnh CCCD
+                      </div>
+                      <CccdManager
+                        targetUser={user}
+                        actor={actor}
+                        onUpdated={onDataChanged}
+                        readOnly
+                      />
+                    </>
+                  </div>
+                )}
 
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Ảnh CCCD
+                  Lịch sử đi làm ({histories.length})
                 </div>
-                <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} readOnly />
-              </>
-            )}
 
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Lịch sử đi làm ({histories.length})
-            </div>
-
-            {histories.length === 0 ? (
-              <div className="rounded-xl border bg-card p-3 text-center text-xs text-muted-foreground">
-                Chưa có lịch sử
+                {histories.length === 0 ? (
+                  <div className="rounded-xl border bg-card p-3 text-center text-xs text-muted-foreground">
+                    Chưa có lịch sử
+                  </div>
+                ) : (
+                  histories.map((h) => {
+                    const canEdit = canEditHistoryRecord(h);
+                    const factoryName = h.expand?.factory?.name || "Nhà máy";
+                    const mainHouseName = h.expand?.main_house?.name || "—";
+                    const recruiterName =
+                      h.expand?.recruiter_staff?.full_name ||
+                      h.expand?.recruiter_staff?.username ||
+                      "—";
+                    const employmentPeriod = `Vào: ${formatDate(h.join_date)} · Nghỉ: ${formatDate(h.leave_date) || "—"}`;
+                    return (
+                      <Card
+                        key={h.id}
+                        className={`min-w-0 space-y-2 overflow-hidden rounded-2xl p-3 transition-colors desktop:grid desktop:grid-cols-[minmax(13rem,1.35fr)_minmax(10rem,1fr)_minmax(8rem,.8fr)_minmax(9rem,.9fr)_minmax(11rem,1.1fr)_auto] desktop:items-center desktop:gap-3 desktop:space-y-0 desktop:rounded-xl desktop:px-3 desktop:py-2 ${
+                          canEdit ? "cursor-pointer hover:bg-muted/30" : ""
+                        }`}
+                        onClick={canEdit ? () => startEdit(h) : undefined}
+                      >
+                        <div className="flex items-start justify-between gap-2 desktop:contents">
+                          <div className="min-w-0 flex-1 desktop:col-start-1 desktop:row-start-1">
+                            <div
+                              title={`${factoryName} · Mã NV: ${h.employee_code || "—"}`}
+                              className="break-words text-sm font-semibold [overflow-wrap:anywhere] desktop:truncate"
+                            >
+                              {factoryName}
+                              <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                                · Mã: {h.employee_code || "—"}
+                              </span>
+                            </div>
+                            <div
+                              title={h.worker_name_snapshot || "—"}
+                              className="break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere] desktop:truncate"
+                            >
+                              {h.worker_name_snapshot || "—"}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1.5 desktop:col-start-6 desktop:row-start-1 desktop:justify-self-end">
+                            <StatusChip tone={isCurrentlyWorking(h) ? "success" : "neutral"}>
+                              {isCurrentlyWorking(h) ? "Đang làm" : "Đã nghỉ"}
+                            </StatusChip>
+                            {canEdit && (
+                              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            )}
+                          </div>
+                        </div>
+                        <div className="min-w-0 space-y-1 text-[11px] text-muted-foreground desktop:contents">
+                          <div
+                            title={employmentPeriod}
+                            className="min-w-0 break-words [overflow-wrap:anywhere] desktop:col-start-2 desktop:row-start-1 desktop:truncate"
+                          >
+                            <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground desktop:block">
+                              Thời gian
+                            </span>
+                            {employmentPeriod}
+                          </div>
+                          <div
+                            title={mainHouseName}
+                            className="hidden min-w-0 desktop:col-start-3 desktop:row-start-1 desktop:block desktop:truncate"
+                          >
+                            <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              Nhà chính
+                            </span>
+                            {mainHouseName}
+                          </div>
+                          <div
+                            title={recruiterName}
+                            className="min-w-0 break-words [overflow-wrap:anywhere] desktop:col-start-4 desktop:row-start-1 desktop:truncate"
+                          >
+                            <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground desktop:block">
+                              Người tuyển
+                            </span>
+                            <span className="desktop:hidden">Người tuyển: </span>
+                            {recruiterName}
+                          </div>
+                          {h.note && (
+                            <div
+                              title={h.note}
+                              className="min-w-0 break-words [overflow-wrap:anywhere] desktop:col-start-5 desktop:row-start-1 desktop:truncate"
+                            >
+                              <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground desktop:block">
+                                Ghi chú
+                              </span>
+                              {h.note}
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+                    );
+                  })
+                )}
               </div>
-            ) : (
-              histories.map((h) => (
-                <Card
-                  key={h.id}
-                  className={`min-w-0 space-y-2 overflow-hidden rounded-2xl p-3 transition-colors ${
-                    permissions.canEditHistory ? "cursor-pointer hover:bg-muted/30" : ""
-                  }`}
-                  onClick={permissions.canEditHistory ? () => startEdit(h) : undefined}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                        {h.expand?.factory?.name || "Nhà máy"}
-                        <span className="ml-1 text-[11px] font-normal text-muted-foreground">
-                          · Mã: {h.employee_code || "—"}
-                        </span>
-                      </div>
-                      <div className="break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
-                        {h.worker_name_snapshot}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <StatusChip tone={isCurrentlyWorking(h) ? "success" : "neutral"}>
-                        {isCurrentlyWorking(h) ? "Đang làm" : "Đã nghỉ"}
-                      </StatusChip>
-                      {permissions.canEditHistory && (
-                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      )}
-                    </div>
-                  </div>
-                  <div className="min-w-0 space-y-1 text-[11px] text-muted-foreground">
-                    <div className="min-w-0 break-words [overflow-wrap:anywhere]">
-                      Vào: {formatDate(h.join_date)} · Nghỉ: {formatDate(h.leave_date) || "—"}
-                    </div>
-                    <div className="min-w-0 break-words [overflow-wrap:anywhere]">
-                      Người tuyển:{" "}
-                      {h.expand?.recruiter_staff?.full_name ||
-                        h.expand?.recruiter_staff?.username ||
-                        "—"}
-                    </div>
-                    {h.note && (
-                      <div className="min-w-0 break-words [overflow-wrap:anywhere]">{h.note}</div>
-                    )}
-                  </div>
-                </Card>
-              ))
-            )}
+            </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="desktop:px-5 desktop:pb-4">
             <Button variant="outline" onClick={onClose}>
               Đóng
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cccdViewerOpen} onOpenChange={setCccdViewerOpen}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto desktop:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Ảnh CCCD</DialogTitle>
+            <DialogDescription>
+              {user.full_name || user.username || "Người lao động"}
+            </DialogDescription>
+          </DialogHeader>
+          <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} readOnly />
         </DialogContent>
       </Dialog>
 
@@ -1261,13 +1536,26 @@ export function WorkerEmploymentDrawer({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1 desktop:order-6 desktop:col-span-6">
-              <Label className="text-xs">Địa chỉ NLĐ</Label>
-              <Input
-                value={form.address}
-                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                placeholder="Nhập địa chỉ người lao động"
-              />
+            <div className="grid grid-cols-1 gap-2 desktop:order-6 desktop:col-span-6 desktop:grid-cols-6">
+              <div className="space-y-1 desktop:col-span-4">
+                <Label className="text-xs">Địa chỉ NLĐ</Label>
+                <Input
+                  value={form.address}
+                  onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                  placeholder="Nhập địa chỉ người lao động"
+                />
+              </div>
+              <div className="space-y-1 desktop:col-span-2">
+                <Label className="text-xs">Số điện thoại NLĐ</Label>
+                <Input
+                  type="tel"
+                  inputMode="tel"
+                  value={form.phone}
+                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="Nhập số điện thoại"
+                  autoComplete="tel"
+                />
+              </div>
             </div>
             <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2 desktop:contents">
               <div className="space-y-1 desktop:order-3 desktop:col-span-2">
@@ -1408,8 +1696,8 @@ export function WorkerEmploymentDrawer({
                 {user.full_name || user.username || "Người lao động"}
               </div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">
-                {activeHistory?.expand?.factory?.name || user.company || "Chưa có nhà máy"} · Mã NV:{" "}
-                {activeHistory?.employee_code || user.employee_code || "—"}
+                {activeHistory?.expand?.factory?.name || "Chưa có nhà máy"} ? Mã NV:{" "}
+                {activeHistory?.employee_code || "?"}
               </div>
             </div>
 

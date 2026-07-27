@@ -22,7 +22,6 @@ import {
   fetchEmploymentHistories,
   getLatestEmploymentHistory,
   maskCccd,
-  syncLegacyUserWorkFields,
   updateEmploymentHistory,
   type EmploymentHistoryRecord,
 } from "@/lib/employment";
@@ -82,7 +81,6 @@ export function UserWorkHistoryPanel() {
     if (!user?.id) return;
     const nextRows = await fetchEmploymentHistories([user.id]);
     setHistories(nextRows);
-    await syncLegacyUserWorkFields(user.id, getLatestEmploymentHistory(nextRows));
     await refresh();
   };
 

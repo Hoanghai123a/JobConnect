@@ -53,10 +53,101 @@ export async function parseExcelToRowsFromUrl(url: string): Promise<string[][]> 
   return rows.map((row) => row.map((cell) => String(cell ?? "")));
 }
 
-export function exportToExcel(filename: string, sheets: Record<string, any[]>) {
+export type ExcelDateColumns = Record<string, string[]>;
+
+const EXCEL_DATE_FORMAT = "dd/mm/yyyy";
+const EXCEL_EPOCH_UTC = Date.UTC(1899, 11, 30);
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+function isValidCalendarDate(year: number, month: number, day: number) {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function parseDateParts(value: unknown): { year: number; month: number; day: number } | null {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return {
+      year: value.getFullYear(),
+      month: value.getMonth() + 1,
+      day: value.getDate(),
+    };
+  }
+
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (!text) return null;
+
+  const iso = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:$|[T\s])/);
+  if (iso) {
+    const year = Number(iso[1]);
+    const month = Number(iso[2]);
+    const day = Number(iso[3]);
+    return isValidCalendarDate(year, month, day) ? { year, month, day } : null;
+  }
+
+  const local = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:$|[T\s])/);
+  if (local) {
+    const day = Number(local[1]);
+    const month = Number(local[2]);
+    const year = Number(local[3]);
+    return isValidCalendarDate(year, month, day) ? { year, month, day } : null;
+  }
+
+  return null;
+}
+
+function toExcelDateSerial(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const parts = parseDateParts(value);
+  if (!parts) return null;
+  return (
+    (Date.UTC(parts.year, parts.month - 1, parts.day) - EXCEL_EPOCH_UTC) / DAY_IN_MS
+  );
+}
+
+function applyDateColumns(ws: XLSX.WorkSheet, dateColumns: string[]) {
+  if (!dateColumns.length || !ws["!ref"]) return;
+
+  const range = XLSX.utils.decode_range(ws["!ref"]);
+  const dateColumnSet = new Set(dateColumns);
+
+  for (let column = range.s.c; column <= range.e.c; column++) {
+    const headerAddress = XLSX.utils.encode_cell({ r: range.s.r, c: column });
+    const header = ws[headerAddress];
+    if (!header || !dateColumnSet.has(String(header.v ?? ""))) continue;
+
+    for (let row = range.s.r + 1; row <= range.e.r; row++) {
+      const address = XLSX.utils.encode_cell({ r: row, c: column });
+      const cell = ws[address];
+      if (!cell || cell.v === "" || cell.v == null) continue;
+
+      const serial = toExcelDateSerial(cell.v);
+      if (serial == null) continue;
+
+      cell.t = "n";
+      cell.v = serial;
+      cell.z = EXCEL_DATE_FORMAT;
+      delete cell.w;
+      delete cell.h;
+    }
+  }
+}
+
+export function exportToExcel(
+  filename: string,
+  sheets: Record<string, any[]>,
+  dateColumnsBySheet: ExcelDateColumns = {},
+) {
   const wb = XLSX.utils.book_new();
   for (const [name, rows] of Object.entries(sheets)) {
     const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{}]);
+    applyDateColumns(ws, dateColumnsBySheet[name] ?? []);
     XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
   }
   XLSX.writeFile(wb, filename.endsWith(".xlsx") ? filename : filename + ".xlsx");

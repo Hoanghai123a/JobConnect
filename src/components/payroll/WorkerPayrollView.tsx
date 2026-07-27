@@ -1,11 +1,7 @@
-import { createFileRoute, useParams, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { pb } from "@/lib/pocketbase";
-import { useAuth } from "@/lib/auth";
-import { AppHeader } from "@/components/layout/BottomNav";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarCheck, Moon, Sun, Wallet } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -13,8 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatVND, type AttendanceRow, type RateBuckets } from "@/lib/salary";
-import { escapePb } from "@/lib/delegations";
 import {
   buildPayrollCalendarCells,
   fetchFactoryAttendanceCutoffDay,
@@ -22,18 +18,8 @@ import {
   type PayrollPeriod,
 } from "@/lib/payroll-cycle";
 import { cn } from "@/lib/utils";
-import { CalendarCheck, Moon, Sun, Wallet } from "lucide-react";
-import { toast } from "sonner";
-import { fetchStaffWorkerWorkspace } from "@/lib/staff-permissions";
-import type { UserRecord } from "@/lib/pocketbase";
 
-export const Route = createFileRoute(
-  "/_authenticated/staff/workers/$workerId/payroll",
-)({
-  component: StaffWorkerPayrollPage,
-});
-
-type BatchRecord = {
+export type PayrollBatchRecord = {
   id: string;
   month: string;
   round_no: number;
@@ -41,7 +27,7 @@ type BatchRecord = {
   created?: string;
 };
 
-type CheckItemRecord = {
+export type WorkerAttendanceCheckItem = {
   id: string;
   batch: string;
   user: string;
@@ -50,13 +36,13 @@ type CheckItemRecord = {
   rows: AttendanceRow[];
   summary?: Partial<RateBuckets>;
   created?: string;
-  expand?: { batch?: BatchRecord };
+  expand?: { batch?: PayrollBatchRecord };
 };
 
-type SalaryWageLine = { rate: string; hours: number; amount: number };
-type SalaryMoneyLine = { label: string; amount: number };
-type SalaryTotals = { wage: number; allowance: number; deduction: number; net: number };
-type SalaryPersonalInfo = {
+export type SalaryWageLine = { rate: string; hours: number; amount: number };
+export type SalaryMoneyLine = { label: string; amount: number };
+export type SalaryTotals = { wage: number; allowance: number; deduction: number; net: number };
+export type SalaryPersonalInfo = {
   employee_code: string;
   company: string;
   start_date: string;
@@ -64,7 +50,8 @@ type SalaryPersonalInfo = {
   base_salary: number;
   standard_workdays: number;
 };
-type SalaryItemRecord = {
+
+export type WorkerSalaryCheckItem = {
   id: string;
   batch: string;
   user: string;
@@ -76,29 +63,31 @@ type SalaryItemRecord = {
   deduction_lines: SalaryMoneyLine[];
   totals: SalaryTotals;
   created?: string;
-  expand?: { batch?: BatchRecord };
+  expand?: { batch?: PayrollBatchRecord };
 };
 
 const EMPTY_BUCKETS = (): RateBuckets => ({
-  r100: 0, r130: 0, r150: 0, r200: 0, r270: 0, r300: 0, r390: 0,
+  r100: 0,
+  r130: 0,
+  r150: 0,
+  r200: 0,
+  r270: 0,
+  r300: 0,
+  r390: 0,
 });
 
 function normalizeBuckets(summary?: Partial<RateBuckets>) {
   return { ...EMPTY_BUCKETS(), ...(summary || {}) };
 }
 
-function pad(n: number) {
-  return String(n).padStart(2, "0");
-}
-
 function todayMonth() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function monthStringToDate(month: string) {
-  const [year, m] = month.split("-").map(Number);
-  return new Date(year || new Date().getFullYear(), (m || 1) - 1, 1);
+  const [year, monthValue] = month.split("-").map(Number);
+  return new Date(year || new Date().getFullYear(), (monthValue || 1) - 1, 1);
 }
 
 function formatDisplayDate(value?: string) {
@@ -122,82 +111,48 @@ function calculateSalaryTotals({
   return { wage, allowance, deduction, net: wage + allowance - deduction };
 }
 
-function StaffWorkerPayrollPage() {
-  const { workerId } = useParams({ from: "/_authenticated/staff/workers/$workerId/payroll" });
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const [workerName, setWorkerName] = useState("");
-  const [workerCompany, setWorkerCompany] = useState("");
-  const [items, setItems] = useState<CheckItemRecord[]>([]);
-  const [selected, setSelected] = useState<CheckItemRecord | null>(null);
-  const [salaryItems, setSalaryItems] = useState<SalaryItemRecord[]>([]);
-  const [selectedSalary, setSelectedSalary] = useState<SalaryItemRecord | null>(null);
-  const [loading, setLoading] = useState(true);
+export function WorkerPayrollView({
+  attendanceItems,
+  salaryItems,
+  loading,
+  fallbackFactoryName,
+}: {
+  attendanceItems: WorkerAttendanceCheckItem[];
+  salaryItems: WorkerSalaryCheckItem[];
+  loading: boolean;
+  fallbackFactoryName?: string;
+}) {
+  const [selectedAttendance, setSelectedAttendance] = useState<WorkerAttendanceCheckItem | null>(null);
+  const [selectedSalary, setSelectedSalary] = useState<WorkerSalaryCheckItem | null>(null);
   const [factoryCutoffDay, setFactoryCutoffDay] = useState<number | null>(null);
-  const [authorized, setAuthorized] = useState(true);
-
-  const load = useCallback(async () => {
-    if (!user?.id || !workerId) return;
-    setLoading(true);
-    try {
-      const workspace = await fetchStaffWorkerWorkspace(user as UserRecord, workerId);
-      const worker = workspace.worker;
-      if (!worker || !worker.canViewPayroll) {
-        setAuthorized(false);
-        return;
-      }
-
-      setAuthorized(true);
-      const workerUser = worker.user;
-      setWorkerName(workerUser.full_name || workerUser.username || "");
-      setWorkerCompany(workerUser.company || "");
-
-      const [attendanceRes, salaryRes] = await Promise.all([
-        pb.collection("check_attendance_items").getList(1, 100, {
-          filter: `user="${escapePb(workerId)}"`,
-          sort: "-created",
-          expand: "batch",
-        }),
-        pb.collection("check_salary_items").getList(1, 100, {
-          filter: `user="${escapePb(workerId)}"`,
-          sort: "-created",
-          expand: "batch",
-        }).catch(() => ({ items: [] })),
-      ]);
-
-      const normalized = (attendanceRes.items as unknown as CheckItemRecord[]).map((item) => ({
-        ...item,
-        rows: Array.isArray(item.rows) ? item.rows : [],
-      }));
-      const normalizedSalary = (salaryRes.items as unknown as SalaryItemRecord[]).map((item) => ({
-        ...item,
-        wage_lines: Array.isArray(item.wage_lines) ? item.wage_lines : [],
-        allowance_lines: Array.isArray(item.allowance_lines) ? item.allowance_lines : [],
-        deduction_lines: Array.isArray(item.deduction_lines) ? item.deduction_lines : [],
-        totals: item.totals || { wage: 0, allowance: 0, deduction: 0, net: 0 },
-      }));
-      setItems(normalized);
-      setSalaryItems(normalizedSalary);
-      setSelected(normalized[0] || null);
-      setSelectedSalary(normalizedSalary[0] || null);
-    } catch (e: any) {
-      toast.error(e?.message || "Không tải được check công/lương");
-    } finally {
-      setLoading(false);
-    }
-  }, [user, workerId]);
-
-  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    setSelectedAttendance((current) =>
+      attendanceItems.find((item) => item.id === current?.id) || attendanceItems[0] || null,
+    );
+  }, [attendanceItems]);
+
+  useEffect(() => {
+    setSelectedSalary((current) =>
+      salaryItems.find((item) => item.id === current?.id) || salaryItems[0] || null,
+    );
+  }, [salaryItems]);
+
+  const factoryName = selectedSalary?.personal.company || fallbackFactoryName || "";
+  useEffect(() => {
     let cancelled = false;
-    fetchFactoryAttendanceCutoffDay(workerCompany).then((day) => {
+    fetchFactoryAttendanceCutoffDay(factoryName).then((day) => {
       if (!cancelled) setFactoryCutoffDay(day);
     });
-    return () => { cancelled = true; };
-  }, [workerCompany]);
+    return () => {
+      cancelled = true;
+    };
+  }, [factoryName]);
 
-  const buckets = useMemo(() => normalizeBuckets(selected?.summary), [selected]);
+  const buckets = useMemo(
+    () => normalizeBuckets(selectedAttendance?.summary),
+    [selectedAttendance],
+  );
   const visibleRateCells = useMemo(
     () =>
       [
@@ -212,107 +167,87 @@ function StaffWorkerPayrollPage() {
     [buckets],
   );
   const selectedPeriod = useMemo(
-    () => getPayrollPeriod(monthStringToDate(selected?.month || todayMonth()), factoryCutoffDay),
-    [selected?.month, factoryCutoffDay],
+    () =>
+      getPayrollPeriod(
+        monthStringToDate(selectedAttendance?.month || todayMonth()),
+        factoryCutoffDay,
+      ),
+    [selectedAttendance?.month, factoryCutoffDay],
   );
-
-  if (!authorized) {
-    return (
-      <div>
-        <AppHeader title="Check công/lương" back />
-        <div className="p-4">
-          <EmptyState
-            icon={CalendarCheck}
-            title="Không có quyền"
-            description="Bạn không có quyền xem check công/lương của người lao động này."
-          />
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div>
-      <AppHeader title="Check công/lương" subtitle={workerName} back />
-      <div className="space-y-4 p-4">
-        {loading && <div className="p-4 text-sm text-muted-foreground">Đang tải...</div>}
+    <Tabs defaultValue="attendance" className="space-y-4">
+      <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl">
+        <TabsTrigger value="attendance" className="rounded-lg text-xs">
+          Check công
+        </TabsTrigger>
+        <TabsTrigger value="salary" className="rounded-lg text-xs">
+          Check lương
+        </TabsTrigger>
+      </TabsList>
 
-        <Tabs defaultValue="attendance" className="space-y-4">
-          <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl">
-            <TabsTrigger value="attendance" className="rounded-lg text-xs">
-              Check công
-            </TabsTrigger>
-            <TabsTrigger value="salary" className="rounded-lg text-xs">
-              Check lương
-            </TabsTrigger>
-          </TabsList>
+      <TabsContent value="attendance" className="mt-0 space-y-4">
+        {attendanceItems.length === 0 && !loading ? (
+          <EmptyState
+            icon={CalendarCheck}
+            title="Chưa có bảng check công"
+            description="Khi admin gửi bảng check công, dữ liệu sẽ hiển thị tại đây."
+          />
+        ) : (
+          <>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {attendanceItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSelectedAttendance(item)}
+                  className={cn(
+                    "flex-none rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                    selectedAttendance?.id === item.id
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-card text-muted-foreground",
+                  )}
+                >
+                  {item.month} · {item.expand?.batch?.note || `Lần ${item.round_no}`}
+                </button>
+              ))}
+            </div>
 
-          <TabsContent value="attendance" className="mt-0 space-y-4">
-            {items.length === 0 && !loading ? (
-              <EmptyState
-                icon={CalendarCheck}
-                title="Chưa có bảng check công"
-                description="Khi admin gửi bảng check công, dữ liệu sẽ hiển thị tại đây."
-              />
-            ) : (
+            {selectedAttendance && (
               <>
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {items.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setSelected(item)}
-                      className={cn(
-                        "flex-none rounded-full border px-3 py-1.5 text-xs font-medium transition",
-                        selected?.id === item.id
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-card text-muted-foreground",
-                      )}
-                    >
-                      {item.month} · {item.expand?.batch?.note || `Lần ${item.round_no}`}
-                    </button>
-                  ))}
-                </div>
+                <Card className="overflow-hidden">
+                  <div className="gradient-accent p-4 text-accent-foreground">
+                    <div className="text-xs uppercase opacity-80">Bảng check công</div>
+                    <div className="mt-0.5 text-xl font-bold">
+                      {selectedAttendance.month} · {selectedAttendance.expand?.batch?.note || `Lần ${selectedAttendance.round_no}`}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
+                    {visibleRateCells.map((cell) => (
+                      <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
+                    ))}
+                    <RateCell label="Ngày" hours={selectedAttendance.rows.length} suffix="" />
+                  </div>
+                </Card>
 
-                {selected && (
-                  <>
-                    <Card className="overflow-hidden">
-                      <div className="gradient-accent p-4 text-accent-foreground">
-                        <div className="text-xs uppercase opacity-80">Bảng check công</div>
-                        <div className="mt-0.5 text-xl font-bold">
-                          {selected.month} · {selected.expand?.batch?.note || `Lần ${selected.round_no}`}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
-                        {visibleRateCells.map((cell) => (
-                          <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
-                        ))}
-                        <RateCell label="Ngày" hours={selected.rows.length} suffix="" />
-                      </div>
-                    </Card>
-
-                    <CheckMonthCalendar rows={selected.rows} period={selectedPeriod} />
-                  </>
-                )}
+                <CheckMonthCalendar rows={selectedAttendance.rows} period={selectedPeriod} />
               </>
             )}
-          </TabsContent>
+          </>
+        )}
+      </TabsContent>
 
-          <TabsContent value="salary" className="mt-0">
-            <SalaryCheckPanel
-              items={salaryItems}
-              selected={selectedSalary}
-              onSelect={setSelectedSalary}
-              loading={loading}
-            />
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
+      <TabsContent value="salary" className="mt-0">
+        <SalaryCheckPanel
+          items={salaryItems}
+          selected={selectedSalary}
+          onSelect={setSelectedSalary}
+          loading={loading}
+        />
+      </TabsContent>
+    </Tabs>
   );
 }
-
-/* ─── Salary Panel ─── */
 
 function SalaryCheckPanel({
   items,
@@ -320,9 +255,9 @@ function SalaryCheckPanel({
   onSelect,
   loading,
 }: {
-  items: SalaryItemRecord[];
-  selected: SalaryItemRecord | null;
-  onSelect: (item: SalaryItemRecord) => void;
+  items: WorkerSalaryCheckItem[];
+  selected: WorkerSalaryCheckItem | null;
+  onSelect: (item: WorkerSalaryCheckItem) => void;
   loading: boolean;
 }) {
   if (items.length === 0 && !loading) {
@@ -345,6 +280,9 @@ function SalaryCheckPanel({
 
   return (
     <div className="space-y-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Check lương
+      </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {items.map((item) => (
           <button
@@ -384,8 +322,16 @@ function SalaryCheckPanel({
             </div>
 
             <SalaryWageSection lines={selected.wage_lines} total={selectedTotals?.wage || 0} />
-            <SalaryMoneySection title="Phụ cấp" lines={selected.allowance_lines} total={selectedTotals?.allowance || 0} />
-            <SalaryMoneySection title="Khấu trừ" lines={selected.deduction_lines} total={selectedTotals?.deduction || 0} />
+            <SalaryMoneySection
+              title="Phụ cấp"
+              lines={selected.allowance_lines}
+              total={selectedTotals?.allowance || 0}
+            />
+            <SalaryMoneySection
+              title="Khấu trừ"
+              lines={selected.deduction_lines}
+              total={selectedTotals?.deduction || 0}
+            />
 
             <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
               <div className="text-[11px] uppercase text-muted-foreground">Thực nhận</div>
@@ -399,8 +345,6 @@ function SalaryCheckPanel({
     </div>
   );
 }
-
-/* ─── Sub-components ─── */
 
 function SalaryWageSection({ lines, total }: { lines: SalaryWageLine[]; total: number }) {
   return (
@@ -451,9 +395,7 @@ function SalaryMoneySection({
 }) {
   return (
     <div className="space-y-2">
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</div>
       <div className="space-y-2">
         {lines.length === 0 ? (
           <div className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">
@@ -485,20 +427,9 @@ function TotalRow({ label, value }: { label: string; value: number }) {
   );
 }
 
-function CheckMonthCalendar({
-  rows,
-  period,
-}: {
-  rows: AttendanceRow[];
-  period: PayrollPeriod;
-}) {
+function CheckMonthCalendar({ rows, period }: { rows: AttendanceRow[]; period: PayrollPeriod }) {
   const [detail, setDetail] = useState<AttendanceRow | null>(null);
-  const map = useMemo(() => {
-    const result = new Map<string, AttendanceRow>();
-    for (const row of rows) result.set(row.date, row);
-    return result;
-  }, [rows]);
-
+  const rowByDate = useMemo(() => new Map(rows.map((row) => [row.date, row])), [rows]);
   const cells = buildPayrollCalendarCells(period);
 
   return (
@@ -509,18 +440,18 @@ function CheckMonthCalendar({
           <span className="chip chip-info">{rows.length} ngày</span>
         </div>
         <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase text-muted-foreground">
-          {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((d, i) => (
-            <div key={d} className={i === 6 ? "text-[color:var(--status-danger)]" : ""}>
-              {d}
+          {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((day, index) => (
+            <div key={day} className={index === 6 ? "text-[color:var(--status-danger)]" : ""}>
+              {day}
             </div>
           ))}
         </div>
         <div className="mt-1 grid grid-cols-7 gap-1">
-          {cells.map((cell, idx) => {
-            if (!cell) return <div key={`empty-${idx}`} className="aspect-square" />;
-            const row = map.get(cell.key);
-            const isSun = idx % 7 === 6;
-            const total = row ? row.hc_hours + row.ot_hours : 0;
+          {cells.map((cell, index) => {
+            if (!cell) return <div key={`empty-${index}`} className="aspect-square" />;
+            const row = rowByDate.get(cell.key);
+            const isSunday = index % 7 === 6;
+            const totalHours = row ? row.hc_hours + row.ot_hours : 0;
             return (
               <button
                 key={cell.key}
@@ -539,7 +470,7 @@ function CheckMonthCalendar({
               >
                 <div
                   className={`text-[11px] font-semibold leading-none ${
-                    isSun ? "text-[color:var(--status-danger)]" : ""
+                    isSunday ? "text-[color:var(--status-danger)]" : ""
                   }`}
                 >
                   {cell.day}
@@ -551,7 +482,7 @@ function CheckMonthCalendar({
                     ) : (
                       <Moon className="h-3 w-3 text-primary" />
                     )}
-                    <div className="text-[9px] font-semibold leading-none">{total}h</div>
+                    <div className="text-[9px] font-semibold leading-none">{totalHours}h</div>
                     {row.is_holiday && (
                       <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-[color:var(--status-danger)]" />
                     )}
@@ -594,15 +525,7 @@ function InfoCell({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RateCell({
-  label,
-  hours,
-  suffix = "h",
-}: {
-  label: string;
-  hours: number;
-  suffix?: string;
-}) {
+function RateCell({ label, hours, suffix = "h" }: { label: string; hours: number; suffix?: string }) {
   return (
     <div className="rounded-lg border border-border/80 bg-background p-2 text-center shadow-sm">
       <div className="text-[9px] uppercase text-muted-foreground">{label}</div>

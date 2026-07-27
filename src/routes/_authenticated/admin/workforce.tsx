@@ -66,7 +66,6 @@ import {
   getLatestEmploymentHistory,
   isCurrentlyWorking,
   maskCccd,
-  syncLegacyUserWorkFields,
   updateEmploymentHistory,
   updateUserAndCache,
   type EmploymentHistoryRecord,
@@ -76,7 +75,7 @@ import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import {
   fetchCachedStaffWorkspace,
   fetchFreshStaffWorkspace,
-  hasActiveOrRecentlyLeftEmployment,
+  type StaffWorkerRecord,
 } from "@/lib/staff-permissions";
 import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { cn } from "@/lib/utils";
@@ -85,6 +84,7 @@ import { CccdManager } from "@/components/cccd/CccdManager";
 import { WorkerEmploymentDrawer } from "@/components/employment/WorkerEmploymentDrawer";
 import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
 import { WorkerDesktopCard } from "@/components/staff/WorkerDesktopCard";
+import { StaffWorkerDirectory } from "@/components/staff/StaffWorkerDirectory";
 import { RecruitChartDialog } from "@/components/workforce/RecruitChartDialog";
 import { RegisterDialog as SharedRegisterDialog } from "@/components/workforce/RegisterDialog";
 import { VN_BANKS } from "@/lib/vn-banks";
@@ -103,7 +103,6 @@ export const Route = createFileRoute("/_authenticated/admin/workforce")({
 type ActiveTab = "list" | "stats" | "my-recruited";
 type RecruitSubTab = "factory" | "recruiter";
 type ListScope = "all" | "working" | "left";
-const RECRUITED_PAGE_SIZE = 20;
 
 function todayIso() {
   const now = new Date();
@@ -195,6 +194,7 @@ function WorkforcePage() {
   const [to, setTo] = useState(todayIso());
   const [loading, setLoading] = useState(true);
   const [histories, setHistories] = useState<EmploymentHistoryRecord[]>([]);
+  const [workspaceWorkers, setWorkspaceWorkers] = useState<StaffWorkerRecord[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [mainHouses, setMainHouses] = useState<MainHouseRecord[]>([]);
@@ -222,6 +222,7 @@ function WorkforcePage() {
       const workerUsers = workspace.workers.map((w) => w.user);
       const workerIds = new Set(workerUsers.map((u) => u.id));
       const mergedUsers = [...workerUsers, ...staffAdminUsers.filter((u) => !workerIds.has(u.id))];
+      setWorkspaceWorkers(workspace.workers);
       setHistories(workspace.workers.flatMap((w) => w.histories));
       setUsers(mergedUsers);
       setFactories(factoryList);
@@ -245,6 +246,7 @@ function WorkforcePage() {
       if (!ws) return;
       const workerUsers = ws.workers.map((w) => w.user);
       const workerIds = new Set(workerUsers.map((u) => u.id));
+      setWorkspaceWorkers(ws.workers);
       setHistories(ws.workers.flatMap((w) => w.histories));
       setUsers((prev) => [...workerUsers, ...prev.filter((u) => !workerIds.has(u.id))]);
     }, 150);
@@ -544,11 +546,13 @@ function WorkforcePage() {
         </TabsContent>
 
         <TabsContent value="my-recruited" className="mt-0 space-y-3">
-          <MyRecruitedTab
-            histories={histories}
-            userById={userById}
-            factoryById={factoryById}
-            onSelectWorker={setSelectedUserId}
+          <StaffWorkerDirectory
+            workers={workspaceWorkers}
+            viewer={currentUser}
+            loading={loading}
+            mode="recruited"
+            embedded
+            onSelectWorker={(worker) => setSelectedUserId(worker.user.id)}
           />
         </TabsContent>
       </Tabs>
@@ -588,6 +592,9 @@ function WorkforcePage() {
           canAddOldHistory: true,
           canReportAdvance: true,
           canUpdateBank: true,
+          canReportLeave: true,
+          canReportJoin: true,
+          canViewPayroll: true,
         }}
         open={!!selectedUserId}
         onClose={() => setSelectedUserId(null)}
@@ -1099,14 +1106,14 @@ function WorkerList({
                 name={user.full_name || user.username || "Người lao động"}
                 username={user.username}
                 uid={latest?.uid || user.uid}
-                employeeCode={latest?.employee_code || user.employee_code}
+                employeeCode={latest?.employee_code || ""}
                 cccd={maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
                 taxCode={latest?.worker_tax_code_snapshot}
                 phone={user.phone}
                 dateOfBirth={user.date_of_birth ? formatDate(user.date_of_birth) : undefined}
                 gender={user.gender}
                 address={user.address}
-                factoryName={factoryName || user.company}
+                factoryName={factoryName || ""}
                 mainHouseName={mainHouseName}
                 recruiterName={recruiterName}
                 joinDate={formatDate(latest?.join_date)}
@@ -1131,7 +1138,7 @@ function WorkerList({
                         <span className="font-medium text-primary">{user.uid}</span> ·{" "}
                       </>
                     )}
-                    Mã NV: {latest?.employee_code || user.employee_code || "—"} · CCCD:{" "}
+                    Mã NV: {latest?.employee_code || "" || "—"} · CCCD:{" "}
                     {maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
                     {latest?.worker_tax_code_snapshot &&
                       ` · MST: ${latest.worker_tax_code_snapshot}`}
@@ -1612,243 +1619,5 @@ function CccdExportDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function MyRecruitedTab({
-  histories,
-  userById,
-  factoryById,
-  onSelectWorker,
-}: {
-  histories: EmploymentHistoryRecord[];
-  userById: Map<string, UserRecord>;
-  factoryById: Map<string, FactoryRecord>;
-  onSelectWorker: (userId: string) => void;
-}) {
-  const currentUser = pb.authStore.record as UserRecord | null;
-  const [search, setSearch] = useState("");
-  const [scope, setScope] = useState<"all" | "working" | "left">("all");
-  const [visibleCount, setVisibleCount] = useState(RECRUITED_PAGE_SIZE);
-
-  const recruitedWorkers = useMemo(() => {
-    if (!currentUser?.id) return [];
-
-    const historiesByUser = new Map<string, EmploymentHistoryRecord[]>();
-    for (const history of histories) {
-      const workerHistories = historiesByUser.get(history.user) || [];
-      workerHistories.push(history);
-      historiesByUser.set(history.user, workerHistories);
-    }
-
-    return [...historiesByUser.entries()]
-      .filter(([, workerHistories]) => {
-        const recruitedByCurrentAdmin = workerHistories.some(
-          (history) => history.recruiter_staff === currentUser.id,
-        );
-        return recruitedByCurrentAdmin && hasActiveOrRecentlyLeftEmployment(workerHistories);
-      })
-      .map(([userId, workerHistories]) => ({
-        userId,
-        histories: workerHistories,
-        latest: getLatestEmploymentHistory(workerHistories),
-      }))
-      .filter((item) => item.latest && userById.has(item.userId))
-      .sort((a, b) => {
-        const aTime = latestJoinTime(a.latest);
-        const bTime = latestJoinTime(b.latest);
-        if (aTime !== null && bTime !== null && aTime !== bTime) return bTime - aTime;
-        if (aTime === null && bTime !== null) return 1;
-        if (aTime !== null && bTime === null) return -1;
-        return a.userId.localeCompare(b.userId);
-      });
-  }, [histories, currentUser?.id, userById]);
-
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return recruitedWorkers.filter(({ userId, histories: workerHistories, latest }) => {
-      const isWorking = latest ? isCurrentlyWorking(latest) : false;
-      if (scope === "working" && !isWorking) return false;
-      if (scope === "left" && isWorking) return false;
-      if (query) {
-        const user = userById.get(userId);
-        const haystack = [
-          user?.full_name,
-          user?.username,
-          user?.phone,
-          user?.cccd,
-          user?.employee_code,
-          ...workerHistories.flatMap((history) => [
-            history.worker_name_snapshot,
-            history.worker_cccd_snapshot,
-            history.worker_tax_code_snapshot,
-            history.employee_code,
-            history.expand?.factory?.name,
-            factoryById.get(history.factory)?.name,
-          ]),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        if (!haystack.includes(query)) return false;
-      }
-      return true;
-    });
-  }, [recruitedWorkers, search, scope, userById, factoryById]);
-
-  const visibleWorkers = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
-
-  const updateSearch = (value: string) => {
-    setSearch(value);
-    setVisibleCount(RECRUITED_PAGE_SIZE);
-  };
-
-  const updateScope = (value: "all" | "working" | "left") => {
-    setScope(value);
-    setVisibleCount(RECRUITED_PAGE_SIZE);
-  };
-
-  return (
-    <div className="space-y-3">
-      <div className="sticky top-[calc(env(safe-area-inset-top)+6.5rem)] z-10 -mx-4 space-y-3 bg-background px-4 pb-2 pt-1">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => updateSearch(e.target.value)}
-            placeholder="Tìm tên, mã NV, CCCD, nhà máy..."
-            className="rounded-full pl-9"
-          />
-        </div>
-
-        <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-          <button
-            type="button"
-            onClick={() => updateScope("all")}
-            className={cn(
-              "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
-              scope === "all"
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border text-muted-foreground",
-            )}
-          >
-            Tất cả
-          </button>
-          <button
-            type="button"
-            onClick={() => updateScope("working")}
-            className={cn(
-              "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
-              scope === "working"
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border text-muted-foreground",
-            )}
-          >
-            Đang làm
-          </button>
-          <button
-            type="button"
-            onClick={() => updateScope("left")}
-            className={cn(
-              "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
-              scope === "left"
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border text-muted-foreground",
-            )}
-          >
-            Đã nghỉ
-          </button>
-        </div>
-      </div>
-
-      <div className="text-xs text-muted-foreground">
-        Đang hiển thị {Math.min(visibleCount, filtered.length)}/{filtered.length} lao động bạn
-        tuyển.
-      </div>
-
-      {filtered.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="Không có hồ sơ phù hợp"
-          description="Không có lao động đang làm hoặc đã nghỉ trong 90 ngày gần đây do bạn tuyển."
-        />
-      ) : (
-        <div className="space-y-2">
-          {visibleWorkers.map(({ userId, latest }) => {
-            if (!latest) return null;
-            const user = userById.get(userId);
-            const factory = factoryById.get(latest.factory);
-            const isWorking = isCurrentlyWorking(latest);
-            const recruiterName =
-              latest.expand?.recruiter_staff?.full_name || latest.expand?.recruiter_staff?.username;
-            const mainHouseName = latest.expand?.main_house?.name;
-            const factoryName = latest.expand?.factory?.name || factory?.name;
-
-            return (
-              <Fragment key={userId}>
-                <WorkerDesktopCard
-                  name={latest.worker_name_snapshot || user?.full_name || "Người lao động"}
-                  username={user?.username}
-                  uid={latest.uid || user?.uid}
-                  employeeCode={latest.employee_code || user?.employee_code}
-                  cccd={maskCccd(latest.worker_cccd_snapshot || user?.cccd)}
-                  taxCode={latest.worker_tax_code_snapshot}
-                  phone={user?.phone}
-                  dateOfBirth={user?.date_of_birth ? formatDate(user.date_of_birth) : undefined}
-                  gender={user?.gender}
-                  address={user?.address}
-                  factoryName={factoryName || user?.company}
-                  mainHouseName={mainHouseName}
-                  recruiterName={recruiterName}
-                  joinDate={formatDate(latest.join_date)}
-                  leaveDate={latest.leave_date ? formatDate(latest.leave_date) : undefined}
-                  isWorking={isWorking}
-                  onClick={() => onSelectWorker(userId)}
-                />
-
-                <button
-                  key={`${userId}-mobile`}
-                  type="button"
-                  onClick={() => onSelectWorker(userId)}
-                  className="w-full rounded-2xl border border-border/60 bg-card p-3 text-left shadow-soft transition-colors hover:bg-muted/30 active:scale-[0.99] desktop:hidden"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold">
-                        {latest.worker_name_snapshot || user?.full_name || "Người lao động"}
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-muted-foreground">
-                        Mã NV: {latest.employee_code || user?.employee_code || "Chưa có"} · CCCD:{" "}
-                        {maskCccd(latest.worker_cccd_snapshot || user?.cccd)}
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-muted-foreground">
-                        {factoryName || "Chưa có nhà máy"} · Vào: {formatDate(latest.join_date)}
-                        {latest.leave_date ? ` · Nghỉ: ${formatDate(latest.leave_date)}` : ""}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <StatusChip tone={isWorking ? "success" : "neutral"}>
-                        {isWorking ? "Đang làm" : "Đã nghỉ"}
-                      </StatusChip>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </div>
-                </button>
-              </Fragment>
-            );
-          })}
-          {visibleCount < filtered.length && (
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-full"
-              onClick={() => setVisibleCount((count) => count + RECRUITED_PAGE_SIZE)}
-            >
-              Tải thêm người lao động
-            </Button>
-          )}
-        </div>
-      )}
-    </div>
   );
 }

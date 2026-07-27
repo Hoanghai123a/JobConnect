@@ -30,7 +30,6 @@ import {
   fetchEmploymentHistories,
   fetchRegisterableUsers,
   maskCccd,
-  syncLegacyUserWorkFields,
   updateEmploymentHistory,
 } from "@/lib/employment";
 import { createStaffActionLog } from "@/lib/staff-log";
@@ -192,7 +191,6 @@ export function RegisterDialog({
         status: "working",
         note: note.trim() || undefined,
       });
-      await syncLegacyUserWorkFields(userId, created);
       await createStaffActionLog({
         actor,
         targetUserId: userId,

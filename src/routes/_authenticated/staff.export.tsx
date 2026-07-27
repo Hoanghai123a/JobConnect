@@ -182,7 +182,7 @@ function StaffExportPage() {
       toast.warning("Không có dữ liệu để xuất");
       return;
     }
-    exportToExcel(`jobconnect_export_co_ban_${Date.now()}`, { "Lao động cơ bản": basicRows });
+    exportToExcel(`jobconnect_export_co_ban_${Date.now()}`, { "Lao động cơ bản": basicRows }, { "Lao động cơ bản": ["Ngày vào", "Ngày nghỉ"] });
     toast.success("Đã xuất Excel cơ bản");
   };
 
@@ -191,7 +191,7 @@ function StaffExportPage() {
       toast.warning("Không có dữ liệu để xuất");
       return;
     }
-    exportToExcel(`jobconnect_export_day_du_${Date.now()}`, { "Lao động đầy đủ": fullRows });
+    exportToExcel(`jobconnect_export_day_du_${Date.now()}`, { "Lao động đầy đủ": fullRows }, { "Lao động đầy đủ": ["Ngày vào", "Ngày nghỉ"] });
     toast.success("Đã xuất Excel đầy đủ");
   };
 
@@ -208,7 +208,9 @@ function StaffExportPage() {
       }
       exportToExcel(`jobconnect_export_tat_ca_pocketbase_${Date.now()}`, {
         "Tất cả lao động": rows,
-      });
+      },
+      { "Tất cả lao động": ["Ngày vào", "Ngày nghỉ"] }
+      );
       toast.success("Đã xuất tất cả dữ liệu từ PocketBase");
     } catch {
       toast.error("Không thể xuất tất cả dữ liệu từ PocketBase");

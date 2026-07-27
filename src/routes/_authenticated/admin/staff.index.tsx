@@ -123,7 +123,9 @@ function AdminStaffPage() {
           "Nhà máy 3": "",
         },
       ],
-    });
+    },
+    { "Tài khoản Staff": ["Ngày sinh"] }
+    );
   };
 
   const importStaff = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -151,7 +153,7 @@ function AdminStaffPage() {
         const username = normalizeAccountUsername(pickValue(row, ["username", "Tên đăng nhập"]));
         const fullName = pickValue(row, ["full_name", "Họ tên", "Họ và tên"]);
         const phone = pickValue(row, ["phone", "Số điện thoại", "SĐT"]);
-        const dob = normalizeDate(pickValue(row, ["date_of_birth", "Ngày sinh"]));
+        const dob = normalizeDate(row["date_of_birth"] ?? row["Ngày sinh"] ?? "");
         const address = pickValue(row, ["address", "Địa chỉ"]);
         const password = pickValue(row, ["password", "Mật khẩu"]) || DEFAULT_PASSWORD;
 
@@ -245,7 +247,7 @@ function AdminStaffPage() {
       setImportResult(resultText);
       toast.success(resultText);
       if (failedRows.length) {
-        exportToExcel(`staff_import_loi_${Date.now()}`, { "Dòng lỗi": failedRows });
+        exportToExcel(`staff_import_loi_${Date.now()}`, { "Dòng lỗi": failedRows }, { "Dòng lỗi": ["Ngày sinh", "date_of_birth"] });
         toast.warning("Đã xuất file các dòng lỗi");
       }
       await load();

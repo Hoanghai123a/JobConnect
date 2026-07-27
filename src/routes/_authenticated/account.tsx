@@ -106,7 +106,7 @@ const ROLE_LABELS: Record<Role, string> = {
 function buildUserSearchFilter(search: string, extraFilter = "") {
   const q = escapePb(search.trim());
   const searchFilter = q
-    ? `(${["full_name", "username", "phone", "employee_code", "company", "role"]
+    ? `(${["full_name", "username", "phone", "role"]
         .map((field) => `${field}~"${q}"`)
         .join(" || ")})`
     : "";
@@ -139,7 +139,7 @@ function AccountPage() {
       />
 
       <div className="space-y-4 p-4">
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden desktop:hidden">
           <div className="gradient-primary p-5 text-primary-foreground">
             <div className="flex items-center gap-3">
               <div className="rounded-full bg-white/20 p-3">
@@ -158,7 +158,9 @@ function AccountPage() {
           </div>
         </Card>
 
-        <PushNotificationSettingsCard />
+        <div className="desktop:hidden">
+          <PushNotificationSettingsCard />
+        </div>
 
         {isAdmin ? (
           <Tabs defaultValue="admin" className="space-y-3">
@@ -280,6 +282,9 @@ function UserProfileForm() {
         </Card>
       )}
       <Section title={isAdmin ? "Thông tin admin" : "Thông tin chung"}>
+        <div className="hidden justify-end desktop:flex">
+          <PushNotificationSettingsCard buttonOnly />
+        </div>
         <div className="flex flex-col items-center gap-2">
           <div className="relative h-20 w-20">
             {avatarPreview ? (
@@ -498,8 +503,6 @@ function AdminUsersPanel() {
     cccd: "",
     date_of_birth: "",
     address: "",
-    company: "",
-    employee_code: "",
   });
   const [detailProfileSaving, setDetailProfileSaving] = useState(false);
   const [bulkStaffProcessing, setBulkStaffProcessing] = useState(false);
@@ -509,8 +512,6 @@ function AdminUsersPanel() {
     username: "",
     password: "",
     uid: "",
-    company: "",
-    employee_code: "",
   };
   const [newUser, setNewUser] = useState<any>(emptyNew);
 
@@ -569,8 +570,6 @@ function AdminUsersPanel() {
     "Ngày sinh": formatDateOnly(u.date_of_birth),
     "Địa chỉ": u.address || "",
     "Mã tài khoản (UID)": u.uid || "",
-    "Mã nhân viên": u.employee_code || "",
-    "Nhà máy": u.company || "",
     "Ngân hàng": u.bank_name || "",
     "Số tài khoản": u.bank_account_number || "",
     "Tên tài khoản": u.bank_account_name || "",
@@ -581,14 +580,14 @@ function AdminUsersPanel() {
 
   const exportExcel = () => {
     const rows = filtered.map(formatUserRow);
-    exportToExcel("danh_sach_tai_khoan_" + Date.now(), { "Tài khoản": rows });
+    exportToExcel("danh_sach_tai_khoan_" + Date.now(), { "Tài khoản": rows }, { "Tài khoản": ["Ngày sinh", "Ngày tạo"] });
   };
 
   const exportAll = async () => {
     try {
       const all = await pb.collection("users").getFullList({ sort: "-created" });
       const rows = all.map(formatUserRow);
-      exportToExcel("tat_ca_tai_khoan_" + Date.now(), { "Tài khoản": rows });
+      exportToExcel("tat_ca_tai_khoan_" + Date.now(), { "Tài khoản": rows }, { "Tài khoản": ["Ngày sinh", "Ngày tạo"] });
     } catch (e: any) {
       toast.error(e?.message || "Lỗi xuất dữ liệu");
     }
@@ -827,6 +826,55 @@ function AdminUsersPanel() {
     }
   };
 
+  const openDetailUser = (user: UserRecord) => {
+    setDetailUser(user);
+    setDetailBankEditing(false);
+    setDetailProfileEditing(false);
+    setDetailBankForm({
+      bank_name: user.bank_name || "",
+      bank_account_number: user.bank_account_number || "",
+      bank_account_name: user.bank_account_name || "",
+    });
+    setDetailProfileForm({
+      full_name: user.full_name || "",
+      phone: user.phone || "",
+      gender: user.gender || "",
+      cccd: user.cccd || "",
+      date_of_birth: user.date_of_birth ? user.date_of_birth.slice(0, 10) : "",
+      address: user.address || "",
+    });
+  };
+
+  const closeDetailUser = () => {
+    if (detailBankSaving || detailProfileSaving) return;
+    setDetailBankEditing(false);
+    setDetailProfileEditing(false);
+    setDetailUser(null);
+  };
+
+  const openDetailProfileEditor = () => {
+    if (!detailUser) return;
+    setDetailProfileForm({
+      full_name: detailUser.full_name || "",
+      phone: detailUser.phone || "",
+      gender: detailUser.gender || "",
+      cccd: detailUser.cccd || "",
+      date_of_birth: detailUser.date_of_birth ? detailUser.date_of_birth.slice(0, 10) : "",
+      address: detailUser.address || "",
+    });
+    setDetailProfileEditing(true);
+  };
+
+  const openDetailBankEditor = () => {
+    if (!detailUser) return;
+    setDetailBankForm({
+      bank_name: detailUser.bank_name || "",
+      bank_account_number: detailUser.bank_account_number || "",
+      bank_account_name: detailUser.bank_account_name || "",
+    });
+    setDetailBankEditing(true);
+  };
+
   const saveDetailBank = async () => {
     if (!detailUser || !me) return;
     setDetailBankSaving(true);
@@ -868,8 +916,6 @@ function AdminUsersPanel() {
       cccd: detailProfileForm.cccd.trim(),
       date_of_birth: detailProfileForm.date_of_birth,
       address: detailProfileForm.address.trim(),
-      company: detailProfileForm.company.trim(),
-      employee_code: detailProfileForm.employee_code.trim(),
     };
     if (!payload.full_name) {
       toast.warning("Vui lòng nhập họ tên");
@@ -891,8 +937,6 @@ function AdminUsersPanel() {
           cccd: detailUser.cccd || "",
           date_of_birth: detailUser.date_of_birth || "",
           address: detailUser.address || "",
-          company: detailUser.company || "",
-          employee_code: detailUser.employee_code || "",
         },
         after: payload,
         note: "Admin cập nhật thông tin cá nhân cho NLĐ",
@@ -986,8 +1030,6 @@ function AdminUsersPanel() {
     const username = normalizeAccountUsername(newUser.username);
     const password = newUser.password || "";
     const manualUid = (newUser.uid || "").trim();
-    const company = (newUser.company || "").trim();
-    const employee_code = (newUser.employee_code || "").trim();
     if (!full_name || !phone || !username || !password) {
       toast.error("Vui lòng nhập đủ Họ tên, SĐT, Tên đăng nhập, Mật khẩu");
       return;
@@ -1013,8 +1055,6 @@ function AdminUsersPanel() {
         username,
         uid,
         password,
-        company,
-        employee_code,
         passwordConfirm: password,
         role: "user",
         approvalStatus: "approved",
@@ -1062,7 +1102,7 @@ function AdminUsersPanel() {
         "Tên tài khoản": "TRAN THI B",
       },
     ];
-    exportToExcel("mau_nhap_tai_khoan", { "Tài khoản": sample });
+    exportToExcel("mau_nhap_tai_khoan", { "Tài khoản": sample }, { "Tài khoản": ["Ngày sinh"] });
   };
 
   const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1168,9 +1208,16 @@ function AdminUsersPanel() {
       }
       toast.success("Đã nhập " + ok + " tài khoản" + (fail ? ", " + fail + " lỗi" : ""));
       if (failedRows.length) {
-        exportToExcel(`import_tai_khoan_loi_${Date.now()}`, { "Dòng lỗi": failedRows });
+        exportToExcel(`import_tai_khoan_loi_${Date.now()}`, { "Dòng lỗi": failedRows }, { "Dòng lỗi": ["Ngày sinh", "date_of_birth"] });
         toast.warning("Đã xuất file các dòng lỗi");
       }
+      await createStaffActionLog({
+        actor: me as UserRecord,
+        targetCollection: "users",
+        action: "import",
+        after: { created: ok, updated: 0, failed: fail, file: f.name, exported_errors: failedRows.length },
+        note: "Admin import tài khoản NLĐ từ Excel",
+      });
       load();
     } catch (err: any) {
       toast.error(err?.message || "File không hợp lệ");
@@ -1181,9 +1228,13 @@ function AdminUsersPanel() {
 
   return (
     <Card className="space-y-3 p-4">
+      <div className="hidden justify-end desktop:flex">
+        <PushNotificationSettingsCard buttonOnly />
+      </div>
+
       <Link
-        to="/admin/accounts/logs"
-        className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/30 p-3 transition hover:bg-muted/50"
+        to="/admin/logs"
+        className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/30 p-3 transition hover:bg-muted/50 desktop:hidden"
       >
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
           <ClipboardList className="h-4 w-4" />
@@ -1290,34 +1341,43 @@ function AdminUsersPanel() {
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Nhập
               </div>
-              <label
-                className={
-                  "flex h-11 cursor-pointer items-center gap-2 rounded-2xl border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent " +
-                  (importing ? "pointer-events-none opacity-50" : "")
-                }
+              <Link
+                to="/admin/imports"
+                onClick={() => setActionSheetOpen(false)}
+                className="hidden h-11 items-center gap-2 rounded-2xl border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent desktop:flex"
               >
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="hidden"
-                  onChange={(e) => {
+                <FileSpreadsheet className="h-4 w-4" /> Mở Trung tâm dữ liệu
+              </Link>
+              <div className="space-y-2 desktop:hidden">
+                <label
+                  className={
+                    "flex h-11 cursor-pointer items-center gap-2 rounded-2xl border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent " +
+                    (importing ? "pointer-events-none opacity-50" : "")
+                  }
+                >
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={(e) => {
+                      setActionSheetOpen(false);
+                      onImportFile(e);
+                    }}
+                    disabled={importing}
+                  />
+                  <Upload className="h-4 w-4" /> {importing ? "Đang nhập..." : "Nhập Excel tài khoản"}
+                </label>
+                <Button
+                  variant="outline"
+                  onClick={() => {
                     setActionSheetOpen(false);
-                    onImportFile(e);
+                    downloadTemplate();
                   }}
-                  disabled={importing}
-                />
-                <Upload className="h-4 w-4" /> {importing ? "Đang nhập..." : "Nhập Excel tài khoản"}
-              </label>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setActionSheetOpen(false);
-                  downloadTemplate();
-                }}
-                className="w-full justify-start rounded-2xl"
-              >
-                <FileSpreadsheet className="h-4 w-4" /> Tải mẫu nhập tài khoản
-              </Button>
+                  className="w-full justify-start rounded-2xl"
+                >
+                  <FileSpreadsheet className="h-4 w-4" /> Tải mẫu nhập tài khoản
+                </Button>
+              </div>
             </section>
 
             <Separator />
@@ -1472,41 +1532,66 @@ function AdminUsersPanel() {
             const tone = approved
               ? "border-l-[color:var(--status-success)]"
               : "border-l-[color:var(--status-danger)]";
+            const displayName = u.full_name || u.username || "—";
+            const username = u.username || "—";
+            const phone = u.phone || "—";
+            const company = u.company || "—";
+            const employeeCode = u.employee_code || "—";
+            const createdAt = formatDateOnly(u.created) || "—";
+
             return (
-              <div key={u.id} className={"list-card flex items-start gap-3 " + tone}>
-                <Checkbox checked={isSel} onCheckedChange={() => toggle(u.id)} className="mt-1" />
-                <div
-                  className="min-w-0 flex-1 cursor-pointer"
-                  onClick={() => {
-                    setDetailUser(u);
-                    setDetailBankEditing(false);
-                    setDetailBankForm({
-                      bank_name: u.bank_name || "",
-                      bank_account_number: u.bank_account_number || "",
-                      bank_account_name: u.bank_account_name || "",
-                    });
-                    setDetailProfileEditing(false);
-                    setDetailProfileForm({
-                      full_name: u.full_name || "",
-                      phone: u.phone || "",
-                      gender: u.gender || "",
-                      cccd: u.cccd || "",
-                      date_of_birth: u.date_of_birth ? u.date_of_birth.slice(0, 10) : "",
-                      address: u.address || "",
-                      company: u.company || "",
-                      employee_code: u.employee_code || "",
-                    });
-                  }}
-                >
-                  <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    {"📞 " + (u.phone || "—")}
+              <div
+                key={u.id}
+                onClick={() => openDetailUser(u)}
+                className={
+                  "list-card cursor-pointer flex items-start gap-3 " +
+                  tone +
+                  " desktop:grid desktop:grid-cols-[auto_minmax(12rem,1.35fr)_minmax(8rem,.95fr)_minmax(10rem,1.15fr)_minmax(6rem,.7fr)_minmax(9rem,1fr)_minmax(6.5rem,.75fr)_auto] desktop:items-center desktop:gap-3 desktop:px-3 desktop:py-2"
+                }
+              >
+                <Checkbox
+                  checked={isSel}
+                  onClick={(event) => event.stopPropagation()}
+                  onCheckedChange={() => toggle(u.id)}
+                  className="mt-1 desktop:mt-0"
+                />
+
+                <div className="min-w-0 flex-1 desktop:flex-none">
+                  <div title={displayName} className="truncate text-sm font-semibold">
+                    {displayName}
                   </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {"Mã NV " + (u.employee_code || "—") + " · " + (u.company || "—")}
+                  <div
+                    title={`@${username}`}
+                    className="mt-0.5 truncate text-[11px] text-muted-foreground"
+                  >
+                    @{username}
                   </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {"📅 " + new Date(u.created).toLocaleDateString("vi-VN")}
+                  <div className="mt-0.5 text-[11px] text-muted-foreground desktop:hidden">
+                    {"SĐT " + phone}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground desktop:hidden">
+                    {"Mã NV " + employeeCode + " · " + company}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground desktop:hidden">
+                    {"Ngày tạo " + createdAt}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1 desktop:hidden">
+                    <span className={"chip " + (approved ? "chip-success" : "chip-danger")}>
+                      {approved ? "Hoạt động" : "Vô hiệu hoá"}
+                    </span>
+                    <span className="chip chip-info">
+                      {ROLE_LABELS[(u.role || "user") as Role]}
+                    </span>
+                  </div>
+                </div>
+
+                <AccountListCell label="SĐT" value={phone} />
+                <AccountListCell label="Nhà máy" value={company} />
+                <AccountListCell label="Mã NV" value={employeeCode} />
+
+                <div className="hidden min-w-0 desktop:block">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Trạng thái
                   </div>
                   <div className="mt-1 flex flex-wrap gap-1">
                     <span className={"chip " + (approved ? "chip-success" : "chip-danger")}>
@@ -1517,9 +1602,20 @@ function AdminUsersPanel() {
                     </span>
                   </div>
                 </div>
-                <div className="flex flex-col gap-1">
+
+                <div className="hidden min-w-0 desktop:block">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Ngày tạo
+                  </div>
+                  <div title={createdAt} className="mt-1 truncate text-xs text-muted-foreground">
+                    {createdAt}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1 desktop:flex-row desktop:gap-0.5 desktop:justify-self-end">
                   <button
-                    onClick={() => {
+                    onClick={(event) => {
+                      event.stopPropagation();
                       setResetTarget(u);
                       setNewPwd("");
                     }}
@@ -1529,14 +1625,20 @@ function AdminUsersPanel() {
                     <KeyRound className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => openRoleDialog(u)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openRoleDialog(u);
+                    }}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
                     title="Chuyển quyền"
                   >
                     <UserCog className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => deleteOne(u)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      deleteOne(u);
+                    }}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
                     title="Xoá"
                   >
@@ -1722,16 +1824,6 @@ function AdminUsersPanel() {
               onChange={(v) => setNewUser({ ...newUser, uid: v })}
               placeholder="Để trống để tự sinh"
             />
-            <TextField
-              label="Nhà máy"
-              value={newUser.company}
-              onChange={(v) => setNewUser({ ...newUser, company: v })}
-            />
-            <TextField
-              label="Mã NV"
-              value={newUser.employee_code}
-              onChange={(v) => setNewUser({ ...newUser, employee_code: v })}
-            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
@@ -1745,278 +1837,310 @@ function AdminUsersPanel() {
       </Dialog>
 
       {/* User detail dialog */}
-      <Dialog open={!!detailUser} onOpenChange={(o) => !o && setDetailUser(null)}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {detailUser?.full_name || detailUser?.username || "Tài khoản"}
-            </DialogTitle>
-            <DialogDescription>Thông tin chi tiết tài khoản</DialogDescription>
-          </DialogHeader>
+      <Dialog open={!!detailUser} onOpenChange={(open) => !open && closeDetailUser()}>
+        <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border-border/70 bg-card p-0 shadow-xl desktop:max-w-5xl">
           {detailUser && (
-            <div className="space-y-3 text-sm">
-              <DetailRow label="Tên đăng nhập" value={detailUser.username} />
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Thông tin cá nhân
+            <>
+              <DialogHeader className="border-b border-border/70 bg-card px-5 pb-4 pt-5 text-left sm:px-6">
+                <DialogTitle className="pr-12 text-xl text-foreground">
+                  {detailUser.full_name || detailUser.username || "Tài khoản"}
+                </DialogTitle>
+                <DialogDescription>Thông tin chi tiết tài khoản</DialogDescription>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="rounded-lg border border-border/70 bg-muted/35 px-2.5 py-1 text-xs font-medium text-foreground">
+                    @{detailUser.username || "—"}
                   </span>
-                  {!detailProfileEditing && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                      onClick={() => setDetailProfileEditing(true)}
-                    >
-                      Sửa thông tin
-                    </Button>
-                  )}
+                  <Badge
+                    variant="secondary"
+                    className="border border-primary/20 bg-primary/10 text-primary"
+                  >
+                    {ROLE_LABELS[(detailUser.role || "user") as Role]}
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className={
+                      isUserApproved(detailUser)
+                        ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border border-rose-200 bg-rose-50 text-rose-700"
+                    }
+                  >
+                    {isUserApproved(detailUser) ? "Hoạt động" : "Vô hiệu hoá"}
+                  </Badge>
                 </div>
-                {detailProfileEditing ? (
-                  <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Họ và tên</Label>
-                      <Input
-                        value={detailProfileForm.full_name}
-                        onChange={(e) =>
-                          setDetailProfileForm((c) => ({ ...c, full_name: e.target.value }))
-                        }
-                        placeholder="Nhập họ tên"
-                        className="rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Số điện thoại</Label>
-                      <Input
-                        value={detailProfileForm.phone}
-                        onChange={(e) =>
-                          setDetailProfileForm((c) => ({
-                            ...c,
-                            phone: e.target.value.replace(/\D/g, ""),
-                          }))
-                        }
-                        inputMode="tel"
-                        placeholder="Nhập số điện thoại"
-                        className="rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Giới tính</Label>
-                      <Select
-                        value={detailProfileForm.gender}
-                        onValueChange={(v) => setDetailProfileForm((c) => ({ ...c, gender: v }))}
-                      >
-                        <SelectTrigger className="rounded-xl">
-                          <SelectValue placeholder="Chọn giới tính" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Nam">Nam</SelectItem>
-                          <SelectItem value="Nữ">Nữ</SelectItem>
-                          <SelectItem value="Khác">Khác</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">CCCD</Label>
-                      <Input
-                        value={detailProfileForm.cccd}
-                        onChange={(e) =>
-                          setDetailProfileForm((c) => ({
-                            ...c,
-                            cccd: e.target.value.replace(/\D/g, ""),
-                          }))
-                        }
-                        inputMode="numeric"
-                        placeholder="Nhập số CCCD"
-                        className="rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Ngày sinh</Label>
-                      <DateInput
-                        value={detailProfileForm.date_of_birth}
-                        onChange={(v) => setDetailProfileForm((c) => ({ ...c, date_of_birth: v }))}
-                        className="rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Địa chỉ</Label>
-                      <Input
-                        value={detailProfileForm.address}
-                        onChange={(e) =>
-                          setDetailProfileForm((c) => ({ ...c, address: e.target.value }))
-                        }
-                        placeholder="Nhập địa chỉ"
-                        className="rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Mã nhân viên</Label>
-                      <Input
-                        value={detailProfileForm.employee_code}
-                        onChange={(e) =>
-                          setDetailProfileForm((c) => ({ ...c, employee_code: e.target.value }))
-                        }
-                        placeholder="Nhập mã nhân viên"
-                        className="rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Nhà máy</Label>
-                      <Input
-                        value={detailProfileForm.company}
-                        onChange={(e) =>
-                          setDetailProfileForm((c) => ({ ...c, company: e.target.value }))
-                        }
-                        placeholder="Nhập nhà máy"
-                        className="rounded-xl"
-                      />
-                    </div>
-                    <div className="flex gap-2 pt-1">
+              </DialogHeader>
+
+              <div className="max-h-[calc(90dvh-13rem)] overflow-y-auto p-4 sm:p-5 desktop:p-6">
+                <div className="grid gap-4 desktop:grid-cols-[minmax(0,1.15fr)_minmax(17rem,0.85fr)] desktop:items-start">
+                  <DetailSection
+                    title="Thông tin cá nhân"
+                    action={
                       <Button
                         size="sm"
                         variant="outline"
-                        className="flex-1 rounded-xl"
-                        onClick={() => setDetailProfileEditing(false)}
+                        className="h-9 rounded-xl border-border/80 bg-card px-3 text-xs hover:bg-muted/40"
+                        onClick={openDetailProfileEditor}
                       >
-                        Hủy
+                        <Pencil className="h-3.5 w-3.5" /> Sửa thông tin
                       </Button>
-                      <Button
-                        size="sm"
-                        className="flex-1 rounded-xl"
-                        disabled={detailProfileSaving}
-                        onClick={saveDetailProfile}
-                      >
-                        {detailProfileSaving ? "Đang lưu..." : "Lưu thông tin"}
-                      </Button>
+                    }
+                  >
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <DetailField label="Tên đăng nhập" value={`@${detailUser.username || "—"}`} />
+                      <DetailField label="Họ và tên" value={detailUser.full_name} />
+                      <DetailField label="Số điện thoại" value={detailUser.phone} />
+                      <DetailField label="Giới tính" value={detailUser.gender} />
+                      <DetailField label="CCCD" value={detailUser.cccd} />
+                      <DetailField
+                        label="Ngày sinh"
+                        value={
+                          detailUser.date_of_birth
+                            ? detailUser.date_of_birth.slice(0, 10).split("-").reverse().join("/")
+                            : ""
+                        }
+                      />
+                      <DetailField
+                        label="Địa chỉ"
+                        value={detailUser.address}
+                        className="sm:col-span-2"
+                      />
                     </div>
-                  </div>
-                ) : (
-                  <>
-                    <DetailRow label="Họ và tên" value={detailUser.full_name} />
-                    <DetailRow label="Số điện thoại" value={detailUser.phone} />
-                    <DetailRow label="Giới tính" value={detailUser.gender} />
-                    <DetailRow label="CCCD" value={detailUser.cccd} />
-                    <DetailRow
-                      label="Ngày sinh"
-                      value={
-                        detailUser.date_of_birth
-                          ? detailUser.date_of_birth.slice(0, 10).split("-").reverse().join("/")
-                          : ""
+                  </DetailSection>
+
+                  <div className="space-y-4">
+                    <DetailSection
+                      title="Tài khoản ngân hàng"
+                      action={
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-9 rounded-xl border-border/80 bg-card px-3 text-xs hover:bg-muted/40"
+                          onClick={openDetailBankEditor}
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Sửa STK
+                        </Button>
                       }
-                    />
-                    <DetailRow label="Địa chỉ" value={detailUser.address} />
-                    <DetailRow label="Mã tài khoản (UID)" value={detailUser.uid} />
-                    <DetailRow label="Mã nhân viên" value={detailUser.employee_code} />
-                    <DetailRow label="Nhà máy" value={detailUser.company} />
-                  </>
-                )}
-              </div>
-              <Separator />
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Tài khoản ngân hàng
-                  </span>
-                  {!detailBankEditing && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                      onClick={() => setDetailBankEditing(true)}
                     >
-                      Sửa STK
-                    </Button>
-                  )}
-                </div>
-                {detailBankEditing ? (
-                  <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Ngân hàng</Label>
-                      <Select
-                        value={detailBankForm.bank_name}
-                        onValueChange={(v) => setDetailBankForm((c) => ({ ...c, bank_name: v }))}
-                      >
-                        <SelectTrigger className="rounded-xl">
-                          <SelectValue placeholder="Chọn ngân hàng" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-72">
-                          {VN_BANKS.map((bank) => (
-                            <SelectItem key={bank.code} value={bank.name}>
-                              {bank.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Số tài khoản</Label>
-                      <Input
-                        value={detailBankForm.bank_account_number}
-                        onChange={(e) =>
-                          setDetailBankForm((c) => ({
-                            ...c,
-                            bank_account_number: e.target.value.replace(/\D/g, ""),
-                          }))
-                        }
-                        inputMode="numeric"
-                        placeholder="Nhập số tài khoản"
-                        className="rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Tên chủ tài khoản</Label>
-                      <Input
-                        value={detailBankForm.bank_account_name}
-                        onChange={(e) =>
-                          setDetailBankForm((c) => ({ ...c, bank_account_name: e.target.value }))
-                        }
-                        placeholder="Nhập tên chủ tài khoản"
-                        className="rounded-xl"
-                      />
-                    </div>
-                    <div className="flex gap-2 pt-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 rounded-xl"
-                        onClick={() => setDetailBankEditing(false)}
-                      >
-                        Hủy
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="flex-1 rounded-xl"
-                        disabled={detailBankSaving}
-                        onClick={saveDetailBank}
-                      >
-                        {detailBankSaving ? "Đang lưu..." : "Lưu STK"}
-                      </Button>
-                    </div>
+                      <div className="grid gap-2">
+                        <DetailField label="Ngân hàng" value={detailUser.bank_name} />
+                        <DetailField label="Số tài khoản" value={detailUser.bank_account_number} />
+                        <DetailField label="Tên tài khoản" value={detailUser.bank_account_name} />
+                      </div>
+                    </DetailSection>
+
+                    <DetailSection title="Thông tin hệ thống">
+                      <div className="grid gap-2 sm:grid-cols-2 desktop:grid-cols-1">
+                        <DetailField label="Mã tài khoản (UID)" value={detailUser.uid} />
+                        <DetailField
+                          label="Vai trò"
+                          value={ROLE_LABELS[(detailUser.role || "user") as Role]}
+                        />
+                        <DetailField
+                          label="Trạng thái"
+                          value={isUserApproved(detailUser) ? "Hoạt động" : "Vô hiệu hoá"}
+                        />
+                        <DetailField
+                          label="Ngày tạo"
+                          value={
+                            detailUser.created
+                              ? new Date(detailUser.created).toLocaleDateString("vi-VN")
+                              : ""
+                          }
+                        />
+                      </div>
+                    </DetailSection>
                   </div>
-                ) : (
-                  <>
-                    <DetailRow label="Ngân hàng" value={detailUser.bank_name} />
-                    <DetailRow label="Số tài khoản" value={detailUser.bank_account_number} />
-                    <DetailRow label="Tên tài khoản" value={detailUser.bank_account_name} />
-                  </>
-                )}
+                </div>
               </div>
-              <Separator />
-              <DetailRow label="Vai trò" value={ROLE_LABELS[(detailUser.role || "user") as Role]} />
-              <DetailRow
-                label="Trạng thái"
-                value={isUserApproved(detailUser) ? "Hoạt động" : "Vô hiệu hoá"}
-              />
-              <DetailRow
-                label="Ngày tạo"
-                value={new Date(detailUser.created).toLocaleDateString("vi-VN")}
-              />
-            </div>
+            </>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDetailUser(null)}>
+          <DialogFooter className="border-t border-border/70 bg-card px-4 py-3 sm:px-5">
+            <Button variant="outline" className="rounded-xl" onClick={closeDetailUser}>
               Đóng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit profile dialog */}
+      <Dialog
+        open={detailProfileEditing}
+        onOpenChange={(open) => !detailProfileSaving && setDetailProfileEditing(open)}
+      >
+        <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border-border/70 bg-card p-0 shadow-xl desktop:max-w-3xl">
+          <DialogHeader className="border-b border-border/70 bg-card px-5 pb-4 pt-5 text-left sm:px-6">
+            <DialogTitle>Sửa thông tin cá nhân</DialogTitle>
+            <DialogDescription>
+              Cập nhật thông tin của {detailUser?.full_name || detailUser?.username || "tài khoản"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 px-5 py-4 sm:px-6 desktop:grid-cols-2">
+            <DetailEditorField label="Họ và tên">
+              <Input
+                value={detailProfileForm.full_name}
+                onChange={(e) =>
+                  setDetailProfileForm((current) => ({ ...current, full_name: e.target.value }))
+                }
+                placeholder="Nhập họ và tên"
+                className={DETAIL_EDITOR_CONTROL_CLASS}
+              />
+            </DetailEditorField>
+            <DetailEditorField label="Số điện thoại">
+              <Input
+                value={detailProfileForm.phone}
+                onChange={(e) =>
+                  setDetailProfileForm((current) => ({
+                    ...current,
+                    phone: e.target.value.replace(/\D/g, ""),
+                  }))
+                }
+                inputMode="tel"
+                placeholder="Nhập số điện thoại"
+                className={DETAIL_EDITOR_CONTROL_CLASS}
+              />
+            </DetailEditorField>
+            <DetailEditorField label="Giới tính">
+              <Select
+                value={detailProfileForm.gender}
+                onValueChange={(value) =>
+                  setDetailProfileForm((current) => ({ ...current, gender: value }))
+                }
+              >
+                <SelectTrigger className={DETAIL_EDITOR_CONTROL_CLASS}>
+                  <SelectValue placeholder="Chọn giới tính" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Nam">Nam</SelectItem>
+                  <SelectItem value="Nữ">Nữ</SelectItem>
+                  <SelectItem value="Khác">Khác</SelectItem>
+                </SelectContent>
+              </Select>
+            </DetailEditorField>
+            <DetailEditorField label="CCCD">
+              <Input
+                value={detailProfileForm.cccd}
+                onChange={(e) =>
+                  setDetailProfileForm((current) => ({
+                    ...current,
+                    cccd: e.target.value.replace(/\D/g, ""),
+                  }))
+                }
+                inputMode="numeric"
+                placeholder="Nhập số CCCD"
+                className={DETAIL_EDITOR_CONTROL_CLASS}
+              />
+            </DetailEditorField>
+            <DetailEditorField label="Ngày sinh">
+              <DateInput
+                value={detailProfileForm.date_of_birth}
+                onChange={(value) =>
+                  setDetailProfileForm((current) => ({ ...current, date_of_birth: value }))
+                }
+                className={DETAIL_EDITOR_CONTROL_CLASS}
+              />
+            </DetailEditorField>
+            <DetailEditorField label="Địa chỉ" className="desktop:col-span-2">
+              <Input
+                value={detailProfileForm.address}
+                onChange={(e) =>
+                  setDetailProfileForm((current) => ({ ...current, address: e.target.value }))
+                }
+                placeholder="Nhập địa chỉ"
+                className={DETAIL_EDITOR_CONTROL_CLASS}
+              />
+            </DetailEditorField>
+          </div>
+          <DialogFooter className="sticky bottom-0 border-t border-border/70 bg-card px-5 py-3 sm:px-6">
+            <Button
+              variant="outline"
+              className="rounded-xl"
+              disabled={detailProfileSaving}
+              onClick={() => setDetailProfileEditing(false)}
+            >
+              Hủy
+            </Button>
+            <Button
+              className="rounded-xl"
+              disabled={detailProfileSaving}
+              onClick={saveDetailProfile}
+            >
+              {detailProfileSaving ? "Đang lưu..." : "Lưu thông tin"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit bank dialog */}
+      <Dialog
+        open={detailBankEditing}
+        onOpenChange={(open) => !detailBankSaving && setDetailBankEditing(open)}
+      >
+        <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border-border/70 bg-card p-0 shadow-xl desktop:max-w-xl">
+          <DialogHeader className="border-b border-border/70 bg-card px-5 pb-4 pt-5 text-left sm:px-6">
+            <DialogTitle>Sửa tài khoản ngân hàng</DialogTitle>
+            <DialogDescription>
+              Cập nhật thông tin nhận lương của{" "}
+              {detailUser?.full_name || detailUser?.username || "tài khoản"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 px-5 py-4 sm:px-6">
+            <DetailEditorField label="Ngân hàng">
+              <Select
+                value={detailBankForm.bank_name}
+                onValueChange={(value) =>
+                  setDetailBankForm((current) => ({ ...current, bank_name: value }))
+                }
+              >
+                <SelectTrigger className={DETAIL_EDITOR_CONTROL_CLASS}>
+                  <SelectValue placeholder="Chọn ngân hàng" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {VN_BANKS.map((bank) => (
+                    <SelectItem key={bank.code} value={bank.name}>
+                      {bank.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </DetailEditorField>
+            <DetailEditorField label="Số tài khoản">
+              <Input
+                value={detailBankForm.bank_account_number}
+                onChange={(e) =>
+                  setDetailBankForm((current) => ({
+                    ...current,
+                    bank_account_number: e.target.value.replace(/\D/g, ""),
+                  }))
+                }
+                inputMode="numeric"
+                placeholder="Nhập số tài khoản"
+                className={DETAIL_EDITOR_CONTROL_CLASS}
+              />
+            </DetailEditorField>
+            <DetailEditorField label="Tên chủ tài khoản">
+              <Input
+                value={detailBankForm.bank_account_name}
+                onChange={(e) =>
+                  setDetailBankForm((current) => ({
+                    ...current,
+                    bank_account_name: e.target.value,
+                  }))
+                }
+                placeholder="Nhập tên chủ tài khoản"
+                className={DETAIL_EDITOR_CONTROL_CLASS}
+              />
+            </DetailEditorField>
+          </div>
+          <DialogFooter className="sticky bottom-0 border-t border-border/70 bg-card px-5 py-3 sm:px-6">
+            <Button
+              variant="outline"
+              className="rounded-xl"
+              disabled={detailBankSaving}
+              onClick={() => setDetailBankEditing(false)}
+            >
+              Hủy
+            </Button>
+            <Button className="rounded-xl" disabled={detailBankSaving} onClick={saveDetailBank}>
+              {detailBankSaving ? "Đang lưu..." : "Lưu STK"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2025,11 +2149,63 @@ function AdminUsersPanel() {
   );
 }
 
-function DetailRow({ label, value }: { label: string; value?: string }) {
+const DETAIL_EDITOR_CONTROL_CLASS =
+  "h-11 rounded-xl border-border/80 bg-card shadow-none hover:border-primary/40 focus-visible:border-primary/70 focus-visible:ring-primary/25";
+
+function DetailSection({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-border/40 pb-2 last:border-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-right font-medium">{value || "—"}</span>
+    <section className="rounded-2xl border border-border/70 bg-card p-3.5 shadow-sm sm:p-4">
+      <div className="mb-3 flex min-h-9 items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function DetailField({
+  label,
+  value,
+  className = "",
+}: {
+  label: string;
+  value?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`min-w-0 rounded-xl border border-border/65 bg-muted/20 px-3 py-2.5 ${className}`}
+    >
+      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-1 break-words text-sm font-medium text-foreground">{value || "?"}</div>
+    </div>
+  );
+}
+
+function DetailEditorField({
+  label,
+  className = "",
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`space-y-1.5 ${className}`}>
+      <Label className="text-xs font-medium text-foreground">{label}</Label>
+      {children}
     </div>
   );
 }
@@ -2122,7 +2298,9 @@ function StaffPanel() {
           "Nhà máy 3": "",
         },
       ],
-    });
+    },
+    { "Tài khoản Staff": ["Ngày sinh"] }
+    );
   };
 
   const importStaff = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -2160,7 +2338,7 @@ function StaffPanel() {
         const username = normalizeAccountUsername(pickVal(row, ["username", "Tên đăng nhập"]));
         const fullName = pickVal(row, ["full_name", "Họ tên", "Họ và tên"]);
         const phone = pickVal(row, ["phone", "Số điện thoại", "SĐT"]);
-        const dob = normalizeDate(pickVal(row, ["date_of_birth", "Ngày sinh"]));
+        const dob = normalizeDate(row["date_of_birth"] ?? row["Ngày sinh"] ?? "");
         const address = pickVal(row, ["address", "Địa chỉ"]);
         const password = pickVal(row, ["password", "Mật khẩu"]) || STAFF_DEFAULT_PASSWORD;
 
@@ -2254,7 +2432,7 @@ function StaffPanel() {
       setImportResult(resultText);
       toast.success(resultText);
       if (failedRows.length) {
-        exportToExcel(`staff_import_loi_${Date.now()}`, { "Dòng lỗi": failedRows });
+        exportToExcel(`staff_import_loi_${Date.now()}`, { "Dòng lỗi": failedRows }, { "Dòng lỗi": ["Ngày sinh", "date_of_birth"] });
         toast.warning("Đã xuất file các dòng lỗi");
       }
       await load();
@@ -2559,6 +2737,20 @@ function CreateStaffDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+
+function AccountListCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="hidden min-w-0 desktop:block">
+      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div title={value} className="mt-1 truncate text-sm text-foreground">
+        {value}
+      </div>
+    </div>
   );
 }
 

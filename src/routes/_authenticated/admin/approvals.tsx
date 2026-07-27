@@ -122,14 +122,13 @@ function ApprovalsPage() {
       "Địa chỉ email": u.email,
       "Vai trò": u.role,
       "Đã duyệt": isUserApproved(u) ? "Có" : "Không",
-      "Nhà máy": u.company,
       "Lương cơ bản": u.lcb,
       "Ngân hàng": u.bank_name,
       "Số tài khoản": u.bank_account_number,
       "Tên chủ tài khoản": u.bank_account_name,
       "Tạo lúc": formatDateOnly(u.created),
     }));
-    exportToExcel(`danh_sach_user_${Date.now()}`, { "Tài khoản chờ duyệt": rows });
+    exportToExcel(`danh_sach_user_${Date.now()}`, { "Tài khoản chờ duyệt": rows }, { "Tài khoản chờ duyệt": ["Tạo lúc"] });
   };
 
   return (

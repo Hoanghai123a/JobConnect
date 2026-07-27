@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { pb } from "@/lib/pocketbase";
 import { getSeen } from "@/lib/seen";
+import { findActiveEmploymentByUser } from "@/lib/employment";
 import {
   happiness,
   hunger,
@@ -61,8 +62,6 @@ export function RoamingPet() {
   const reactTimer = useRef<number | null>(null);
   const reactHideTimer = useRef<number | null>(null);
   const userId = user?.id ?? "";
-  const employeeCode = user?.employee_code?.trim() ?? "";
-  const company = user?.company?.trim() ?? "";
 
   // Tải state + theo dõi thay đổi từ trang vườn.
   useEffect(() => {
@@ -84,7 +83,8 @@ export function RoamingPet() {
       const dd = String(today.getDate()).padStart(2, "0");
       const todayKey = `${yyyy}-${mm}-${dd}`;
 
-      const hasEmployment = Boolean(employeeCode && company);
+      const currentEmployment = await findActiveEmploymentByUser(userId).catch(() => null);
+      const hasEmployment = Boolean(currentEmployment);
 
       const [attCount, newsCount] = await Promise.all([
         hasEmployment
@@ -121,7 +121,7 @@ export function RoamingPet() {
       alive = false;
       window.clearInterval(id);
     };
-  }, [company, employeeCode, userId]);
+  }, [userId]);
 
   const isStaff = user?.role === "staff";
   const enabled = Boolean(userId) && !loading && !isStaff && garden?.roamingEnabled !== false;

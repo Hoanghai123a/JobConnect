@@ -34,7 +34,7 @@ function userSearchFilter(search: string) {
   const q = escapePb(search.trim());
   const roleFilter = '(role="user" || role="")';
   if (!q) return roleFilter;
-  const searchFilter = `(${["full_name", "username", "phone", "employee_code", "company"]
+  const searchFilter = `(${["full_name", "username", "phone"]
     .map((field) => `${field}~"${q}"`)
     .join(" || ")})`;
   return `${roleFilter} && ${searchFilter}`;
@@ -58,7 +58,6 @@ function AdminAccountsPage() {
     full_name: "",
     cccd: "",
     phone: "",
-    company: "",
   });
   const [saving, setSaving] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -101,7 +100,6 @@ function AdminAccountsPage() {
       full_name: user.full_name || "",
       cccd: user.cccd || "",
       phone: user.phone || "",
-      company: user.company || "",
     });
   };
 
@@ -128,7 +126,6 @@ function AdminAccountsPage() {
       full_name: profileForm.full_name.trim(),
       cccd: profileForm.cccd.trim(),
       phone: profileForm.phone.trim(),
-      company: profileForm.company.trim(),
     };
     if (!payload.full_name) {
       toast.warning("Vui lòng nhập họ tên");
@@ -138,7 +135,6 @@ function AdminAccountsPage() {
       full_name: detailUser.full_name || "",
       cccd: detailUser.cccd || "",
       phone: detailUser.phone || "",
-      company: detailUser.company || "",
     };
     setSavingProfile(true);
     try {
@@ -173,7 +169,7 @@ function AdminAccountsPage() {
     >
       <div className="grid grid-cols-2 gap-2">
         <Link
-          to="/admin/accounts/logs"
+          to="/admin/logs"
           className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-3 py-3 text-left text-sm font-medium shadow-soft"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -317,17 +313,6 @@ function AdminAccountsPage() {
                       }
                       inputMode="tel"
                       placeholder="Nhập số điện thoại"
-                      className="rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Công ty</Label>
-                    <Input
-                      value={profileForm.company}
-                      onChange={(e) =>
-                        setProfileForm((c) => ({ ...c, company: e.target.value }))
-                      }
-                      placeholder="Nhập công ty"
                       className="rounded-xl"
                     />
                   </div>

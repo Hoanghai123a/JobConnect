@@ -229,30 +229,18 @@ export async function syncStaffData(opts?: {
   const allHistories = await idbGetAll<EmploymentHistoryRecord>(db, STORE_HISTORIES);
 
   const userIds = [...new Set(allHistories.map((h) => h.user).filter(Boolean))];
-  const cachedUsers = await idbGetAll<UserRecord>(db, STORE_USERS);
-  const cachedUserIds = new Set(cachedUsers.map((u) => u.id));
 
-  const missingUserIds = userIds.filter((id) => !cachedUserIds.has(id));
-  let updatedUsers: UserRecord[] = [];
+  // A user profile can change without touching employment_histories. Refresh every
+  // worker already present in the permitted history scope so a page reload cannot
+  // keep serving a stale IndexedDB user record. The query remains limited to the
+  // scoped user ids instead of listing every recently updated account.
+  const refreshedUsers = await fetchUsersBatched(userIds).catch((error) => {
+    console.warn("[staff-cache] scoped user refresh failed", error);
+    return [] as UserRecord[];
+  });
 
-  if (lastSync) {
-    const freshUsers = (await pb
-      .collection("users")
-      .getFullList({
-        filter: `updated>"${lastSync}"`,
-        sort: "full_name,username",
-      })
-      .catch(() => [])) as unknown as UserRecord[];
-    updatedUsers = freshUsers;
-  }
-
-  if (missingUserIds.length) {
-    const fetched = await fetchUsersBatched(missingUserIds).catch(() => []);
-    updatedUsers.push(...fetched);
-  }
-
-  if (updatedUsers.length) {
-    await idbPutMany(db, STORE_USERS, updatedUsers);
+  if (refreshedUsers.length) {
+    await idbPutMany(db, STORE_USERS, refreshedUsers);
   }
 
   if (includeCccdVersions) {

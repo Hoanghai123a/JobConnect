@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { escapePb } from "@/lib/delegations";
+import { findActiveEmploymentByUser, type EmploymentHistoryRecord } from "@/lib/employment";
 import { toast } from "sonner";
 import {
   Phone,
@@ -101,12 +102,12 @@ function ComplaintsPage() {
   const [note, setNote] = useState("");
   const [form, setForm] = useState({
     full_name: user?.full_name || "",
-    company: user?.company || "",
     phone: user?.phone || "",
     content: "",
   });
   const [sending, setSending] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [currentEmployment, setCurrentEmployment] = useState<EmploymentHistoryRecord | null>(null);
   const [expandedComplaintId, setExpandedComplaintId] = useState<string | null>(null);
 
   const load = async () => {
@@ -138,14 +139,29 @@ function ComplaintsPage() {
     /* eslint-disable-next-line */
   }, [isAdmin, user?.phone, tab, search]);
 
+  useEffect(() => {
+    if (!user?.id) {
+      setCurrentEmployment(null);
+      return;
+    }
+    let active = true;
+    findActiveEmploymentByUser(user.id)
+      .then((history) => active && setCurrentEmployment(history))
+      .catch(() => active && setCurrentEmployment(null));
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSending(true);
     try {
+      const employment = user?.id ? await findActiveEmploymentByUser(user.id) : null;
       await pb.collection("complaints").create({
         full_name: user?.full_name || "",
-        employee_code: user?.employee_code || "",
-        company: user?.company || "",
+        employee_code: employment?.employee_code || "",
+        company: employment?.expand?.factory?.name || "",
         phone: user?.phone || "",
         content: form.content,
         status: "pending",
@@ -190,7 +206,7 @@ function ComplaintsPage() {
       "Thời gian gửi": formatDateOnly(i.created),
       "Thời gian xử lý": formatDateOnly(i.resolved_at),
     }));
-    exportToExcel(`khieu_nai_${Date.now()}`, { "Khiếu nại": rows });
+    exportToExcel(`khieu_nai_${Date.now()}`, { "Khiếu nại": rows }, { "Khiếu nại": ["Thời gian gửi", "Thời gian xử lý"] });
   };
 
   /* ─── User view ─── */
@@ -212,8 +228,10 @@ function ComplaintsPage() {
             {showProfile && (
               <div className="space-y-3">
                 <ReadOnlyField label="Họ và tên" value={user?.full_name} />
-                <ReadOnlyField label="Mã NV" value={user?.employee_code} />
-                <ReadOnlyField label="Nhà máy đang làm" value={user?.company} />
+                <ReadOnlyField
+                  label="Nhà máy đang làm"
+                  value={currentEmployment?.expand?.factory?.name || "Chưa có lịch sử đi làm"}
+                />
                 <ReadOnlyField label="Số điện thoại liên hệ" value={user?.phone} />
               </div>
             )}

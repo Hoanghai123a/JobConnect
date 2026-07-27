@@ -40,6 +40,7 @@ import { Route as ApiPublicAppLogoRouteImport } from './routes/api/public/app-lo
 import { Route as ApiPublicAppIcon512RouteImport } from './routes/api/public/app-icon-512'
 import { Route as ApiPublicAppIcon192RouteImport } from './routes/api/public/app-icon-192'
 import { Route as ApiPublicAppIconRouteImport } from './routes/api/public/app-icon'
+import { Route as AuthenticatedStaffWorkforceRouteImport } from './routes/_authenticated/staff.workforce'
 import { Route as AuthenticatedStaffSalaryHoldsRouteImport } from './routes/_authenticated/staff.salary-holds'
 import { Route as AuthenticatedStaffRecruitedRouteImport } from './routes/_authenticated/staff.recruited'
 import { Route as AuthenticatedStaffExportRouteImport } from './routes/_authenticated/staff.export'
@@ -48,6 +49,7 @@ import { Route as AuthenticatedStaffAdvancesRouteImport } from './routes/_authen
 import { Route as AuthenticatedAdminWorkforceRouteImport } from './routes/_authenticated/admin/workforce'
 import { Route as AuthenticatedAdminStaffRouteImport } from './routes/_authenticated/admin/staff'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
+import { Route as AuthenticatedAdminLogsRouteImport } from './routes/_authenticated/admin/logs'
 import { Route as AuthenticatedAdminImportsRouteImport } from './routes/_authenticated/admin/imports'
 import { Route as AuthenticatedAdminApprovalsRouteImport } from './routes/_authenticated/admin/approvals'
 import { Route as AuthenticatedAdminAccountsRouteImport } from './routes/_authenticated/admin/accounts'
@@ -60,7 +62,7 @@ import { Route as AuthenticatedStaffWorkersWorkerIdRouteImport } from './routes/
 import { Route as AuthenticatedAdminAccountsStatsRouteImport } from './routes/_authenticated/admin/accounts.stats'
 import { Route as AuthenticatedAdminAccountsLogsRouteImport } from './routes/_authenticated/admin/accounts.logs'
 import { Route as AuthenticatedAdminAccountsFactoriesRouteImport } from './routes/_authenticated/admin/accounts.factories'
-import { Route as AuthenticatedStaffWorkersWorkerIdPayrollRouteImport } from './routes/_authenticated/staff.workers.$workerId.payroll'
+import { Route as AuthenticatedStaffWorkersWorkerIdPayrollRouteImport } from './routes/_authenticated/staff.workers.$workerId_.payroll'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
@@ -220,6 +222,12 @@ const ApiPublicAppIconRoute = ApiPublicAppIconRouteImport.update({
   path: '/api/public/app-icon',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedStaffWorkforceRoute =
+  AuthenticatedStaffWorkforceRouteImport.update({
+    id: '/workforce',
+    path: '/workforce',
+    getParentRoute: () => AuthenticatedStaffRoute,
+  } as any)
 const AuthenticatedStaffSalaryHoldsRoute =
   AuthenticatedStaffSalaryHoldsRouteImport.update({
     id: '/salary-holds',
@@ -267,6 +275,11 @@ const AuthenticatedAdminSettingsRoute =
     path: '/admin/settings',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedAdminLogsRoute = AuthenticatedAdminLogsRouteImport.update({
+  id: '/admin/logs',
+  path: '/admin/logs',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedAdminImportsRoute =
   AuthenticatedAdminImportsRouteImport.update({
     id: '/admin/imports',
@@ -340,9 +353,9 @@ const AuthenticatedAdminAccountsFactoriesRoute =
   } as any)
 const AuthenticatedStaffWorkersWorkerIdPayrollRoute =
   AuthenticatedStaffWorkersWorkerIdPayrollRouteImport.update({
-    id: '/payroll',
-    path: '/payroll',
-    getParentRoute: () => AuthenticatedStaffWorkersWorkerIdRoute,
+    id: '/workers/$workerId_/payroll',
+    path: '/workers/$workerId/payroll',
+    getParentRoute: () => AuthenticatedStaffRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -370,6 +383,7 @@ export interface FileRoutesByFullPath {
   '/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
+  '/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/staff': typeof AuthenticatedAdminStaffRouteWithChildren
   '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
@@ -378,6 +392,7 @@ export interface FileRoutesByFullPath {
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/staff/salary-holds': typeof AuthenticatedStaffSalaryHoldsRoute
+  '/staff/workforce': typeof AuthenticatedStaffWorkforceRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
   '/api/public/app-icon-512': typeof ApiPublicAppIcon512Route
@@ -390,7 +405,7 @@ export interface FileRoutesByFullPath {
   '/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
   '/admin/accounts/stats': typeof AuthenticatedAdminAccountsStatsRoute
-  '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRouteWithChildren
+  '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
   '/admin/accounts/': typeof AuthenticatedAdminAccountsIndexRoute
@@ -421,6 +436,7 @@ export interface FileRoutesByTo {
   '/work-history': typeof AuthenticatedWorkHistoryRoute
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
+  '/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
   '/staff/advances': typeof AuthenticatedStaffAdvancesRoute
@@ -428,6 +444,7 @@ export interface FileRoutesByTo {
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/staff/salary-holds': typeof AuthenticatedStaffSalaryHoldsRoute
+  '/staff/workforce': typeof AuthenticatedStaffWorkforceRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
   '/api/public/app-icon-512': typeof ApiPublicAppIcon512Route
@@ -440,7 +457,7 @@ export interface FileRoutesByTo {
   '/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
   '/admin/accounts/stats': typeof AuthenticatedAdminAccountsStatsRoute
-  '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRouteWithChildren
+  '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
   '/admin/accounts': typeof AuthenticatedAdminAccountsIndexRoute
@@ -475,6 +492,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/_authenticated/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/_authenticated/admin/imports': typeof AuthenticatedAdminImportsRoute
+  '/_authenticated/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/staff': typeof AuthenticatedAdminStaffRouteWithChildren
   '/_authenticated/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
@@ -483,6 +501,7 @@ export interface FileRoutesById {
   '/_authenticated/staff/export': typeof AuthenticatedStaffExportRoute
   '/_authenticated/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/_authenticated/staff/salary-holds': typeof AuthenticatedStaffSalaryHoldsRoute
+  '/_authenticated/staff/workforce': typeof AuthenticatedStaffWorkforceRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
   '/api/public/app-icon-512': typeof ApiPublicAppIcon512Route
@@ -495,13 +514,13 @@ export interface FileRoutesById {
   '/_authenticated/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/_authenticated/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
   '/_authenticated/admin/accounts/stats': typeof AuthenticatedAdminAccountsStatsRoute
-  '/_authenticated/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRouteWithChildren
+  '/_authenticated/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
   '/_authenticated/admin/accounts/': typeof AuthenticatedAdminAccountsIndexRoute
   '/_authenticated/admin/staff/': typeof AuthenticatedAdminStaffIndexRoute
   '/_authenticated/staff/workers/': typeof AuthenticatedStaffWorkersIndexRoute
-  '/_authenticated/staff/workers/$workerId/payroll': typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
+  '/_authenticated/staff/workers/$workerId_/payroll': typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -530,6 +549,7 @@ export interface FileRouteTypes {
     | '/admin/accounts'
     | '/admin/approvals'
     | '/admin/imports'
+    | '/admin/logs'
     | '/admin/settings'
     | '/admin/staff'
     | '/admin/workforce'
@@ -538,6 +558,7 @@ export interface FileRouteTypes {
     | '/staff/export'
     | '/staff/recruited'
     | '/staff/salary-holds'
+    | '/staff/workforce'
     | '/api/public/app-icon'
     | '/api/public/app-icon-192'
     | '/api/public/app-icon-512'
@@ -581,6 +602,7 @@ export interface FileRouteTypes {
     | '/work-history'
     | '/admin/approvals'
     | '/admin/imports'
+    | '/admin/logs'
     | '/admin/settings'
     | '/admin/workforce'
     | '/staff/advances'
@@ -588,6 +610,7 @@ export interface FileRouteTypes {
     | '/staff/export'
     | '/staff/recruited'
     | '/staff/salary-holds'
+    | '/staff/workforce'
     | '/api/public/app-icon'
     | '/api/public/app-icon-192'
     | '/api/public/app-icon-512'
@@ -634,6 +657,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/accounts'
     | '/_authenticated/admin/approvals'
     | '/_authenticated/admin/imports'
+    | '/_authenticated/admin/logs'
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/staff'
     | '/_authenticated/admin/workforce'
@@ -642,6 +666,7 @@ export interface FileRouteTypes {
     | '/_authenticated/staff/export'
     | '/_authenticated/staff/recruited'
     | '/_authenticated/staff/salary-holds'
+    | '/_authenticated/staff/workforce'
     | '/api/public/app-icon'
     | '/api/public/app-icon-192'
     | '/api/public/app-icon-512'
@@ -660,7 +685,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/accounts/'
     | '/_authenticated/admin/staff/'
     | '/_authenticated/staff/workers/'
-    | '/_authenticated/staff/workers/$workerId/payroll'
+    | '/_authenticated/staff/workers/$workerId_/payroll'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -901,6 +926,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicAppIconRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/staff/workforce': {
+      id: '/_authenticated/staff/workforce'
+      path: '/workforce'
+      fullPath: '/staff/workforce'
+      preLoaderRoute: typeof AuthenticatedStaffWorkforceRouteImport
+      parentRoute: typeof AuthenticatedStaffRoute
+    }
     '/_authenticated/staff/salary-holds': {
       id: '/_authenticated/staff/salary-holds'
       path: '/salary-holds'
@@ -955,6 +987,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/settings'
       fullPath: '/admin/settings'
       preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/admin/logs': {
+      id: '/_authenticated/admin/logs'
+      path: '/admin/logs'
+      fullPath: '/admin/logs'
+      preLoaderRoute: typeof AuthenticatedAdminLogsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/admin/imports': {
@@ -1041,30 +1080,15 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAccountsFactoriesRouteImport
       parentRoute: typeof AuthenticatedAdminAccountsRoute
     }
-    '/_authenticated/staff/workers/$workerId/payroll': {
-      id: '/_authenticated/staff/workers/$workerId/payroll'
-      path: '/payroll'
+    '/_authenticated/staff/workers/$workerId_/payroll': {
+      id: '/_authenticated/staff/workers/$workerId_/payroll'
+      path: '/workers/$workerId/payroll'
       fullPath: '/staff/workers/$workerId/payroll'
       preLoaderRoute: typeof AuthenticatedStaffWorkersWorkerIdPayrollRouteImport
-      parentRoute: typeof AuthenticatedStaffWorkersWorkerIdRoute
+      parentRoute: typeof AuthenticatedStaffRoute
     }
   }
 }
-
-interface AuthenticatedStaffWorkersWorkerIdRouteChildren {
-  AuthenticatedStaffWorkersWorkerIdPayrollRoute: typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
-}
-
-const AuthenticatedStaffWorkersWorkerIdRouteChildren: AuthenticatedStaffWorkersWorkerIdRouteChildren =
-  {
-    AuthenticatedStaffWorkersWorkerIdPayrollRoute:
-      AuthenticatedStaffWorkersWorkerIdPayrollRoute,
-  }
-
-const AuthenticatedStaffWorkersWorkerIdRouteWithChildren =
-  AuthenticatedStaffWorkersWorkerIdRoute._addFileChildren(
-    AuthenticatedStaffWorkersWorkerIdRouteChildren,
-  )
 
 interface AuthenticatedStaffRouteChildren {
   AuthenticatedStaffAdvancesRoute: typeof AuthenticatedStaffAdvancesRoute
@@ -1072,9 +1096,11 @@ interface AuthenticatedStaffRouteChildren {
   AuthenticatedStaffExportRoute: typeof AuthenticatedStaffExportRoute
   AuthenticatedStaffRecruitedRoute: typeof AuthenticatedStaffRecruitedRoute
   AuthenticatedStaffSalaryHoldsRoute: typeof AuthenticatedStaffSalaryHoldsRoute
+  AuthenticatedStaffWorkforceRoute: typeof AuthenticatedStaffWorkforceRoute
   AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
-  AuthenticatedStaffWorkersWorkerIdRoute: typeof AuthenticatedStaffWorkersWorkerIdRouteWithChildren
+  AuthenticatedStaffWorkersWorkerIdRoute: typeof AuthenticatedStaffWorkersWorkerIdRoute
   AuthenticatedStaffWorkersIndexRoute: typeof AuthenticatedStaffWorkersIndexRoute
+  AuthenticatedStaffWorkersWorkerIdPayrollRoute: typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
 }
 
 const AuthenticatedStaffRouteChildren: AuthenticatedStaffRouteChildren = {
@@ -1083,10 +1109,13 @@ const AuthenticatedStaffRouteChildren: AuthenticatedStaffRouteChildren = {
   AuthenticatedStaffExportRoute: AuthenticatedStaffExportRoute,
   AuthenticatedStaffRecruitedRoute: AuthenticatedStaffRecruitedRoute,
   AuthenticatedStaffSalaryHoldsRoute: AuthenticatedStaffSalaryHoldsRoute,
+  AuthenticatedStaffWorkforceRoute: AuthenticatedStaffWorkforceRoute,
   AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
   AuthenticatedStaffWorkersWorkerIdRoute:
-    AuthenticatedStaffWorkersWorkerIdRouteWithChildren,
+    AuthenticatedStaffWorkersWorkerIdRoute,
   AuthenticatedStaffWorkersIndexRoute: AuthenticatedStaffWorkersIndexRoute,
+  AuthenticatedStaffWorkersWorkerIdPayrollRoute:
+    AuthenticatedStaffWorkersWorkerIdPayrollRoute,
 }
 
 const AuthenticatedStaffRouteWithChildren =
@@ -1147,6 +1176,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAdminAccountsRoute: typeof AuthenticatedAdminAccountsRouteWithChildren
   AuthenticatedAdminApprovalsRoute: typeof AuthenticatedAdminApprovalsRoute
   AuthenticatedAdminImportsRoute: typeof AuthenticatedAdminImportsRoute
+  AuthenticatedAdminLogsRoute: typeof AuthenticatedAdminLogsRoute
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
   AuthenticatedAdminStaffRoute: typeof AuthenticatedAdminStaffRouteWithChildren
   AuthenticatedAdminWorkforceRoute: typeof AuthenticatedAdminWorkforceRoute
@@ -1172,6 +1202,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminAccountsRoute: AuthenticatedAdminAccountsRouteWithChildren,
   AuthenticatedAdminApprovalsRoute: AuthenticatedAdminApprovalsRoute,
   AuthenticatedAdminImportsRoute: AuthenticatedAdminImportsRoute,
+  AuthenticatedAdminLogsRoute: AuthenticatedAdminLogsRoute,
   AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
   AuthenticatedAdminStaffRoute: AuthenticatedAdminStaffRouteWithChildren,
   AuthenticatedAdminWorkforceRoute: AuthenticatedAdminWorkforceRoute,

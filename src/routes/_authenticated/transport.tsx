@@ -31,7 +31,6 @@ type TransportRecord = {
     user?: {
       full_name?: string;
       username?: string;
-      company?: string;
     };
     edited_by?: {
       full_name?: string;
@@ -282,7 +281,6 @@ function TransportPage() {
                   )}
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {author?.full_name || author?.username || "Người đóng góp"}
-                    {author?.company ? ` . ${author.company}` : ""}
                     {editor
                       ? ` . Admin sửa: ${editor.full_name || editor.username || "Admin"}`
                       : ""}

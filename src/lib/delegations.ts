@@ -12,7 +12,5 @@ export function relationInFilter(field: string, ids: string[]) {
 
 export function userDisplayName(user?: Partial<UserRecord> | null) {
   if (!user) return "Không rõ";
-  const name = user.full_name || user.username || user.phone || user.employee_code || user.id;
-  const code = user.employee_code ? ` · ${user.employee_code}` : "";
-  return `${name}${code}`;
+  return user.full_name || user.username || user.phone || user.id;
 }

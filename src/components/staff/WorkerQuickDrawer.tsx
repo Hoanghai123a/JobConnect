@@ -41,7 +41,6 @@ import {
   findActiveEmploymentByUser,
   getLatestEmploymentHistory,
   maskCccd,
-  syncLegacyUserWorkFields,
   updateEmploymentHistory,
   updateUserAndCache,
 } from "@/lib/employment";
@@ -170,7 +169,7 @@ export function WorkerQuickDrawer({
       bank_account_number: worker.user.bank_account_number || "",
       bank_account_name: worker.user.bank_account_name || "",
     });
-    setEmployeeCodeForm(latest?.employee_code || worker.user.employee_code || "");
+    setEmployeeCodeForm(latest?.employee_code || "");
   }, [worker, viewer?.id]);
 
   const joinableFactories = useMemo(() => {
@@ -199,7 +198,6 @@ export function WorkerQuickDrawer({
       });
       const updated = await fetchEmploymentHistories([worker.user.id]);
       const newLatest = getLatestEmploymentHistory(updated);
-      await syncLegacyUserWorkFields(worker.user.id, newLatest);
       await createStaffActionLog({
         actor: viewer,
         targetUserId: worker.user.id,
@@ -300,7 +298,6 @@ export function WorkerQuickDrawer({
         status: "working",
         note: joinForm.note.trim(),
       });
-      await syncLegacyUserWorkFields(worker.user.id, created);
       await createStaffActionLog({
         actor: viewer,
         targetUserId: worker.user.id,
@@ -368,9 +365,9 @@ export function WorkerQuickDrawer({
         user: worker.user.id,
         requested_by: viewer.id,
         recruiter_id: viewer.id,
-        employee_code: latest.employee_code || worker.user.employee_code || "",
+        employee_code: latest.employee_code || "",
         full_name: latest.worker_name_snapshot || worker.user.full_name || "",
-        company: latest.expand?.factory?.name || worker.user.company || "",
+        company: latest.expand?.factory?.name || "",
         phone: worker.user.phone || "",
         join_date: activeHistory.join_date || "",
         bank_name: bankSource.bank_name || "",
@@ -438,10 +435,11 @@ export function WorkerQuickDrawer({
     }
     setSubmitting(true);
     try {
-      await updateUserAndCache(worker.user.id, { employee_code: code });
-      if (latest) {
-        await updateEmploymentHistory(latest.id, { employee_code: code });
+      if (!latest) {
+        toast.error("Ng??i lao ??ng ch?a c? l?ch s? ?i l?m ?? c?p nh?t m? NV");
+        return;
       }
+      await updateEmploymentHistory(latest.id, { employee_code: code });
       await createStaffActionLog({
         actor: viewer,
         targetUserId: worker.user.id,
@@ -560,7 +558,7 @@ export function WorkerQuickDrawer({
                   <InfoCell label="Mã số thuế" value={latest?.worker_tax_code_snapshot || "—"} />
                   <InfoCell
                     label="Mã NV"
-                    value={latest?.employee_code || worker.user.employee_code || "—"}
+                    value={latest?.employee_code || "?"}
                   />
                   <InfoCell label="SĐT" value={worker.user.phone || "—"} />
                   <InfoCell label="Nhà máy" value={latest?.expand?.factory?.name || "—"} />
@@ -900,7 +898,7 @@ export function WorkerQuickDrawer({
               <div className="space-y-1">
                 <Label className="text-xs">Mã NV hiện tại</Label>
                 <div className="rounded-xl bg-muted/35 px-3 py-2 text-sm">
-                  {worker?.latestHistory?.employee_code || worker?.user.employee_code || "Chưa có"}
+                  {worker?.latestHistory?.employee_code || "Chưa có"}
                 </div>
               </div>
               <div className="space-y-1">

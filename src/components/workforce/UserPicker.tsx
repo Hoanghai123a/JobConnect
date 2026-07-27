@@ -87,7 +87,7 @@ export function UserPicker({
                 {users.map((u) => (
                   <CommandItem
                     key={u.id}
-                    value={`${u.full_name || ""} ${u.username || ""} ${u.phone || ""} ${u.uid || ""} ${u.employee_code || ""} ${u.cccd || ""}`}
+                    value={`${u.full_name || ""} ${u.username || ""} ${u.phone || ""} ${u.uid || ""} ${u.cccd || ""}`}
                     onSelect={() => {
                       onChange(u.id);
                       setOpen(false);
@@ -98,7 +98,7 @@ export function UserPicker({
                         {u.full_name || u.username || "—"}
                       </span>
                       <span className="truncate text-[11px] text-muted-foreground">
-                        {[u.username, u.phone, u.uid, u.employee_code, u.cccd]
+                        {[u.username, u.phone, u.uid, u.cccd]
                           .filter(Boolean)
                           .join(" · ")}
                       </span>

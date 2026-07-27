@@ -20,6 +20,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Download,
+  FileInput,
   Gem,
   Gamepad2,
   Home,
@@ -28,6 +29,7 @@ import {
   MessageCircle,
   Newspaper,
   Settings,
+  ScrollText,
   ShieldCheck,
   Sprout,
   User,
@@ -94,6 +96,7 @@ const staffNavigation: readonly NavigationSection[] = [
     label: "Lao động",
     items: [
       { to: "/staff/workers", label: "Danh sách lao động", icon: Users },
+      { to: "/staff/workforce", label: "Dashboard nhân lực", icon: BarChart3 },
       { to: "/staff/recruited", label: "Người tôi tuyển", icon: ClipboardList },
     ],
   },
@@ -139,6 +142,8 @@ const adminNavigation: readonly NavigationSection[] = [
       { to: "/advances", label: "Ứng lương", icon: Banknote },
       { to: "/staff/approvals", label: "Phê duyệt", icon: ClipboardCheck },
       { to: "/staff/salary-holds", label: "Giữ lương", icon: Landmark },
+      { to: "/admin/imports", label: "Nhập dữ liệu", icon: FileInput },
+      { to: "/admin/logs", label: "Nhật ký thao tác", icon: ScrollText },
     ],
   },
   {

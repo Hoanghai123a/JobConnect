@@ -52,7 +52,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { findOrCreateCccdVersion } from "@/lib/cccd-versions";
 import { displayDateToPocketBase, scanCccdQrFromFile, type CccdQrData } from "@/lib/cccd-qr";
 import { findUserByUsernameInsensitive, normalizeAccountUsername } from "@/lib/account-identity";
-import { createEmploymentHistory, syncLegacyUserWorkFields } from "@/lib/employment";
+import { createEmploymentHistory } from "@/lib/employment";
 import type { FactoryRecord } from "@/lib/factories";
 import { compressImage } from "@/lib/image-compress";
 import type { MainHouseRecord } from "@/lib/main-houses";
@@ -426,8 +426,6 @@ export function QuickWorkerAccountDialog({
     fd.append("bank_name", resolveBankName(form.bank_name.trim()));
     fd.append("bank_account_number", form.bank_account_number.replace(/\D/g, ""));
     fd.append("bank_account_name", form.bank_account_name.trim());
-    fd.append("employee_code", form.employee_code.trim());
-    fd.append("company", selectedFactory?.name || "");
     if (compressedFront) fd.append("cccd_front", compressedFront);
     if (compressedBack) fd.append("cccd_back", compressedBack);
 
@@ -439,8 +437,6 @@ export function QuickWorkerAccountDialog({
       phone,
       username,
       cccd,
-      company: selectedFactory?.name || "",
-      employee_code: form.employee_code.trim(),
     };
 
     try {
@@ -482,7 +478,6 @@ export function QuickWorkerAccountDialog({
         note: form.note.trim(),
       });
       historyId = history.id;
-      await syncLegacyUserWorkFields(createdUser.id, history);
     } catch (error) {
       secondaryWarnings.push(
         `chưa tạo được lịch sử đi làm (${getErrorMessage(error, "lỗi không rõ")})`,
@@ -897,7 +892,7 @@ function QuickWorkerEntryFields({
           placeholder="Chủ TK"
           desktopClassName="desktop:col-start-6 desktop:row-start-1"
         />
-        <div className="sm:col-span-2 desktop:col-span-1 desktop:col-start-5 desktop:row-start-2 desktop:max-w-none">
+        <div className="sm:col-span-2 desktop:col-span-2 desktop:col-start-5 desktop:row-start-2 desktop:max-w-none">
           <TextField
             label="Địa chỉ"
             value={form.address}
@@ -956,7 +951,7 @@ function QuickWorkerEntryFields({
           placeholder="Mã NV"
           desktopClassName="desktop:col-start-4 desktop:row-start-3"
         />
-        <div className="sm:col-span-2 lg:col-span-4 desktop:col-span-1 desktop:col-start-5 desktop:row-start-3">
+        <div className="sm:col-span-2 lg:col-span-4 desktop:col-span-2 desktop:col-start-5 desktop:row-start-3">
           <Label className="text-xs desktop:hidden">Ghi chú</Label>
           <Textarea
             rows={1}

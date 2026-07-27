@@ -95,7 +95,7 @@ function toneClass(tone: StatusTone) {
   return "border-primary/20 bg-primary/10 text-primary";
 }
 
-export function PushNotificationSettingsCard() {
+export function PushNotificationSettingsCard({ buttonOnly = false }: { buttonOnly?: boolean }) {
   const [state, setState] = useState<PushSupportState | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -131,6 +131,21 @@ export function PushNotificationSettingsCard() {
     }
   }
 
+  const actionButton = (
+    <Button
+      type="button"
+      onClick={enable}
+      disabled={loading || submitting || !status.canEnable}
+      className="w-full shrink-0 gap-2 rounded-xl sm:w-auto"
+      variant={buttonOnly ? "default" : state?.permission === "granted" ? "outline" : "default"}
+    >
+      {submitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+      {submitting ? "Đang xử lý..." : status.buttonLabel}
+    </Button>
+  );
+
+  if (buttonOnly) return actionButton;
+
   return (
     <Card className="mb-4 overflow-hidden rounded-2xl border-border/60 shadow-soft">
       <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -145,16 +160,7 @@ export function PushNotificationSettingsCard() {
           </div>
         </div>
 
-        <Button
-          type="button"
-          onClick={enable}
-          disabled={loading || submitting || !status.canEnable}
-          className="w-full shrink-0 gap-2 rounded-xl sm:w-auto"
-          variant={state?.permission === "granted" ? "outline" : "default"}
-        >
-          {submitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
-          {submitting ? "Đang xử lý..." : status.buttonLabel}
-        </Button>
+        {actionButton}
       </div>
     </Card>
   );

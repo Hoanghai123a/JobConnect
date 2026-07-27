@@ -13,7 +13,7 @@ import { RecruitmentChart } from "@/components/workforce/RecruitmentChart";
 import { WorkforceInsightsCharts } from "@/components/workforce/WorkforceInsightsCharts";
 import { FinanceDashboard } from "@/components/dashboard/FinanceDashboard";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
-import type { EmploymentHistoryRecord } from "@/lib/employment";
+import { findActiveEmploymentByUser, type EmploymentHistoryRecord } from "@/lib/employment";
 import { fetchFreshStaffWorkspace } from "@/lib/staff-permissions";
 import { escapePb } from "@/lib/delegations";
 import {
@@ -129,6 +129,7 @@ function DashboardPage() {
   const [workforceError, setWorkforceError] = useState("");
   const [workforceReloadToken, setWorkforceReloadToken] = useState(0);
   const [approvalStats, setApprovalStats] = useState<ApprovalStats>(createEmptyApprovalStats);
+  const [currentEmployment, setCurrentEmployment] = useState<EmploymentHistoryRecord | null>(null);
   const nav = useNavigate();
   const { hash } = useLocation();
   const normalizedHash = hash.startsWith("#") ? hash.slice(1) : hash;
@@ -144,6 +145,20 @@ function DashboardPage() {
     }
     window.location.reload();
   };
+
+  useEffect(() => {
+    if (!user?.id || isAdmin) {
+      setCurrentEmployment(null);
+      return;
+    }
+    let alive = true;
+    findActiveEmploymentByUser(user.id)
+      .then((history) => alive && setCurrentEmployment(history))
+      .catch(() => alive && setCurrentEmployment(null));
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin, user?.id]);
 
   useEffect(() => {
     if (loading) return;
@@ -357,7 +372,7 @@ function DashboardPage() {
     );
   }
 
-  const hasEmployment = Boolean(user?.employee_code?.trim() && user?.company?.trim());
+  const hasEmployment = Boolean(currentEmployment);
   const workDisabled = !isAdmin && !hasEmployment;
   const workDisabledReason =
     "Tính năng này chỉ dùng được khi bạn đã được admin gắn mã NV và nhà máy. Vui lòng liên hệ admin để cập nhật hồ sơ.";
@@ -433,7 +448,7 @@ function DashboardPage() {
             </div>
             {!isAdmin && hasEmployment && (
               <div className="inline-flex items-center rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] backdrop-blur">
-                {user.company}
+                {currentEmployment?.expand?.factory?.name || "Chưa có nhà máy"}
               </div>
             )}
           </div>

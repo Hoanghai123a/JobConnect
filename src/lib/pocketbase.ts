@@ -22,8 +22,6 @@ export interface UserRecord {
   default_hc_hours?: number;
   default_ot_hours?: number;
   attendance_cutoff_day?: number;
-  company?: string;
-  employee_code?: string;
   lcb?: number;
   chuyen_can?: number;
   doi_song?: number;

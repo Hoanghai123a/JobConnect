@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Banknote, BookOpen, Building2, BusFront, ChevronRight, ClipboardCheck, Download, LayoutGrid, MessagesSquare, Newspaper, NotebookPen, RefreshCw, UserCheck, Users } from "lucide-react";
+import { Banknote, BarChart3, BookOpen, Building2, BusFront, ChevronRight, ClipboardCheck, Download, LayoutGrid, MessagesSquare, Newspaper, NotebookPen, RefreshCw, UserCheck, Users } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -121,6 +121,16 @@ function StaffDashboardPage() {
           description="Tìm kiếm, xem lịch sử và xử lý nghiệp vụ."
           icon={Users}
         />
+        {user?.role === "staff" && (
+          <div className="hidden desktop:block">
+            <DashboardLink
+              to="/staff/workforce"
+              title="Dashboard nhân lực"
+              description="Theo dõi số liệu tuyển dụng trong phạm vi quyền của bạn."
+              icon={BarChart3}
+            />
+          </div>
+        )}
         <DashboardLink
           to="/staff/recruited"
           title="Người tôi tuyển"

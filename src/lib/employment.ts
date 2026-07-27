@@ -31,6 +31,17 @@ export function isCurrentlyWorking(
   return deriveEmploymentStatus(history, referenceDate) === "working";
 }
 
+function startOfDay(referenceDate: Date) {
+  return new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+}
+
+function historyDate(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 export interface EmploymentHistoryRecord {
   id: string;
   uid?: string;
@@ -184,18 +195,55 @@ export function getLatestEmploymentHistory(histories: EmploymentHistoryRecord[])
   return sortEmploymentHistories(histories)[0] || null;
 }
 
+/** Returns the employment record that was valid on the supplied calendar date. */
+export function getEmploymentHistoryAtDate(
+  histories: EmploymentHistoryRecord[],
+  referenceDate: Date = new Date(),
+) {
+  const referenceDay = startOfDay(referenceDate);
+  return histories
+    .filter((history) => {
+      const joinDay = historyDate(history.join_date);
+      if (!joinDay || joinDay > referenceDay) return false;
+      const leaveDay = historyDate(history.leave_date);
+      return !leaveDay || leaveDay > referenceDay;
+    })
+    .sort((a, b) => {
+      const joinDiff = (historyDate(b.join_date)?.getTime() || 0) - (historyDate(a.join_date)?.getTime() || 0);
+      if (joinDiff) return joinDiff;
+      return new Date(b.created || 0).getTime() - new Date(a.created || 0).getTime();
+    })[0] || null;
+}
+
+/** Returns the worker's current employment without using fields on the user record. */
+export function getCurrentEmploymentHistory(
+  histories: EmploymentHistoryRecord[],
+  referenceDate: Date = new Date(),
+) {
+  return getEmploymentHistoryAtDate(histories, referenceDate);
+}
+
+export function getEmploymentIdentity(history: EmploymentHistoryRecord | null | undefined) {
+  return {
+    historyId: history?.id || "",
+    employeeCode: history?.employee_code || "",
+    factoryId: history?.factory || "",
+    factoryName: history?.expand?.factory?.name || "",
+  };
+}
+
 export function hasActiveEmployment(histories: EmploymentHistoryRecord[]) {
-  return histories.some((item) => isCurrentlyWorking(item));
+  return Boolean(getCurrentEmploymentHistory(histories));
 }
 
 export async function findActiveEmploymentByUser(userId: string) {
-  const list = (await pb.collection("employment_histories").getList(1, 1, {
-    filter: `user="${userId}" && status="working"`,
+  const histories = (await pb.collection("employment_histories").getFullList({
+    filter: `user="${userId}"`,
     sort: "-join_date,-created",
-    expand: "user,factory,recruiter_staff",
-  })) as unknown as { items: EmploymentHistoryRecord[] };
+    expand: "user,factory,recruiter_staff,main_house",
+  })) as unknown as EmploymentHistoryRecord[];
 
-  return list.items[0] || null;
+  return getCurrentEmploymentHistory(histories);
 }
 
 export async function createEmploymentHistory(draft: EmploymentDraft, opts?: { uid?: string }) {
@@ -222,17 +270,6 @@ export async function updateUserAndCache(id: string, payload: Record<string, unk
   const record = (await pb.collection("users").update(id, payload)) as unknown as UserRecord;
   await updateCachedUser(record);
   return record;
-}
-
-export async function syncLegacyUserWorkFields(
-  userId: string,
-  latestHistory: EmploymentHistoryRecord | null,
-) {
-  const record = (await pb.collection("users").update(userId, {
-    company: latestHistory?.expand?.factory?.name || "",
-    employee_code: latestHistory?.employee_code || "",
-  })) as unknown as UserRecord;
-  await updateCachedUser(record);
 }
 
 export function maskCccd(cccd?: string | null) {

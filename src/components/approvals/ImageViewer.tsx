@@ -14,6 +14,11 @@ export function ImageViewer({
   const activeImage = viewIdx !== null ? images[viewIdx] : null;
   const canBrowse = images.length > 1;
 
+  const closeViewer = () => {
+    setViewIdx(null);
+    setTouchStartX(null);
+  };
+
   const showPrev = () => {
     setViewIdx((current) => {
       if (current === null) return current;
@@ -32,7 +37,7 @@ export function ImageViewer({
     if (!activeImage) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setViewIdx(null);
+      if (event.key === "Escape") closeViewer();
       if (event.key === "ArrowLeft" && canBrowse) showPrev();
       if (event.key === "ArrowRight" && canBrowse) showNext();
     };
@@ -46,11 +51,11 @@ export function ImageViewer({
   }, [activeImage, canBrowse, images.length]);
 
   function handleTouchEnd(event: React.TouchEvent<HTMLDivElement>) {
-    if (touchStartX === null || !canBrowse) return;
+    if (touchStartX === null) return;
     const diff = event.changedTouches[0].clientX - touchStartX;
     setTouchStartX(null);
 
-    if (Math.abs(diff) < 40) return;
+    if (!canBrowse || Math.abs(diff) < 40) return;
     if (diff > 0) showPrev();
     else showNext();
   }
@@ -86,16 +91,19 @@ export function ImageViewer({
         createPortal(
           <div
             data-approval-image-viewer
-            className="fixed inset-0 z-[80] flex touch-pan-y select-none items-center justify-center bg-black/90 p-3 sm:p-6"
+            className="pointer-events-auto fixed inset-0 z-[80] flex touch-pan-y select-none items-center justify-center bg-black/90 p-3 sm:p-6"
             onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (event.target === event.currentTarget) closeViewer();
+            }}
             onTouchStart={(event) => setTouchStartX(event.touches[0].clientX)}
             onTouchEnd={handleTouchEnd}
           >
             <button
               type="button"
-              onClick={() => setViewIdx(null)}
-              className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-foreground shadow-lg transition hover:bg-white"
+              onClick={closeViewer}
+              className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-foreground shadow-lg transition hover:bg-white"
               aria-label="Đóng ảnh"
             >
               <X className="h-5 w-5" />
@@ -129,6 +137,8 @@ export function ImageViewer({
               src={activeImage.url}
               alt={`Ảnh ${viewIdx! + 1}`}
               className="max-h-[88dvh] max-w-[96vw] rounded-lg object-contain shadow-2xl"
+              draggable={false}
+              onClick={(event) => event.stopPropagation()}
             />
           </div>,
           document.body,

@@ -30,6 +30,12 @@ import {
   type PayrollPeriod,
 } from "@/lib/payroll-cycle";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
+import {
+  fetchEmploymentHistories,
+  findActiveEmploymentByUser,
+  getEmploymentHistoryAtDate,
+  type EmploymentHistoryRecord,
+} from "@/lib/employment";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -86,6 +92,7 @@ function AdminAttendance() {
     return d;
   });
   const [rows, setRows] = useState<RowWithUser[]>([]);
+  const [employmentHistories, setEmploymentHistories] = useState<EmploymentHistoryRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [detailUser, setDetailUser] = useState<any | null>(null);
@@ -97,11 +104,15 @@ function AdminAttendance() {
       const next = new Date(monthDate);
       next.setMonth(next.getMonth() + 1);
       const last = ym(next) + "-01";
-      const res = await pb.collection("attendance").getList(1, 500, {
-        filter: `date>="${first}" && date<"${last}"`,
-        sort: "date",
-        expand: "user",
-      });
+      const [res, histories] = await Promise.all([
+        pb.collection("attendance").getList(1, 500, {
+          filter: `date>="${first}" && date<"${last}"`,
+          sort: "date",
+          expand: "user",
+        }),
+        fetchEmploymentHistories(),
+      ]);
+      setEmploymentHistories(histories);
       setRows(
         res.items.map((r: any) => ({
           id: r.id,
@@ -140,17 +151,26 @@ function AdminAttendance() {
     );
   }, [rows]);
 
+  const getFactoryNameAtDate = (userId: string, date: string) =>
+    getEmploymentHistoryAtDate(
+      employmentHistories.filter((history) => history.user === userId),
+      new Date(`${date}T00:00:00`),
+    )?.expand?.factory?.name || "";
+
   const filtered = useMemo(() => {
     if (!search) return grouped;
     const q = search.toLowerCase();
-    return grouped.filter(
-      ({ user }) =>
-        (user.full_name || "").toLowerCase().includes(q) ||
-        (user.username || "").toLowerCase().includes(q) ||
-        (user.company || "").toLowerCase().includes(q) ||
-        (user.phone || "").toLowerCase().includes(q),
+    return grouped.filter(({ user, rows: userRows }) =>
+      [
+        user.full_name,
+        user.username,
+        user.phone,
+        ...userRows.map((row) => getFactoryNameAtDate(user.id, row.date)),
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q)),
     );
-  }, [grouped, search]);
+  }, [grouped, search, employmentHistories]);
 
   const totals = useMemo(() => {
     let hc = 0,
@@ -168,7 +188,7 @@ function AdminAttendance() {
       return {
         "Họ tên": u.full_name || "",
         "Số điện thoại": u.phone || "",
-        "Nhà máy": u.company || "",
+        "Nhà máy": getFactoryNameAtDate(r.user, r.date),
         Ngày: formatDateOnly(r.date),
         Ca: r.shift === "day" ? "Ngày" : "Đêm",
         Lễ: r.is_holiday ? "x" : "",
@@ -191,14 +211,14 @@ function AdminAttendance() {
       return {
         "Họ tên": user.full_name || "",
         "Số điện thoại": user.phone || "",
-        "Nhà máy": user.company || "",
+        "Nhà máy": getFactoryNameAtDate(user.id, rs[rs.length - 1]?.date || ym(monthDate) + "-01"),
         "Số ngày công": rs.length,
         "Giờ hành chính": hc,
         "Giờ tăng ca": ot,
         "Lương tạm tính": Math.round(s.total),
       };
     });
-    exportToExcel(`cham_cong_${ym(monthDate)}`, { "Tổng hợp": summary, "Chi tiết": detail });
+    exportToExcel(`cham_cong_${ym(monthDate)}`, { "Tổng hợp": summary, "Chi tiết": detail }, { "Chi tiết": ["Ngày"] });
   };
 
   return (
@@ -266,7 +286,7 @@ function AdminAttendance() {
                 {user.full_name || user.username}
               </div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">
-                {user.company || "—"} · {user.phone || "—"}
+                {getFactoryNameAtDate(user.id, lastWorkDate) || "Chưa có lịch sử đi làm"} · {user.phone || "—"}
               </div>
               <div className="mt-1 flex flex-wrap gap-1">
                 <span className="chip chip-info">{rs.length} ngày</span>
@@ -370,6 +390,7 @@ function UserAttendance() {
   const [rows, setRows] = useState<(AttendanceRow & { id: string })[]>([]);
   const [loading, setLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [currentEmployment, setCurrentEmployment] = useState<EmploymentHistoryRecord | null>(null);
 
   const [date, setDate] = useState(todayStr());
   const [shift, setShift] = useState<Shift>("day");
@@ -378,6 +399,20 @@ function UserAttendance() {
   const [otHours, setOtHours] = useState<number>(user?.default_ot_hours ?? 0);
   const [entryOpen, setEntryOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setCurrentEmployment(null);
+      return;
+    }
+    let alive = true;
+    findActiveEmploymentByUser(user.id)
+      .then((history) => alive && setCurrentEmployment(history))
+      .catch(() => alive && setCurrentEmployment(null));
+    return () => {
+      alive = false;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     setHcHours(user?.default_hc_hours ?? 8);
@@ -517,7 +552,7 @@ function UserAttendance() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs uppercase opacity-80">Bảng lương tạm tính</div>
-                <div className="text-xl font-bold">{user?.company || "—"}</div>
+                <div className="text-xl font-bold">{currentEmployment?.expand?.factory?.name || "Chưa có lịch sử đi làm"}</div>
               </div>
               <button
                 onClick={() => setSettingsOpen(true)}
@@ -891,20 +926,6 @@ function AttendanceSettingsDialog({
             void save();
           }}
         >
-          <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Nhà máy hiện tại</span>
-              <span className="text-sm font-semibold">{user?.company || "Chưa có"}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Mã NV</span>
-              <span className="text-sm font-semibold">{user?.employee_code || "Chưa có"}</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              Muốn đổi nhà máy → vào Lịch sử đi làm → Báo nghỉ, rồi được tuyển vào nhà máy mới.
-            </p>
-          </div>
-
           <SettingsNumberField
             label="Ngày chốt công (1–31, để trống = theo tháng dương lịch)"
             value={form.attendance_cutoff_day || ""}

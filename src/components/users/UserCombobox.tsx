@@ -57,7 +57,7 @@ export function UserCombobox({
             {users.map((item) => (
               <CommandItem
                 key={item.id}
-                value={`${item.full_name || ""} ${item.username || ""} ${item.employee_code || ""} ${item.phone || ""}`}
+                value={`${item.full_name || ""} ${item.username || ""} ${item.phone || ""}`}
                 onSelect={() => {
                   onChange(item.id);
                   setOpen(false);
@@ -70,7 +70,7 @@ export function UserCombobox({
                     {item.id === currentUserId ? "Bạn" : userDisplayName(item)}
                   </div>
                   <div className="truncate text-[11px] text-muted-foreground">
-                    @{item.username || "—"} · {item.employee_code || "—"} · {item.phone || "—"}
+                    @{item.username || "?"} ? {item.phone || "?"}
                   </div>
                 </div>
               </CommandItem>
