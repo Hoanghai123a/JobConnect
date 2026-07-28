@@ -5,7 +5,6 @@ import type { CccdVersionRecord } from "./cccd-versions";
 import type { FactoryRecord } from "./factories";
 import type { MainHouseRecord } from "./main-houses";
 import { buildScopedHistoryFilter } from "./staff-permissions";
-import { syncStaffData } from "./staff-cache";
 import {
   deleteCachedHistory,
   deleteCachedUser,
@@ -22,6 +21,9 @@ import {
   getCachedUserIds,
   factoryExistsInCache,
   mainHouseExistsInCache,
+  buildScopeFingerprint,
+  reconcileStaffData,
+  saveScopeFingerprint,
 } from "./staff-cache";
 
 const SIGNAL_EVENT = "jobconnect:staff-cache-changed";
@@ -34,15 +36,29 @@ interface RealtimeEvent<T> {
 }
 
 interface SyncState {
+  key: string;
   viewerId: string;
   managedFactoryIds: Set<string>;
   unsubs: UnsubscribeFunc[];
   catchupTimer: number | null;
+  catchupPromise: Promise<void> | null;
   visibilityHandler: (() => void) | null;
   onlineHandler: (() => void) | null;
 }
 
 let state: SyncState | null = null;
+let requestedVersion = 0;
+let operationQueue: Promise<void> = Promise.resolve();
+
+function syncKey(viewer: UserRecord, managedFactoryIds: Set<string>) {
+  return buildScopeFingerprint(viewer.id, managedFactoryIds, viewer.role);
+}
+
+function enqueue(operation: () => Promise<void>): Promise<void> {
+  const task = operationQueue.then(operation);
+  operationQueue = task.catch(() => undefined);
+  return task;
+}
 
 function dispatchSignal(detail: { collection: string; action: Action; id: string }) {
   try {
@@ -88,7 +104,10 @@ async function handleHistoryEvent(
 
   let relatedUser = record.expand?.user;
   if (!relatedUser && record.user) {
-    relatedUser = await pb.collection("users").getOne<UserRecord>(record.user).catch(() => undefined);
+    relatedUser = await pb
+      .collection("users")
+      .getOne<UserRecord>(record.user)
+      .catch(() => undefined);
   }
 
   const userChanged = relatedUser ? await upsertCachedUserIfNewer(relatedUser) : false;
@@ -100,16 +119,32 @@ async function handleHistoryEvent(
   dispatchSignal({ collection: "employment_histories", action, id: record.id });
 }
 
+function syncAuthenticatedUser(record: UserRecord) {
+  const current = pb.authStore.record as (UserRecord & { expand?: Record<string, unknown> }) | null;
+  if (!current || current.id !== record.id) return;
+
+  pb.authStore.save(pb.authStore.token, {
+    ...current,
+    ...record,
+    expand: {
+      ...current.expand,
+      ...(record as UserRecord & { expand?: Record<string, unknown> }).expand,
+    },
+  } as unknown as NonNullable<typeof pb.authStore.record>);
+}
+
 async function handleUserEvent(event: RealtimeEvent<UserRecord>) {
   const { action, record } = event;
   if (!record?.id) return;
 
   if (action === "delete") {
     await deleteCachedUser(record.id);
+    if ((pb.authStore.record as UserRecord | null)?.id === record.id) pb.authStore.clear();
     dispatchSignal({ collection: "users", action, id: record.id });
     return;
   }
 
+  syncAuthenticatedUser(record);
   const userIds = await getCachedUserIds();
   if (!userIds.has(record.id)) {
     const cached = await readCachedUser(record.id);
@@ -176,19 +211,56 @@ async function handleMainHouseEvent(event: RealtimeEvent<MainHouseRecord>) {
   dispatchSignal({ collection: "main_houses", action, id: record.id });
 }
 
-export async function startStaffRealtimeSync(
+async function cleanupSubscriptions(unsubs: UnsubscribeFunc[]) {
+  for (const unsub of unsubs) {
+    try {
+      await unsub();
+    } catch (error) {
+      console.warn("[realtime-sync] unsubscribe failed", error);
+    }
+  }
+}
+
+async function unsubscribeRealtimeTopics() {
+  for (const collection of [
+    "employment_histories",
+    "users",
+    "cccd_versions",
+    "factories",
+    "main_houses",
+  ]) {
+    try {
+      await pb.collection(collection).unsubscribe("*");
+    } catch {
+      // ignore cleanup failures
+    }
+  }
+}
+
+async function runStopStaffRealtimeSync(): Promise<void> {
+  if (!state) return;
+  const current = state;
+  state = null;
+
+  if (current.catchupTimer !== null) window.clearTimeout(current.catchupTimer);
+  if (current.visibilityHandler)
+    document.removeEventListener("visibilitychange", current.visibilityHandler);
+  if (current.onlineHandler) window.removeEventListener("online", current.onlineHandler);
+  await cleanupSubscriptions(current.unsubs);
+  if (current.catchupPromise) await current.catchupPromise;
+}
+
+async function runStartStaffRealtimeSync(
   viewer: UserRecord,
   managedFactoryIds: Set<string>,
+  version: number,
 ): Promise<void> {
-  if (state && state.viewerId === viewer.id) {
-    return;
-  }
-  if (state) {
-    await stopStaffRealtimeSync();
-  }
+  const key = syncKey(viewer, managedFactoryIds);
+  if (state?.key === key) return;
+  if (state) await runStopStaffRealtimeSync();
+  if (version !== requestedVersion) return;
 
   const unsubs: UnsubscribeFunc[] = [];
-
   try {
     const historyFilter = buildScopedHistoryFilter(viewer, managedFactoryIds);
     const historyUnsub = await pb
@@ -197,7 +269,7 @@ export async function startStaffRealtimeSync(
         "*",
         (e) =>
           handleHistoryEvent(
-            e as RealtimeEvent<EmploymentHistoryRecord>,
+            e as unknown as RealtimeEvent<EmploymentHistoryRecord>,
             { id: viewer.id, role: viewer.role },
             managedFactoryIds,
           ).catch((err) => console.warn("[realtime-sync] history handler", err)),
@@ -207,51 +279,67 @@ export async function startStaffRealtimeSync(
         },
       );
     unsubs.push(historyUnsub);
+    if (version !== requestedVersion) {
+      await cleanupSubscriptions(unsubs);
+      return;
+    }
 
     const userUnsub = await pb
       .collection("users")
       .subscribe("*", (e) =>
-        handleUserEvent(e as RealtimeEvent<UserRecord>).catch((err) =>
+        handleUserEvent(e as unknown as RealtimeEvent<UserRecord>).catch((err) =>
           console.warn("[realtime-sync] user handler", err),
         ),
       );
     unsubs.push(userUnsub);
+    if (version !== requestedVersion) {
+      await cleanupSubscriptions(unsubs);
+      return;
+    }
 
     const cccdUnsub = await pb
       .collection("cccd_versions")
       .subscribe("*", (e) =>
-        handleCccdVersionEvent(e as RealtimeEvent<CccdVersionRecord>).catch((err) =>
+        handleCccdVersionEvent(e as unknown as RealtimeEvent<CccdVersionRecord>).catch((err) =>
           console.warn("[realtime-sync] cccd handler", err),
         ),
       );
     unsubs.push(cccdUnsub);
+    if (version !== requestedVersion) {
+      await cleanupSubscriptions(unsubs);
+      return;
+    }
 
     const factoryUnsub = await pb
       .collection("factories")
       .subscribe("*", (e) =>
-        handleFactoryEvent(e as RealtimeEvent<FactoryRecord>).catch((err) =>
+        handleFactoryEvent(e as unknown as RealtimeEvent<FactoryRecord>).catch((err) =>
           console.warn("[realtime-sync] factory handler", err),
         ),
       );
     unsubs.push(factoryUnsub);
+    if (version !== requestedVersion) {
+      await cleanupSubscriptions(unsubs);
+      return;
+    }
 
     const mainHouseUnsub = await pb
       .collection("main_houses")
       .subscribe("*", (e) =>
-        handleMainHouseEvent(e as RealtimeEvent<MainHouseRecord>).catch((err) =>
+        handleMainHouseEvent(e as unknown as RealtimeEvent<MainHouseRecord>).catch((err) =>
           console.warn("[realtime-sync] main-house handler", err),
         ),
       );
     unsubs.push(mainHouseUnsub);
   } catch (error) {
     console.warn("[realtime-sync] failed to subscribe", error);
-    for (const unsub of unsubs) {
-      try {
-        await unsub();
-      } catch {
-        // ignore unsubscribe errors during cleanup
-      }
-    }
+    await cleanupSubscriptions(unsubs);
+    if (version === requestedVersion) await unsubscribeRealtimeTopics();
+    return;
+  }
+
+  if (version !== requestedVersion) {
+    await cleanupSubscriptions(unsubs);
     return;
   }
 
@@ -263,63 +351,70 @@ export async function startStaffRealtimeSync(
   window.addEventListener("online", onlineHandler);
 
   state = {
+    key,
     viewerId: viewer.id,
     managedFactoryIds,
     unsubs,
     catchupTimer: null,
+    catchupPromise: null,
     visibilityHandler,
     onlineHandler,
   };
+  scheduleCatchUp(viewer);
 }
 
-export async function stopStaffRealtimeSync(): Promise<void> {
-  if (!state) return;
-  const current = state;
-  state = null;
+export function startStaffRealtimeSync(
+  viewer: UserRecord,
+  managedFactoryIds: Set<string>,
+): Promise<void> {
+  const version = ++requestedVersion;
+  return enqueue(() => runStartStaffRealtimeSync(viewer, managedFactoryIds, version));
+}
 
-  if (current.catchupTimer !== null) {
-    window.clearTimeout(current.catchupTimer);
-  }
-  if (current.visibilityHandler) {
-    document.removeEventListener("visibilitychange", current.visibilityHandler);
-  }
-  if (current.onlineHandler) {
-    window.removeEventListener("online", current.onlineHandler);
-  }
-  for (const unsub of current.unsubs) {
-    try {
-      await unsub();
-    } catch (error) {
-      console.warn("[realtime-sync] unsubscribe failed", error);
-    }
-  }
+export function stopStaffRealtimeSync(): Promise<void> {
+  ++requestedVersion;
+  return enqueue(runStopStaffRealtimeSync);
 }
 
 function scheduleCatchUp(viewer: UserRecord) {
   if (!state) return;
-  if (state.catchupTimer !== null) {
-    window.clearTimeout(state.catchupTimer);
-  }
+  if (state.catchupTimer !== null) window.clearTimeout(state.catchupTimer);
   state.catchupTimer = window.setTimeout(() => {
-    if (state) state.catchupTimer = null;
-    catchUpStaffRealtimeSync(viewer).catch((err) =>
+    const current = state;
+    if (current) current.catchupTimer = null;
+    void catchUpStaffRealtimeSync(viewer).catch((err) =>
       console.warn("[realtime-sync] catch-up failed", err),
     );
   }, CATCHUP_DEBOUNCE_MS);
 }
 
-export async function catchUpStaffRealtimeSync(viewer: UserRecord): Promise<void> {
-  if (!state) return;
-  try {
-    const historyFilter = buildScopedHistoryFilter(viewer, state.managedFactoryIds);
-    await syncStaffData({
-      historyFilter,
-      useCache: true,
-      includeCccdVersions: true,
-    });
-    dispatchSignal({ collection: "employment_histories", action: "update", id: "__catchup__" });
-    console.debug("[realtime-sync] catch-up done");
-  } catch (error) {
-    console.warn("[realtime-sync] catch-up error", error);
-  }
+export function catchUpStaffRealtimeSync(viewer: UserRecord): Promise<void> {
+  const current = state;
+  if (!current) return Promise.resolve();
+  if (current.catchupPromise) return current.catchupPromise;
+
+  const promise = (async () => {
+    try {
+      const historyFilter = buildScopedHistoryFilter(viewer, current.managedFactoryIds);
+      await reconcileStaffData({
+        historyFilter,
+        includeCccdVersions: true,
+      });
+      await saveScopeFingerprint(
+        buildScopeFingerprint(viewer.id, current.managedFactoryIds, viewer.role),
+      );
+      if (state === current) {
+        dispatchSignal({ collection: "employment_histories", action: "update", id: "__catchup__" });
+        console.debug("[realtime-sync] catch-up done");
+      }
+    } catch (error) {
+      console.warn("[realtime-sync] catch-up error", error);
+    }
+  })();
+
+  const trackedPromise = promise.finally(() => {
+    if (current.catchupPromise === trackedPromise) current.catchupPromise = null;
+  });
+  current.catchupPromise = trackedPromise;
+  return trackedPromise;
 }

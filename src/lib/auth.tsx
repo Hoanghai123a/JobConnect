@@ -100,9 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    stopStaffRealtimeSync().catch((error) => console.warn("[auth] stopRealtime failed", error));
     pb.authStore.clear();
-    clearStaffCache();
+    stopStaffRealtimeSync()
+      .catch((error) => console.warn("[auth] stopRealtime failed", error))
+      .finally(() => clearStaffCache());
   }, []);
 
   const refresh = useCallback(async () => {

@@ -19,7 +19,7 @@ const BATCH_SIZE = 50;
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_HISTORIES)) {
         db.createObjectStore(STORE_HISTORIES, { keyPath: "id" });
@@ -42,10 +42,15 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_META)) {
         db.createObjectStore(STORE_META);
       }
-      if (request.oldVersion < 5) {
+      if (event.oldVersion < 5) {
         for (const store of [
-          STORE_HISTORIES, STORE_USERS, STORE_CCCD_VERSIONS,
-          STORE_FACTORIES, STORE_MAIN_HOUSES, STORE_STAFF_USERS, STORE_META,
+          STORE_HISTORIES,
+          STORE_USERS,
+          STORE_CCCD_VERSIONS,
+          STORE_FACTORIES,
+          STORE_MAIN_HOUSES,
+          STORE_STAFF_USERS,
+          STORE_META,
         ]) {
           if (db.objectStoreNames.contains(store)) request.transaction?.objectStore(store).clear();
         }
@@ -69,6 +74,17 @@ function idbPutMany<T>(db: IDBDatabase, store: string, items: T[]): Promise<void
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, "readwrite");
     const os = tx.objectStore(store);
+    for (const item of items) os.put(item);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+function idbReplaceMany<T>(db: IDBDatabase, store: string, items: T[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, "readwrite");
+    const os = tx.objectStore(store);
+    os.clear();
     for (const item of items) os.put(item);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
@@ -145,10 +161,7 @@ async function setLastSyncAt(db: IDBDatabase, timestamp: string): Promise<void> 
   await idbPut(db, STORE_META, timestamp, "lastSyncAt");
 }
 
-function getLatestUpdatedAt(
-  records: Array<{ updated?: string }>,
-  fallback = "",
-): string {
+function getLatestUpdatedAt(records: Array<{ updated?: string }>, fallback = ""): string {
   return records.reduce((latest, record) => {
     const updated = record.updated || "";
     return updated > latest ? updated : latest;
@@ -267,6 +280,81 @@ export async function syncStaffData(opts?: {
   return { histories: allHistories, users: allUsers };
 }
 
+export async function reconcileStaffData(opts: {
+  historyFilter?: string;
+  includeCccdVersions?: boolean;
+}): Promise<void> {
+  const db = await openDB();
+  const historyFilter = opts.historyFilter || "";
+  const scopedHistories = (await pb.collection("employment_histories").getFullList({
+    filter: historyFilter,
+    sort: "-join_date,-created",
+    expand: "user,factory,recruiter_staff,main_house,cccd_version",
+  })) as unknown as EmploymentHistoryRecord[];
+
+  const scopeUserIds = [...new Set(scopedHistories.map((history) => history.user).filter(Boolean))];
+  const allHistories: EmploymentHistoryRecord[] = [];
+  for (let i = 0; i < scopeUserIds.length; i += 30) {
+    const batch = scopeUserIds.slice(i, i + 30);
+    const items = (await pb.collection("employment_histories").getFullList({
+      filter: relationInFilter("user", batch),
+      sort: "-join_date,-created",
+      expand: "user,factory,recruiter_staff,main_house,cccd_version",
+    })) as unknown as EmploymentHistoryRecord[];
+    allHistories.push(...items);
+  }
+
+  const historyById = new Map<string, EmploymentHistoryRecord>();
+  for (const history of [...scopedHistories, ...allHistories]) historyById.set(history.id, history);
+  const histories = [...historyById.values()];
+  const expandedUsers = usersFromExpandedHistories(histories);
+  const expandedUserIds = new Set(expandedUsers.map((user) => user.id));
+  const fetchedUsers = await fetchUsersBatched(
+    scopeUserIds.filter((id) => !expandedUserIds.has(id)),
+  ).catch(() => [] as UserRecord[]);
+  const users = [...expandedUsers, ...fetchedUsers];
+
+  await idbReplaceMany(db, STORE_HISTORIES, histories);
+  await idbReplaceMany(db, STORE_USERS, users);
+
+  const factories = [
+    ...new Map(
+      histories
+        .map((history) => history.expand?.factory)
+        .filter((factory): factory is FactoryRecord => !!factory?.id)
+        .map((factory) => [factory.id, factory]),
+    ).values(),
+  ];
+  const mainHouses = [
+    ...new Map(
+      histories
+        .map((history) => history.expand?.main_house)
+        .filter((mainHouse): mainHouse is MainHouseRecord => !!mainHouse?.id)
+        .map((mainHouse) => [mainHouse.id, mainHouse]),
+    ).values(),
+  ];
+  if (factories.length) await idbPutMany(db, STORE_FACTORIES, factories);
+  if (mainHouses.length) await idbPutMany(db, STORE_MAIN_HOUSES, mainHouses);
+
+  if (opts.includeCccdVersions !== false) {
+    const cccdVersions: CccdVersionRecord[] = [];
+    for (let i = 0; i < scopeUserIds.length; i += 30) {
+      const batch = scopeUserIds.slice(i, i + 30);
+      const items = (await pb
+        .collection("cccd_versions")
+        .getFullList({
+          filter: relationInFilter("user", batch),
+          sort: "-created",
+        })
+        .catch(() => [])) as unknown as CccdVersionRecord[];
+      cccdVersions.push(...items);
+    }
+    await idbReplaceMany(db, STORE_CCCD_VERSIONS, cccdVersions);
+  }
+
+  await setLastSyncAt(db, getLatestUpdatedAt(histories, "1970-01-01 00:00:00.000Z"));
+}
+
 export async function updateCachedHistory(record: EmploymentHistoryRecord): Promise<boolean> {
   try {
     const db = await openDB();
@@ -293,7 +381,9 @@ export async function updateCachedCccdVersion(record: CccdVersionRecord): Promis
   try {
     const db = await openDB();
     await idbPut(db, STORE_CCCD_VERSIONS, record);
-  } catch {}
+  } catch {
+    // Ignore IndexedDB cache failures.
+  }
 }
 
 export async function clearStaffCache(): Promise<void> {
@@ -306,11 +396,17 @@ export async function clearStaffCache(): Promise<void> {
     await idbClear(db, STORE_MAIN_HOUSES);
     await idbClear(db, STORE_STAFF_USERS);
     await idbClear(db, STORE_META);
-  } catch {}
+  } catch {
+    // Ignore IndexedDB cache failures.
+  }
 }
 
-export function buildScopeFingerprint(viewerId: string, managedFactoryIds: Set<string>): string {
-  return [viewerId, ...[...managedFactoryIds].sort()].join("|");
+export function buildScopeFingerprint(
+  viewerId: string,
+  managedFactoryIds: Set<string>,
+  role = "",
+): string {
+  return [viewerId, role, ...[...managedFactoryIds].sort()].join("|");
 }
 
 export async function isCacheScopeValid(currentFingerprint: string): Promise<boolean> {
@@ -327,7 +423,9 @@ export async function saveScopeFingerprint(fingerprint: string): Promise<void> {
   try {
     const db = await openDB();
     await idbPut(db, STORE_META, fingerprint, "scopeFingerprint");
-  } catch {}
+  } catch {
+    // Ignore IndexedDB cache failures.
+  }
 }
 
 export async function readCachedAuxData(): Promise<{
@@ -357,14 +455,18 @@ export async function writeCachedAuxData(data: {
     await idbPutMany(db, STORE_FACTORIES, data.factories);
     await idbPutMany(db, STORE_MAIN_HOUSES, data.mainHouses);
     await idbPutMany(db, STORE_STAFF_USERS, data.staffUsers);
-  } catch {}
+  } catch {
+    // Ignore IndexedDB cache failures.
+  }
 }
 
 export async function idbPutManyHistories(items: EmploymentHistoryRecord[]): Promise<void> {
   try {
     const db = await openDB();
     await idbPutMany(db, STORE_HISTORIES, items);
-  } catch {}
+  } catch {
+    // Ignore IndexedDB cache failures.
+  }
 }
 
 export async function deleteCachedHistory(id: string): Promise<void> {

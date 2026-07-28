@@ -87,7 +87,9 @@ export function buildScopedHistoryFilter(viewer: UserRecord, managedFactoryIds: 
 
   const qlnmFilters: string[] = [];
   if (managedFactoryIds.size > 0) {
-    qlnmFilters.push(`(${relationInFilter("factory", [...managedFactoryIds])}) && (${scopeFilter})`);
+    qlnmFilters.push(
+      `(${relationInFilter("factory", [...managedFactoryIds])}) && (${scopeFilter})`,
+    );
   }
 
   const recruiterFilter = `recruiter_staff="${escapePb(viewer.id)}"`;
@@ -359,7 +361,7 @@ async function getManagedFactoryIds(viewer: UserRecord) {
 export async function fetchCachedStaffWorkspace(viewer: UserRecord) {
   const managedFactoryIds = await getManagedFactoryIds(viewer);
   const useCache = viewer.role === "admin" || viewer.role === "staff";
-  const fingerprint = buildScopeFingerprint(viewer.id, managedFactoryIds);
+  const fingerprint = buildScopeFingerprint(viewer.id, managedFactoryIds, viewer.role);
   const cacheValid = useCache ? await isCacheScopeValid(fingerprint) : false;
   const cached = useCache && cacheValid ? await readCachedStaffData() : null;
 
@@ -390,7 +392,7 @@ export async function fetchFreshStaffWorkspace(
   }
 
   if (opts?.hydrateCache) {
-    await saveScopeFingerprint(buildScopeFingerprint(viewer.id, managedFactoryIds));
+    await saveScopeFingerprint(buildScopeFingerprint(viewer.id, managedFactoryIds, viewer.role));
   }
 
   return buildWorkspace(viewer, synced.histories, synced.users, managedFactoryIds, {
@@ -408,7 +410,7 @@ export async function fetchStaffWorkspace(
 
   let cacheValid = false;
   if (useCache) {
-    const fingerprint = buildScopeFingerprint(viewer.id, managedFactoryIds);
+    const fingerprint = buildScopeFingerprint(viewer.id, managedFactoryIds, viewer.role);
     cacheValid = await isCacheScopeValid(fingerprint);
     if (!cacheValid) {
       await clearStaffCache();
@@ -451,7 +453,7 @@ export async function fetchStaffWorkspace(
   }
 
   if (useCache) {
-    await saveScopeFingerprint(buildScopeFingerprint(viewer.id, managedFactoryIds));
+    await saveScopeFingerprint(buildScopeFingerprint(viewer.id, managedFactoryIds, viewer.role));
   }
 
   const userIds = [...new Set(synced.histories.map((h) => h.user).filter(Boolean))];

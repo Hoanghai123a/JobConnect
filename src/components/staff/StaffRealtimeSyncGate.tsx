@@ -7,30 +7,48 @@ export function StaffRealtimeSyncGate() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!user?.id) return;
-    if (user.role !== "staff" && user.role !== "admin") return;
-
     let cancelled = false;
-    (async () => {
+    let syncing = false;
+
+    const sync = async () => {
+      if (cancelled || !user?.id || (user.role !== "staff" && user.role !== "admin")) {
+        await stopStaffRealtimeSync();
+        return;
+      }
+      if (syncing) return;
+      syncing = true;
       try {
         const managers = await fetchFactoryManagers(user.id);
         const managedFactoryIds = new Set(
           managers.filter((item) => isFactoryAssignmentActive(item)).map((item) => item.factory),
         );
-        if (cancelled) return;
-        await startStaffRealtimeSync(user, managedFactoryIds);
+        if (!cancelled) await startStaffRealtimeSync(user, managedFactoryIds);
       } catch (error) {
         console.warn("[realtime-sync-gate] start failed", error);
+      } finally {
+        syncing = false;
       }
-    })();
+    };
+
+    void sync();
+    const interval = window.setInterval(() => void sync(), 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void sync();
+    };
+    const onOnline = () => void sync();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
 
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
       stopStaffRealtimeSync().catch((error) =>
         console.warn("[realtime-sync-gate] stop failed", error),
       );
     };
-    // Only re-subscribe when identity/role changes, not on every user object change.
+    // Re-sync when identity or role changes; the callback only needs those stable fields.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.role]);
 

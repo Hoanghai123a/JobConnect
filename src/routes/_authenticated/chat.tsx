@@ -99,6 +99,14 @@ function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]) {
 function chatSeenScope(roomId: string) {
   return `chat:${roomId}`;
 }
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (message) return String(message);
+  }
+  return fallback;
+}
 
 function GroupChatPage() {
   const { user, isAdmin } = useAuth();
@@ -112,11 +120,15 @@ function GroupChatPage() {
   const [myRequests, setMyRequests] = useState<JoinRequest[]>([]);
   const [showRequestsDialog, setShowRequestsDialog] = useState(false);
   const [selectedRequests, setSelectedRequests] = useState<Set<string>>(new Set());
-  const [showRoomForm, setShowRoomForm] = useState<null | { mode: "create" | "edit"; room?: ChatRoom }>(null);
+  const [showRoomForm, setShowRoomForm] = useState<null | {
+    mode: "create" | "edit";
+    room?: ChatRoom;
+  }>(null);
   const [roomForm, setRoomForm] = useState<{ name: string; description: string }>({
     name: "",
     description: "",
   });
+  const metaRefreshInFlightRef = useRef(false);
 
   const activeRoom = useMemo(
     () => rooms.find((r) => r.id === activeRoomId) || null,
@@ -150,8 +162,8 @@ function GroupChatPage() {
     try {
       const res = await pb.collection("chat_rooms").getFullList({ sort: "-is_default,name" });
       setRooms(res as unknown as ChatRoom[]);
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi tải danh sách phòng");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Lỗi tải danh sách phòng"));
     }
   }, []);
 
@@ -203,10 +215,17 @@ function GroupChatPage() {
   }, [loadAll]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      void loadMemberships();
-      void loadJoinRequests();
-    }, 5000);
+    const refreshMeta = async () => {
+      if (document.visibilityState !== "visible" || !window.navigator.onLine) return;
+      if (metaRefreshInFlightRef.current) return;
+      metaRefreshInFlightRef.current = true;
+      try {
+        await Promise.all([loadMemberships(), loadJoinRequests()]);
+      } finally {
+        metaRefreshInFlightRef.current = false;
+      }
+    };
+    const timer = window.setInterval(() => void refreshMeta(), 5000);
     return () => window.clearInterval(timer);
   }, [loadMemberships, loadJoinRequests]);
 
@@ -265,8 +284,8 @@ function GroupChatPage() {
       }
       setShowRoomForm(null);
       await loadRooms();
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi lưu phòng");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Lỗi lưu phòng"));
     }
   };
 
@@ -282,8 +301,8 @@ function GroupChatPage() {
       setShowRoomForm(null);
       if (activeRoomId === room.id) setActiveRoomId(null);
       await loadAll();
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi xoá phòng");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Lỗi xoá phòng"));
     }
   };
 
@@ -298,8 +317,8 @@ function GroupChatPage() {
       toast.success(`Đã gửi yêu cầu vào "${room.name}"`);
       setSearch("");
       await loadJoinRequests();
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi gửi yêu cầu");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Lỗi gửi yêu cầu"));
     }
   };
 
@@ -337,8 +356,8 @@ function GroupChatPage() {
       toast.success(approve ? "Đã duyệt" : "Đã từ chối");
       setSelectedRequests(new Set());
       await Promise.all([loadJoinRequests(), loadMemberships()]);
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi xử lý yêu cầu");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Lỗi xử lý yêu cầu"));
     }
   };
 
@@ -490,9 +509,7 @@ function GroupChatPage() {
             <DialogTitle>
               {showRoomForm?.mode === "edit" ? "Sửa phòng chat" : "Tạo phòng chat"}
             </DialogTitle>
-            <DialogDescription>
-              Đặt tên và mô tả ngắn để user dễ tìm phòng.
-            </DialogDescription>
+            <DialogDescription>Đặt tên và mô tả ngắn để user dễ tìm phòng.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -516,16 +533,18 @@ function GroupChatPage() {
             </div>
           </div>
           <DialogFooter>
-            {showRoomForm?.mode === "edit" && showRoomForm.room && !showRoomForm.room.is_default && (
-              <Button
-                variant="destructive"
-                onClick={() => showRoomForm.room && void deleteRoom(showRoomForm.room)}
-                className="sm:mr-auto"
-              >
-                <Trash2 className="h-4 w-4" />
-                Xoá phòng
-              </Button>
-            )}
+            {showRoomForm?.mode === "edit" &&
+              showRoomForm.room &&
+              !showRoomForm.room.is_default && (
+                <Button
+                  variant="destructive"
+                  onClick={() => showRoomForm.room && void deleteRoom(showRoomForm.room)}
+                  className="sm:mr-auto"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Xoá phòng
+                </Button>
+              )}
             <Button variant="outline" onClick={() => setShowRoomForm(null)}>
               Huỷ
             </Button>
@@ -560,9 +579,7 @@ function GroupChatPage() {
                     selectedRequests.size === pendingRequests.length && pendingRequests.length > 0
                   }
                   onCheckedChange={(c) =>
-                    setSelectedRequests(
-                      c ? new Set(pendingRequests.map((r) => r.id)) : new Set(),
-                    )
+                    setSelectedRequests(c ? new Set(pendingRequests.map((r) => r.id)) : new Set())
                   }
                 />
                 Chọn tất cả ({pendingRequests.length})
@@ -645,9 +662,12 @@ function RoomListItem({
 }) {
   const [lastMessage, setLastMessage] = useState<ChatMessage | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const pressTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const pressTimerRef = useRef<number | null>(null);
+  const previewInFlightRef = useRef(false);
 
   const loadPreview = useCallback(async () => {
+    if (previewInFlightRef.current) return;
+    previewInFlightRef.current = true;
     try {
       const res = await pb.collection("group_chat_messages").getList(1, 1, {
         filter: `room = "${room.id}"`,
@@ -669,12 +689,17 @@ function RoomListItem({
       }
     } catch {
       // silent
+    } finally {
+      previewInFlightRef.current = false;
     }
   }, [room.id, userId]);
 
   useEffect(() => {
-    loadPreview();
-    const timer = window.setInterval(loadPreview, 5000);
+    const refreshPreview = () => {
+      if (document.visibilityState === "visible" && window.navigator.onLine) void loadPreview();
+    };
+    refreshPreview();
+    const timer = window.setInterval(refreshPreview, 5000);
     return () => window.clearInterval(timer);
   }, [loadPreview]);
 
@@ -767,8 +792,10 @@ function RoomChatView({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const pressTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const pressTimerRef = useRef<number | null>(null);
   const pageRef = useRef(1);
+  const latestPageIdsRef = useRef<Set<string>>(new Set());
+  const refreshInFlightRef = useRef(false);
 
   const fetchMessagePage = useCallback(
     async (pageNo: number) => {
@@ -803,28 +830,33 @@ function RoomChatView({
         latest ? new Date(latest.created).getTime() : Date.now(),
       );
       window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "auto" }), 0);
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi tải trò chuyện");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Lỗi tải trò chuyện"));
     } finally {
       setLoading(false);
     }
   }, [fetchMessagePage, onRefreshMe, room.id, user?.id]);
 
   const refreshLatest = useCallback(async () => {
+    if (refreshInFlightRef.current) return;
+    if (document.visibilityState !== "visible" || !window.navigator.onLine) return;
+    refreshInFlightRef.current = true;
     try {
       const pageData = await fetchMessagePage(1);
       setTotalCount(pageData.totalItems);
       setHasMore(pageRef.current < pageData.totalPages);
-      setMessages((current) => {
-        const merged = mergeMessages(current, pageData.items);
-        return pageRef.current <= 1 ? merged.slice(-PAGE_SIZE) : merged;
-      });
+      latestPageIdsRef.current = new Set(pageData.items.map((item) => item.id));
+      setMessages((current) =>
+        pageRef.current <= 1 ? pageData.items : mergeMessages(current, pageData.items),
+      );
       const latest = pageData.items[pageData.items.length - 1];
       if (latest) {
         markSeen(chatSeenScope(room.id), user?.id, new Date(latest.created).getTime());
       }
     } catch {
       // silent polling
+    } finally {
+      refreshInFlightRef.current = false;
     }
   }, [fetchMessagePage, room.id, user?.id]);
 
@@ -833,7 +865,8 @@ function RoomChatView({
   }, [loadInitial]);
 
   useEffect(() => {
-    const timer = window.setInterval(refreshLatest, 3000);
+    const refresh = () => void refreshLatest();
+    const timer = window.setInterval(refresh, 3000);
     return () => window.clearInterval(timer);
   }, [refreshLatest]);
 
@@ -853,8 +886,8 @@ function RoomChatView({
         if (!box) return;
         box.scrollTop = box.scrollHeight - previousHeight;
       }, 0);
-    } catch (error: any) {
-      toast.error(error?.message || "Không tải được tin nhắn cũ");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Không tải được tin nhắn cũ"));
     } finally {
       setLoadingOlder(false);
     }
@@ -898,8 +931,8 @@ function RoomChatView({
       setShowEmojis(false);
       await refreshLatest();
       window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 0);
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi gửi tin nhắn");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Lỗi gửi tin nhắn"));
     } finally {
       setSending(false);
     }
@@ -917,8 +950,8 @@ function RoomChatView({
       setActionMessage(null);
       await refreshLatest();
       setMessages((current) => current.filter((row) => row.id !== id));
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi xoá tin nhắn");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Lỗi xoá tin nhắn"));
     }
   };
 
@@ -928,8 +961,8 @@ function RoomChatView({
       toast.success(target.chat_blocked ? "Đã bỏ chặn" : "Đã chặn");
       setActionMessage(null);
       await refreshLatest();
-    } catch (error: any) {
-      toast.error(error?.message || "Lỗi chặn user");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Lỗi chặn user"));
     }
   };
 
