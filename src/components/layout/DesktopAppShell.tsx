@@ -23,7 +23,6 @@ import {
   FileInput,
   Gem,
   Gamepad2,
-  Home,
   Landmark,
   LogOut,
   MessageCircle,
@@ -57,10 +56,6 @@ type NavigationSection = {
 };
 
 const workerNavigation: readonly NavigationSection[] = [
-  {
-    label: "Tổng quan",
-    items: [{ to: "/", label: "Trang chủ", icon: Home }],
-  },
   {
     label: "Công việc",
     items: [
@@ -265,10 +260,12 @@ export function DesktopAppShell({ children }: { children: ReactNode }) {
   };
 
   const accountActive = pathname === "/account" || pathname.startsWith("/account/");
+  const settingsActive = pathname === "/admin/settings" || pathname.startsWith("/admin/settings/");
 
   return (
     <div
       className={cn("desktop-shell", immersive && "desktop-shell--immersive")}
+      data-desktop-role={user?.role ?? "unknown"}
       style={shellStyle}
     >
       {!immersive && (
@@ -376,22 +373,38 @@ export function DesktopAppShell({ children }: { children: ReactNode }) {
             </nav>
 
             <div className="shrink-0 border-t border-border/60 p-3">
-              <Link
-                to="/account"
-                title={collapsed ? "Tài khoản" : undefined}
-                aria-label="Tài khoản"
-                className={cn(
-                  "desktop-sidebar-link flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors",
-                  collapsed && "justify-center px-0",
-                  accountActive
-                    ? "bg-primary text-primary-foreground shadow-soft"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              <div className="relative flex items-center gap-2">
+                <Link
+                  to="/account"
+                  title={collapsed ? "Tài khoản" : undefined}
+                  aria-label="Tài khoản"
+                  className={cn(
+                    "desktop-sidebar-link flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors",
+                    collapsed && "justify-center px-0",
+                    accountActive
+                      ? "bg-primary text-primary-foreground shadow-soft"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <User className="h-5 w-5 shrink-0" />
+                  {!collapsed && <span className="desktop-sidebar-label truncate">Tài khoản</span>}
+                </Link>
+                {user?.role === "admin" && (
+                  <Link
+                    to="/admin/settings"
+                    title="Cài đặt quản trị"
+                    aria-label="Cài đặt quản trị"
+                    className={cn(
+                      "desktop-sidebar-link flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      collapsed && "absolute right-0 top-0 z-10 h-5 w-5 rounded-full bg-card",
+                      settingsActive &&
+                        "border-primary bg-primary text-primary-foreground shadow-soft",
+                    )}
+                  >
+                    <Settings className={cn("h-5 w-5", collapsed && "h-3 w-3")} />
+                  </Link>
                 )}
-              >
-                <User className="h-5 w-5 shrink-0" />
-                {!collapsed && <span className="desktop-sidebar-label truncate">Tài khoản</span>}
-              </Link>
-
+              </div>
               <div
                 className={cn(
                   "desktop-sidebar-user mt-2 flex items-center gap-3 rounded-xl bg-muted/55 p-2",

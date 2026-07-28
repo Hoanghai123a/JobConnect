@@ -53,6 +53,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
+import { useAppSettings } from "@/lib/app-settings";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import {
   createEmploymentHistory,
@@ -67,6 +68,11 @@ import {
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
+import {
+  resolveAdvancePolicy,
+  validateAdvanceAmount,
+  type AdvancePolicy,
+} from "@/lib/advance-policy";
 import { CccdManager } from "@/components/cccd/CccdManager";
 import { BankNameInput } from "@/components/staff/BankNameInput";
 import { SalaryHoldCreateDialog } from "@/components/staff/SalaryHoldCreateDialog";
@@ -92,6 +98,12 @@ import {
 } from "@/lib/staff-permissions";
 import { pb, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import { resolveBankName } from "@/lib/vn-banks";
+import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
+import {
+  PAYOUT_METHOD_META,
+  normalizeAdvancePayoutMethod,
+  type AdvancePayoutMethod,
+} from "@/lib/advances";
 
 export const Route = createFileRoute("/_authenticated/staff/workers/$workerId")({
   component: StaffWorkerDetailPage,
@@ -103,12 +115,14 @@ type AdvanceItem = {
   reason?: string;
   status?: string;
   recovery_status?: string;
+  payout_method?: AdvancePayoutMethod;
   created?: string;
 };
 
 function StaffWorkerDetailPage() {
   const { workerId } = Route.useParams();
   const { user: viewer } = useAuth();
+  const { data: settings } = useAppSettings();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -135,6 +149,11 @@ function StaffWorkerDetailPage() {
 
   const [amountText, setAmountText] = useState("");
   const [advanceReason, setAdvanceReason] = useState("");
+  const [advancePayoutMethod, setAdvancePayoutMethod] =
+    useState<AdvancePayoutMethod>("bank_transfer");
+  const [advancePolicy, setAdvancePolicy] = useState<AdvancePolicy | null>(null);
+  const [advancePolicyError, setAdvancePolicyError] = useState("");
+  const [advancePolicyLoading, setAdvancePolicyLoading] = useState(false);
   const [leaveDate, setLeaveDate] = useState(todayDate());
   const [leaveNote, setLeaveNote] = useState("");
   const [joinForm, setJoinForm] = useState({
@@ -287,6 +306,9 @@ function StaffWorkerDetailPage() {
   );
   const recentRecruiter = isRecentRecruiter(viewer, histories);
   const canReportAdvanceForWorker = canReportAdvance(viewer, histories);
+  const allowAdvanceAfterLeave = Boolean(settings.allow_advance_after_leave);
+  const canOpenAdvanceForWorker =
+    canReportAdvanceForWorker && (Boolean(activeHistory) || allowAdvanceAfterLeave);
   const canViewPayrollForWorker = canViewPayroll(viewer, histories, managedFactoryIds);
   const canReportLeaveForWorker = canReportLeave(
     viewer,
@@ -303,11 +325,34 @@ function StaffWorkerDetailPage() {
   const canOpenJoinForm = canReportJoin(viewer, histories, managedFactoryIds);
   const canUpdateBankForWorker = canUpdateBank(viewer, allWorkerHistories, managedFactoryIds);
   const canDoAnyAction =
-    canReportAdvanceForWorker ||
+    canOpenAdvanceForWorker ||
     canViewPayrollForWorker ||
     canReportLeaveForWorker ||
     canOpenJoinForm ||
     canUpdateBankForWorker;
+  useEffect(() => {
+    if (!advanceOpen || !workerUser?.id) return;
+    let active = true;
+    setAdvancePolicyLoading(true);
+    resolveAdvancePolicy(workerUser.id, { allowAfterLeave: allowAdvanceAfterLeave })
+      .then((policy) => {
+        if (!active) return;
+        setAdvancePolicy(policy);
+        setAdvancePolicyError("");
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setAdvancePolicy(null);
+        setAdvancePolicyError(
+          error instanceof Error ? error.message : "Không thể kiểm tra hạn mức ứng tiền",
+        );
+      })
+      .finally(() => active && setAdvancePolicyLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [advanceOpen, allowAdvanceAfterLeave, workerUser?.id]);
+
   const joinableFactories = useMemo(() => {
     if (viewer?.role === "admin" || recentRecruiter) return factories;
     return factories.filter((factory) => managedFactoryIds.has(factory.id));
@@ -363,7 +408,7 @@ function StaffWorkerDetailPage() {
 
   const submitAdvance = async () => {
     if (!workerUser || !latestHistory || !viewer?.id) return;
-    if (!canReportAdvanceForWorker) {
+    if (!canOpenAdvanceForWorker) {
       toast.error("Bạn không có quyền báo ứng cho hồ sơ này");
       return;
     }
@@ -378,57 +423,55 @@ function StaffWorkerDetailPage() {
       return;
     }
 
-    const existingAdvances = await pb.collection("advances").getList(1, 100, {
-      filter: `user="${workerUser.id}" && (status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))`,
-    });
-    const outstanding = existingAdvances.items.reduce(
-      (sum: number, r: any) => sum + Number(r.amount || 0),
-      0,
-    );
-    const settings = await (await import("@/lib/app-settings")).fetchAppSettings();
-    const limit = Number(settings.advance_limit || 0);
-    if (limit <= 0) {
-      toast.error("Admin chưa cài hạn mức Ứng lương");
-      return;
-    }
-    if (outstanding + amount > limit) {
+    try {
+      const policy = await resolveAdvancePolicy(workerUser.id, {
+        allowAfterLeave: allowAdvanceAfterLeave,
+      });
+      validateAdvanceAmount(policy, amount);
+      const employment = policy.employment;
+      const payload = {
+        user: workerUser.id,
+        requested_by: viewer.id,
+        recruiter_id: employment.recruiter_staff || "",
+        employee_code: employment.employee_code || "",
+        full_name: employment.worker_name_snapshot || workerUser.full_name || "",
+        company: policy.factoryName,
+        phone: workerUser.phone || "",
+        join_date: employment.join_date || "",
+        bank_name: advancePayoutMethod === "cash" ? "" : workerUser.bank_name || "",
+        bank_account_number:
+          advancePayoutMethod === "cash" ? "" : workerUser.bank_account_number || "",
+        bank_account_name:
+          advancePayoutMethod === "cash" ? "" : workerUser.bank_account_name || "",
+        payout_method: advancePayoutMethod,
+        amount,
+        reason: advanceReason.trim(),
+        status: "recruiter_approved",
+        recovery_status: "none",
+      };
+
+      await pb.collection("advances").create(payload);
+      await createStaffActionLog({
+        actor: viewer,
+        targetUserId: workerUser.id,
+        targetCollection: "advances",
+        action: "report_advance",
+        after: payload,
+        note: policy.isWorking
+          ? "Staff tạo yêu cầu ứng lương thay người lao động"
+          : "Staff tạo ứng cho NLĐ đã nghỉ theo cấu hình Admin",
+      });
+
+      setAdvanceOpen(false);
+      setAmountText("");
+      setAdvanceReason("");
+      setAdvancePayoutMethod("bank_transfer");
+      toast.success("Đã gửi yêu cầu ứng lương");
+    } catch (error: unknown) {
       toast.error(
-        `Vượt hạn mức ứng lương. Đang dùng ${outstanding.toLocaleString("vi-VN")} đ / ${limit.toLocaleString("vi-VN")} đ. Còn lại ${(limit - outstanding).toLocaleString("vi-VN")} đ`,
+        error instanceof Error ? error.message : "Không thể tạo yêu cầu ứng tiền",
       );
-      return;
     }
-
-    const payload = {
-      user: workerUser.id,
-      requested_by: viewer.id,
-      recruiter_id: viewer.id,
-      employee_code: latestHistory.employee_code || "",
-      full_name: latestHistory.worker_name_snapshot || workerUser.full_name || "",
-      company: latestHistory.expand?.factory?.name || "",
-      phone: workerUser.phone || "",
-      bank_name: workerUser.bank_name || "",
-      bank_account_number: workerUser.bank_account_number || "",
-      bank_account_name: workerUser.bank_account_name || "",
-      amount,
-      reason: advanceReason.trim(),
-      status: "recruiter_approved",
-      recovery_status: "none",
-    };
-
-    await pb.collection("advances").create(payload);
-    await createStaffActionLog({
-      actor: viewer,
-      targetUserId: workerUser.id,
-      targetCollection: "advances",
-      action: "report_advance",
-      after: payload,
-      note: "Staff tạo yêu cầu ứng lương thay người lao động",
-    });
-
-    setAdvanceOpen(false);
-    setAmountText("");
-    setAdvanceReason("");
-    toast.success("Đã gửi yêu cầu ứng lương");
   };
 
   const submitLeave = async () => {
@@ -780,8 +823,11 @@ function StaffWorkerDetailPage() {
         <ActionButton
           icon={Wallet}
           label="Báo ứng"
-          disabled={!canReportAdvanceForWorker}
-          onClick={() => setAdvanceOpen(true)}
+          disabled={!canOpenAdvanceForWorker}
+          onClick={() => {
+            setAdvancePayoutMethod("bank_transfer");
+            setAdvanceOpen(true);
+          }}
         />
         <ActionButton
           icon={CalendarRange}
@@ -906,6 +952,9 @@ function StaffWorkerDetailPage() {
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {formatDate(adv.created)}
                   </div>
+                  <div className="mt-1 text-[11px] font-medium text-primary">
+                    {PAYOUT_METHOD_META[normalizeAdvancePayoutMethod(adv.payout_method)].label}
+                  </div>
                 </div>
                 <AdvanceStatusChip status={adv.status} recoveryStatus={adv.recovery_status} />
               </div>
@@ -1020,6 +1069,31 @@ function StaffWorkerDetailPage() {
               void submitAdvance();
             }}
           >
+            {advancePolicyLoading && (
+              <div className="rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+                Đang kiểm tra nhà máy và hạn mức ứng tiền...
+              </div>
+            )}
+            {advancePolicyError && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                {advancePolicyError}
+              </div>
+            )}
+            {advancePolicy && (
+              <div className="rounded-xl border bg-primary/5 p-3 text-xs">
+                <div>
+                  <span className="text-muted-foreground">Nhà máy áp dụng: </span>
+                  <span className="font-semibold">{advancePolicy.factoryName}</span>
+                </div>
+                <div className="mt-1 text-muted-foreground">
+                  Hạn mức {advancePolicy.limit.toLocaleString("vi-VN")} đ · Còn lại {advancePolicy.available.toLocaleString("vi-VN")} đ
+                </div>
+              </div>
+            )}
+            <AdvancePayoutMethodPicker
+              value={advancePayoutMethod}
+              onChange={setAdvancePayoutMethod}
+            />
             <FormField label="Số tiền">
               <Input
                 value={amountText}
@@ -1047,7 +1121,7 @@ function StaffWorkerDetailPage() {
               >
                 Đóng
               </Button>
-              <Button type="submit" className="rounded-xl">
+              <Button type="submit" className="rounded-xl" disabled={advancePolicyLoading || !advancePolicy || Boolean(advancePolicyError)}>
                 Gửi yêu cầu
               </Button>
             </DialogFooter>

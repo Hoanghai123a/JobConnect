@@ -11,6 +11,7 @@ export interface AppSettings {
   about?: string;
   advance_limit?: number;
   advance_rules?: string;
+  allow_advance_after_leave?: boolean;
   account_code_prefix?: string;
   logo?: string;
   updated?: string;
@@ -28,6 +29,7 @@ const DEFAULTS: AppSettings = {
   about: "",
   advance_limit: 0,
   advance_rules: "",
+  allow_advance_after_leave: false,
   install_guide_images: [],
 };
 

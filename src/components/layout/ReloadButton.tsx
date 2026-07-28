@@ -1,5 +1,4 @@
 import { RefreshCw } from "lucide-react";
-import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 export function ReloadButton({
@@ -9,10 +8,6 @@ export function ReloadButton({
   showLabel?: boolean;
   className?: string;
 }) {
-  const { isAdmin, isStaff } = useAuth();
-
-  if (!isAdmin && !isStaff) return null;
-
   return (
     <button
       type="button"

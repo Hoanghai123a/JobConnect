@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Banknote, BarChart3, BookOpen, Building2, BusFront, ChevronRight, ClipboardCheck, Download, LayoutGrid, MessagesSquare, Newspaper, NotebookPen, RefreshCw, UserCheck, Users } from "lucide-react";
+import { Banknote, BarChart3, BookOpen, Building2, BusFront, ChevronRight, ClipboardCheck, Download, LayoutGrid, ListOrdered, MessagesSquare, Newspaper, NotebookPen, RefreshCw, UserCheck, Users } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -188,6 +188,11 @@ function StaffDashboardPage() {
             <FeatureTile to="/chat" label="Trò chuyện" icon={MessagesSquare} size="compact" />
             <FeatureTile to="/notebook" label="Sổ tay" icon={NotebookPen} size="compact" />
             <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
+            {user?.role === "staff" && (
+              <div className="contents desktop:hidden">
+                <FeatureTile to="/counter" label="Bộ đếm" icon={ListOrdered} size="compact" />
+              </div>
+            )}
             <FeatureTile to="/staff/approvals" label="Phê duyệt" icon={ClipboardCheck} size="compact" />
           </div>
         </DialogContent>

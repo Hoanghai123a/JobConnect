@@ -696,6 +696,27 @@ function GemsGamePage() {
         </TabsList>
 
         <TabsContent value="play" className="mt-0 flex flex-col gap-3">
+          <div className="worker-game-layout">
+          <aside className="worker-game-desktop-rail" aria-label="Chỉ số xếp kim cương">
+            <div className="worker-game-rail-title">Chỉ số</div>
+            <Card className="worker-game-stat">
+              <div className="worker-game-stat-label">Điểm</div>
+              <div className="worker-game-stat-value">{score}</div>
+            </Card>
+            <Card className="worker-game-stat">
+              <div className="worker-game-stat-label">Kỷ lục</div>
+              <div className={cn("worker-game-stat-value", score >= bestScore && bestScore > 0 && "text-amber-600")}>{bestScore}</div>
+            </Card>
+            <Card className="worker-game-stat">
+              <div className="worker-game-stat-label">Mục tiêu</div>
+              <div className="worker-game-stat-value">{config.threshold ? config.threshold : "∞"}</div>
+            </Card>
+            <Card className="worker-game-stat">
+              <div className="worker-game-stat-label">Xu hôm nay</div>
+              <div className="worker-game-stat-value">{dailyEarned}</div>
+            </Card>
+          </aside>
+          <div className="worker-game-main flex flex-col gap-3">
           <section className="gradient-hero overflow-hidden rounded-3xl p-4 text-white shadow-soft">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -715,7 +736,7 @@ function GemsGamePage() {
             </div>
           </section>
 
-          <div className="grid grid-cols-4 gap-2">
+          <div className="worker-game-mobile-stats grid grid-cols-4 gap-2">
             <Card className="p-3 text-center">
               <div className="text-[11px] text-muted-foreground">Điểm</div>
               <div className="text-lg font-semibold">{score}</div>
@@ -745,7 +766,7 @@ function GemsGamePage() {
             </div>
           )}
 
-          <Card className="flex flex-col gap-3 p-3">
+          <Card className="worker-game-board-card flex flex-col gap-3 p-3">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="text-sm font-semibold">Bàn kim cương</div>
@@ -762,7 +783,7 @@ function GemsGamePage() {
               </Button>
             </div>
 
-            <div className="mx-auto w-full max-w-[420px] touch-none select-none">
+            <div className="worker-game-board mx-auto w-full max-w-[420px] touch-none select-none">
               <div
                 ref={boardRef}
                 className="relative w-full overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 p-0"
@@ -820,6 +841,8 @@ function GemsGamePage() {
               </div>
             </div>
           </Card>
+          </div>
+          </div>
         </TabsContent>
 
         <TabsContent value="rank" className="mt-0 flex flex-col gap-3">

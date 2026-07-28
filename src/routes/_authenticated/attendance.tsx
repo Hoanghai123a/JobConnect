@@ -546,57 +546,61 @@ function UserAttendance() {
   return (
     <div>
       <AppHeader title="Tự chấm công" />
-      <div className="space-y-4 p-4">
-        <Card className="overflow-hidden">
-          <div className="gradient-accent p-4 text-accent-foreground">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs uppercase opacity-80">Bảng lương tạm tính</div>
-                <div className="text-xl font-bold">{currentEmployment?.expand?.factory?.name || "Chưa có lịch sử đi làm"}</div>
+      <div className="worker-attendance-page space-y-4 p-4">
+        <div className="worker-attendance-layout">
+          <aside className="worker-attendance-summary">
+            <Card className="worker-attendance-salary overflow-hidden">
+              <div className="gradient-accent p-4 text-accent-foreground">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs uppercase opacity-80">Bảng lương tạm tính</div>
+                    <div className="text-xl font-bold">{currentEmployment?.expand?.factory?.name || "Chưa có lịch sử đi làm"}</div>
+                  </div>
+                  <button
+                    onClick={() => setSettingsOpen(true)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 transition hover:bg-white/30"
+                    aria-label="Cài đặt chấm công"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="mt-3 text-3xl font-extrabold tracking-tight">
+                  {formatVND(salary.total)}
+                </div>
+                <div className="mt-0.5 text-xs opacity-80">
+                  Lương theo giờ: {formatVND(salary.wage)} • Phụ cấp: {formatVND(salary.allowance)}
+                </div>
               </div>
-              <button
-                onClick={() => setSettingsOpen(true)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition"
-                aria-label="Cài đặt chấm công"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="mt-3 text-3xl font-extrabold tracking-tight">
-              {formatVND(salary.total)}
-            </div>
-            <div className="mt-0.5 text-xs opacity-80">
-              Lương theo giờ: {formatVND(salary.wage)} • Phụ cấp: {formatVND(salary.allowance)}
-            </div>
-          </div>
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2 bg-card p-3 text-[10px] sm:text-sm">
-            {visibleRateCells.map((cell) => (
-              <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
-            ))}
-            <RateCell label="LCB" hours={user?.lcb || 0} suffix="₫" className="col-span-2" />
-          </div>
-        </Card>
+              <div className="worker-attendance-rate-grid grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
+                {visibleRateCells.map((cell) => (
+                  <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
+                ))}
+                <RateCell label="LCB" hours={user?.lcb || 0} suffix="₫" className="col-span-2" />
+              </div>
+            </Card>
+          </aside>
 
-        <div className="space-y-3">
-          {loading && <div className="p-4 text-sm text-muted-foreground">Đang tải…</div>}
-          <div className="flex items-center justify-center rounded-2xl shadow-soft">
-            <MonthSwitcher value={monthDate} onChange={setMonthDate} neutral />
-          </div>
-          <MonthCalendar period={payrollPeriod} rows={rows} onPickDate={openEntryForDate} />
-          <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-muted-foreground">
-            <span className="inline-flex items-center gap-1">
-              <Sun className="h-3 w-3 text-[color:var(--status-warning-fg)]" />
-              Ngày
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <Moon className="h-3 w-3 text-primary" />
-              Đêm
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-[color:var(--status-danger)]" />
-              Lễ
-            </span>
-            <span>· Chạm ngày để nhập / chỉnh sửa</span>
+          <div className="worker-attendance-calendar space-y-3">
+            {loading && <div className="p-4 text-sm text-muted-foreground">Đang tải…</div>}
+            <div className="flex items-center justify-center rounded-2xl shadow-soft">
+              <MonthSwitcher value={monthDate} onChange={setMonthDate} neutral />
+            </div>
+            <MonthCalendar period={payrollPeriod} rows={rows} onPickDate={openEntryForDate} />
+            <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Sun className="h-3 w-3 text-[color:var(--status-warning-fg)]" />
+                Ngày
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Moon className="h-3 w-3 text-primary" />
+                Đêm
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-[color:var(--status-danger)]" />
+                Lễ
+              </span>
+              <span>· Chạm ngày để nhập / chỉnh sửa</span>
+            </div>
           </div>
         </div>
 
@@ -765,7 +769,7 @@ function MonthCalendar({
   const dows = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 
   return (
-    <Card className="overflow-hidden rounded-2xl p-3">
+    <Card className="worker-attendance-month-calendar overflow-hidden rounded-2xl p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="text-sm font-semibold">{period.title}</div>
         <span className="chip chip-info">{rows.length} ngày</span>
@@ -1062,7 +1066,7 @@ function RateCell({
 }) {
   return (
     <div
-      className={`rounded-xl border border-border/80 bg-background p-2.5 text-center shadow-sm ${className}`}
+      className={`worker-attendance-rate-cell rounded-xl border border-border/80 bg-background p-2.5 text-center shadow-sm ${className}`}
     >
       <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
       <div className="text-sm font-semibold">

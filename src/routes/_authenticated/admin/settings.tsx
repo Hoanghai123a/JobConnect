@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -46,6 +47,7 @@ import {
   ChevronDown,
   MapPin,
   Search,
+  Wallet,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({
@@ -106,7 +108,6 @@ function CompanyTab() {
       hotline: settings.hotline || "",
       email: settings.email || "",
       about: settings.about || "",
-      advance_limit: formatMoneyInput(settings.advance_limit || 0),
       advance_rules: settings.advance_rules || "",
       account_code_prefix: settings.account_code_prefix || "",
     });
@@ -353,6 +354,7 @@ interface Factory {
   hotline?: string;
   note?: string;
   attendance_cutoff_day?: number;
+  advance_limit?: number;
   status?: string;
 }
 
@@ -372,6 +374,8 @@ interface MainHouse {
 
 function FactoriesTab() {
   const currentUser = pb.authStore.record as UserRecord | null;
+  const { data: appSettings } = useAppSettings();
+  const queryClient = useQueryClient();
   const [items, setItems] = useState<Factory[]>([]);
   const [areas, setAreas] = useState<RecruitmentArea[]>([]);
   const [mainHouses, setMainHouses] = useState<MainHouse[]>([]);
@@ -388,6 +392,14 @@ function FactoriesTab() {
   const [factorySearch, setFactorySearch] = useState("");
   const [areaSearch, setAreaSearch] = useState("");
   const [mainHouseSearch, setMainHouseSearch] = useState("");
+  const [bulkAdvanceLimit, setBulkAdvanceLimit] = useState("");
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [editingAdvanceFactory, setEditingAdvanceFactory] = useState<Factory | null>(null);
+  const [advanceLimitText, setAdvanceLimitText] = useState("");
+  const [advanceSaving, setAdvanceSaving] = useState(false);
+  const [allowAfterLeaveSaving, setAllowAfterLeaveSaving] = useState(false);
+  const [allowAfterLeavePending, setAllowAfterLeavePending] = useState(false);
 
   const filteredFactories = items.filter((f) => {
     if (!factorySearch.trim()) return true;
@@ -457,6 +469,10 @@ function FactoriesTab() {
     loadMainHouses();
   }, []);
 
+  useEffect(() => {
+    setAllowAfterLeaveSaving(Boolean(appSettings.allow_advance_after_leave));
+  }, [appSettings.allow_advance_after_leave]);
+
   const save = async () => {
     if (!editing?.name?.trim()) {
       toast.error("Tên nhà máy bắt buộc");
@@ -476,6 +492,7 @@ function FactoriesTab() {
         hotline: editing.hotline || "",
         note: editing.note || "",
         attendance_cutoff_day: Number(editing.attendance_cutoff_day) || 31,
+        advance_limit: Math.max(0, Number(editing.advance_limit) || 0),
         status: editing.status || "active",
       };
       if (editing.id) {
@@ -506,6 +523,113 @@ function FactoriesTab() {
       loadFactories();
     } catch (e: any) {
       toast.error(e?.message || "Lỗi lưu");
+    }
+  };
+
+  const saveAllowAfterLeave = async (checked: boolean) => {
+    setAllowAfterLeaveSaving(checked);
+    setAllowAfterLeavePending(true);
+    try {
+      if (appSettings.id) {
+        await pb.collection("app_settings").update(appSettings.id, {
+          allow_advance_after_leave: checked,
+        });
+      } else {
+        await pb.collection("app_settings").create({
+          allow_advance_after_leave: checked,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["app_settings"] });
+      toast.success(checked ? "Đã cho phép báo ứng khi NLĐ đã nghỉ" : "Đã tắt báo ứng khi NLĐ đã nghỉ");
+    } catch (e: any) {
+      setAllowAfterLeaveSaving(!checked);
+      toast.error(e?.message || "Không thể lưu cài đặt báo ứng sau nghỉ");
+    } finally {
+      setAllowAfterLeavePending(false);
+    }
+  };
+
+  const openAdvanceEditor = (factory: Factory) => {
+    setEditingAdvanceFactory(factory);
+    setAdvanceLimitText(formatMoneyInput(String(factory.advance_limit || 0)));
+  };
+
+  const saveAdvanceLimit = async () => {
+    if (!editingAdvanceFactory) return;
+    const advanceLimit = Math.max(0, parseMoneyInput(advanceLimitText));
+    setAdvanceSaving(true);
+    try {
+      const before = items.find((item) => item.id === editingAdvanceFactory.id);
+      const status = editingAdvanceFactory.status === "inactive" ? "inactive" : "active";
+      await pb.collection("factories").update(editingAdvanceFactory.id, {
+        advance_limit: advanceLimit,
+        status,
+      });
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "factories",
+        targetRecord: editingAdvanceFactory.id,
+        action: "update",
+        before,
+        after: { advance_limit: advanceLimit, status },
+        note: "Admin cập nhật hạn mức ứng tiền theo nhà máy",
+      });
+      setItems((current) =>
+        current.map((item) =>
+          item.id === editingAdvanceFactory.id
+            ? { ...item, advance_limit: advanceLimit, status }
+            : item,
+        ),
+      );
+      setEditingAdvanceFactory(null);
+      toast.success("Đã lưu hạn mức ứng tiền");
+    } catch (e: any) {
+      toast.error(e?.message || "Không thể lưu hạn mức ứng tiền");
+    } finally {
+      setAdvanceSaving(false);
+    }
+  };
+
+  const applyAdvanceLimitToAll = async () => {
+    const advanceLimit = Math.max(0, parseMoneyInput(bulkAdvanceLimit));
+    if (!items.length) {
+      toast.warning("Chưa có nhà máy để áp dụng");
+      setBulkConfirmOpen(false);
+      return;
+    }
+    setBulkSaving(true);
+    try {
+      for (const factory of items) {
+        const before = factory;
+        const status = factory.status === "inactive" ? "inactive" : "active";
+        await pb.collection("factories").update(factory.id, {
+          advance_limit: advanceLimit,
+          status,
+        });
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "factories",
+          targetRecord: factory.id,
+          action: "update",
+          before,
+          after: { advance_limit: advanceLimit, status },
+          note: "Admin áp dụng đồng loạt hạn mức ứng tiền cho toàn bộ nhà máy",
+        });
+      }
+      setItems((current) =>
+        current.map((factory) => ({
+          ...factory,
+          advance_limit: advanceLimit,
+          status: factory.status === "inactive" ? "inactive" : "active",
+        })),
+      );
+      setBulkConfirmOpen(false);
+      toast.success(`Đã áp dụng ${advanceLimit.toLocaleString("vi-VN")} đ cho ${items.length} nhà máy`);
+    } catch (e: any) {
+      toast.error(e?.message || "Không thể áp dụng hạn mức cho toàn bộ nhà máy");
+      loadFactories();
+    } finally {
+      setBulkSaving(false);
     }
   };
 
@@ -664,6 +788,75 @@ function FactoriesTab() {
 
   return (
     <div className="space-y-3">
+      <Card className="space-y-3 rounded-2xl border-border/70 p-3 shadow-soft">
+        <div className="flex items-start gap-2">
+          <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div>
+            <div className="text-sm font-semibold">Cài đặt ứng tiền theo nhà máy</div>
+            <div className="text-[11px] text-muted-foreground">
+              Hạn mức được lấy theo lịch sử đi làm gần nhất của NLĐ. 0 đ nghĩa là không cho phép báo ứng.
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3">
+          <div className="min-w-0">
+            <div className="text-xs font-medium">Cho phép báo ứng khi NLĐ đã nghỉ</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              Mặc định tắt; khi bật sử dụng nhà máy của lịch sử gần nhất.
+            </div>
+          </div>
+          <Switch
+            checked={allowAfterLeaveSaving}
+            onCheckedChange={saveAllowAfterLeave}
+            disabled={allowAfterLeavePending}
+            aria-label="Cho phép báo ứng khi NLĐ đã nghỉ"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Hạn mức áp dụng nhanh cho toàn bộ nhà máy</Label>
+          <div className="flex gap-2">
+            <Input
+              className="min-w-0 flex-1 rounded-xl"
+              inputMode="numeric"
+              placeholder="Nhập số tiền, 0 để tắt"
+              value={bulkAdvanceLimit}
+              onChange={(event) => setBulkAdvanceLimit(formatMoneyInput(event.target.value))}
+            />
+            <Button
+              type="button"
+              className="shrink-0 rounded-xl"
+              onClick={() => setBulkConfirmOpen(true)}
+              disabled={bulkSaving || !bulkAdvanceLimit.trim()}
+            >
+              Áp dụng
+            </Button>
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            Sau khi áp dụng, Admin vẫn có thể chỉnh riêng từng nhà máy bên dưới.
+          </div>
+        </div>
+      </Card>
+
+      <Dialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
+        <DialogContent className="w-[calc(100%-2rem)] rounded-2xl sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Áp dụng hạn mức cho toàn bộ nhà máy?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Tất cả {items.length} nhà máy sẽ được đặt hạn mức {parseMoneyInput(bulkAdvanceLimit).toLocaleString("vi-VN")} đ.
+            Thao tác này ghi đè hạn mức riêng hiện tại.
+          </p>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setBulkConfirmOpen(false)}>
+              Huỷ
+            </Button>
+            <Button type="button" onClick={applyAdvanceLimitToAll} disabled={bulkSaving}>
+              {bulkSaving ? "Đang áp dụng..." : "Xác nhận áp dụng"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Collapsible open={factoriesOpen} onOpenChange={setFactoriesOpen}>
         <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
           <div className="flex items-center justify-between gap-2">
@@ -742,6 +935,21 @@ function FactoriesTab() {
                   <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                     <CalendarDays className="h-3 w-3" />
                     Chốt công ngày {f.attendance_cutoff_day || 31}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground">
+                      Hạn mức ứng tiền: {Number(f.advance_limit || 0).toLocaleString("vi-VN")} đ
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-lg px-2.5 text-[11px]"
+                      onClick={() => openAdvanceEditor(f)}
+                    >
+                      <Wallet className="h-3.5 w-3.5" />
+                      Cài hạn mức
+                    </Button>
                   </div>
                 </div>
                 <div className="flex gap-1">
@@ -829,6 +1037,38 @@ function FactoriesTab() {
             </Button>
             <Button onClick={save} className="rounded-xl">
               <Save className="h-4 w-4" /> Lưu
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!editingAdvanceFactory}
+        onOpenChange={(open) => !open && setEditingAdvanceFactory(null)}
+      >
+        <DialogContent className="w-[calc(100%-2rem)] rounded-2xl sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Hạn mức ứng tiền · {editingAdvanceFactory?.name || "Nhà máy"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label className="text-xs">Hạn mức tối đa cho mỗi NLĐ</Label>
+            <Input
+              className="rounded-xl"
+              inputMode="numeric"
+              placeholder="0"
+              value={advanceLimitText}
+              onChange={(event) => setAdvanceLimitText(formatMoneyInput(event.target.value))}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Nhập 0 đ để tạm khoá báo ứng tại nhà máy này.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setEditingAdvanceFactory(null)}>
+              Huỷ
+            </Button>
+            <Button type="button" onClick={saveAdvanceLimit} disabled={advanceSaving}>
+              {advanceSaving ? "Đang lưu..." : "Lưu hạn mức"}
             </Button>
           </DialogFooter>
         </DialogContent>

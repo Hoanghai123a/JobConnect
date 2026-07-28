@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bar, CartesianGrid, Cell, ComposedChart, LabelList, Line, XAxis, YAxis } from "recharts";
 import { Building2, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,11 +18,20 @@ import {
 import type { EmploymentHistoryRecord } from "@/lib/employment";
 import type { FactoryRecord } from "@/lib/factories";
 import type { UserRecord } from "@/lib/pocketbase";
+import {
+  datePart,
+  enumerateDates,
+  getActiveHistoriesAtDate,
+  localIsoDate,
+  shiftIsoDate,
+} from "./workforce-stats";
 
 export type RecruitmentChartProps = {
   histories: EmploymentHistoryRecord[];
   users: UserRecord[];
   factories: FactoryRecord[];
+  from?: string;
+  to?: string;
 };
 
 type DailyRecruitment = {
@@ -30,43 +39,40 @@ type DailyRecruitment = {
   label: string;
   joined: number;
   working: number;
+  left: number;
 };
-
-function daysAgoIso(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
 
 const chartConfig = {
   joined: { label: "Tuyển mới", color: "oklch(0.65 0.2 250)" },
   working: { label: "Còn đi làm", color: "oklch(0.7 0.18 145)" },
+  left: { label: "Đã nghỉ", color: "oklch(0.68 0.2 35)" },
 } satisfies ChartConfig;
 
-export function RecruitmentChart({ histories, users, factories }: RecruitmentChartProps) {
+export function RecruitmentChart({ histories, users, factories, from, to }: RecruitmentChartProps) {
+  const resolvedTo = to || localIsoDate();
+  const resolvedFrom = from || shiftIsoDate(resolvedTo, -6);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedFactoryId, setSelectedFactoryId] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (selectedDay && (selectedDay < resolvedFrom || selectedDay > resolvedTo)) {
+      setSelectedDay(null);
+      setSelectedFactoryId(null);
+    }
+  }, [resolvedFrom, resolvedTo, selectedDay]);
+
   const dailyData = useMemo(() => {
-    const days: DailyRecruitment[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const dateStr = daysAgoIso(i);
-      const label = new Date(`${dateStr}T00:00:00`).toLocaleDateString("vi-VN", {
+    return enumerateDates(resolvedFrom, resolvedTo).map((date) => ({
+      date,
+      label: new Date(`${date}T12:00:00`).toLocaleDateString("vi-VN", {
         day: "2-digit",
         month: "2-digit",
-      });
-
-      const joined = histories.filter((h) => h.join_date?.slice(0, 10) === dateStr).length;
-      let working = 0;
-      for (const h of histories) {
-        if (!h.join_date || h.join_date.slice(0, 10) > dateStr) continue;
-        if (!h.leave_date || h.leave_date.slice(0, 10) > dateStr) working++;
-      }
-
-      days.push({ date: dateStr, label, joined, working });
-    }
-    return days;
-  }, [histories]);
+      }),
+      joined: histories.filter((history) => datePart(history.join_date) === date).length,
+      left: histories.filter((history) => datePart(history.leave_date) === date).length,
+      working: getActiveHistoriesAtDate(histories, date).length,
+    }));
+  }, [histories, resolvedFrom, resolvedTo]);
 
   const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const factoryById = useMemo(() => new Map(factories.map((f) => [f.id, f])), [factories]);
@@ -126,7 +132,12 @@ export function RecruitmentChart({ histories, users, factories }: RecruitmentCha
       <ChartContainer config={chartConfig} className="h-[240px] w-full">
         <ComposedChart data={dailyData} margin={{ top: 16, right: 4, bottom: 0, left: -8 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
+          <XAxis
+            dataKey="label"
+            interval={Math.max(0, Math.ceil(dailyData.length / 14) - 1)}
+            tick={{ fontSize: 11 }}
+            tickLine={false}
+          />
           <YAxis yAxisId="left" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
           <YAxis
             yAxisId="right"
@@ -165,6 +176,15 @@ export function RecruitmentChart({ histories, users, factories }: RecruitmentCha
             type="monotone"
             dataKey="working"
             stroke="var(--color-working)"
+            strokeWidth={2}
+            dot={{ r: 3 }}
+            activeDot={{ r: 5 }}
+          />
+          <Line
+            yAxisId="left"
+            type="monotone"
+            dataKey="left"
+            stroke="var(--color-left)"
             strokeWidth={2}
             dot={{ r: 3 }}
             activeDot={{ r: 5 }}

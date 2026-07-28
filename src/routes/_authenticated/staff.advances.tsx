@@ -14,8 +14,11 @@ import {
   type AdvanceRecord,
   type AdvanceStatus,
   type AdminTab,
+  type AdvancePayoutMethod,
   ADVANCE_TAB_FILTERS,
   STATUS_META,
+  PAYOUT_METHOD_META,
+  normalizeAdvancePayoutMethod,
   joinPbFilters,
   buildAdvanceFilter,
   formatMoney,
@@ -42,9 +45,15 @@ import {
 } from "@/components/ui/dialog";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { parseMoneyInput, formatMoneyInput } from "@/lib/money";
+import {
+  resolveAdvancePolicy,
+  validateAdvanceAmount,
+  type AdvancePolicy,
+} from "@/lib/advance-policy";
 import { VN_BANKS, resolveBankName } from "@/lib/vn-banks";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
 import {
   BarChart3,
   Check,
@@ -331,9 +340,12 @@ function WorkerAdvancesView() {
   const [workerSearch, setWorkerSearch] = useState("");
   const [workerAmountText, setWorkerAmountText] = useState("");
   const [workerReason, setWorkerReason] = useState("");
+  const [workerPayoutMethod, setWorkerPayoutMethod] =
+    useState<AdvancePayoutMethod>("bank_transfer");
   const [bankChoice, setBankChoice] = useState<"worker" | "staff">("worker");
-  const [workerOutstanding, setWorkerOutstanding] = useState(0);
-  const [loadingOutstanding, setLoadingOutstanding] = useState(false);
+  const [workerPolicy, setWorkerPolicy] = useState<AdvancePolicy | null>(null);
+  const [workerPolicyError, setWorkerPolicyError] = useState("");
+  const [loadingWorkerPolicy, setLoadingWorkerPolicy] = useState(false);
   const [creatingAdvance, setCreatingAdvance] = useState(false);
   const [stats, setStats] = useState<Record<AdminTab, AdvanceSummary>>(emptyAdvanceSummaries);
   const [showMobileStats, setShowMobileStats] = useState(false);
@@ -354,20 +366,22 @@ function WorkerAdvancesView() {
       workers.filter(
         (worker) =>
           worker.canReportAdvance &&
-          worker.histories.some((history) => history.status === "working" && !history.leave_date),
+          (Boolean(settings.allow_advance_after_leave) ||
+            worker.histories.some((history) => history.status === "working" && !history.leave_date)),
       ),
-    [workers],
+    [settings.allow_advance_after_leave, workers],
   );
   const selectedWorker =
     eligibleWorkers.find((worker) => worker.user.id === selectedWorkerId) || null;
-  const workerLimit = Number(settings.advance_limit || 0);
-  const workerAvailable = workerLimit > 0 ? Math.max(0, workerLimit - workerOutstanding) : 0;
+  const workerLimit = workerPolicy?.limit || 0;
+  const workerOutstanding = workerPolicy?.outstanding || 0;
+  const workerAvailable = workerPolicy?.available || 0;
 
   const filteredWorkers = useMemo(() => {
     const keyword = removeVietnameseTone(workerSearch.trim().toLowerCase());
     if (!keyword) return eligibleWorkers;
     return eligibleWorkers.filter((worker) => {
-      const active = getActiveWorkerHistory(worker);
+      const active = getAdvanceHistory(worker, Boolean(settings.allow_advance_after_leave));
       const haystack = removeVietnameseTone(
         [
           worker.user.full_name,
@@ -493,25 +507,32 @@ function WorkerAdvancesView() {
 
   useEffect(() => {
     if (!selectedWorkerId) {
-      setWorkerOutstanding(0);
+      setWorkerPolicy(null);
+      setWorkerPolicyError("");
       return;
     }
     let active = true;
-    setLoadingOutstanding(true);
-    loadWorkerOutstanding(selectedWorkerId)
-      .then((total) => {
-        if (active) setWorkerOutstanding(total);
+    setLoadingWorkerPolicy(true);
+    resolveAdvancePolicy(selectedWorkerId, {
+      allowAfterLeave: Boolean(settings.allow_advance_after_leave),
+    })
+      .then((policy) => {
+        if (!active) return;
+        setWorkerPolicy(policy);
+        setWorkerPolicyError("");
       })
-      .catch(() => {
-        if (active) setWorkerOutstanding(0);
+      .catch((error: unknown) => {
+        if (!active) return;
+        setWorkerPolicy(null);
+        setWorkerPolicyError(
+          error instanceof Error ? error.message : "Không thể kiểm tra hạn mức ứng tiền",
+        );
       })
-      .finally(() => {
-        if (active) setLoadingOutstanding(false);
-      });
+      .finally(() => active && setLoadingWorkerPolicy(false));
     return () => {
       active = false;
     };
-  }, [selectedWorkerId]);
+  }, [selectedWorkerId, settings.allow_advance_after_leave]);
 
   const updateRow = async (id: string, payload: Partial<AdvanceRecord>) => {
     await pb.collection("advances").update(id, payload);
@@ -573,8 +594,10 @@ function WorkerAdvancesView() {
     setWorkerSearch("");
     setWorkerAmountText("");
     setWorkerReason("");
+    setWorkerPayoutMethod("bank_transfer");
     setBankChoice("worker");
-    setWorkerOutstanding(0);
+    setWorkerPolicy(null);
+    setWorkerPolicyError("");
   };
 
   const createWorkerAdvance = async (event: React.FormEvent) => {
@@ -597,13 +620,17 @@ function WorkerAdvancesView() {
     try {
       const workspace = await fetchStaffWorkspace(user as UserRecord);
       const currentWorker = workspace.workers.find((worker) => worker.user.id === selectedWorkerId);
-      const activeHistory = currentWorker ? getActiveWorkerHistory(currentWorker) : null;
-      if (!currentWorker?.canReportAdvance || !activeHistory) {
-        throw new Error("Bạn không còn quyền báo ứng hoặc NLĐ đã ngừng làm");
+      if (!currentWorker?.canReportAdvance) {
+        throw new Error("Bạn không còn quyền báo ứng cho hồ sơ này");
       }
+      const policy = await resolveAdvancePolicy(currentWorker.user.id, {
+        allowAfterLeave: Boolean(settings.allow_advance_after_leave),
+      });
+      validateAdvanceAmount(policy, amount);
+      const employment = policy.employment;
 
       const bankSource = bankChoice === "staff" ? user : currentWorker.user;
-      if (!bankSource.bank_account_number) {
+      if (workerPayoutMethod === "bank_transfer" && !bankSource.bank_account_number) {
         throw new Error(
           bankChoice === "staff"
             ? "Tài khoản ngân hàng của staff chưa có"
@@ -611,27 +638,21 @@ function WorkerAdvancesView() {
         );
       }
 
-      const outstanding = await loadWorkerOutstanding(currentWorker.user.id);
-      const limit = Number(settings.advance_limit || 0);
-      if (limit <= 0) throw new Error("Admin chưa cài hạn mức Ứng lương");
-      if (outstanding + amount > limit) {
-        throw new Error(
-          `Vượt hạn mức ứng lương. Đã ứng chưa thu hồi ${formatMoney(outstanding)}đ, còn có thể ứng ${formatMoney(Math.max(0, limit - outstanding))}đ`,
-        );
-      }
-
       const payload = {
         user: currentWorker.user.id,
         requested_by: user.id,
-        recruiter_id: user.id,
-        employee_code: activeHistory.employee_code || "",
-        full_name: activeHistory.worker_name_snapshot || currentWorker.user.full_name || "",
-        company: activeHistory.expand?.factory?.name || "",
+        recruiter_id: employment.recruiter_staff || "",
+        employee_code: employment.employee_code || "",
+        full_name: employment.worker_name_snapshot || currentWorker.user.full_name || "",
+        company: policy.factoryName,
         phone: currentWorker.user.phone || "",
-        join_date: activeHistory.join_date || "",
-        bank_name: bankSource.bank_name || "",
-        bank_account_number: bankSource.bank_account_number || "",
-        bank_account_name: bankSource.bank_account_name || "",
+        join_date: employment.join_date || "",
+        bank_name: workerPayoutMethod === "cash" ? "" : bankSource.bank_name || "",
+        bank_account_number:
+          workerPayoutMethod === "cash" ? "" : bankSource.bank_account_number || "",
+        bank_account_name:
+          workerPayoutMethod === "cash" ? "" : bankSource.bank_account_name || "",
+        payout_method: workerPayoutMethod,
         amount,
         reason: workerReason.trim(),
         status: "recruiter_approved",
@@ -773,6 +794,7 @@ function WorkerAdvancesView() {
       ) : (
         items.map((row) => {
           const status = (row.status || "pending") as AdvanceStatus;
+          const payoutMethod = normalizeAdvancePayoutMethod(row.payout_method);
           return (
             <div
               key={row.id}
@@ -804,6 +826,9 @@ function WorkerAdvancesView() {
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <StatusChip tone={STATUS_META[status].tone as ChipTone}>
                     {STATUS_META[status].label}
+                  </StatusChip>
+                  <StatusChip tone={payoutMethod === "cash" ? "warning" : "neutral"}>
+                    {PAYOUT_METHOD_META[payoutMethod].label}
                   </StatusChip>
                   {status === "pending" && (
                     <div className="flex gap-1">
@@ -925,6 +950,8 @@ function WorkerAdvancesView() {
           setWorkerSearch("");
           setBankChoice("worker");
         }}
+        payoutMethod={workerPayoutMethod}
+        setPayoutMethod={setWorkerPayoutMethod}
         bankChoice={bankChoice}
         setBankChoice={setBankChoice}
         amountText={workerAmountText}
@@ -934,7 +961,9 @@ function WorkerAdvancesView() {
         limit={workerLimit}
         outstanding={workerOutstanding}
         available={workerAvailable}
-        loadingOutstanding={loadingOutstanding}
+        factoryName={workerPolicy?.factoryName || ""}
+        policyError={workerPolicyError}
+        loadingOutstanding={loadingWorkerPolicy}
         submitting={creatingAdvance}
         onSubmit={createWorkerAdvance}
       />
@@ -1371,6 +1400,7 @@ function MyAdvancesView() {
   const [sending, setSending] = useState(false);
   const [amountText, setAmountText] = useState("");
   const [reason, setReason] = useState("");
+  const [payoutMethod, setPayoutMethod] = useState<AdvancePayoutMethod>("bank_transfer");
   const [bankForm, setBankForm] = useState({
     bank_name: "",
     bank_account_number: "",
@@ -1446,9 +1476,10 @@ function MyAdvancesView() {
         employee_code: "",
         company: "",
         phone: user!.phone || "",
-        bank_name: bankForm.bank_name,
-        bank_account_number: bankForm.bank_account_number,
-        bank_account_name: bankForm.bank_account_name,
+        bank_name: payoutMethod === "cash" ? "" : bankForm.bank_name,
+        bank_account_number: payoutMethod === "cash" ? "" : bankForm.bank_account_number,
+        bank_account_name: payoutMethod === "cash" ? "" : bankForm.bank_account_name,
+        payout_method: payoutMethod,
         amount,
         reason: reason.trim(),
         status: "recruiter_approved",
@@ -1458,6 +1489,7 @@ function MyAdvancesView() {
       toast.success("Đã gửi yêu cầu ứng lương");
       setAmountText("");
       setReason("");
+      setPayoutMethod("bank_transfer");
       setSelectedAdmins([]);
       setShowForm(false);
       load();
@@ -1559,6 +1591,7 @@ function MyAdvancesView() {
       ) : (
         items.map((row) => {
           const status = (row.status || "recruiter_approved") as AdvanceStatus;
+          const payoutMethod = normalizeAdvancePayoutMethod(row.payout_method);
           return (
             <div
               key={row.id}
@@ -1574,6 +1607,9 @@ function MyAdvancesView() {
                 <div className="flex flex-col items-end gap-1">
                   <StatusChip tone={STATUS_META[status].tone as ChipTone}>
                     {STATUS_META[status].label}
+                  </StatusChip>
+                  <StatusChip tone={payoutMethod === "cash" ? "warning" : "neutral"}>
+                    {PAYOUT_METHOD_META[payoutMethod].label}
                   </StatusChip>
                   {status === "recruiter_approved" && row.requested_by === user?.id && (
                     <Button
@@ -1596,7 +1632,10 @@ function MyAdvancesView() {
 
       <Button
         className="fixed bottom-20 right-4 z-30 h-12 w-12 rounded-full shadow-lg"
-        onClick={() => setShowForm(true)}
+        onClick={() => {
+          setPayoutMethod("bank_transfer");
+          setShowForm(true);
+        }}
       >
         <Plus className="h-5 w-5" />
       </Button>
@@ -1608,6 +1647,8 @@ function MyAdvancesView() {
         setAmountText={setAmountText}
         reason={reason}
         setReason={setReason}
+        payoutMethod={payoutMethod}
+        setPayoutMethod={setPayoutMethod}
         bankForm={bankForm}
         setBankForm={setBankForm}
         adminList={adminList}
@@ -1635,6 +1676,8 @@ function StaffAdvanceFormDialog({
   setAmountText,
   reason,
   setReason,
+  payoutMethod,
+  setPayoutMethod,
   bankForm,
   setBankForm,
   adminList,
@@ -1649,6 +1692,8 @@ function StaffAdvanceFormDialog({
   setAmountText: (v: string) => void;
   reason: string;
   setReason: (v: string) => void;
+  payoutMethod: AdvancePayoutMethod;
+  setPayoutMethod: (value: AdvancePayoutMethod) => void;
   bankForm: { bank_name: string; bank_account_number: string; bank_account_name: string };
   setBankForm: (v: {
     bank_name: string;
@@ -1688,42 +1733,51 @@ function StaffAdvanceFormDialog({
               className="min-h-16 rounded-xl"
             />
           </div>
-          // PLACEHOLDER_FORM_BANK
-          <div className="space-y-1.5">
-            <Label>Ngân hàng</Label>
-            <Input
-              value={bankForm.bank_name}
-              onChange={(e) => setBankForm({ ...bankForm, bank_name: e.target.value })}
-              placeholder="Tên ngân hàng"
-              className="rounded-xl"
-              list="bank-list"
-            />
-            <datalist id="bank-list">
-              {VN_BANKS.map((b) => (
-                <option key={b.code} value={b.name} />
-              ))}
-            </datalist>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <Label>Số tài khoản</Label>
-              <Input
-                value={bankForm.bank_account_number}
-                onChange={(e) => setBankForm({ ...bankForm, bank_account_number: e.target.value })}
-                placeholder="Số TK"
-                className="rounded-xl"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Chủ tài khoản</Label>
-              <Input
-                value={bankForm.bank_account_name}
-                onChange={(e) => setBankForm({ ...bankForm, bank_account_name: e.target.value })}
-                placeholder="Tên chủ TK"
-                className="rounded-xl"
-              />
-            </div>
-          </div>
+          <AdvancePayoutMethodPicker
+            value={payoutMethod}
+            onChange={setPayoutMethod}
+          />
+          {payoutMethod === "bank_transfer" && (
+            <>
+              <div className="space-y-1.5">
+                <Label>Ngân hàng</Label>
+                <Input
+                  value={bankForm.bank_name}
+                  onChange={(e) => setBankForm({ ...bankForm, bank_name: e.target.value })}
+                  placeholder="Tên ngân hàng"
+                  className="rounded-xl"
+                  list="bank-list"
+                />
+                <datalist id="bank-list">
+                  {VN_BANKS.map((b) => (
+                    <option key={b.code} value={b.name} />
+                  ))}
+                </datalist>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label>Số tài khoản</Label>
+                  <Input
+                    value={bankForm.bank_account_number}
+                    onChange={(e) =>
+                      setBankForm({ ...bankForm, bank_account_number: e.target.value })
+                    }
+                    placeholder="Số TK"
+                    className="rounded-xl"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Chủ tài khoản</Label>
+                  <Input
+                    value={bankForm.bank_account_name}
+                    onChange={(e) => setBankForm({ ...bankForm, bank_account_name: e.target.value })}
+                    placeholder="Tên chủ TK"
+                    className="rounded-xl"
+                  />
+                </div>
+              </div>
+            </>
+          )}
           <div className="space-y-1.5">
             <Label>Gửi tới admin duyệt * ({selectedAdmins.length} đã chọn)</Label>
             <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border p-2">
@@ -1775,6 +1829,7 @@ function AdvanceQuickDetail({
 }) {
   if (!detail) return null;
   const status = (detail.status || "pending") as AdvanceStatus;
+  const payoutMethod = normalizeAdvancePayoutMethod(detail.payout_method);
 
   return (
     <Dialog open={!!detail} onOpenChange={(open) => !open && onClose()}>
@@ -1796,8 +1851,13 @@ function AdvanceQuickDetail({
               label="Ngày gửi"
               value={new Date(detail.created).toLocaleDateString("vi-VN")}
             />
-            <DetailCell label="Ngân hàng" value={detail.bank_name} />
-            <DetailCell label="Số TK" value={detail.bank_account_number} />
+            <DetailCell label="Hình thức nhận" value={PAYOUT_METHOD_META[payoutMethod].label} />
+            {payoutMethod === "bank_transfer" && (
+              <>
+                <DetailCell label="Ngân hàng" value={detail.bank_name} />
+                <DetailCell label="Số TK" value={detail.bank_account_number} />
+              </>
+            )}
           </div>
           <div className="rounded-xl border bg-card p-3 text-sm">
             <div className="text-[10px] text-muted-foreground">Lý do</div>
@@ -1844,6 +1904,8 @@ function WorkerAdvanceCreateDialog({
   setSearch,
   selectedWorker,
   selectWorker,
+  payoutMethod,
+  setPayoutMethod,
   bankChoice,
   setBankChoice,
   amountText,
@@ -1853,6 +1915,8 @@ function WorkerAdvanceCreateDialog({
   limit,
   outstanding,
   available,
+  factoryName,
+  policyError,
   loadingOutstanding,
   submitting,
   onSubmit,
@@ -1865,6 +1929,8 @@ function WorkerAdvanceCreateDialog({
   setSearch: (value: string) => void;
   selectedWorker: StaffWorkerRecord | null;
   selectWorker: (workerId: string) => void;
+  payoutMethod: AdvancePayoutMethod;
+  setPayoutMethod: (value: AdvancePayoutMethod) => void;
   bankChoice: "worker" | "staff";
   setBankChoice: (value: "worker" | "staff") => void;
   amountText: string;
@@ -1874,11 +1940,13 @@ function WorkerAdvanceCreateDialog({
   limit: number;
   outstanding: number;
   available: number;
+  factoryName: string;
+  policyError: string;
   loadingOutstanding: boolean;
   submitting: boolean;
   onSubmit: (event: React.FormEvent) => void;
 }) {
-  const activeHistory = selectedWorker ? getActiveWorkerHistory(selectedWorker) : null;
+  const activeHistory = selectedWorker ? getAdvanceHistory(selectedWorker, true) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1938,7 +2006,7 @@ function WorkerAdvanceCreateDialog({
                     </div>
                   ) : (
                     workers.map((worker) => {
-                      const history = getActiveWorkerHistory(worker);
+                      const history = getAdvanceHistory(worker, true);
                       return (
                         <button
                           key={worker.user.id}
@@ -1969,6 +2037,17 @@ function WorkerAdvanceCreateDialog({
 
           {selectedWorker && (
             <>
+              {policyError && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                  {policyError}
+                </div>
+              )}
+              {factoryName && (
+                <div className="rounded-xl border bg-primary/5 p-3 text-xs">
+                  <span className="text-muted-foreground">Nhà máy áp dụng: </span>
+                  <span className="font-semibold">{factoryName}</span>
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-1.5">
                 <DetailCell
                   label="Hạn mức"
@@ -1984,9 +2063,15 @@ function WorkerAdvanceCreateDialog({
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label>Tài khoản nhận tiền *</Label>
-                <div className="grid grid-cols-2 gap-2">
+              <AdvancePayoutMethodPicker
+                value={payoutMethod}
+                onChange={setPayoutMethod}
+              />
+
+              {payoutMethod === "bank_transfer" && (
+                <div className="space-y-2">
+                  <Label>Tài khoản nhận tiền *</Label>
+                  <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setBankChoice("worker")}
@@ -2022,8 +2107,9 @@ function WorkerAdvanceCreateDialog({
                       Dùng tài khoản ngân hàng của bạn
                     </div>
                   </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label>Số tiền ứng *</Label>
@@ -2046,7 +2132,11 @@ function WorkerAdvanceCreateDialog({
                 />
               </div>
 
-              <Button type="submit" className="w-full rounded-xl" disabled={submitting}>
+              <Button
+                type="submit"
+                className="w-full rounded-xl"
+                disabled={submitting || loadingOutstanding || Boolean(policyError) || !factoryName}
+              >
                 <Send className="h-4 w-4" />
                 {submitting ? "Đang gửi..." : "Gửi yêu cầu tới admin"}
               </Button>
@@ -2064,12 +2154,8 @@ function getActiveWorkerHistory(worker: StaffWorkerRecord) {
   );
 }
 
-async function loadWorkerOutstanding(workerId: string) {
-  const rows = await pb.collection("advances").getFullList<Pick<AdvanceRecord, "amount">>({
-    filter: `user="${workerId}" && (status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))`,
-    fields: "amount",
-  });
-  return rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+function getAdvanceHistory(worker: StaffWorkerRecord, allowAfterLeave: boolean) {
+  return allowAfterLeave ? worker.latestHistory : getActiveWorkerHistory(worker);
 }
 
 function removeVietnameseTone(value: string) {

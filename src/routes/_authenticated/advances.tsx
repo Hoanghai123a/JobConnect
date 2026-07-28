@@ -8,10 +8,13 @@ import {
   type AdvanceStatus,
   type RecoveryStatus,
   type AdminTab,
+  type AdvancePayoutMethod,
   ADVANCE_TAB_FILTERS,
   LEGACY_STAFF_REQUESTED_PENDING_FILTER,
   STATUS_META,
   RECOVERY_META,
+  PAYOUT_METHOD_META,
+  normalizeAdvancePayoutMethod,
   joinPbFilters,
   buildAdvanceFilter,
   formatMoney,
@@ -46,8 +49,12 @@ import { escapePb } from "@/lib/delegations";
 import { markSeen } from "@/lib/seen";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { createStaffActionLog } from "@/lib/staff-log";
-import { findActiveEmploymentByUser } from "@/lib/employment";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
+import {
+  resolveAdvancePolicy,
+  validateAdvanceAmount,
+  type AdvancePolicy,
+} from "@/lib/advance-policy";
 import { VN_BANKS, buildVietQrUrl, resolveBankName } from "@/lib/vn-banks";
 import { toast } from "sonner";
 import {
@@ -68,6 +75,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
 
 export const Route = createFileRoute("/_authenticated/advances")({
   component: AdvancesPage,
@@ -180,6 +188,7 @@ export function AdvancesPage() {
   const [sending, setSending] = useState(false);
   const [amountText, setAmountText] = useState("");
   const [reason, setReason] = useState("");
+  const [payoutMethod, setPayoutMethod] = useState<AdvancePayoutMethod>("bank_transfer");
   const [bankForm, setBankForm] = useState({
     bank_name: "",
     bank_account_number: "",
@@ -200,7 +209,9 @@ export function AdvancesPage() {
   const [adminNoteDraft, setAdminNoteDraft] = useState("");
   const [recoveryNoteDraft, setRecoveryNoteDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
-  const [outstandingAmount, setOutstandingAmount] = useState(0);
+  const [advancePolicy, setAdvancePolicy] = useState<AdvancePolicy | null>(null);
+  const [advancePolicyError, setAdvancePolicyError] = useState("");
+  const [advancePolicyLoading, setAdvancePolicyLoading] = useState(false);
   const [stats, setStats] = useState<Record<AdminTab, AdvanceSummary>>(emptyAdvanceSummaries);
   const [adminSegment, setAdminSegment] = useState<"workers" | "staff">("workers");
   const [transferDescriptionTemplate, setTransferDescriptionTemplate] = useState(
@@ -408,42 +419,47 @@ export function AdvancesPage() {
     user?.id,
   ]);
 
-  const loadOutstanding = useCallback(async () => {
-    if (!user?.id || isAdmin) {
-      setOutstandingAmount(0);
-      return;
-    }
-    const res = await pb.collection("advances").getList(1, 500, {
-      filter: joinPbFilters([
-        `user="${escapePb(user.id)}"`,
-        '(status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))',
-      ]),
-      fields: "amount",
-    });
-    setOutstandingAmount(
-      (res.items as unknown as Pick<AdvanceRecord, "amount">[]).reduce(
-        (sum, row) => sum + Number(row.amount || 0),
-        0,
-      ),
-    );
-  }, [isAdmin, user?.id]);
-
   useEffect(() => {
     load();
     loadStats().catch(() => {});
   }, [load, loadStats]);
 
   useEffect(() => {
-    loadOutstanding().catch(() => {});
-  }, [loadOutstanding]);
+    if (!selectedAdvanceUser?.id || isAdmin || isStaff) {
+      setAdvancePolicy(null);
+      setAdvancePolicyError("");
+      return;
+    }
+    let active = true;
+    setAdvancePolicyLoading(true);
+    resolveAdvancePolicy(selectedAdvanceUser.id, {
+      allowAfterLeave: Boolean(settings.allow_advance_after_leave),
+    })
+      .then((policy) => {
+        if (!active) return;
+        setAdvancePolicy(policy);
+        setAdvancePolicyError("");
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setAdvancePolicy(null);
+        setAdvancePolicyError(
+          error instanceof Error ? error.message : "Không thể kiểm tra hạn mức ứng tiền",
+        );
+      })
+      .finally(() => active && setAdvancePolicyLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [isAdmin, isStaff, selectedAdvanceUser?.id, settings.allow_advance_after_leave]);
 
   useEffect(() => {
     setSelectedIds(new Set());
   }, [dateFrom, dateTo, disbursementFilter, factoryFilter, search, tab]);
 
-  const limit = Number(settings.advance_limit || 0);
-  const outstanding = isAdmin ? 0 : outstandingAmount;
-  const available = limit > 0 ? Math.max(0, limit - outstanding) : 0;
+  const limit = advancePolicy?.limit || 0;
+  const outstanding = advancePolicy?.outstanding || 0;
+  const available = advancePolicy?.available || 0;
 
   const filtered = items;
   const isActionable = (row: AdvanceRecord) => {
@@ -489,39 +505,26 @@ export function AdvancesPage() {
       toast.error("Chọn người báo ứng");
       return false;
     }
-    if (limit <= 0) {
-      toast.error("Admin chưa cài hạn mức Ứng lương");
-      return false;
-    }
-    if (outstanding + amount > limit) {
-      toast.error("Vượt hạn mức Ứng lương đang cài đặt");
-      return false;
-    }
-
     setSending(true);
     try {
-      const employment = await findActiveEmploymentByUser(selectedAdvanceUser.id);
-      if (!employment) {
-        toast.error("Bạn hiện không đang đi làm nhà máy nào, không thể báo ứng");
-        setSending(false);
-        return false;
-      }
-      const recruiterId = employment.recruiter_staff || "";
-      const factoryName = employment.expand?.factory?.name || "";
-      const employeeCode = employment.employee_code || "";
-      const joinDate = employment.join_date || "";
+      const policy = await resolveAdvancePolicy(selectedAdvanceUser.id, {
+        allowAfterLeave: Boolean(settings.allow_advance_after_leave),
+      });
+      validateAdvanceAmount(policy, amount);
+      const employment = policy.employment;
       await pb.collection("advances").create({
         user: selectedAdvanceUser.id,
         requested_by: user?.id || selectedAdvanceUser.id,
-        recruiter_id: recruiterId,
-        employee_code: employeeCode,
-        full_name: selectedAdvanceUser.full_name || "",
-        company: factoryName,
+        recruiter_id: employment.recruiter_staff || "",
+        employee_code: employment.employee_code || "",
+        full_name: employment.worker_name_snapshot || selectedAdvanceUser.full_name || "",
+        company: policy.factoryName,
         phone: selectedAdvanceUser.phone || "",
-        join_date: joinDate,
-        bank_name: bankForm.bank_name || "",
-        bank_account_number: bankForm.bank_account_number || "",
-        bank_account_name: bankForm.bank_account_name || "",
+        join_date: employment.join_date || "",
+        bank_name: payoutMethod === "cash" ? "" : bankForm.bank_name || "",
+        bank_account_number: payoutMethod === "cash" ? "" : bankForm.bank_account_number || "",
+        bank_account_name: payoutMethod === "cash" ? "" : bankForm.bank_account_name || "",
+        payout_method: payoutMethod,
         amount,
         reason: reason.trim(),
         status: "pending",
@@ -530,8 +533,13 @@ export function AdvancesPage() {
       toast.success("Đã gửi Ứng lương");
       setAmountText("");
       setReason("");
+      setPayoutMethod("bank_transfer");
       load();
-      loadOutstanding().catch(() => {});
+      setAdvancePolicy({
+        ...policy,
+        outstanding: policy.outstanding + amount,
+        available: Math.max(0, policy.limit - policy.outstanding - amount),
+      });
       return true;
     } catch (error: unknown) {
       toast.error((error as any)?.message || "Lỗi gửi Ứng lương");
@@ -751,6 +759,7 @@ export function AdvancesPage() {
       "Ngân hàng": row.bank_name || "",
       "Số tài khoản": row.bank_account_number || "",
       "Tên chủ tài khoản": row.bank_account_name || "",
+      "Hình thức nhận tiền": PAYOUT_METHOD_META[normalizeAdvancePayoutMethod(row.payout_method)].label,
       "Số tiền": row.amount,
       "Số tiền ban đầu":
         row.original_amount && row.original_amount !== row.amount ? row.original_amount : "",
@@ -774,7 +783,13 @@ export function AdvancesPage() {
       <PageContainer title="Ứng lương" subtitle="Xin ứng lương & xem lịch sử">
         <AdvanceRulesCard rules={settings.advance_rules} />
 
-        <Button className="w-full" onClick={() => setShowProfile(true)}>
+        <Button
+          className="w-full"
+          onClick={() => {
+            setPayoutMethod("bank_transfer");
+            setShowProfile(true);
+          }}
+        >
           <Send className="h-4 w-4" /> Báo ứng mới
         </Button>
 
@@ -792,7 +807,25 @@ export function AdvancesPage() {
               className="min-w-0 space-y-3"
             >
               <div className="min-w-0 space-y-3">
-                <UserProfileCollapsible user={selectedAdvanceUser} />
+                <UserProfileCollapsible user={selectedAdvanceUser} policy={advancePolicy} />
+
+                {advancePolicyLoading && (
+                  <div className="rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    Đang kiểm tra nhà máy và hạn mức ứng tiền...
+                  </div>
+                )}
+                {!advancePolicyLoading && advancePolicyError && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                    {advancePolicyError}
+                  </div>
+                )}
+                {advancePolicy && (
+                  <div className="flex flex-wrap items-center gap-1.5 rounded-xl border bg-primary/5 p-3 text-xs">
+                    <span className="text-muted-foreground">Nhà máy áp dụng:</span>
+                    <span className="font-semibold">{advancePolicy.factoryName}</span>
+                    {!advancePolicy.isWorking && <StatusChip tone="warning">Đã nghỉ</StatusChip>}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-2">
                   <StatCard
@@ -815,53 +848,60 @@ export function AdvancesPage() {
                   </span>
                 </div>
 
-                <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
-                  <div className="text-xs font-semibold text-muted-foreground">
-                    Tài khoản nhận tiền
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Ngân hàng</Label>
-                    <Select
-                      value={bankForm.bank_name || ""}
-                      onValueChange={(value) => setBankForm({ ...bankForm, bank_name: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Chọn ngân hàng" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-72">
-                        {VN_BANKS.map((bank) => (
-                          <SelectItem key={bank.code} value={bank.name}>
-                            {bank.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="min-w-0 space-y-1">
-                      <Label>Số TK</Label>
-                      <Input
-                        value={bankForm.bank_account_number}
-                        inputMode="numeric"
-                        onChange={(e) =>
-                          setBankForm({
-                            ...bankForm,
-                            bank_account_number: e.target.value.replace(/\D/g, ""),
-                          })
-                        }
-                      />
+                <AdvancePayoutMethodPicker
+                  value={payoutMethod}
+                  onChange={setPayoutMethod}
+                />
+
+                {payoutMethod === "bank_transfer" && (
+                  <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
+                    <div className="text-xs font-semibold text-muted-foreground">
+                      Tài khoản nhận tiền
                     </div>
-                    <div className="min-w-0 space-y-1">
-                      <Label>Tên TK</Label>
-                      <Input
-                        value={bankForm.bank_account_name}
-                        onChange={(e) =>
-                          setBankForm({ ...bankForm, bank_account_name: e.target.value })
-                        }
-                      />
+                    <div className="space-y-1">
+                      <Label>Ngân hàng</Label>
+                      <Select
+                        value={bankForm.bank_name || ""}
+                        onValueChange={(value) => setBankForm({ ...bankForm, bank_name: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Chọn ngân hàng" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-72">
+                          {VN_BANKS.map((bank) => (
+                            <SelectItem key={bank.code} value={bank.name}>
+                              {bank.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="min-w-0 space-y-1">
+                        <Label>Số TK</Label>
+                        <Input
+                          value={bankForm.bank_account_number}
+                          inputMode="numeric"
+                          onChange={(e) =>
+                            setBankForm({
+                              ...bankForm,
+                              bank_account_number: e.target.value.replace(/\D/g, ""),
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="min-w-0 space-y-1">
+                        <Label>Tên TK</Label>
+                        <Input
+                          value={bankForm.bank_account_name}
+                          onChange={(e) =>
+                            setBankForm({ ...bankForm, bank_account_name: e.target.value })
+                          }
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div className="space-y-1">
                   <Label>Số tiền xin ứng</Label>
@@ -876,7 +916,11 @@ export function AdvancesPage() {
                   <Label>Lý do ứng</Label>
                   <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
                 </div>
-                <Button type="submit" className="w-full" disabled={sending}>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={sending || advancePolicyLoading || !advancePolicy}
+                >
                   <Send className="h-4 w-4" /> {sending ? "Đang gửi…" : "Gửi Ứng lương"}
                 </Button>
               </div>
@@ -919,11 +963,22 @@ export function AdvancesPage() {
                     {new Date(row.created).toLocaleString("vi-VN")}
                   </div>
                 </div>
-                <StatusChip
-                  tone={STATUS_META[(row.status || "pending") as AdvanceStatus].tone as any}
-                >
-                  {STATUS_META[(row.status || "pending") as AdvanceStatus].label}
-                </StatusChip>
+                <div className="flex flex-col items-end gap-1">
+                  <StatusChip
+                    tone={STATUS_META[(row.status || "pending") as AdvanceStatus].tone as any}
+                  >
+                    {STATUS_META[(row.status || "pending") as AdvanceStatus].label}
+                  </StatusChip>
+                  <StatusChip
+                    tone={
+                      normalizeAdvancePayoutMethod(row.payout_method) === "cash"
+                        ? "warning"
+                        : "neutral"
+                    }
+                  >
+                    {PAYOUT_METHOD_META[normalizeAdvancePayoutMethod(row.payout_method)].label}
+                  </StatusChip>
+                </div>
               </div>
             </div>
           ))
@@ -1223,6 +1278,7 @@ export function AdvancesPage() {
         filtered.map((row) => {
           const status = (row.status || "pending") as AdvanceStatus;
           const recovery = (row.recovery_status || "none") as RecoveryStatus;
+          const payoutMethod = normalizeAdvancePayoutMethod(row.payout_method);
           const selectable = isActionable(row);
           const canRecover = status === "accepted" && recovery === "none";
           const canAdminResolve = status === "pending" || status === "recruiter_approved";
@@ -1333,6 +1389,9 @@ export function AdvancesPage() {
                   </span>
                   <StatusChip tone={STATUS_META[status].tone}>
                     {STATUS_META[status].label}
+                  </StatusChip>
+                  <StatusChip tone={payoutMethod === "cash" ? "warning" : "neutral"}>
+                    {PAYOUT_METHOD_META[payoutMethod].label}
                   </StatusChip>
                   {status === "accepted" && (
                     <StatusChip tone={row.disbursed ? "success" : "warning"}>
@@ -1471,6 +1530,7 @@ function AdvanceDetailDialog({
   }, [advanceDetail?.id]);
 
   const status = advanceDetail?.status;
+  const payoutMethod = normalizeAdvancePayoutMethod(advanceDetail?.payout_method);
   const disbursed = Boolean(advanceDetail?.disbursed);
   const canDisburse = isAdmin && status === "accepted" && !disbursed;
 
@@ -1660,13 +1720,21 @@ function AdvanceDetailDialog({
               />
             </div>
             <div className="rounded-xl border bg-card p-3 text-sm">
-              <div className="text-[11px] text-muted-foreground">Tài khoản nhận tiền</div>
-              <div className="mt-1 font-medium">{advanceDetail.bank_name || "-"}</div>
-              <div className="mt-0.5 text-muted-foreground">
-                {advanceDetail.bank_account_number || "-"} -{" "}
-                {advanceDetail.bank_account_name || "-"}
-              </div>
-              {advanceDetail.status === "accepted" &&
+              <div className="text-[11px] text-muted-foreground">Hình thức nhận tiền</div>
+              <div className="mt-1 font-medium">{PAYOUT_METHOD_META[payoutMethod].label}</div>
+              {payoutMethod === "cash" ? (
+                <div className="mt-0.5 text-muted-foreground">Nhận tiền trực tiếp, không tạo mã QR.</div>
+              ) : (
+                <>
+                  <div className="mt-1 font-medium">{advanceDetail.bank_name || "-"}</div>
+                  <div className="mt-0.5 text-muted-foreground">
+                    {advanceDetail.bank_account_number || "-"} -{" "}
+                    {advanceDetail.bank_account_name || "-"}
+                  </div>
+                </>
+              )}
+              {payoutMethod === "bank_transfer" &&
+                advanceDetail.status === "accepted" &&
                 (() => {
                   const qrUrl = buildVietQrUrl({
                     bankName: advanceDetail.bank_name || "",
@@ -1901,28 +1969,19 @@ function ReadOnlyField({ label, value }: { label: string; value?: string | null 
   );
 }
 
-function UserProfileCollapsible({ user }: { user: UserRecord | null }) {
+function UserProfileCollapsible({
+  user,
+  policy,
+}: {
+  user: UserRecord | null;
+  policy: AdvancePolicy | null;
+}) {
   const [open, setOpen] = useState(false);
-  const [employment, setEmployment] = useState<Awaited<ReturnType<typeof findActiveEmploymentByUser>>>(null);
-
-  useEffect(() => {
-    if (!user?.id) {
-      setEmployment(null);
-      return;
-    }
-    let active = true;
-    findActiveEmploymentByUser(user.id)
-      .then((history) => active && setEmployment(history))
-      .catch(() => active && setEmployment(null));
-    return () => {
-      active = false;
-    };
-  }, [user?.id]);
   return (
     <div className="rounded-xl border bg-muted/30">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen((value) => !value)}
         className="flex w-full items-center justify-between px-3 py-2.5 text-sm font-medium"
       >
         <span>Thông tin người báo ứng</span>
@@ -1932,8 +1991,8 @@ function UserProfileCollapsible({ user }: { user: UserRecord | null }) {
         <div className="space-y-2 border-t px-3 pb-3 pt-2">
           <ReadOnlyField label="Họ và tên" value={user?.full_name} />
           <ReadOnlyField
-            label="Nhà máy đang làm"
-            value={employment?.expand?.factory?.name || "Chưa có lịch sử đi làm"}
+            label="Nhà máy theo lịch sử gần nhất"
+            value={policy?.factoryName || "Chưa xác định được nhà máy"}
           />
           <ReadOnlyField label="Số điện thoại liên hệ" value={user?.phone} />
         </div>

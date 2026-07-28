@@ -15,6 +15,7 @@ import {
   ArrowUpRight,
   CheckCircle2,
   CircleDollarSign,
+  ClipboardCheck,
   Clock3,
   RotateCcw,
   WalletCards,
@@ -247,6 +248,9 @@ export function FinanceDashboard() {
     if (!activeRange) return null;
 
     const requestedRows = rows.filter((row) => isInRange(row.created, activeRange));
+    const waitingApprovalRows = requestedRows.filter(
+      (row) => statusOf(row) === "recruiter_approved",
+    );
     const waitingDisbursement = requestedRows.filter(
       (row) => statusOf(row) === "accepted" && row.disbursed !== true,
     );
@@ -311,6 +315,8 @@ export function FinanceDashboard() {
     return {
       requestedCount: requestedRows.length,
       requestedTotal: requestedRows.reduce((sum, row) => sum + amountOf(row), 0),
+      waitingApprovalTotal: waitingApprovalRows.reduce((sum, row) => sum + amountOf(row), 0),
+      waitingApprovalCount: waitingApprovalRows.length,
       waitingDisbursementTotal: waitingDisbursement.reduce((sum, row) => sum + amountOf(row), 0),
       waitingDisbursementCount: waitingDisbursement.length,
       disbursedTotal: disbursedRows.reduce((sum, row) => sum + amountOf(row), 0),
@@ -382,13 +388,20 @@ export function FinanceDashboard() {
         </div>
       ) : report ? (
         <>
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-5">
             <FinanceKpi
               label="Yêu cầu trong kỳ"
               value={money(report.requestedTotal)}
               detail={`${report.requestedCount} đơn tạo trong kỳ`}
               icon={WalletCards}
               tone="blue"
+            />
+            <FinanceKpi
+              label="Chờ duyệt"
+              value={money(report.waitingApprovalTotal)}
+              detail={`${report.waitingApprovalCount} đơn chờ admin duyệt`}
+              icon={ClipboardCheck}
+              tone="amber"
             />
             <FinanceKpi
               label="Chờ chi"
@@ -649,8 +662,8 @@ function FinanceKpi({
 function FinanceLoading() {
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-4 gap-4">
-        {Array.from({ length: 4 }).map((_, index) => (
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, index) => (
           <div key={index} className="h-32 animate-pulse rounded-3xl bg-muted/60" />
         ))}
       </div>

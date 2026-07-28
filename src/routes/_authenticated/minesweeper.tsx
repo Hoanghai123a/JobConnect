@@ -535,6 +535,27 @@ function MinesweeperPage() {
         </TabsList>
 
         <TabsContent value="play" className="mt-0 flex flex-col gap-3">
+          <div className="worker-game-layout">
+          <aside className="worker-game-desktop-rail" aria-label="Chỉ số dò mìn">
+            <div className="worker-game-rail-title">Chỉ số</div>
+            <Card className="worker-game-stat">
+              <div className="worker-game-stat-label">Thời gian</div>
+              <div className="worker-game-stat-value">{formatTime(timer)}</div>
+            </Card>
+            <Card className="worker-game-stat">
+              <div className="worker-game-stat-label">Số mìn</div>
+              <div className="worker-game-stat-value">{minesLeft}</div>
+            </Card>
+            <Card className="worker-game-stat">
+              <div className="worker-game-stat-label">Lượt còn lại</div>
+              <div className="worker-game-stat-value">{playsLeft}</div>
+            </Card>
+            <Card className="worker-game-stat">
+              <div className="worker-game-stat-label">Xu hôm nay</div>
+              <div className="worker-game-stat-value">{dailyEarned}</div>
+            </Card>
+          </aside>
+          <div className="worker-game-main flex flex-col gap-3">
           <div className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] z-20 -mx-4 space-y-2 bg-background px-4 pb-2 pt-1">
             <div className="flex gap-2">
               {DIFFICULTIES.map((d) => (
@@ -550,7 +571,7 @@ function MinesweeperPage() {
               ))}
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
+            <div className="worker-game-mobile-stats grid grid-cols-4 gap-2">
               <Card className="p-2 text-center">
                 <div className="text-[10px] text-muted-foreground"><Clock className="mx-auto h-3 w-3" /></div>
                 <div className="text-sm font-semibold">{formatTime(timer)}</div>
@@ -588,10 +609,10 @@ function MinesweeperPage() {
               )}
             </div>
           </div>
-          <Card className="flex flex-col items-center gap-2 overflow-hidden p-3">
+          <Card className="worker-game-board-card flex flex-col items-center gap-2 overflow-hidden p-3">
             <div
               ref={boardContainerRef}
-              className="w-full select-none overflow-auto"
+              className="worker-game-board w-full select-none overflow-auto"
               style={{ touchAction: "pan-x pan-y" }}
             >
               <div
@@ -666,6 +687,8 @@ function MinesweeperPage() {
               </motion.div>
             )}
           </Card>
+          </div>
+          </div>
         </TabsContent>
         <TabsContent value="rank" className="mt-0 flex flex-col gap-3">
           <Card className="flex flex-col gap-3 p-3">

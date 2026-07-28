@@ -10,6 +10,7 @@ export interface FactoryRecord {
   address?: string;
   hotline?: string;
   attendance_cutoff_day?: number;
+  advance_limit?: number;
   status?: FactoryStatus;
   note?: string;
   created?: string;

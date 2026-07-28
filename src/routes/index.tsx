@@ -6,11 +6,11 @@ import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
 import { isUserApproved } from "@/lib/user-approval";
 import { getSeen } from "@/lib/seen";
+import { getClientDeviceProfile } from "@/lib/device-profile";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { FeatureTile } from "@/components/dashboard/FeatureTile";
 import { DesktopAppShell } from "@/components/layout/DesktopAppShell";
-import { RecruitmentChart } from "@/components/workforce/RecruitmentChart";
-import { WorkforceInsightsCharts } from "@/components/workforce/WorkforceInsightsCharts";
+import { WorkforceDashboard } from "@/components/workforce/WorkforceDashboard";
 import { FinanceDashboard } from "@/components/dashboard/FinanceDashboard";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { findActiveEmploymentByUser, type EmploymentHistoryRecord } from "@/lib/employment";
@@ -43,6 +43,7 @@ import {
   History,
   Users,
   LayoutGrid,
+  ListOrdered,
   Gamepad2,
   Gem,
   Bomb,
@@ -66,6 +67,9 @@ export const Route = createFileRoute("/")({
     const u = pb.authStore.record as UserRecord | null;
     if (u && !isUserApproved(u)) throw redirect({ to: "/pending" });
     if (u?.role === "staff") throw redirect({ to: "/staff" });
+    if (u?.role === "user" && getClientDeviceProfile() === "desktop") {
+      throw redirect({ to: "/attendance" });
+    }
   },
   component: DashboardPage,
 });
@@ -168,6 +172,10 @@ function DashboardPage() {
     }
     if (user.role === "staff") {
       nav({ to: "/staff" });
+      return;
+    }
+    if (user.role === "user" && getClientDeviceProfile() === "desktop") {
+      nav({ to: "/attendance" });
       return;
     }
     if (!isUserApproved(user)) {
@@ -679,6 +687,9 @@ function DashboardPage() {
               />
               <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
               <FeatureTile to="/notebook" label="Sổ tay" icon={NotebookPen} size="compact" />
+              {!isAdmin && (
+                <FeatureTile to="/counter" label="Bộ đếm" icon={ListOrdered} size="compact" />
+              )}
               {isAdmin && (
                 <FeatureTile
                   to="/admin/accounts/stats"
@@ -724,24 +735,10 @@ function DesktopAdminDashboard({
   approvalStats: ApprovalStats;
   onRetry: () => void;
 }) {
-  const workingUsers = new Set(
-    histories
-      .filter((history) => history.status === "working" && !history.leave_date)
-      .map((history) => history.user),
-  ).size;
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-  sevenDaysAgo.setHours(0, 0, 0, 0);
-  const recruitedLastSevenDays = histories.filter((history) => {
-    if (!history.join_date) return false;
-    const joinDate = new Date(history.join_date);
-    return !Number.isNaN(joinDate.getTime()) && joinDate >= sevenDaysAgo;
-  }).length;
-
   const sectionMeta = {
     "nhan-luc": {
       title: "Nhân lực",
-      description: "Theo dõi tình hình tuyển dụng và lao động trong 7 ngày gần nhất.",
+      description: "Theo dõi tình hình tuyển dụng, nghỉ việc và khả năng duy trì lao động.",
       icon: Users,
     },
     "tai-chinh": {
@@ -775,72 +772,15 @@ function DesktopAdminDashboard({
           </div>
 
           {section === "nhan-luc" ? (
-            <>
-              <div className="sticky top-20 z-20 -mx-2 bg-background/95 px-2 py-2 backdrop-blur">
-                <div className="grid grid-cols-4 gap-4">
-                  <DesktopSummaryCard label="Tổng lao động" value={users.length} icon={Users} />
-                  <DesktopSummaryCard
-                    label="Còn đi làm"
-                    value={workingUsers}
-                    icon={CalendarCheck}
-                  />
-                  <DesktopSummaryCard
-                    label="Tuyển mới 7 ngày"
-                    value={recruitedLastSevenDays}
-                    icon={ClipboardCheck}
-                  />
-                  <DesktopSummaryCard label="Nhà máy" value={factories.length} icon={Building2} />
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-base font-semibold">Biểu đồ tuyển dụng 7 ngày</h3>
-                    <p className="text-xs text-muted-foreground">
-                      Cột thể hiện tuyển mới, đường thể hiện số lao động còn đi làm.
-                    </p>
-                  </div>
-                  <Link
-                    to="/admin/workforce"
-                    className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                  >
-                    Xem chi tiết
-                  </Link>
-                </div>
-
-                {loading ? (
-                  <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-                    Đang tải dữ liệu nhân lực...
-                  </div>
-                ) : error ? (
-                  <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-destructive/40 bg-destructive/5 text-center">
-                    <p className="text-sm text-destructive">{error}</p>
-                    <button
-                      type="button"
-                      onClick={onRetry}
-                      className="rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
-                    >
-                      Thử lại
-                    </button>
-                  </div>
-                ) : histories.length === 0 ? (
-                  <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">
-                    Chưa có dữ liệu nhân lực.
-                  </div>
-                ) : (
-                  <RecruitmentChart histories={histories} users={users} factories={factories} />
-                )}
-              </div>
-
-              {!loading && !error && (
-                <WorkforceInsightsCharts
-                  histories={histories}
-                  users={users}
-                  factories={factories}
-                />
-              )}
-            </>
+            <WorkforceDashboard
+              histories={histories}
+              users={users}
+              factories={factories}
+              loading={loading}
+              error={error}
+              onRetry={onRetry}
+              detailHref="/admin/workforce"
+            />
           ) : section === "tai-chinh" ? (
             <FinanceDashboard />
           ) : (

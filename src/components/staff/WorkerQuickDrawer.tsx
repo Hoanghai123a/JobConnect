@@ -53,10 +53,17 @@ import { compressImage } from "@/lib/image-compress";
 import type { FactoryRecord } from "@/lib/factories";
 import type { MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
+import {
+  resolveAdvancePolicy,
+  validateAdvanceAmount,
+  type AdvancePolicy,
+} from "@/lib/advance-policy";
 import { useAppSettings } from "@/lib/app-settings";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { resolveBankName } from "@/lib/vn-banks";
 import { BankNameInput } from "@/components/staff/BankNameInput";
+import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
+import type { AdvancePayoutMethod } from "@/lib/advances";
 
 function todayDate() {
   const now = new Date();
@@ -115,6 +122,7 @@ export function WorkerQuickDrawer({
   onDataChanged: () => void;
 }) {
   const navigate = useNavigate();
+  const { data: settings } = useAppSettings();
   const [view, setView] = useState<DrawerView>("summary");
   const [infoOpen, setInfoOpen] = useState(false);
   const [leaveDate, setLeaveDate] = useState(todayDate());
@@ -134,6 +142,7 @@ export function WorkerQuickDrawer({
   const [joinCccdBack, setJoinCccdBack] = useState<File | null>(null);
   const [amountText, setAmountText] = useState("");
   const [advanceReason, setAdvanceReason] = useState("");
+  const [payoutMethod, setPayoutMethod] = useState<AdvancePayoutMethod>("bank_transfer");
   const [bankChoice, setBankChoice] = useState<"worker" | "viewer">("worker");
   const [bankForm, setBankForm] = useState({
     bank_name: "",
@@ -150,6 +159,7 @@ export function WorkerQuickDrawer({
     setLeaveNote("");
     setAmountText("");
     setAdvanceReason("");
+    setPayoutMethod("bank_transfer");
     const latest = worker.latestHistory;
     setJoinForm({
       factory: "",
@@ -182,6 +192,8 @@ export function WorkerQuickDrawer({
   const isWorking = latest?.status === "working" && !latest.leave_date;
   const activeHistory =
     worker?.histories.find((h) => h.status === "working" && !h.leave_date) || null;
+  const allowAdvanceAfterLeave = Boolean(settings.allow_advance_after_leave);
+  const canOpenAdvance = Boolean(worker?.canReportAdvance && (isWorking || allowAdvanceAfterLeave));
 
   const submitLeave = async () => {
     if (!worker || !activeHistory || !viewer?.id) return;
@@ -334,45 +346,31 @@ export function WorkerQuickDrawer({
       return;
     }
     const bankSource = bankChoice === "viewer" ? viewer : worker.user;
-    if (!bankSource.bank_account_number) {
+    if (payoutMethod === "bank_transfer" && !bankSource.bank_account_number) {
       toast.warning("Tài khoản ngân hàng chưa có");
       return;
     }
     setSubmitting(true);
     try {
-      const existingAdvances = await pb.collection("advances").getList(1, 100, {
-        filter: `user="${worker.user.id}" && (status="pending" || status="recruiter_approved" || (status="accepted" && (recovery_status="" || recovery_status="none")))`,
+      const policy = await resolveAdvancePolicy(worker.user.id, {
+        allowAfterLeave: allowAdvanceAfterLeave,
       });
-      const outstanding = existingAdvances.items.reduce(
-        (sum: number, r: any) => sum + Number(r.amount || 0),
-        0,
-      );
-      const settings = await (await import("@/lib/app-settings")).fetchAppSettings();
-      const limit = Number(settings.advance_limit || 0);
-      if (limit <= 0) {
-        toast.error("Admin chưa cài hạn mức Ứng lương");
-        setSubmitting(false);
-        return;
-      }
-      if (outstanding + amount > limit) {
-        toast.error(
-          `Vượt hạn mức ứng lương. Đang dùng ${outstanding.toLocaleString("vi-VN")} đ / ${limit.toLocaleString("vi-VN")} đ. Còn lại ${(limit - outstanding).toLocaleString("vi-VN")} đ`,
-        );
-        setSubmitting(false);
-        return;
-      }
+      validateAdvanceAmount(policy, amount);
+      const employment = policy.employment;
+
       await pb.collection("advances").create({
         user: worker.user.id,
         requested_by: viewer.id,
-        recruiter_id: viewer.id,
-        employee_code: latest.employee_code || "",
-        full_name: latest.worker_name_snapshot || worker.user.full_name || "",
-        company: latest.expand?.factory?.name || "",
+        recruiter_id: employment.recruiter_staff || "",
+        employee_code: employment.employee_code || "",
+        full_name: employment.worker_name_snapshot || worker.user.full_name || "",
+        company: policy.factoryName,
         phone: worker.user.phone || "",
-        join_date: activeHistory.join_date || "",
-        bank_name: bankSource.bank_name || "",
-        bank_account_number: bankSource.bank_account_number || "",
-        bank_account_name: bankSource.bank_account_name || "",
+        join_date: employment.join_date || "",
+        bank_name: payoutMethod === "cash" ? "" : bankSource.bank_name || "",
+        bank_account_number: payoutMethod === "cash" ? "" : bankSource.bank_account_number || "",
+        bank_account_name: payoutMethod === "cash" ? "" : bankSource.bank_account_name || "",
+        payout_method: payoutMethod,
         amount,
         reason: advanceReason.trim(),
         status: "recruiter_approved",
@@ -436,7 +434,7 @@ export function WorkerQuickDrawer({
     setSubmitting(true);
     try {
       if (!latest) {
-        toast.error("Ng??i lao ??ng ch?a c? l?ch s? ?i l?m ?? c?p nh?t m? NV");
+        toast.error("Người lao động chưa có lịch sử đi làm để cập nhật mã NV");
         return;
       }
       await updateEmploymentHistory(latest.id, { employee_code: code });
@@ -485,11 +483,14 @@ export function WorkerQuickDrawer({
                     onClick={() => setView("join")}
                   />
                 )}
-                {worker.canReportAdvance && isWorking && (
+                {canOpenAdvance && (
                   <ActionButton
                     icon={Wallet}
                     label="Báo ứng lương"
-                    onClick={() => setView("advance")}
+                    onClick={() => {
+                      setPayoutMethod("bank_transfer");
+                      setView("advance");
+                    }}
                   />
                 )}
                 {worker.canViewPayroll && (
@@ -519,7 +520,7 @@ export function WorkerQuickDrawer({
                 )}
                 {(worker.canReportLeave ||
                   worker.canReportJoin ||
-                  (worker.canReportAdvance && isWorking)) && (
+                  canOpenAdvance) && (
                   <ActionButton
                     icon={Hash}
                     label="Cập nhật mã NV"
@@ -822,9 +823,12 @@ export function WorkerQuickDrawer({
               setAmountText={setAmountText}
               advanceReason={advanceReason}
               setAdvanceReason={setAdvanceReason}
+              payoutMethod={payoutMethod}
+              setPayoutMethod={setPayoutMethod}
               bankChoice={bankChoice}
               setBankChoice={setBankChoice}
               submitting={submitting}
+              allowAfterLeave={allowAdvanceAfterLeave}
               onSubmit={submitAdvance}
               onBack={() => setView("summary")}
             />
@@ -981,9 +985,12 @@ function AdvanceForm({
   setAmountText,
   advanceReason,
   setAdvanceReason,
+  payoutMethod,
+  setPayoutMethod,
   bankChoice,
   setBankChoice,
   submitting,
+  allowAfterLeave,
   onSubmit,
   onBack,
 }: {
@@ -993,14 +1000,40 @@ function AdvanceForm({
   setAmountText: (v: string) => void;
   advanceReason: string;
   setAdvanceReason: (v: string) => void;
+  payoutMethod: AdvancePayoutMethod;
+  setPayoutMethod: (value: AdvancePayoutMethod) => void;
   bankChoice: "worker" | "viewer";
   setBankChoice: (v: "worker" | "viewer") => void;
   submitting: boolean;
+  allowAfterLeave: boolean;
   onSubmit: () => void;
   onBack: () => void;
 }) {
-  const { data: settings } = useAppSettings();
-  const limit = Number(settings.advance_limit || 0);
+  const [policy, setPolicy] = useState<AdvancePolicy | null>(null);
+  const [policyError, setPolicyError] = useState("");
+  const [policyLoading, setPolicyLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setPolicyLoading(true);
+    resolveAdvancePolicy(worker.user.id, { allowAfterLeave })
+      .then((result) => {
+        if (!active) return;
+        setPolicy(result);
+        setPolicyError("");
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setPolicy(null);
+        setPolicyError(error instanceof Error ? error.message : "Không thể kiểm tra hạn mức ứng tiền");
+      })
+      .finally(() => active && setPolicyLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [allowAfterLeave, worker.user.id]);
+
+  const limit = policy?.limit || 0;
 
   const workerBank = worker.user.bank_account_number
     ? `${worker.user.bank_name || "NH"} · ${worker.user.bank_account_number} · ${worker.user.bank_account_name || ""}`
@@ -1019,6 +1052,26 @@ function AdvanceForm({
       }}
     >
       <div className="text-sm font-semibold">Báo ứng lương</div>
+
+      {policyLoading && (
+        <div className="rounded-xl border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+            Đang kiểm tra nhà máy và hạn mức ứng tiền...
+        </div>
+      )}
+      {policyError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+          {policyError}
+        </div>
+      )}
+      {policy && (
+        <div className="rounded-xl border bg-primary/5 p-2.5 text-xs">
+          <span className="text-muted-foreground">Nhà máy áp dụng: </span>
+          <span className="font-semibold">{policy.factoryName}</span>
+          <div className="mt-1 text-muted-foreground">
+            Đã ứng {policy.outstanding.toLocaleString("vi-VN")} đ · Còn lại {policy.available.toLocaleString("vi-VN")} đ
+          </div>
+        </div>
+      )}
 
       {limit > 0 && (
         <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
@@ -1042,9 +1095,15 @@ function AdvanceForm({
         )}
       </div>
 
-      <div className="space-y-1">
-        <Label className="text-xs">Tài khoản nhận tiền</Label>
-        <div className="space-y-1.5">
+      <AdvancePayoutMethodPicker
+        value={payoutMethod}
+        onChange={setPayoutMethod}
+      />
+
+      {payoutMethod === "bank_transfer" && (
+        <div className="space-y-1">
+          <Label className="text-xs">Tài khoản nhận tiền</Label>
+          <div className="space-y-1.5">
           {workerBank && (
             <button
               type="button"
@@ -1080,8 +1139,9 @@ function AdvanceForm({
               Chưa có STK nào. Cập nhật ngân hàng trước khi báo ứng.
             </div>
           )}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="space-y-1">
         <Label className="text-xs">Lý do</Label>
@@ -1099,7 +1159,13 @@ function AdvanceForm({
         </Button>
         <Button
           type="submit"
-          disabled={submitting || (!workerBank && !viewerBank)}
+          disabled={
+            submitting ||
+            policyLoading ||
+            !policy ||
+            Boolean(policyError) ||
+            (payoutMethod === "bank_transfer" && !workerBank && !viewerBank)
+          }
           className="flex-1"
         >
           {submitting ? "Đang gửi..." : "Gửi yêu cầu"}

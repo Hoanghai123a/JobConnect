@@ -4,6 +4,7 @@ import type { UserRecord } from "@/lib/pocketbase";
 
 export type AdvanceStatus = "pending" | "recruiter_approved" | "accepted" | "rejected";
 export type RecoveryStatus = "none" | "recovered" | "unrecoverable";
+export type AdvancePayoutMethod = "bank_transfer" | "cash";
 export type AdminTab =
   | "pending"
   | "recruiter_approved"
@@ -30,6 +31,7 @@ export type AdvanceRecord = {
   bank_name?: string;
   bank_account_number?: string;
   bank_account_name?: string;
+  payout_method?: AdvancePayoutMethod;
   amount: number;
   original_amount?: number;
   reason: string;
@@ -67,6 +69,24 @@ export const STATUS_META: Record<
   accepted: { label: "Đã tiếp nhận", tone: "success" },
   rejected: { label: "Đã từ chối", tone: "danger" },
 };
+
+export const PAYOUT_METHOD_META: Record<
+  AdvancePayoutMethod,
+  { label: string; description: string }
+> = {
+  bank_transfer: {
+    label: "Chuyển khoản",
+    description: "Nhận qua tài khoản ngân hàng",
+  },
+  cash: {
+    label: "Tiền mặt",
+    description: "Nhận tiền trực tiếp",
+  },
+};
+
+export function normalizeAdvancePayoutMethod(value?: string | null): AdvancePayoutMethod {
+  return value === "cash" ? "cash" : "bank_transfer";
+}
 
 export const RECOVERY_META: Record<
   RecoveryStatus,

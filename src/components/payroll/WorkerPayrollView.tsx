@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarCheck, Moon, Sun, Wallet } from "lucide-react";
+import { Camera, CalendarCheck, Loader2, Moon, Sun, Wallet } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -18,6 +18,7 @@ import {
   type PayrollPeriod,
 } from "@/lib/payroll-cycle";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export type PayrollBatchRecord = {
   id: string;
@@ -111,6 +112,214 @@ function calculateSalaryTotals({
   return { wage, allowance, deduction, net: wage + allowance - deduction };
 }
 
+const CAPTURE_STYLE_PROPERTIES = [
+  "align-content",
+  "align-items",
+  "align-self",
+  "aspect-ratio",
+  "background",
+  "background-color",
+  "background-image",
+  "background-position",
+  "background-repeat",
+  "background-size",
+  "border",
+  "border-bottom",
+  "border-left",
+  "border-radius",
+  "border-right",
+  "border-top",
+  "box-shadow",
+  "box-sizing",
+  "color",
+  "column-gap",
+  "display",
+  "fill",
+  "filter",
+  "flex",
+  "flex-basis",
+  "flex-direction",
+  "flex-grow",
+  "flex-shrink",
+  "flex-wrap",
+  "font-family",
+  "font-size",
+  "font-style",
+  "font-weight",
+  "gap",
+  "grid-auto-columns",
+  "grid-auto-flow",
+  "grid-auto-rows",
+  "grid-column",
+  "grid-row",
+  "grid-template-areas",
+  "grid-template-columns",
+  "grid-template-rows",
+  "height",
+  "justify-content",
+  "justify-items",
+  "justify-self",
+  "letter-spacing",
+  "line-height",
+  "margin-bottom",
+  "margin-left",
+  "margin-right",
+  "margin-top",
+  "max-height",
+  "max-width",
+  "min-height",
+  "min-width",
+  "object-fit",
+  "opacity",
+  "overflow",
+  "overflow-x",
+  "overflow-y",
+  "padding-bottom",
+  "padding-left",
+  "padding-right",
+  "padding-top",
+  "position",
+  "row-gap",
+  "stroke",
+  "stroke-width",
+  "text-align",
+  "text-decoration",
+  "text-overflow",
+  "text-transform",
+  "transform",
+  "transform-origin",
+  "vertical-align",
+  "white-space",
+  "width",
+  "word-break",
+  "z-index",
+] as const;
+
+function inlineComputedStyles(source: Element, clone: Element) {
+  if (clone instanceof HTMLElement || clone instanceof SVGElement) {
+    const computed = getComputedStyle(source);
+    for (const property of CAPTURE_STYLE_PROPERTIES) {
+      const value = computed.getPropertyValue(property);
+      if (value) clone.style.setProperty(property, value, computed.getPropertyPriority(property));
+    }
+
+    if (computed.position === "sticky") {
+      clone.style.position = "relative";
+      clone.style.inset = "auto";
+      clone.style.top = "auto";
+    }
+
+    if (clone instanceof SVGElement && !clone.getAttribute("xmlns")) {
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    }
+  }
+
+  const sourceChildren = Array.from(source.children);
+  const cloneChildren = Array.from(clone.children);
+  sourceChildren.forEach((child, index) => {
+    const clonedChild = cloneChildren[index];
+    if (clonedChild) inlineComputedStyles(child, clonedChild);
+  });
+}
+
+async function captureElementAsPng(element: HTMLElement) {
+  await document.fonts?.ready;
+
+  const rect = element.getBoundingClientRect();
+  const width = Math.ceil(Math.max(rect.width, element.scrollWidth));
+  const height = Math.ceil(Math.max(rect.height, element.scrollHeight));
+  const padding = 4;
+  const outputWidth = width + padding * 2;
+  const outputHeight = height + padding * 2;
+  const scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+  const clone = element.cloneNode(true) as HTMLElement;
+  const backgroundColor = getComputedStyle(document.body).backgroundColor || "#ffffff";
+
+  inlineComputedStyles(element, clone);
+  clone.style.width = `${width}px`;
+  clone.style.height = `${height}px`;
+  clone.style.maxWidth = "none";
+  clone.style.margin = "0";
+  clone.style.position = "relative";
+  clone.style.inset = "auto";
+  clone.style.boxSizing = "border-box";
+
+  const markup = `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${outputWidth}px;height:${outputHeight}px;padding:${padding}px;box-sizing:border-box;overflow:hidden;background:${backgroundColor};">${clone.outerHTML}</div>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${outputWidth}" height="${outputHeight}" viewBox="0 0 ${outputWidth} ${outputHeight}"><foreignObject width="100%" height="100%">${markup}</foreignObject></svg>`;
+  const image = new Image();
+
+  const imageBitmap = await new Promise<HTMLImageElement>((resolve, reject) => {
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Kh\u00f4ng th\u1ec3 t\u1ea1o \u1ea3nh t\u1eeb b\u1ea3ng d\u1eef li\u1ec7u"));
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(outputWidth * scale);
+  canvas.height = Math.ceil(outputHeight * scale);
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 t\u1ea1o \u1ea3nh");
+
+  context.scale(scale, scale);
+  context.fillStyle = backgroundColor;
+  context.fillRect(0, 0, outputWidth, outputHeight);
+  context.drawImage(imageBitmap, 0, 0, outputWidth, outputHeight);
+
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Kh\u00f4ng th\u1ec3 xu\u1ea5t \u1ea3nh PNG"));
+    }, "image/png");
+  });
+}
+
+function CopyImageButton({
+  targetSelector,
+  label,
+}: {
+  targetSelector: string;
+  label: string;
+}) {
+  const [copying, setCopying] = useState(false);
+
+  const copyImage = async () => {
+    if (copying) return;
+    const target = document.querySelector<HTMLElement>(targetSelector);
+    if (!target) {
+      toast.error("Kh\u00f4ng t\u00ecm th\u1ea5y v\u00f9ng b\u1ea3ng c\u1ea7n ch\u1ee5p");
+      return;
+    }
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+      toast.error("Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 copy \u1ea3nh tr\u1ef1c ti\u1ebfp");
+      return;
+    }
+
+    setCopying(true);
+    try {
+      const blob = await captureElementAsPng(target);
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      toast.success(`\u0110\u00e3 copy \u1ea3nh ${label}`);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Kh\u00f4ng th\u1ec3 copy \u1ea3nh");
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copyImage}
+      disabled={copying}
+      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm transition hover:bg-muted disabled:cursor-wait disabled:opacity-70"
+      aria-label={`Ch\u1ee5p \u1ea3nh ${label}`}
+    >
+      {copying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+      {copying ? "\u0110ang t\u1ea1o \u1ea3nh" : "Ch\u1ee5p \u1ea3nh"}
+    </button>
+  );
+}
+
 export function WorkerPayrollView({
   attendanceItems,
   salaryItems,
@@ -176,7 +385,7 @@ export function WorkerPayrollView({
   );
 
   return (
-    <Tabs defaultValue="attendance" className="space-y-4">
+    <Tabs defaultValue="attendance" className="worker-payroll-view space-y-4">
       <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl">
         <TabsTrigger value="attendance" className="rounded-lg text-xs">
           Check công
@@ -215,22 +424,31 @@ export function WorkerPayrollView({
 
             {selectedAttendance && (
               <>
-                <Card className="overflow-hidden">
-                  <div className="gradient-accent p-4 text-accent-foreground">
-                    <div className="text-xs uppercase opacity-80">Bảng check công</div>
-                    <div className="mt-0.5 text-xl font-bold">
-                      {selectedAttendance.month} · {selectedAttendance.expand?.batch?.note || `Lần ${selectedAttendance.round_no}`}
+                <div className="flex justify-end">
+                  <CopyImageButton targetSelector=".worker-check-attendance-layout" label={"b\u1ea3ng check c\u00f4ng"} />
+                </div>
+                <div className="worker-check-attendance-layout">
+                <aside className="worker-check-attendance-summary">
+                  <Card className="worker-check-attendance-card overflow-hidden">
+                    <div className="gradient-accent p-4 text-accent-foreground">
+                      <div className="text-xs uppercase opacity-80">Bảng check công</div>
+                      <div className="mt-0.5 text-xl font-bold">
+                        {selectedAttendance.month} · {selectedAttendance.expand?.batch?.note || `Lần ${selectedAttendance.round_no}`}
+                      </div>
                     </div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
-                    {visibleRateCells.map((cell) => (
-                      <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
-                    ))}
-                    <RateCell label="Ngày" hours={selectedAttendance.rows.length} suffix="" />
-                  </div>
-                </Card>
+                    <div className="worker-check-rate-grid grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
+                      {visibleRateCells.map((cell) => (
+                        <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
+                      ))}
+                      <RateCell label="Ngày" hours={selectedAttendance.rows.length} suffix="" />
+                    </div>
+                  </Card>
+                </aside>
 
-                <CheckMonthCalendar rows={selectedAttendance.rows} period={selectedPeriod} />
+                <div className="worker-check-attendance-calendar">
+                  <CheckMonthCalendar rows={selectedAttendance.rows} period={selectedPeriod} />
+                </div>
+                </div>
               </>
             )}
           </>
@@ -280,8 +498,11 @@ function SalaryCheckPanel({
 
   return (
     <div className="space-y-3">
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Check lương
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Check lương
+        </div>
+        {selected && <CopyImageButton targetSelector='[data-ui-card="card"].worker-salary-card' label={"b\u1ea3ng check l\u01b0\u01a1ng"} />}
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {items.map((item) => (
@@ -302,7 +523,7 @@ function SalaryCheckPanel({
       </div>
 
       {selected && (
-        <Card className="overflow-hidden">
+        <Card className="worker-salary-card overflow-hidden">
           <div className="gradient-accent p-4 text-accent-foreground">
             <div className="text-xs uppercase opacity-80">Bảng check lương</div>
             <div className="mt-0.5 text-xl font-bold">{formatVND(selectedTotals?.net || 0)}</div>
@@ -311,32 +532,39 @@ function SalaryCheckPanel({
             </div>
           </div>
 
-          <div className="space-y-4 p-3">
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <InfoCell label="Mã NV" value={selected.personal.employee_code || "—"} />
-              <InfoCell label="Nhà máy" value={selected.personal.company || "—"} />
-              <InfoCell label="Ngày vào làm" value={formatDisplayDate(selected.personal.start_date)} />
-              <InfoCell label="Ngày nghỉ" value={formatDisplayDate(selected.personal.end_date)} />
-              <InfoCell label="Lương cơ bản" value={formatVND(selected.personal.base_salary)} />
-              <InfoCell label="Số công HC" value={`${selected.personal.standard_workdays || 0}`} />
-            </div>
+          <div className="worker-salary-layout flex flex-col gap-4 p-3">
+            <aside className="worker-salary-personal space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Thông tin cá nhân
+              </div>
+              <div className="worker-salary-personal-grid grid grid-cols-2 gap-2 text-sm">
+                <InfoCell label="Mã NV" value={selected.personal.employee_code || "—"} />
+                <InfoCell label="Nhà máy" value={selected.personal.company || "—"} />
+                <InfoCell label="Ngày vào làm" value={formatDisplayDate(selected.personal.start_date)} />
+                <InfoCell label="Ngày nghỉ" value={formatDisplayDate(selected.personal.end_date)} />
+                <InfoCell label="Lương cơ bản" value={formatVND(selected.personal.base_salary)} />
+                <InfoCell label="Số công HC" value={`${selected.personal.standard_workdays || 0}`} />
+              </div>
+            </aside>
 
-            <SalaryWageSection lines={selected.wage_lines} total={selectedTotals?.wage || 0} />
-            <SalaryMoneySection
-              title="Phụ cấp"
-              lines={selected.allowance_lines}
-              total={selectedTotals?.allowance || 0}
-            />
-            <SalaryMoneySection
-              title="Khấu trừ"
-              lines={selected.deduction_lines}
-              total={selectedTotals?.deduction || 0}
-            />
+            <div className="worker-salary-details space-y-3">
+              <SalaryWageSection lines={selected.wage_lines} total={selectedTotals?.wage || 0} />
+              <SalaryMoneySection
+                title="Phụ cấp"
+                lines={selected.allowance_lines}
+                total={selectedTotals?.allowance || 0}
+              />
+              <SalaryMoneySection
+                title="Khấu trừ"
+                lines={selected.deduction_lines}
+                total={selectedTotals?.deduction || 0}
+              />
 
-            <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
-              <div className="text-[11px] uppercase text-muted-foreground">Thực nhận</div>
-              <div className="mt-1 text-xl font-bold text-primary">
-                {formatVND(selectedTotals?.net || 0)}
+              <div className="worker-salary-net rounded-xl border border-primary/30 bg-primary/5 p-3">
+                <div className="text-[11px] uppercase text-muted-foreground">Thực nhận</div>
+                <div className="mt-1 text-xl font-bold text-primary">
+                  {formatVND(selectedTotals?.net || 0)}
+                </div>
               </div>
             </div>
           </div>
@@ -361,7 +589,7 @@ function SalaryWageSection({ lines, total }: { lines: SalaryWageLine[]; total: n
           lines.map((line, index) => (
             <div
               key={`${line.rate}-${index}`}
-              className="grid grid-cols-3 gap-2 rounded-xl border bg-card p-3 text-sm"
+              className="worker-salary-line grid grid-cols-3 gap-2 rounded-xl border bg-card p-3 text-sm"
             >
               <div>
                 <div className="text-[11px] text-muted-foreground">Hệ số</div>
@@ -373,7 +601,7 @@ function SalaryWageSection({ lines, total }: { lines: SalaryWageLine[]; total: n
               </div>
               <div className="text-right">
                 <div className="text-[11px] text-muted-foreground">Thành tiền</div>
-                <div className="font-semibold">{formatVND(line.amount)}</div>
+                <div className="whitespace-nowrap font-semibold">{formatVND(line.amount)}</div>
               </div>
             </div>
           ))
@@ -405,10 +633,10 @@ function SalaryMoneySection({
           lines.map((line, index) => (
             <div
               key={`${line.label}-${index}`}
-              className="flex items-center justify-between gap-3 rounded-xl border bg-card p-3 text-sm"
+              className="worker-salary-line flex items-center justify-between gap-3 rounded-xl border bg-card p-3 text-sm"
             >
               <div className="font-medium">{line.label || "—"}</div>
-              <div className="font-semibold">{formatVND(line.amount)}</div>
+              <div className="whitespace-nowrap font-semibold">{formatVND(line.amount)}</div>
             </div>
           ))
         )}
@@ -420,9 +648,9 @@ function SalaryMoneySection({
 
 function TotalRow({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border bg-secondary/40 p-3 text-sm">
+    <div className="worker-salary-total flex items-center justify-between rounded-xl border bg-secondary/40 p-3 text-sm">
       <div className="font-medium">{label}</div>
-      <div className="font-bold">{formatVND(value)}</div>
+      <div className="whitespace-nowrap font-bold">{formatVND(value)}</div>
     </div>
   );
 }
@@ -434,7 +662,7 @@ function CheckMonthCalendar({ rows, period }: { rows: AttendanceRow[]; period: P
 
   return (
     <>
-      <Card className="overflow-hidden rounded-2xl p-3">
+      <Card className="worker-check-month-calendar overflow-hidden rounded-2xl p-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="text-sm font-semibold">{period.title}</div>
           <span className="chip chip-info">{rows.length} ngày</span>
@@ -527,7 +755,7 @@ function InfoCell({ label, value }: { label: string; value: string }) {
 
 function RateCell({ label, hours, suffix = "h" }: { label: string; hours: number; suffix?: string }) {
   return (
-    <div className="rounded-lg border border-border/80 bg-background p-2 text-center shadow-sm">
+    <div className="worker-payroll-rate-cell rounded-lg border border-border/80 bg-background p-2 text-center shadow-sm">
       <div className="text-[9px] uppercase text-muted-foreground">{label}</div>
       <div className="text-xs font-semibold sm:text-sm">
         {hours}
