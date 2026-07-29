@@ -40,8 +40,19 @@ export type RecruitmentDayDetails = {
 };
 
 function RecruitmentSummaryCard({ group }: { group: RecruitmentBreakdownGroup }) {
+  const sortRecruiters = (items: RecruitmentBreakdownItem[]) =>
+    [...items].sort(
+      (a, b) => b.count - a.count || a.name.localeCompare(b.name, "vi", { sensitivity: "base" }),
+    );
+  const internal = sortRecruiters(group.recruiters.filter((item) => !item.isVendor));
+  const vendors = sortRecruiters(group.recruiters.filter((item) => item.isVendor));
+  const internalTotal = internal.reduce((sum, item) => sum + item.count, 0);
+  const vendorTotal = vendors.reduce((sum, item) => sum + item.count, 0);
+  const internalPct = group.total ? Math.round((internalTotal / group.total) * 100) : 0;
+  const vendorPct = group.total ? Math.round((vendorTotal / group.total) * 100) : 0;
+
   return (
-    <section className="min-w-0 space-y-2 rounded-2xl border border-border/70 bg-card p-3 shadow-sm desktop:w-72 desktop:shrink-0">
+    <section className="min-w-0 space-y-3 rounded-2xl border border-border/70 bg-card p-3 shadow-sm desktop:w-72 desktop:shrink-0">
       <div className="flex min-w-0 items-center gap-2 border-b border-border/60 pb-2 text-sm font-semibold">
         <Building2 className="h-4 w-4 shrink-0 text-primary" />
         <span className="min-w-0 flex-1 truncate" title={group.factoryName}>
@@ -52,21 +63,51 @@ function RecruitmentSummaryCard({ group }: { group: RecruitmentBreakdownGroup })
         </span>
       </div>
 
-      <div className="space-y-1.5">
-        {group.recruiters.map((item) => (
-          <div key={item.id} className="flex min-w-0 items-center gap-2 text-xs">
-            <span className="min-w-0 flex-1 truncate text-foreground" title={item.name}>
-              {item.name}
+      {internal.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
+            <span>Nội bộ</span>
+            <span className="ml-auto tabular-nums">
+              {internalTotal} ({internalPct}%)
             </span>
-            {item.isVendor && (
-              <span className="shrink-0 rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-medium leading-none text-white">
-                Đối tác
-              </span>
-            )}
-            <span className="shrink-0 font-semibold tabular-nums text-primary">{item.count}</span>
           </div>
-        ))}
-      </div>
+          <div className="space-y-1">
+            {internal.map((item) => (
+              <div key={item.id} className="flex min-w-0 items-center gap-2 text-xs">
+                <span className="min-w-0 flex-1 truncate text-foreground" title={item.name}>
+                  {item.name}
+                </span>
+                <span className="shrink-0 font-semibold tabular-nums text-primary">
+                  {item.count}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {vendors.length > 0 && (
+        <div className="space-y-1.5 rounded-xl border border-purple-200 bg-purple-50/50 p-2.5 dark:border-purple-900 dark:bg-purple-950/20">
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-purple-700 dark:text-purple-300">
+            <span>Đối tác</span>
+            <span className="ml-auto tabular-nums">
+              {vendorTotal} ({vendorPct}%)
+            </span>
+          </div>
+          <div className="space-y-1">
+            {vendors.map((item) => (
+              <div key={item.id} className="flex min-w-0 items-center gap-2 text-xs">
+                <span className="min-w-0 flex-1 truncate text-foreground" title={item.name}>
+                  {item.name}
+                </span>
+                <span className="shrink-0 font-semibold tabular-nums text-purple-700 dark:text-purple-300">
+                  {item.count}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
