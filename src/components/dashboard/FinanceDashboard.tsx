@@ -63,8 +63,6 @@ type DailyFinance = {
   recovered: number;
 };
 
-const FINANCE_ADVANCE_FILTER = 'recruiter_id!=""';
-
 type StatusSlice = {
   key: string;
   label: string;
@@ -188,6 +186,15 @@ function recoveryOf(row: FinanceAdvance): RecoveryStatus | "" {
   return row.recovery_status || "";
 }
 
+function isAwaitingDisbursement(row: FinanceAdvance) {
+  const recovery = recoveryOf(row);
+  return (
+    statusOf(row) === "accepted" &&
+    row.disbursed !== true &&
+    (recovery === "" || recovery === "none")
+  );
+}
+
 function statusBadge(row: FinanceAdvance) {
   const status = statusMeta[statusOf(row)];
   return (
@@ -229,7 +236,6 @@ export function FinanceDashboard() {
     setError("");
     try {
       const data = await pb.collection("advances").getFullList<FinanceAdvance>({
-        filter: FINANCE_ADVANCE_FILTER,
         sort: "-created",
         fields:
           "id,full_name,company,employee_code,amount,status,recovery_status,created,resolved_at,disbursed,disbursed_at,recovered_at",
@@ -254,9 +260,7 @@ export function FinanceDashboard() {
     const waitingApprovalRows = requestedRows.filter(
       (row) => statusOf(row) === "recruiter_approved",
     );
-    const waitingDisbursement = requestedRows.filter(
-      (row) => statusOf(row) === "accepted" && row.disbursed !== true,
-    );
+    const waitingDisbursement = requestedRows.filter(isAwaitingDisbursement);
     const disbursedRows = rows.filter(
       (row) => row.disbursed === true && isInRange(row.disbursed_at, activeRange),
     );

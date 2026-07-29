@@ -335,12 +335,15 @@ export function AdvancesPage() {
           : isAdmin && adminSegment === "workers"
             ? joinPbFilters([baseFilter, 'recruiter_id!=""'])
             : baseFilter;
-      const res = await pb.collection("advances").getList(1, 300, {
+      const listOptions = {
         filter: segmentFilter,
         sort: "-created",
         expand: "requested_by",
-      });
-      const rows = res.items as unknown as AdvanceRecord[];
+      };
+      const rows =
+        isAdmin && tab === "pending"
+          ? await pb.collection("advances").getFullList<AdvanceRecord>(listOptions)
+          : (await pb.collection("advances").getList<AdvanceRecord>(1, 300, listOptions)).items;
       setItems(rows);
       if (!isAdmin) {
         const latestResolved = rows.reduce(
