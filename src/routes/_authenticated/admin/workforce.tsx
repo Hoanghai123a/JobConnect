@@ -1,10 +1,11 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   BarChart3,
   BriefcaseBusiness,
   Building2,
   Check,
+  ChevronLeft,
   ChevronRight,
   FileDown,
   FileSpreadsheet,
@@ -103,6 +104,8 @@ export const Route = createFileRoute("/_authenticated/admin/workforce")({
 type ActiveTab = "list" | "stats" | "my-recruited";
 type RecruitSubTab = "factory" | "recruiter";
 type ListScope = "all" | "working" | "left";
+
+const WORKER_LIST_PAGE_SIZE = 100;
 
 function todayIso() {
   const now = new Date();
@@ -1004,6 +1007,18 @@ function WorkerList({
 }) {
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<ListScope>("all");
+  const [page, setPage] = useState(1);
+  const listTopRef = useRef<HTMLDivElement>(null);
+
+  const updateSearch = (value: string) => {
+    setSearch(value);
+    setPage(1);
+  };
+
+  const updateScope = (value: ListScope) => {
+    setScope(value);
+    setPage(1);
+  };
 
   const rows = useMemo(() => {
     const userIds = new Set<string>();
@@ -1054,15 +1069,33 @@ function WorkerList({
       });
   }, [rows, search, scope, factoryById]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / WORKER_LIST_PAGE_SIZE));
+  const pageStart = (page - 1) * WORKER_LIST_PAGE_SIZE;
+  const pageEnd = Math.min(pageStart + WORKER_LIST_PAGE_SIZE, filtered.length);
+  const visibleRows = filtered.slice(pageStart, pageEnd);
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, totalPages));
+  }, [totalPages]);
+
+  const goToPage = (nextPage: number) => {
+    const boundedPage = Math.min(Math.max(nextPage, 1), totalPages);
+    if (boundedPage === page) return;
+    setPage(boundedPage);
+    requestAnimationFrame(() => {
+      listTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
   return (
-    <div className="space-y-3">
+    <div ref={listTopRef} className="space-y-3">
       <div className="sticky top-[calc(env(safe-area-inset-top)+6.5rem)] z-10 -mx-4 space-y-3 bg-background px-4 pb-2 pt-1">
         {headerSlot}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => updateSearch(e.target.value)}
             placeholder="Tìm tên, mã NV, CCCD, mã số thuế, SĐT, nhà máy..."
             className="rounded-full pl-9"
           />
@@ -1071,14 +1104,14 @@ function WorkerList({
           <SubChip
             label={`Tất cả (${rows.length})`}
             active={scope === "all"}
-            onClick={() => setScope("all")}
+            onClick={() => updateScope("all")}
           />
           <SubChip
             label="Đang làm"
             active={scope === "working"}
-            onClick={() => setScope("working")}
+            onClick={() => updateScope("working")}
           />
-          <SubChip label="Đã nghỉ" active={scope === "left"} onClick={() => setScope("left")} />
+          <SubChip label="Đã nghỉ" active={scope === "left"} onClick={() => updateScope("left")} />
         </div>
       </div>
 
@@ -1091,70 +1124,112 @@ function WorkerList({
           description="Thử đổi từ khoá hoặc bộ lọc."
         />
       ) : (
-        filtered.map(({ user, latest }) => {
-          if (!user) return null;
-          const isWorking = !!latest && isCurrentlyWorking(latest);
-          const factoryName =
-            latest?.expand?.factory?.name || factoryById.get(latest?.factory || "")?.name;
-          const recruiterName =
-            latest?.expand?.recruiter_staff?.full_name || latest?.expand?.recruiter_staff?.username;
-          const mainHouseName = latest?.expand?.main_house?.name;
+        <>
+          <div className="text-xs text-muted-foreground" aria-live="polite">
+            Đang hiển thị {pageStart + 1}–{pageEnd} trong {filtered.length.toLocaleString("vi-VN")}{" "}
+            lao động.
+          </div>
 
-          return (
-            <Fragment key={user.id}>
-              <WorkerDesktopCard
-                name={user.full_name || user.username || "Người lao động"}
-                username={user.username}
-                uid={latest?.uid || user.uid}
-                employeeCode={latest?.employee_code || ""}
-                cccd={maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
-                taxCode={latest?.worker_tax_code_snapshot}
-                phone={user.phone}
-                dateOfBirth={user.date_of_birth ? formatDate(user.date_of_birth) : undefined}
-                gender={user.gender}
-                address={user.address}
-                factoryName={factoryName || ""}
-                mainHouseName={mainHouseName}
-                recruiterName={recruiterName}
-                joinDate={formatDate(latest?.join_date)}
-                leaveDate={latest?.leave_date ? formatDate(latest.leave_date) : undefined}
-                isWorking={isWorking}
-                onClick={() => onSelectWorker(user.id)}
-              />
+          <div className="space-y-2">
+            {visibleRows.map(({ user, latest }) => {
+              if (!user) return null;
+              const isWorking = !!latest && isCurrentlyWorking(latest);
+              const factoryName =
+                latest?.expand?.factory?.name || factoryById.get(latest?.factory || "")?.name;
+              const recruiterName =
+                latest?.expand?.recruiter_staff?.full_name ||
+                latest?.expand?.recruiter_staff?.username;
+              const mainHouseName = latest?.expand?.main_house?.name;
 
-              <button
-                key={`${user.id}-mobile`}
+              return (
+                <Fragment key={user.id}>
+                  <WorkerDesktopCard
+                    name={user.full_name || user.username || "Người lao động"}
+                    username={user.username}
+                    uid={latest?.uid || user.uid}
+                    employeeCode={latest?.employee_code || ""}
+                    cccd={maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
+                    taxCode={latest?.worker_tax_code_snapshot}
+                    phone={user.phone}
+                    dateOfBirth={user.date_of_birth ? formatDate(user.date_of_birth) : undefined}
+                    gender={user.gender}
+                    address={user.address}
+                    factoryName={factoryName || ""}
+                    mainHouseName={mainHouseName}
+                    recruiterName={recruiterName}
+                    joinDate={formatDate(latest?.join_date)}
+                    leaveDate={latest?.leave_date ? formatDate(latest.leave_date) : undefined}
+                    isWorking={isWorking}
+                    onClick={() => onSelectWorker(user.id)}
+                  />
+
+                  <button
+                    key={`${user.id}-mobile`}
+                    type="button"
+                    onClick={() => onSelectWorker(user.id)}
+                    className="list-card border-l-primary flex w-full items-start justify-between gap-3 text-left desktop:hidden"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">
+                        {user.full_name || user.username || "Người lao động"}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        {user.uid && (
+                          <>
+                            <span className="font-medium text-primary">{user.uid}</span> ·{" "}
+                          </>
+                        )}
+                        Mã NV: {latest?.employee_code || "" || "—"} · CCCD:{" "}
+                        {maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
+                        {latest?.worker_tax_code_snapshot &&
+                          ` · MST: ${latest.worker_tax_code_snapshot}`}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        {factoryName || "Chưa có nhà máy"} · Vào {formatDate(latest?.join_date)}
+                        {latest?.leave_date && ` · Nghỉ ${formatDate(latest.leave_date)}`}
+                      </div>
+                    </div>
+                    <StatusChip tone={isWorking ? "success" : "neutral"}>
+                      {isWorking ? "Đang làm" : "Đã nghỉ"}
+                    </StatusChip>
+                  </button>
+                </Fragment>
+              );
+            })}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+              <Button
                 type="button"
-                onClick={() => onSelectWorker(user.id)}
-                className="list-card border-l-primary flex w-full items-start justify-between gap-3 text-left desktop:hidden"
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                disabled={page === 1}
+                onClick={() => goToPage(page - 1)}
               >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">
-                    {user.full_name || user.username || "Người lao động"}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    {user.uid && (
-                      <>
-                        <span className="font-medium text-primary">{user.uid}</span> ·{" "}
-                      </>
-                    )}
-                    Mã NV: {latest?.employee_code || "" || "—"} · CCCD:{" "}
-                    {maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
-                    {latest?.worker_tax_code_snapshot &&
-                      ` · MST: ${latest.worker_tax_code_snapshot}`}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    {factoryName || "Chưa có nhà máy"} · Vào {formatDate(latest?.join_date)}
-                    {latest?.leave_date && ` · Nghỉ ${formatDate(latest.leave_date)}`}
-                  </div>
-                </div>
-                <StatusChip tone={isWorking ? "success" : "neutral"}>
-                  {isWorking ? "Đang làm" : "Đã nghỉ"}
-                </StatusChip>
-              </button>
-            </Fragment>
-          );
-        })
+                <ChevronLeft className="h-4 w-4" />
+                Trang trước
+              </Button>
+
+              <span className="min-w-20 text-center text-xs font-medium text-muted-foreground">
+                Trang {page}/{totalPages}
+              </span>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                disabled={page === totalPages}
+                onClick={() => goToPage(page + 1)}
+              >
+                Trang sau
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

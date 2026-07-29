@@ -449,7 +449,7 @@ export function DesktopAppShell({ children }: { children: ReactNode }) {
             }
             aria-label={collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"}
             aria-expanded={!collapsed}
-            className="fixed left-[var(--desktop-sidebar-width)] top-1/2 z-[60] hidden h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-soft transition-all hover:bg-muted hover:text-foreground desktop:flex"
+            className="fixed left-[var(--desktop-sidebar-width)] top-1/2 z-50 hidden h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-soft transition-all hover:bg-muted hover:text-foreground desktop:flex"
           >
             {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
           </button>

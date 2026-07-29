@@ -30,6 +30,16 @@ import {
 import { generateUid } from "@/lib/uid";
 import { resolveBankName } from "@/lib/vn-banks";
 
+const HISTORY_LOOKUP_KEYS = [
+  "history_id",
+  "history_uid",
+  "uid",
+  "ID lịch sử",
+  "UID lịch sử",
+  "Mã lịch sử",
+  "Mã lịch sử (UID)",
+];
+
 export const Route = createFileRoute("/_authenticated/admin/imports")({
   beforeLoad: () => {
     const currentUser = pb.authStore.record as UserRecord | null;
@@ -53,7 +63,7 @@ function AdminImportsPage() {
       {
         "Cập nhật nhanh": [
           {
-            "ID lịch sử": "",
+            "Mã lịch sử (UID)": "",
             "ID NLĐ": "",
             "Tên đăng nhập": "nguyenvana",
             "SĐT tìm kiếm": "0900000001",
@@ -112,6 +122,12 @@ function AdminImportsPage() {
           .map((user) => [accountIdentityKey(user.username), user]),
       );
       const historyById = new Map(allHistories.map((history) => [history.id, history]));
+      const historiesByUid = new Map<string, typeof allHistories>();
+      for (const history of allHistories) {
+        const uid = String(history.uid || "").trim();
+        if (!uid) continue;
+        historiesByUid.set(uid, [...(historiesByUid.get(uid) || []), history]);
+      }
 
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer);
@@ -129,7 +145,7 @@ function AdminImportsPage() {
         failedRows.push({
           Dòng: rowNumber,
           "Lý do lỗi": reason,
-          history_id: pickValue(row, ["history_id", "ID lịch sử"]),
+          history_id: pickValue(row, HISTORY_LOOKUP_KEYS),
           user_id: pickValue(row, ["user_id", "ID NLĐ"]),
           username: pickValue(row, ["username", "Tên đăng nhập"]),
           lookup_phone: pickValue(row, ["lookup_phone", "SĐT tìm kiếm"]),
@@ -152,7 +168,7 @@ function AdminImportsPage() {
 
       for (const [index, row] of rows.entries()) {
         const rowNumber = index + 2;
-        const historyId = pickValue(row, ["history_id", "ID lịch sử"]);
+        const historyKey = pickValue(row, HISTORY_LOOKUP_KEYS);
         const userId = pickValue(row, ["user_id", "ID NLĐ"]);
         const username = pickValue(row, ["username", "Tên đăng nhập"]);
         const lookupPhone = pickValue(row, ["lookup_phone", "SĐT tìm kiếm"]);
@@ -161,18 +177,35 @@ function AdminImportsPage() {
         const currentJoinRaw = row["current_join_date"] ?? row["Ngày vào hiện tại"] ?? "";
         const currentJoinDate = normalizeExcelDate(currentJoinRaw);
 
-        let target = historyId ? historyById.get(historyId) : undefined;
+        let target = historyKey ? historyById.get(historyKey) : undefined;
         let targetUser: UserRecord | undefined;
 
-        if (historyId && !target) {
-          addFailedRow(row, rowNumber, `Không tìm thấy lịch sử có history_id "${historyId}"`);
+        if (historyKey && !target) {
+          const uidMatches = historiesByUid.get(historyKey) || [];
+          if (uidMatches.length > 1) {
+            addFailedRow(
+              row,
+              rowNumber,
+              `Tìm thấy ${uidMatches.length} lịch sử trùng UID "${historyKey}"; không thể xác định bản ghi cần cập nhật`,
+            );
+            continue;
+          }
+          target = uidMatches[0];
+        }
+
+        if (historyKey && !target) {
+          addFailedRow(row, rowNumber, `Không tìm thấy lịch sử có ID/UID "${historyKey}"`);
           continue;
         }
 
         if (!target) {
           const identityCount = [userId, username, lookupPhone].filter(Boolean).length;
           if (!identityCount) {
-            addFailedRow(row, rowNumber, "Thiếu dữ liệu định danh: cần history_id hoặc user_id/username/lookup_phone");
+            addFailedRow(
+              row,
+              rowNumber,
+              "Thiếu dữ liệu định danh: cần ID/UID lịch sử hoặc user_id/username/lookup_phone",
+            );
             continue;
           }
           if (!currentFactoryName && !currentFactoryCode) {
@@ -223,7 +256,11 @@ function AdminImportsPage() {
             continue;
           }
           if (matches.length > 1) {
-            addFailedRow(row, rowNumber, `Tìm thấy ${matches.length} lịch sử trùng dữ liệu nhận diện; hãy dùng history_id`);
+            addFailedRow(
+              row,
+              rowNumber,
+              `Tìm thấy ${matches.length} lịch sử trùng dữ liệu nhận diện; hãy dùng ID/UID lịch sử`,
+            );
             continue;
           }
           target = matches[0];
@@ -756,8 +793,9 @@ function AdminImportsPage() {
             <FileInput className="h-4 w-4 text-primary" /> Cập nhật nhanh lịch sử/NLĐ
           </div>
           <div className="text-sm text-muted-foreground">
-            Chỉ điền các cột cần sửa. Ưu tiên <code>history_id</code>; nếu không có, dùng thông tin NLĐ
-            kèm nhà máy và ngày vào hiện tại. Ô để trống sẽ giữ nguyên dữ liệu.
+            Chỉ điền các cột cần sửa. Ưu tiên <code>Mã lịch sử (UID)</code> đang hiển thị trên bản
+            ghi; hệ thống vẫn chấp nhận PocketBase record ID. Nếu không có, dùng thông tin NLĐ kèm
+            nhà máy và ngày vào hiện tại. Ô để trống sẽ giữ nguyên dữ liệu.
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="rounded-full" onClick={downloadBulkEditTemplate}>

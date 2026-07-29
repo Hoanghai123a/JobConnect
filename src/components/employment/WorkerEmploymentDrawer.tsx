@@ -10,6 +10,7 @@ import {
   IdCard,
   Landmark,
   Plus,
+  RotateCcw,
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -51,6 +52,7 @@ import {
   getLatestEmploymentHistory,
   isCurrentlyWorking,
   maskCccd,
+  restoreEmploymentHistoryToWorking,
   updateEmploymentHistory,
   updateUserAndCache,
   type EmploymentHistoryRecord,
@@ -63,6 +65,11 @@ import { CccdManager } from "@/components/cccd/CccdManager";
 import { VN_BANKS } from "@/lib/vn-banks";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
 import type { AdvancePayoutMethod } from "@/lib/advances";
+
+type RestoreRequest = {
+  history: EmploymentHistoryRecord;
+  source: "action" | "edit";
+};
 
 export type WorkerEmploymentPermissions = {
   /** Cho phép sửa từng lịch sử đi làm (mở form edit khi click card). */
@@ -94,6 +101,26 @@ function formatDate(value?: string) {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+function validateRestoreRequest(histories: EmploymentHistoryRecord[], historyId: string) {
+  const target = histories.find((history) => history.id === historyId);
+  if (!target) throw new Error("Không tìm thấy bản ghi lịch sử cần khôi phục");
+
+  const otherActive = histories.find(
+    (history) => history.id !== historyId && isCurrentlyWorking(history),
+  );
+  if (otherActive) {
+    throw new Error(
+      "NLĐ đã có một bản ghi đang làm khác. Vui lòng kiểm tra lại lịch sử đi làm.",
+    );
+  }
+
+  const latest = getLatestEmploymentHistory(histories);
+  if (latest?.id !== historyId) {
+    throw new Error("Chỉ được khôi phục bản ghi lịch sử đi làm gần nhất");
+  }
+  return target;
 }
 
 function getPocketBaseFieldErrors(error: unknown) {
@@ -226,6 +253,8 @@ export function WorkerEmploymentDrawer({
   const [employeeCodeForm, setEmployeeCodeForm] = useState("");
   const [employeeCodeSaving, setEmployeeCodeSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [restoreRequest, setRestoreRequest] = useState<RestoreRequest | null>(null);
+  const [restoreSaving, setRestoreSaving] = useState(false);
   const [oldHistoryOpen, setOldHistoryOpen] = useState(false);
   const [oldHistorySaving, setOldHistorySaving] = useState(false);
   const [advanceOpen, setAdvanceOpen] = useState(false);
@@ -327,6 +356,8 @@ export function WorkerEmploymentDrawer({
       setLeaveNote("");
       setJoinOpen(false);
       setEmployeeCodeOpen(false);
+      setRestoreRequest(null);
+      setRestoreSaving(false);
       setCccdViewerOpen(false);
       const latest = getLatestEmploymentHistory(histories);
       setJoinForm({
@@ -347,6 +378,8 @@ export function WorkerEmploymentDrawer({
   const latestHistory = useMemo(() => getLatestEmploymentHistory(histories), [histories]);
   const canEditHistoryRecord = (history: EmploymentHistoryRecord) =>
     permissions.canEditHistory && (actor?.role === "admin" || history.id === latestHistory?.id);
+  const restorableHistory =
+    latestHistory?.leave_date && permissions.canEditHistory ? latestHistory : null;
 
   const startEdit = (h: EmploymentHistoryRecord) => {
     if (!canEditHistoryRecord(h)) return;
@@ -365,6 +398,17 @@ export function WorkerEmploymentDrawer({
       leave_date: h.leave_date?.slice(0, 10) || "",
       note: h.note || "",
     });
+  };
+
+  const openRestoreDialog = (history: EmploymentHistoryRecord) => {
+    if (
+      !permissions.canEditHistory ||
+      history.id !== latestHistory?.id ||
+      !history.leave_date
+    ) {
+      return;
+    }
+    setRestoreRequest({ history, source: "action" });
   };
 
   const submitLeave = async () => {
@@ -575,28 +619,34 @@ export function WorkerEmploymentDrawer({
     }
   };
 
-  const saveEdit = async () => {
-    if (!editingId) return;
+  const saveEdit = async (restoreConfirmed = false) => {
+    if (!editingId || !user?.id) return;
     if (!form.factory) {
       toast.warning("Chọn nhà máy");
       return;
     }
     setSaving(true);
     try {
-      if (actor?.role === "staff") {
-        if (!user?.id) return;
-        const latestHistories = await fetchEmploymentHistories([user.id]);
-        const latest = getLatestEmploymentHistory(latestHistories);
-        if (latest?.id !== editingId) {
-          toast.error("Staff chỉ được sửa lịch sử đi làm gần nhất");
-          setEditingId(null);
-          await onDataChanged();
-          return;
-        }
+      const latestHistories = await fetchEmploymentHistories([user.id]);
+      const before = latestHistories.find((item) => item.id === editingId);
+      if (!before) throw new Error("Không tìm thấy lịch sử đi làm cần cập nhật");
+
+      const latest = getLatestEmploymentHistory(latestHistories);
+      if (actor?.role === "staff" && latest?.id !== editingId) {
+        toast.error("Staff chỉ được sửa lịch sử đi làm gần nhất");
+        setEditingId(null);
+        await onDataChanged();
+        return;
       }
 
-      const before = histories.find((item) => item.id === editingId) || null;
-      const updated = await updateEmploymentHistory(editingId, {
+      const isRestoring = Boolean(before.leave_date && !form.leave_date);
+      if (isRestoring && !restoreConfirmed) {
+        setRestoreRequest({ history: before, source: "edit" });
+        return;
+      }
+      if (isRestoring) validateRestoreRequest(latestHistories, editingId);
+
+      const historyPayload = {
         factory: form.factory,
         employee_code: form.employee_code.trim(),
         worker_name_snapshot: form.worker_name_snapshot.trim(),
@@ -605,31 +655,33 @@ export function WorkerEmploymentDrawer({
         recruiter_staff: form.recruiter_staff || undefined,
         main_house: form.main_house || undefined,
         join_date: form.join_date || undefined,
-        leave_date: form.leave_date || undefined,
+        leave_date: form.leave_date,
         status: deriveEmploymentStatus({ leave_date: form.leave_date }),
         note: form.note.trim(),
+      };
+      const updated = isRestoring
+        ? await restoreEmploymentHistoryToWorking(editingId, historyPayload)
+        : await updateEmploymentHistory(editingId, historyPayload);
+      await updateUserAndCache(user.id, {
+        address: form.address.trim(),
+        phone: form.phone.trim(),
       });
-      if (user) {
-        await updateUserAndCache(user.id, {
-          address: form.address.trim(),
-          phone: form.phone.trim(),
-        });
-        const updatedHistories = await fetchEmploymentHistories([user.id]);
-        const latest = getLatestEmploymentHistory(updatedHistories);
-      }
       await createStaffActionLog({
         actor,
-        targetUserId: user?.id,
+        targetUserId: user.id,
         targetCollection: "employment_histories",
         targetRecord: editingId,
         action: "update",
         before,
         after: updated,
-        note: "Cập nhật lịch sử đi làm",
+        note: isRestoring
+          ? "Xóa ngày nghỉ, khôi phục trạng thái đang làm"
+          : "Cập nhật lịch sử đi làm",
       });
-      toast.success("Đã lưu thay đổi");
+      toast.success(isRestoring ? "Đã khôi phục trạng thái đang làm" : "Đã lưu thay đổi");
+      setRestoreRequest(null);
       setEditingId(null);
-      onDataChanged();
+      await onDataChanged();
     } catch (error: unknown) {
       const fieldErrors = getPocketBaseFieldErrors(error);
       if (fieldErrors) {
@@ -639,6 +691,41 @@ export function WorkerEmploymentDrawer({
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const confirmRestore = async () => {
+    if (!restoreRequest || !user?.id) return;
+    if (restoreRequest.source === "edit") {
+      await saveEdit(true);
+      return;
+    }
+
+    setRestoreSaving(true);
+    try {
+      const latestHistories = await fetchEmploymentHistories([user.id]);
+      const before = validateRestoreRequest(latestHistories, restoreRequest.history.id);
+      const updated = await restoreEmploymentHistoryToWorking(restoreRequest.history.id);
+      await createStaffActionLog({
+        actor,
+        targetUserId: user.id,
+        targetCollection: "employment_histories",
+        targetRecord: restoreRequest.history.id,
+        action: "update",
+        before,
+        after: updated,
+        note: "Xóa ngày nghỉ, khôi phục trạng thái đang làm",
+      });
+      toast.success("Đã khôi phục trạng thái đang làm");
+      setRestoreRequest(null);
+      await onDataChanged();
+    } catch (error: unknown) {
+      const fieldErrors = getPocketBaseFieldErrors(error);
+      toast.error(
+        fieldErrors || getErrorMessage(error, "Không thể khôi phục trạng thái đang làm"),
+      );
+    } finally {
+      setRestoreSaving(false);
     }
   };
 
@@ -814,7 +901,8 @@ export function WorkerEmploymentDrawer({
                 canOpenAdvance ||
                 permissions.canViewPayroll ||
                 permissions.canUpdateBank ||
-                permissions.canAddOldHistory) && (
+                permissions.canAddOldHistory ||
+                Boolean(restorableHistory)) && (
                 <div className="desktop:col-start-1 desktop:row-start-1 desktop:self-stretch desktop:rounded-xl desktop:border desktop:border-border/60 desktop:bg-card/70 desktop:p-1.5">
                   <div className="hidden px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground desktop:block">
                     Chức năng
@@ -826,6 +914,14 @@ export function WorkerEmploymentDrawer({
                         label="Báo nghỉ"
                         tone="danger"
                         onClick={openLeaveDialog}
+                      />
+                    )}
+                    {restorableHistory && (
+                      <ActionButton
+                        icon={RotateCcw}
+                        label="Khôi phục đang làm"
+                        tone="success"
+                        onClick={() => openRestoreDialog(restorableHistory)}
                       />
                     )}
                     {permissions.canReportJoin && (
@@ -1299,6 +1395,71 @@ export function WorkerEmploymentDrawer({
           <DialogFooter className="desktop:px-5 desktop:pb-4">
             <Button variant="outline" onClick={onClose}>
               Đóng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(restoreRequest)}
+        onOpenChange={(value) => {
+          if (!value && !restoreSaving && !saving) setRestoreRequest(null);
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Khôi phục trạng thái đang làm</DialogTitle>
+            <DialogDescription>
+              Xóa ngày nghỉ của lịch sử gần nhất và chuyển NLĐ về trạng thái đang làm.
+            </DialogDescription>
+          </DialogHeader>
+
+          {restoreRequest && (
+            <div className="space-y-3">
+              <div className="rounded-xl border bg-muted/30 p-3">
+                <div className="text-sm font-semibold">
+                  {restoreRequest.history.expand?.factory?.name ||
+                    factories.find((factory) => factory.id === restoreRequest.history.factory)?.name ||
+                    "Nhà máy"}
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-xl bg-background p-2.5">
+                    <div className="text-[11px] text-muted-foreground">Ngày vào làm</div>
+                    <div className="mt-1 font-semibold">
+                      {formatDate(restoreRequest.history.join_date)}
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-background p-2.5">
+                    <div className="text-[11px] text-muted-foreground">Ngày nghỉ sẽ xóa</div>
+                    <div className="mt-1 font-semibold text-destructive">
+                      {formatDate(restoreRequest.history.leave_date)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
+                Sau khi xác nhận, bản ghi này sẽ không còn ngày nghỉ và giao diện NLĐ sẽ chuyển
+                sang “Đang làm”. Hệ thống sẽ chặn nếu đã có bản ghi đang làm khác.
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRestoreRequest(null)}
+              disabled={restoreSaving || saving}
+            >
+              Huỷ
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void confirmRestore()}
+              disabled={restoreSaving || saving}
+            >
+              {restoreSaving || saving ? "Đang cập nhật..." : "Xóa ngày nghỉ và khôi phục"}
             </Button>
           </DialogFooter>
         </DialogContent>

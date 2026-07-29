@@ -19,6 +19,10 @@ import type { EmploymentHistoryRecord } from "@/lib/employment";
 import type { FactoryRecord } from "@/lib/factories";
 import type { UserRecord } from "@/lib/pocketbase";
 import {
+  RecruitmentDayDetailDialog,
+  type RecruitmentDayDetails,
+} from "./RecruitmentDayDetailDialog";
+import {
   datePart,
   enumerateDates,
   getActiveHistoriesAtDate,
@@ -32,6 +36,7 @@ export type RecruitmentChartProps = {
   factories: FactoryRecord[];
   from?: string;
   to?: string;
+  dayDetailPresentation?: "inline" | "dialog";
 };
 
 type DailyRecruitment = {
@@ -48,7 +53,119 @@ const chartConfig = {
   left: { label: "Đã nghỉ", color: "oklch(0.68 0.2 35)" },
 } satisfies ChartConfig;
 
-export function RecruitmentChart({ histories, users, factories, from, to }: RecruitmentChartProps) {
+function displayUserName(user?: UserRecord | null) {
+  return user?.full_name?.trim() || user?.username?.trim() || "Không xác định";
+}
+
+function buildRecruitmentDayDetails({
+  histories,
+  users,
+  factories,
+  selectedDay,
+}: {
+  histories: EmploymentHistoryRecord[];
+  users: UserRecord[];
+  factories: FactoryRecord[];
+  selectedDay: string | null;
+}): RecruitmentDayDetails {
+  if (!selectedDay) return { groups: [], workers: [] };
+
+  const dayHistories = histories.filter((history) => datePart(history.join_date) === selectedDay);
+  const userById = new Map(users.map((user) => [user.id, user]));
+  const factoryById = new Map(factories.map((factory) => [factory.id, factory]));
+  const factoryMap = new Map<
+    string,
+    {
+      factoryName: string;
+      recruiters: Map<string, { user?: UserRecord; count: number }>;
+    }
+  >();
+
+  for (const history of dayHistories) {
+    const factoryId = history.factory || "__none__";
+    const recruiterId = history.recruiter_staff || "__none__";
+    const factoryName =
+      history.expand?.factory?.name || factoryById.get(factoryId)?.name || "Không xác định";
+    const recruiter = history.expand?.recruiter_staff || userById.get(recruiterId);
+    const group = factoryMap.get(factoryId) || {
+      factoryName,
+      recruiters: new Map<string, { user?: UserRecord; count: number }>(),
+    };
+    const recruiterEntry = group.recruiters.get(recruiterId) || { user: recruiter, count: 0 };
+    recruiterEntry.user ||= recruiter;
+    recruiterEntry.count++;
+    group.recruiters.set(recruiterId, recruiterEntry);
+    factoryMap.set(factoryId, group);
+  }
+
+  const groups = [...factoryMap.entries()]
+    .map(([factoryId, group]) => {
+      const recruiters = [...group.recruiters.entries()]
+        .map(([recruiterId, entry]) => ({
+          id: recruiterId,
+          name: displayUserName(entry.user),
+          username: entry.user?.username || "",
+          count: entry.count,
+          isVendor: entry.user?.username?.startsWith("vd_") ?? false,
+        }))
+        .sort(
+          (a, b) =>
+            b.count - a.count || a.name.localeCompare(b.name, "vi", { sensitivity: "base" }),
+        );
+
+      return {
+        factoryId,
+        factoryName: group.factoryName,
+        total: recruiters.reduce((sum, item) => sum + item.count, 0),
+        recruiters,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.total - a.total ||
+        a.factoryName.localeCompare(b.factoryName, "vi", { sensitivity: "base" }),
+    );
+
+  const workers = dayHistories
+    .map((history) => {
+      const worker = history.expand?.user || userById.get(history.user);
+      const recruiter =
+        history.expand?.recruiter_staff ||
+        (history.recruiter_staff ? userById.get(history.recruiter_staff) : undefined);
+      const factory = history.expand?.factory || factoryById.get(history.factory);
+      const joinDate = datePart(history.join_date);
+
+      return {
+        id: history.id,
+        factoryName: factory?.name?.trim() || "—",
+        employeeCode: history.employee_code?.trim() || "—",
+        workerName:
+          history.worker_name_snapshot?.trim() ||
+          worker?.full_name?.trim() ||
+          worker?.username?.trim() ||
+          "—",
+        mainHouseName: history.expand?.main_house?.name?.trim() || "—",
+        recruiterName: recruiter ? displayUserName(recruiter) : "—",
+        joinDate: joinDate ? new Date(`${joinDate}T12:00:00`).toLocaleDateString("vi-VN") : "—",
+      };
+    })
+    .sort(
+      (a, b) =>
+        a.factoryName.localeCompare(b.factoryName, "vi", { sensitivity: "base" }) ||
+        a.workerName.localeCompare(b.workerName, "vi", { sensitivity: "base" }),
+    );
+
+  return { groups, workers };
+}
+
+export function RecruitmentChart({
+  histories,
+  users,
+  factories,
+  from,
+  to,
+  dayDetailPresentation = "inline",
+}: RecruitmentChartProps) {
   const resolvedTo = to || localIsoDate();
   const resolvedFrom = from || shiftIsoDate(resolvedTo, -6);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -74,49 +191,11 @@ export function RecruitmentChart({ histories, users, factories, from, to }: Recr
     }));
   }, [histories, resolvedFrom, resolvedTo]);
 
-  const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
-  const factoryById = useMemo(() => new Map(factories.map((f) => [f.id, f])), [factories]);
-
-  const breakdown = useMemo(() => {
-    if (!selectedDay) return [];
-
-    const dayHistories = histories.filter((h) => h.join_date?.slice(0, 10) === selectedDay);
-    const factoryMap = new Map<string, Map<string, number>>();
-
-    for (const h of dayHistories) {
-      const factoryId = h.factory || "__none__";
-      const recruiterId = h.recruiter_staff || "__none__";
-      if (!factoryMap.has(factoryId)) factoryMap.set(factoryId, new Map());
-      const recruiterMap = factoryMap.get(factoryId)!;
-      recruiterMap.set(recruiterId, (recruiterMap.get(recruiterId) || 0) + 1);
-    }
-
-    return [...factoryMap.entries()]
-      .map(([factoryId, recruiterMap]) => {
-        const factory = factoryById.get(factoryId);
-        const recruiters = [...recruiterMap.entries()]
-          .filter(([, count]) => count > 0)
-          .map(([recruiterId, count]) => {
-            const user = userById.get(recruiterId);
-            return {
-              id: recruiterId,
-              name: user?.full_name || user?.username || "Không xác định",
-              username: user?.username || "",
-              count,
-              isVendor: user?.username?.startsWith("vd_") ?? false,
-            };
-          })
-          .sort((a, b) => b.count - a.count);
-
-        return {
-          factoryId,
-          factoryName: factory?.name || "Không xác định",
-          total: recruiters.reduce((sum, item) => sum + item.count, 0),
-          recruiters,
-        };
-      })
-      .sort((a, b) => b.total - a.total);
-  }, [factoryById, histories, selectedDay, userById]);
+  const dayDetails = useMemo(
+    () => buildRecruitmentDayDetails({ histories, users, factories, selectedDay }),
+    [factories, histories, selectedDay, users],
+  );
+  const breakdown = dayDetails.groups;
 
   const selectedFactory = useMemo(
     () => breakdown.find((group) => group.factoryId === selectedFactoryId) || null,
@@ -130,7 +209,19 @@ export function RecruitmentChart({ histories, users, factories, from, to }: Recr
   return (
     <div className="space-y-4">
       <ChartContainer config={chartConfig} className="h-[240px] w-full">
-        <ComposedChart data={dailyData} margin={{ top: 16, right: 4, bottom: 0, left: -8 }}>
+        <ComposedChart
+          data={dailyData}
+          margin={{ top: 16, right: 4, bottom: 0, left: -8 }}
+          onClick={(state) => {
+            const payload = state?.activePayload?.[0]?.payload as DailyRecruitment | undefined;
+            const date =
+              payload?.date || dailyData.find((entry) => entry.label === state?.activeLabel)?.date;
+            if (!date) return;
+            setSelectedDay(date);
+            setSelectedFactoryId(null);
+          }}
+          className="cursor-pointer"
+        >
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis
             dataKey="label"
@@ -147,16 +238,7 @@ export function RecruitmentChart({ histories, users, factories, from, to }: Recr
             axisLine={false}
           />
           <ChartTooltip content={<ChartTooltipContent />} />
-          <Bar
-            yAxisId="left"
-            dataKey="joined"
-            radius={[4, 4, 0, 0]}
-            cursor="pointer"
-            onClick={(_: unknown, index: number) => {
-              setSelectedDay(dailyData[index]?.date || null);
-              setSelectedFactoryId(null);
-            }}
-          >
+          <Bar yAxisId="left" dataKey="joined" radius={[4, 4, 0, 0]} cursor="pointer">
             <LabelList
               dataKey="joined"
               position="top"
@@ -192,7 +274,7 @@ export function RecruitmentChart({ histories, users, factories, from, to }: Recr
         </ComposedChart>
       </ChartContainer>
 
-      {selectedDay && (
+      {selectedDay && dayDetailPresentation === "inline" && (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium text-muted-foreground">
@@ -370,6 +452,19 @@ export function RecruitmentChart({ histories, users, factories, from, to }: Recr
             })}
           </div>
         </div>
+      )}
+
+      {dayDetailPresentation === "dialog" && (
+        <RecruitmentDayDetailDialog
+          open={Boolean(selectedDay)}
+          selectedDay={selectedDay || ""}
+          details={dayDetails}
+          onOpenChange={(open) => {
+            if (open) return;
+            setSelectedDay(null);
+            setSelectedFactoryId(null);
+          }}
+        />
       )}
 
       <Dialog

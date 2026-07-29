@@ -210,6 +210,7 @@ export function WorkforceDashboard({
             factories={factories}
             from={range.from}
             to={range.to}
+            dayDetailPresentation="dialog"
           />
         )}
       </section>

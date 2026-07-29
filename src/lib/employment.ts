@@ -265,6 +265,16 @@ export async function updateEmploymentHistory(id: string, payload: Partial<Emplo
   await updateCachedHistory(record);
   return record;
 }
+export async function restoreEmploymentHistoryToWorking(
+  id: string,
+  payload: Partial<EmploymentDraft> = {},
+) {
+  return updateEmploymentHistory(id, {
+    ...payload,
+    leave_date: "",
+    status: "working",
+  });
+}
 
 export async function updateUserAndCache(id: string, payload: Record<string, unknown> | FormData) {
   const record = (await pb.collection("users").update(id, payload)) as unknown as UserRecord;
