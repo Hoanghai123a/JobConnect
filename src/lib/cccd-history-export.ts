@@ -55,6 +55,8 @@ type WordImage = {
 };
 
 const WORD_IMAGE_WIDTH_PX = 288;
+const WORD_IMAGE_MAX_HEIGHT_PX = 3.5 * 96;
+const WORD_IMAGE_GAP_TWIP = 3 * 1440;
 
 function normalizeCccd(value?: string | null) {
   return String(value ?? "").replace(/\D/g, "");
@@ -124,16 +126,32 @@ function versionsByUserId(versions: CccdVersionRecord[]) {
   return grouped;
 }
 
+function exportFileUrl(record: object, filename?: string) {
+  const url = fileUrl(record, filename);
+  if (!url) return "";
+
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname.includes("/api/public/pb/api/files/") && !parsed.pathname.endsWith("/")) {
+      // Keep dotted filenames behind the app proxy from being handled as static Vite assets.
+      parsed.pathname += "/";
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 function imageUrlFromVersion(version: CccdVersionRecord | undefined, side: ImageSide) {
   if (!version) return "";
   const filename = side === "front" ? version.front_image : version.back_image;
-  return filename ? fileUrl(version, filename) : "";
+  return exportFileUrl(version, filename);
 }
 
 function imageUrlFromUser(user: UserRecord | undefined, side: ImageSide) {
   if (!user) return "";
   const filename = side === "front" ? user.cccd_front : user.cccd_back;
-  return filename ? fileUrl(user, filename) : "";
+  return exportFileUrl(user, filename);
 }
 
 function resolveImageUrl(
@@ -475,17 +493,25 @@ async function exportWordArchive(
 
       if (!images.length) continue;
       images.forEach((image, imageIndex) => {
-        const height = Math.max(1, Math.round((WORD_IMAGE_WIDTH_PX * image.height) / image.width));
+        const scale = Math.min(
+          WORD_IMAGE_WIDTH_PX / image.width,
+          WORD_IMAGE_MAX_HEIGHT_PX / image.height,
+        );
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
         children.push(
           new Paragraph({
             pageBreakBefore: exportedInDocument > 0 && imageIndex === 0,
             alignment: AlignmentType.CENTER,
-            spacing: { before: 0, after: imageIndex === images.length - 1 ? 0 : 360 },
+            spacing: {
+              before: 0,
+              after: imageIndex === images.length - 1 ? 0 : WORD_IMAGE_GAP_TWIP,
+            },
             children: [
               new ImageRun({
                 type: image.type,
                 data: image.data,
-                transformation: { width: WORD_IMAGE_WIDTH_PX, height },
+                transformation: { width, height },
               }),
             ],
           }),
