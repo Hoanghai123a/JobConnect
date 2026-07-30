@@ -58,6 +58,19 @@ function buildTenureDaysByUserId(workers: StaffWorkerRecord[]) {
   return map;
 }
 
+function getBirthYear(value?: string) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+
+  const iso = text.match(/^(\d{4})[-/]\d{1,2}[-/]\d{1,2}/);
+  if (iso) return iso[1];
+
+  const local = text.match(/^\d{1,2}[-/]\d{1,2}[-/](\d{4})/);
+  if (local) return local[1];
+
+  return /^(?:19|20)\d{2}$/.test(text) ? text : "";
+}
+
 function buildBasicRows(
   histories: EmploymentHistoryRecord[],
   tenureDaysByUserId: Map<string, number>,
@@ -95,45 +108,36 @@ function buildFullRows(
     return {
       STT: index + 1,
       "Mã tài khoản (UID)": user?.uid || "",
-      "Tên đăng nhập": user?.username || "",
-      "Số điện thoại": user?.phone || "",
-      Email: user?.email || "",
-      "Vai trò": user?.role || "",
-      "Giới tính": user?.gender || "",
-      "Trạng thái tài khoản": user?.status || "",
-      "Trạng thái duyệt": user ? APPROVAL_STATUS_LABELS[getApprovalStatus(user)] : "",
       "Mã lịch sử": history.uid || "",
       "Mã nhân viên": history.employee_code || "",
-      "Họ tên tại thời điểm đi làm": history.worker_name_snapshot || "",
-      "CCCD tại thời điểm đi làm": history.worker_cccd_snapshot || "",
-      "Ngày sinh tại thời điểm đi làm": formatDateOnly(
-        history.worker_date_of_birth_snapshot,
-      ),
-      "Địa chỉ thường trú tại thời điểm đi làm":
-        history.worker_address_snapshot || history.hometown_snapshot || "",
-      "Ngày cấp CCCD tại thời điểm đi làm": formatDateOnly(history.cccd_issue_date),
-      "Mã số thuế": history.worker_tax_code_snapshot || "",
+      "Họ tên tại nhà máy": history.worker_name_snapshot || "",
+      "CCCD tại nhà máy": history.worker_cccd_snapshot || "",
+      "Số điện thoại": user?.phone || "",
+      "Năm sinh": getBirthYear(user?.date_of_birth),
+      "Giới tính": user?.gender || "",
+      "Quê quán": user?.address || "",
       "Nhà máy": history.expand?.factory?.name || "",
       "Nhà chính": history.expand?.main_house?.name || "",
       "Ngày vào": formatDateOnly(history.join_date),
       "Ngày nghỉ": formatDateOnly(history.leave_date),
-      "Trạng thái lịch sử": history.status === "working" ? "Đang làm" : "Đã nghỉ",
       "Người tuyển":
         history.expand?.recruiter_staff?.full_name ||
         history.expand?.recruiter_staff?.username ||
         "",
+      "Họ tên gốc": user?.full_name || "",
+      "CCCD gốc": user?.cccd || "",
+      "Ngày cấp CCCD": formatDateOnly(history.cccd_issue_date),
       "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
+      "Mã số thuế": history.worker_tax_code_snapshot || "",
+      "Trạng thái lịch sử": history.status === "working" ? "Đang làm" : "Đã nghỉ",
       "Ghi chú": history.note || "",
       "Ngân hàng": user?.bank_name || "",
       "Số tài khoản": user?.bank_account_number || "",
       "Tên chủ tài khoản": user?.bank_account_name || "",
-      "Lương cơ bản": user?.lcb ?? "",
-      "Chuyên cần": user?.chuyen_can ?? "",
-      "Đời sống": user?.doi_song ?? "",
-      "Thâm niên": user?.tham_nien ?? "",
-      "Giờ HC mặc định": user?.default_hc_hours ?? "",
-      "Giờ OT mặc định": user?.default_ot_hours ?? "",
-      "Ngày chốt công": user?.attendance_cutoff_day ?? "",
+      "Tên đăng nhập": user?.username || "",
+      "Vai trò": user?.role || "",
+      "Trạng thái tài khoản": user?.status || "",
+      "Trạng thái duyệt": user ? APPROVAL_STATUS_LABELS[getApprovalStatus(user)] : "",
     };
   });
 }

@@ -665,9 +665,7 @@ export function WorkerEmploymentDrawer({
     if (!joinForm.main_house) return toast.warning("Chọn nhà chính");
     const missingSnapshotFields = getMissingEmploymentSnapshotFields(joinForm);
     if (missingSnapshotFields.length) {
-      return toast.warning(
-        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
-      );
+      return toast.warning(`Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`);
     }
     if (!canReportJoin(actor, histories, managedFactoryIds ?? new Set(), joinForm.factory)) {
       toast.error("Bạn không có quyền báo đi làm tại nhà máy đã chọn");
@@ -807,9 +805,7 @@ export function WorkerEmploymentDrawer({
     if (!oldHistoryForm.leave_date) return toast.warning("Chọn ngày nghỉ");
     const missingSnapshotFields = getMissingEmploymentSnapshotFields(oldHistoryForm);
     if (missingSnapshotFields.length) {
-      return toast.warning(
-        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
-      );
+      return toast.warning(`Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`);
     }
     if (oldHistoryForm.leave_date < oldHistoryForm.join_date) {
       return toast.warning("Ngày nghỉ không được trước ngày vào");
@@ -903,9 +899,7 @@ export function WorkerEmploymentDrawer({
     }
     const missingSnapshotFields = getMissingEmploymentSnapshotFields(form);
     if (missingSnapshotFields.length) {
-      toast.warning(
-        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
-      );
+      toast.warning(`Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`);
       return;
     }
     setSaving(true);
@@ -1618,9 +1612,7 @@ export function WorkerEmploymentDrawer({
                     return (
                       <Card
                         key={h.id}
-                        className={`min-w-0 space-y-2 overflow-hidden rounded-2xl p-3 transition-colors desktop:grid desktop:grid-cols-[minmax(13rem,1.35fr)_minmax(10rem,1fr)_minmax(8rem,.8fr)_minmax(9rem,.9fr)_minmax(11rem,1.1fr)_auto] desktop:items-center desktop:gap-3 desktop:space-y-0 desktop:rounded-xl desktop:px-3 desktop:py-2 ${
-                          "cursor-pointer hover:bg-muted/30"
-                        }`}
+                        className="min-w-0 space-y-2 overflow-hidden rounded-2xl p-3 transition-colors desktop:grid desktop:grid-cols-[minmax(13rem,1.35fr)_minmax(10rem,1fr)_minmax(8rem,.8fr)_minmax(9rem,.9fr)_minmax(11rem,1.1fr)_auto] desktop:items-center desktop:gap-3 desktop:space-y-0 desktop:rounded-xl desktop:px-3 desktop:py-2 cursor-pointer hover:bg-muted/30"
                         onClick={() => setSelectedHistory(h)}
                       >
                         <div className="flex items-start justify-between gap-2 desktop:contents">
@@ -1646,8 +1638,8 @@ export function WorkerEmploymentDrawer({
                               {isCurrentlyWorking(h) ? "Đang làm" : "Đã nghỉ"}
                             </StatusChip>
                             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                            </div>
                           </div>
+                        </div>
                         <div className="min-w-0 space-y-1 text-[11px] text-muted-foreground desktop:contents">
                           <div
                             title={employmentPeriod}
@@ -2054,9 +2046,7 @@ export function WorkerEmploymentDrawer({
               <div className="text-sm font-semibold">Thông tin CCCD</div>
               <JoinCccdSection
                 value={oldHistoryForm}
-                onChange={(changes) =>
-                  setOldHistoryForm((current) => ({ ...current, ...changes }))
-                }
+                onChange={(changes) => setOldHistoryForm((current) => ({ ...current, ...changes }))}
                 frontFile={oldHistoryCccdFront}
                 backFile={oldHistoryCccdBack}
                 onFrontFileChange={setOldHistoryCccdFront}

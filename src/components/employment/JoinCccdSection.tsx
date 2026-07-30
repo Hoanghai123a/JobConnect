@@ -202,7 +202,8 @@ export function JoinCccdSection({
             />
           </div>
           <p className="text-[11px] leading-4 text-muted-foreground">
-            Chọn ảnh có mã QR ở mặt trước hoặc mặt sau để tự đọc thông tin. Dữ liệu chỉ được điền sau khi bạn xác nhận.
+            Chọn ảnh có mã QR ở mặt trước hoặc mặt sau để tự đọc thông tin. Dữ liệu chỉ được điền
+            sau khi bạn xác nhận.
           </p>
         </div>
       </div>

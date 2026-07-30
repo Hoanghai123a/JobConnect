@@ -8,8 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   FileDown,
-  FileSpreadsheet,
-  IdCard,
   Landmark,
   Plus,
   Search,
@@ -167,6 +165,10 @@ function formatDate(value?: string) {
   if (!value) return "—";
   const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : value;
+}
+
+function getWorkerDisplayName(user?: UserRecord) {
+  return user?.full_name?.trim() || user?.username?.trim() || "Thiếu thông tin";
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -363,16 +365,26 @@ function WorkforcePage() {
       right={
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={() => setOpenRegister(true)}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm active:scale-[0.98]"
+            className="flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm active:scale-[0.98]"
             aria-label="Đăng ký đi làm"
           >
             <BriefcaseBusiness className="h-4 w-4" />
             Đăng ký
           </button>
+          <Link
+            to="/staff/export"
+            className="hidden h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted active:scale-[0.98] desktop:flex"
+            aria-label="Xuất Excel"
+          >
+            <FileDown className="h-4 w-4" />
+            Xuất Excel
+          </Link>
           <button
+            type="button"
             onClick={() => setQuickCreateOpen(true)}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow active:scale-[0.98]"
+            className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground shadow active:scale-[0.98]"
             aria-label="Tạo nhanh tài khoản NLĐ"
           >
             <Plus className="h-4 w-4" />
@@ -403,29 +415,14 @@ function WorkforcePage() {
             loading={loading}
             onSelectWorker={setSelectedUserId}
             headerSlot={
-              <div className="flex gap-2">
-                <Link
-                  to="/admin/imports"
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
-                >
-                  <FileSpreadsheet className="h-4 w-4" />
-                  Nhập Excel
-                </Link>
+              <div className="flex">
                 <Link
                   to="/staff/export"
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground desktop:hidden"
                 >
                   <FileDown className="h-4 w-4" />
                   Xuất Excel
                 </Link>
-                <button
-                  type="button"
-                  onClick={() => setCccdExportOpen(true)}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
-                >
-                  <IdCard className="h-4 w-4" />
-                  Xuất CCCD
-                </button>
               </div>
             }
           />
@@ -645,6 +642,7 @@ function RecruitGroups({
   onSelectWorker: (userId: string) => void;
 }) {
   const [sub, setSub] = useState<RecruitSubTab>("factory");
+  const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
 
   const factoryStats = useMemo(() => {
     const map = new Map<string, { working: number; joined: number; left: number }>();
@@ -732,7 +730,7 @@ function RecruitGroups({
               subtitle={f.code || ""}
               icon={Building2}
               stats={s}
-              workers={collectWorkersForFactory(histories, latestByUser, f.id, from, to)}
+              workers={collectWorkersForFactory(histories, latestByUser, userById, f.id, from, to)}
               onSelectWorker={onSelectWorker}
             />
           );
@@ -760,7 +758,7 @@ function RecruitGroups({
                 subtitle={staff.phone || staff.username || ""}
                 icon={ShieldCheck}
                 stats={s}
-                workers={collectWorkersForRecruiter(histories, latestByUser, staffId, from, to)}
+                workers={collectWorkersForRecruiter(histories, latestByUser, userById, staffId, from, to)}
                 onSelectWorker={onSelectWorker}
               />
             );
@@ -781,6 +779,7 @@ type GroupWorker = {
 function collectWorkersForFactory(
   histories: EmploymentHistoryRecord[],
   latestByUser: Map<string, EmploymentHistoryRecord>,
+  userById: Map<string, UserRecord>,
   factoryId: string,
   from: string,
   to: string,
@@ -791,7 +790,7 @@ function collectWorkersForFactory(
     if (isWorkingAtEndDate(h, to)) {
       seen.set(`${userId}:working`, {
         userId,
-        fullName: h.worker_name_snapshot || "Thiếu thông tin",
+        fullName: getWorkerDisplayName(userById.get(h.user)),
         factoryName: h.expand?.factory?.name || "",
         state: "working",
         date: h.join_date,
@@ -803,7 +802,7 @@ function collectWorkersForFactory(
     if (inDateRange(h.join_date, from, to)) {
       seen.set(`${h.user}:joined:${h.id}`, {
         userId: h.user,
-        fullName: h.worker_name_snapshot || "Thiếu thông tin",
+        fullName: getWorkerDisplayName(userById.get(h.user)),
         factoryName: h.expand?.factory?.name || "",
         state: "joined",
         date: h.join_date,
@@ -812,7 +811,7 @@ function collectWorkersForFactory(
     if (h.status === "left" && inDateRange(h.leave_date, from, to)) {
       seen.set(`${h.user}:left:${h.id}`, {
         userId: h.user,
-        fullName: h.worker_name_snapshot || "Thiếu thông tin",
+        fullName: getWorkerDisplayName(userById.get(h.user)),
         factoryName: h.expand?.factory?.name || "",
         state: "left",
         date: h.leave_date || "",
@@ -825,6 +824,7 @@ function collectWorkersForFactory(
 function collectWorkersForRecruiter(
   histories: EmploymentHistoryRecord[],
   latestByUser: Map<string, EmploymentHistoryRecord>,
+  userById: Map<string, UserRecord>,
   staffId: string,
   from: string,
   to: string,
@@ -835,7 +835,7 @@ function collectWorkersForRecruiter(
     if (isWorkingAtEndDate(h, to)) {
       seen.set(`${userId}:working`, {
         userId,
-        fullName: h.worker_name_snapshot || "Thiếu thông tin",
+        fullName: getWorkerDisplayName(userById.get(h.user)),
         factoryName: h.expand?.factory?.name || "",
         state: "working",
         date: h.join_date,
@@ -847,7 +847,7 @@ function collectWorkersForRecruiter(
     if (inDateRange(h.join_date, from, to)) {
       seen.set(`${h.user}:joined:${h.id}`, {
         userId: h.user,
-        fullName: h.worker_name_snapshot || "Thiếu thông tin",
+        fullName: getWorkerDisplayName(userById.get(h.user)),
         factoryName: h.expand?.factory?.name || "",
         state: "joined",
         date: h.join_date,
@@ -856,7 +856,7 @@ function collectWorkersForRecruiter(
     if (h.status === "left" && inDateRange(h.leave_date, from, to)) {
       seen.set(`${h.user}:left:${h.id}`, {
         userId: h.user,
-        fullName: h.worker_name_snapshot || "Thiếu thông tin",
+        fullName: getWorkerDisplayName(userById.get(h.user)),
         factoryName: h.expand?.factory?.name || "",
         state: "left",
         date: h.leave_date || "",
@@ -1039,6 +1039,7 @@ function WorkerList({
         if (scope === "left" && status !== "left") return false;
         if (!q) return true;
         const haystack = [
+          user.full_name,
           user.username,
           user.phone,
           latest?.employee_code,
@@ -1060,8 +1061,8 @@ function WorkerList({
         if (aTime === null && bTime !== null) return 1;
         if (aTime !== null && bTime === null) return -1;
 
-        const aName = a.latest?.worker_name_snapshot || "Thiếu thông tin";
-        const bName = b.latest?.worker_name_snapshot || "Thiếu thông tin";
+        const aName = getWorkerDisplayName(a.user);
+        const bName = getWorkerDisplayName(b.user);
         const nameOrder = aName.localeCompare(bName, "vi", { sensitivity: "base" });
         return nameOrder || (a.user?.id || "").localeCompare(b.user?.id || "");
       });
@@ -1138,13 +1139,13 @@ function WorkerList({
                 latest?.expand?.recruiter_staff?.full_name ||
                 latest?.expand?.recruiter_staff?.username;
               const mainHouseName = latest?.expand?.main_house?.name;
-              const snapshotName = latest?.worker_name_snapshot?.trim() || "Thiếu thông tin";
+              const workerName = getWorkerDisplayName(user);
               const snapshotCccd = latest?.worker_cccd_snapshot || "";
 
               return (
                 <Fragment key={user.id}>
                   <WorkerDesktopCard
-                    name={snapshotName}
+                    name={workerName}
                     username={user.username}
                     uid={latest?.uid || user.uid}
                     employeeCode={latest?.employee_code || ""}
@@ -1175,7 +1176,7 @@ function WorkerList({
                   >
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold">
-                        {snapshotName}
+                        {workerName}
                       </div>
                       <div className="mt-0.5 text-[11px] text-muted-foreground">
                         {user.uid && (

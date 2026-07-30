@@ -53,6 +53,10 @@ function isRecruitedByViewer(worker: StaffWorkerRecord, viewerId?: string) {
   );
 }
 
+function getWorkerDisplayName(worker: StaffWorkerRecord) {
+  return worker.user.full_name?.trim() || worker.user.username?.trim() || "Thiếu thông tin";
+}
+
 export function StaffWorkerDirectory({
   workers,
   viewer,
@@ -103,6 +107,7 @@ export function StaffWorkerDirectory({
 
         if (query) {
           const haystack = [
+            worker.user.full_name,
             worker.user.username,
             worker.user.phone,
             worker.user.uid,
@@ -133,8 +138,8 @@ export function StaffWorkerDirectory({
         if (aTime === null && bTime !== null) return 1;
         if (aTime !== null && bTime === null) return -1;
 
-        const aName = a.latestHistory?.worker_name_snapshot || "Thiếu thông tin";
-        const bName = b.latestHistory?.worker_name_snapshot || "Thiếu thông tin";
+        const aName = getWorkerDisplayName(a);
+        const bName = getWorkerDisplayName(b);
         const nameOrder = aName.localeCompare(bName, "vi", { sensitivity: "base" });
         return nameOrder || a.user.id.localeCompare(b.user.id);
       });
@@ -230,7 +235,7 @@ export function StaffWorkerDirectory({
               latest?.expand?.recruiter_staff?.full_name ||
               latest?.expand?.recruiter_staff?.username;
             const mainHouseName = latest?.expand?.main_house?.name;
-            const snapshotName = latest?.worker_name_snapshot?.trim() || "Thiếu thông tin";
+            const workerName = getWorkerDisplayName(worker);
             const snapshotCccd = latest?.worker_cccd_snapshot || "";
             const snapshotDateOfBirth = latest?.worker_date_of_birth_snapshot;
             const snapshotAddress = latest?.worker_address_snapshot || latest?.hometown_snapshot;
@@ -238,7 +243,7 @@ export function StaffWorkerDirectory({
             return (
               <Fragment key={worker.user.id}>
                 <WorkerDesktopCard
-                  name={snapshotName}
+                  name={workerName}
                   username={worker.user.username}
                   uid={latest?.uid || worker.user.uid}
                   employeeCode={latest?.employee_code || ""}
@@ -265,7 +270,7 @@ export function StaffWorkerDirectory({
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0 flex-1 overflow-hidden">
                       <div className="truncate text-sm font-semibold">
-                        {snapshotName}
+                        {workerName}
                       </div>
                       <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
                         Mã NV: {latest?.employee_code || "Chưa có"} · CCCD:{" "}
