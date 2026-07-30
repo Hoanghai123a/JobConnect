@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Download, FileDown } from "lucide-react";
+import { Download, FileDown, ImageDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { CccdHistoryExportDialog } from "@/components/cccd/CccdHistoryExportDialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -25,7 +26,14 @@ import type { FactoryRecord } from "@/lib/factories";
 import type { StaffWorkerRecord } from "@/lib/staff-permissions";
 import type { EmploymentHistoryRecord } from "@/lib/employment";
 import type { UserRecord } from "@/lib/pocketbase";
+import { getApprovalStatus } from "@/lib/user-approval";
 import { toast } from "sonner";
+
+const APPROVAL_STATUS_LABELS = {
+  pending: "Chờ duyệt",
+  approved: "Đã duyệt",
+  rejected: "Từ chối",
+} as const;
 
 function computeTenureDays(histories: EmploymentHistoryRecord[], referenceDate = new Date()) {
   const refTime = referenceDate.getTime();
@@ -50,18 +58,23 @@ function buildTenureDaysByUserId(workers: StaffWorkerRecord[]) {
   return map;
 }
 
-function buildBasicRows(histories: EmploymentHistoryRecord[], tenureDaysByUserId: Map<string, number>) {
+function buildBasicRows(
+  histories: EmploymentHistoryRecord[],
+  tenureDaysByUserId: Map<string, number>,
+) {
   return histories.map((history, index) => ({
     STT: index + 1,
     "Mã lịch sử": history.uid || "",
     "Mã nhân viên": history.employee_code || "",
-    "Họ tên tại nhà máy": history.worker_name_snapshot,
-    CCCD: history.worker_cccd_snapshot,
+    "Họ tên tại thời điểm đi làm": history.worker_name_snapshot,
+    "CCCD tại thời điểm đi làm": history.worker_cccd_snapshot,
+    "Ngày sinh tại thời điểm đi làm": formatDateOnly(history.worker_date_of_birth_snapshot),
+    "Địa chỉ thường trú tại thời điểm đi làm":
+      history.worker_address_snapshot || history.hometown_snapshot || "",
+    "Ngày cấp CCCD tại thời điểm đi làm": formatDateOnly(history.cccd_issue_date),
     "Mã số thuế": history.worker_tax_code_snapshot || "",
     "Người tuyển":
-      history.expand?.recruiter_staff?.full_name ||
-      history.expand?.recruiter_staff?.username ||
-      "",
+      history.expand?.recruiter_staff?.full_name || history.expand?.recruiter_staff?.username || "",
     "Nhà máy": history.expand?.factory?.name || "",
     "Nhà chính": history.expand?.main_house?.name || "",
     "Ngày vào": formatDateOnly(history.join_date),
@@ -73,41 +86,54 @@ function buildBasicRows(histories: EmploymentHistoryRecord[], tenureDaysByUserId
   }));
 }
 
-function buildFullRows(histories: EmploymentHistoryRecord[], tenureDaysByUserId: Map<string, number>) {
+function buildFullRows(
+  histories: EmploymentHistoryRecord[],
+  tenureDaysByUserId: Map<string, number>,
+) {
   return histories.map((history, index) => {
-    const u = history.expand?.user;
+    const user = history.expand?.user;
     return {
       STT: index + 1,
-      "Mã tài khoản (UID)": u?.uid || "",
+      "Mã tài khoản (UID)": user?.uid || "",
+      "Tên đăng nhập": user?.username || "",
+      "Số điện thoại": user?.phone || "",
+      Email: user?.email || "",
+      "Vai trò": user?.role || "",
+      "Giới tính": user?.gender || "",
+      "Trạng thái tài khoản": user?.status || "",
+      "Trạng thái duyệt": user ? APPROVAL_STATUS_LABELS[getApprovalStatus(user)] : "",
       "Mã lịch sử": history.uid || "",
-      "Họ tên gốc": u?.full_name || "",
-      "CCCD gốc": u?.cccd || "",
-      "Số điện thoại": u?.phone || "",
-      "Tên đăng nhập": u?.username || "",
-      "Vai trò": u?.role || "",
-      "Trạng thái tài khoản": u?.status || "",
       "Mã nhân viên": history.employee_code || "",
+      "Họ tên tại thời điểm đi làm": history.worker_name_snapshot || "",
+      "CCCD tại thời điểm đi làm": history.worker_cccd_snapshot || "",
+      "Ngày sinh tại thời điểm đi làm": formatDateOnly(
+        history.worker_date_of_birth_snapshot,
+      ),
+      "Địa chỉ thường trú tại thời điểm đi làm":
+        history.worker_address_snapshot || history.hometown_snapshot || "",
+      "Ngày cấp CCCD tại thời điểm đi làm": formatDateOnly(history.cccd_issue_date),
+      "Mã số thuế": history.worker_tax_code_snapshot || "",
       "Nhà máy": history.expand?.factory?.name || "",
       "Nhà chính": history.expand?.main_house?.name || "",
       "Ngày vào": formatDateOnly(history.join_date),
       "Ngày nghỉ": formatDateOnly(history.leave_date),
+      "Trạng thái lịch sử": history.status === "working" ? "Đang làm" : "Đã nghỉ",
       "Người tuyển":
         history.expand?.recruiter_staff?.full_name ||
         history.expand?.recruiter_staff?.username ||
         "",
       "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
-      "Họ tên tại nhà máy": history.worker_name_snapshot,
-      "CCCD tại nhà máy": history.worker_cccd_snapshot,
-      "Mã số thuế": history.worker_tax_code_snapshot || "",
-      "Trạng thái lịch sử": history.status === "working" ? "Đang làm" : "Đã nghỉ",
       "Ghi chú": history.note || "",
-      "Ngân hàng": u?.bank_name || "",
-      "Số tài khoản": u?.bank_account_number || "",
-      "Tên chủ tài khoản": u?.bank_account_name || "",
-      "Lương cơ bản": u?.lcb ?? "",
-      "Chuyên cần": u?.chuyen_can ?? "",
-      "Đời sống": u?.doi_song ?? "",
-      "Thâm niên": u?.tham_nien ?? "",
+      "Ngân hàng": user?.bank_name || "",
+      "Số tài khoản": user?.bank_account_number || "",
+      "Tên chủ tài khoản": user?.bank_account_name || "",
+      "Lương cơ bản": user?.lcb ?? "",
+      "Chuyên cần": user?.chuyen_can ?? "",
+      "Đời sống": user?.doi_song ?? "",
+      "Thâm niên": user?.tham_nien ?? "",
+      "Giờ HC mặc định": user?.default_hc_hours ?? "",
+      "Giờ OT mặc định": user?.default_ot_hours ?? "",
+      "Ngày chốt công": user?.attendance_cutoff_day ?? "",
     };
   });
 }
@@ -124,6 +150,7 @@ function StaffExportPage() {
   const [factoryFilter, setFactoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [exportingAll, setExportingAll] = useState(false);
+  const [cccdExportOpen, setCccdExportOpen] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -182,7 +209,11 @@ function StaffExportPage() {
       toast.warning("Không có dữ liệu để xuất");
       return;
     }
-    exportToExcel(`jobconnect_export_co_ban_${Date.now()}`, { "Lao động cơ bản": basicRows }, { "Lao động cơ bản": ["Ngày vào", "Ngày nghỉ"] });
+    exportToExcel(
+      `jobconnect_export_co_ban_${Date.now()}`,
+      { "Lao động cơ bản": basicRows },
+      { "Lao động cơ bản": ["Ngày sinh", "Ngày cấp CCCD", "Ngày vào", "Ngày nghỉ"] },
+    );
     toast.success("Đã xuất Excel cơ bản");
   };
 
@@ -191,7 +222,11 @@ function StaffExportPage() {
       toast.warning("Không có dữ liệu để xuất");
       return;
     }
-    exportToExcel(`jobconnect_export_day_du_${Date.now()}`, { "Lao động đầy đủ": fullRows }, { "Lao động đầy đủ": ["Ngày vào", "Ngày nghỉ"] });
+    exportToExcel(
+      `jobconnect_export_day_du_${Date.now()}`,
+      { "Lao động đầy đủ": fullRows },
+      { "Lao động đầy đủ": ["Ngày cấp CCCD", "Ngày vào", "Ngày nghỉ"] },
+    );
     toast.success("Đã xuất Excel đầy đủ");
   };
 
@@ -206,10 +241,12 @@ function StaffExportPage() {
         toast.warning("Không có dữ liệu từ PocketBase để xuất");
         return;
       }
-      exportToExcel(`jobconnect_export_tat_ca_pocketbase_${Date.now()}`, {
-        "Tất cả lao động": rows,
-      },
-      { "Tất cả lao động": ["Ngày vào", "Ngày nghỉ"] }
+      exportToExcel(
+        `jobconnect_export_tat_ca_pocketbase_${Date.now()}`,
+        {
+          "Tất cả lao động": rows,
+        },
+        { "Tất cả lao động": ["Ngày cấp CCCD", "Ngày vào", "Ngày nghỉ"] },
       );
       toast.success("Đã xuất tất cả dữ liệu từ PocketBase");
     } catch {
@@ -277,10 +314,41 @@ function StaffExportPage() {
           </Button>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Bản đầy đủ kèm thông tin cá nhân (mã tài khoản UID, vai trò, CCCD gốc), tài khoản ngân hàng và
-          các tham số lương.
+          Bản đầy đủ gồm thông tin nhân sự, lịch sử làm việc, tài khoản ngân hàng
+          và trạng thái tài khoản.
         </p>
       </div>
+
+      <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 shadow-soft">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <ImageDown className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold">Xuất ảnh CCCD theo lịch sử đi làm</div>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Nhóm theo nhà máy và ngày vào; có thể xuất cây thư mục ảnh hoặc file Word sẵn sàng in.
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="secondary"
+          className="mt-3 w-full rounded-xl"
+          onClick={() => setCccdExportOpen(true)}
+        >
+          <ImageDown className="h-4 w-4" />
+          Xuất ảnh CCCD
+        </Button>
+      </div>
+
+      <CccdHistoryExportDialog
+        open={cccdExportOpen}
+        onClose={() => setCccdExportOpen(false)}
+        histories={filteredHistories}
+        users={workers.map((worker) => worker.user)}
+        factories={factories}
+      />
 
       {loading ? (
         <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">

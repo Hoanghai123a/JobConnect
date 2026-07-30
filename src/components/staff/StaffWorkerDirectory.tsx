@@ -1,12 +1,13 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { BriefcaseBusiness, Plus, Search, UserRoundSearch } from "lucide-react";
+import { BriefcaseBusiness, FileDown, Plus, Search, UserRoundSearch } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { WorkerEmploymentDrawer } from "@/components/employment/WorkerEmploymentDrawer";
 import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
 import { WorkerDesktopCard } from "@/components/staff/WorkerDesktopCard";
 import { ScopeChip } from "@/components/staff/WorkerQuickDrawer";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -102,10 +103,8 @@ export function StaffWorkerDirectory({
 
         if (query) {
           const haystack = [
-            worker.user.full_name,
             worker.user.username,
             worker.user.phone,
-            worker.user.cccd,
             worker.user.uid,
             ...worker.histories.flatMap((history) => [
               history.uid,
@@ -134,8 +133,8 @@ export function StaffWorkerDirectory({
         if (aTime === null && bTime !== null) return 1;
         if (aTime !== null && bTime === null) return -1;
 
-        const aName = a.user.full_name || a.user.username || "";
-        const bName = b.user.full_name || b.user.username || "";
+        const aName = a.latestHistory?.worker_name_snapshot || "Thiếu thông tin";
+        const bName = b.latestHistory?.worker_name_snapshot || "Thiếu thông tin";
         const nameOrder = aName.localeCompare(bName, "vi", { sensitivity: "base" });
         return nameOrder || a.user.id.localeCompare(b.user.id);
       });
@@ -227,51 +226,34 @@ export function StaffWorkerDirectory({
           {visibleWorkers.map((worker) => {
             const latest = worker.latestHistory;
             const isWorking = latest ? isCurrentlyWorking(latest) : false;
-            const recruitedByViewer = isRecruitedByViewer(worker, viewer?.id);
             const recruiterName =
               latest?.expand?.recruiter_staff?.full_name ||
               latest?.expand?.recruiter_staff?.username;
             const mainHouseName = latest?.expand?.main_house?.name;
-            const desktopBadges = (
-              <>
-                {worker.reasons.includes("qlnm") && (
-                  <StatusChip tone="info">Thuộc nhà máy phụ trách</StatusChip>
-                )}
-                {recruitedByViewer && <StatusChip tone="primary">Bạn là người tuyển</StatusChip>}
-                {(worker.canReportAdvance || worker.canReportLeave || worker.canReportJoin) && (
-                  <StatusChip tone="success">Có thể thao tác</StatusChip>
-                )}
-              </>
-            );
-            const hasDesktopBadges =
-              worker.reasons.includes("qlnm") ||
-              recruitedByViewer ||
-              worker.canReportAdvance ||
-              worker.canReportLeave ||
-              worker.canReportJoin;
+            const snapshotName = latest?.worker_name_snapshot?.trim() || "Thiếu thông tin";
+            const snapshotCccd = latest?.worker_cccd_snapshot || "";
+            const snapshotDateOfBirth = latest?.worker_date_of_birth_snapshot;
+            const snapshotAddress = latest?.worker_address_snapshot || latest?.hometown_snapshot;
 
             return (
               <Fragment key={worker.user.id}>
                 <WorkerDesktopCard
-                  name={worker.user.full_name || worker.user.username || "Người lao động"}
+                  name={snapshotName}
                   username={worker.user.username}
                   uid={latest?.uid || worker.user.uid}
                   employeeCode={latest?.employee_code || ""}
-                  cccd={maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)}
+                  cccd={maskCccd(snapshotCccd)}
                   taxCode={latest?.worker_tax_code_snapshot}
                   phone={worker.user.phone}
-                  dateOfBirth={
-                    worker.user.date_of_birth ? formatDate(worker.user.date_of_birth) : undefined
-                  }
+                  dateOfBirth={snapshotDateOfBirth ? formatDate(snapshotDateOfBirth) : undefined}
                   gender={worker.user.gender}
-                  address={worker.user.address}
+                  address={snapshotAddress}
                   factoryName={latest?.expand?.factory?.name || ""}
                   mainHouseName={mainHouseName}
                   recruiterName={recruiterName}
                   joinDate={formatDate(latest?.join_date)}
                   leaveDate={latest?.leave_date ? formatDate(latest.leave_date) : undefined}
                   isWorking={isWorking}
-                  badges={hasDesktopBadges ? desktopBadges : undefined}
                   onClick={() => onSelectWorker(worker)}
                 />
 
@@ -283,11 +265,11 @@ export function StaffWorkerDirectory({
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0 flex-1 overflow-hidden">
                       <div className="truncate text-sm font-semibold">
-                        {worker.user.full_name || worker.user.username || "Người lao động"}
+                        {snapshotName}
                       </div>
                       <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
                         Mã NV: {latest?.employee_code || "Chưa có"} · CCCD:{" "}
-                        {maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)}
+                        {maskCccd(snapshotCccd)}
                         {latest?.worker_tax_code_snapshot &&
                           ` · MST: ${latest.worker_tax_code_snapshot}`}
                       </div>
@@ -307,17 +289,6 @@ export function StaffWorkerDirectory({
                     </StatusChip>
                   </div>
 
-                  <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
-                    {worker.reasons.includes("qlnm") && (
-                      <StatusChip tone="info">Thuộc nhà máy phụ trách</StatusChip>
-                    )}
-                    {recruitedByViewer && (
-                      <StatusChip tone="primary">Bạn là người tuyển</StatusChip>
-                    )}
-                    {(worker.canReportAdvance || worker.canReportLeave || worker.canReportJoin) && (
-                      <StatusChip tone="success">Có thể thao tác</StatusChip>
-                    )}
-                  </div>
                 </button>
               </Fragment>
             );
@@ -456,6 +427,15 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
             </button>
             <button
               type="button"
+              onClick={() => navigate({ to: "/staff/export" })}
+              className="hidden h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted active:scale-[0.98] desktop:flex"
+              aria-label="Xuất Excel"
+            >
+              <FileDown className="h-4 w-4" />
+              Xuất Excel
+            </button>
+            <button
+              type="button"
               onClick={() => setQuickCreateOpen(true)}
               className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground shadow active:scale-[0.98]"
               aria-label="Tạo nhanh tài khoản NLĐ"
@@ -467,6 +447,28 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
         ) : undefined
       }
     >
+      {isAllMode && (
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/staff/export" })}
+          className="block w-full text-left desktop:hidden"
+          aria-label="Mở trang xuất Excel"
+        >
+          <Card className="group flex items-center gap-3 rounded-2xl border-primary/20 bg-primary/5 p-4 text-left shadow-soft transition hover:border-primary/40 hover:bg-primary/10 active:scale-[0.99]">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+              <FileDown className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-foreground">Xuất Excel</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                Xuất danh sách và dữ liệu lao động theo phạm vi quyền truy cập.
+              </div>
+            </div>
+            <FileDown className="h-4 w-4 shrink-0 text-primary transition-transform group-hover:translate-y-0.5" />
+          </Card>
+        </button>
+      )}
+
       <StaffWorkerDirectory
         workers={workers}
         viewer={(user as UserRecord | null) ?? null}

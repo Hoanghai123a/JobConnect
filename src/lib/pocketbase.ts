@@ -14,6 +14,7 @@ export interface UserRecord {
   phone?: string;
   full_name?: string;
   cccd?: string;
+  cccd_issue_date?: string;
   uid?: string;
   role?: Role;
   approved?: boolean | string;

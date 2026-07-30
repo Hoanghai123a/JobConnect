@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { escapePb } from "@/lib/delegations";
 import { markSeen } from "@/lib/seen";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { ResponsiveOverlay } from "@/components/layout/ResponsiveOverlay";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { toneBorder, ChipTone } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -414,7 +415,7 @@ function NewsPage() {
         chipActions={
           <button
             type="button"
-            onClick={() => setShowAdvancedFilters((value) => !value)}
+            onClick={() => setShowAdvancedFilters(true)}
             aria-expanded={showAdvancedFilters}
             className={cn(
               "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition",
@@ -431,7 +432,32 @@ function NewsPage() {
           </button>
         }
       />
-      {showAdvancedFilters && (
+      <ResponsiveOverlay
+        open={showAdvancedFilters}
+        onOpenChange={setShowAdvancedFilters}
+        title="Bộ lọc nâng cao"
+        description="Chọn các điều kiện để thu gọn danh sách tuyển dụng."
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setAreaFilter("all");
+                setEmploymentTypeFilter("all");
+                setEnvironmentFilter("all");
+                setPostureFilter("all");
+                setProductionQcFilter("all");
+              }}
+            >
+              Đặt lại
+            </Button>
+            <Button type="button" onClick={() => setShowAdvancedFilters(false)}>
+              Áp dụng
+            </Button>
+          </>
+        }
+      >
         <AdvancedFilters
           area={areaFilter}
           areaOptions={areaOptions}
@@ -445,7 +471,7 @@ function NewsPage() {
           productionQc={productionQcFilter}
           onProductionQcChange={setProductionQcFilter}
         />
-      )}
+      </ResponsiveOverlay>
 
       {filtered.length === 0 ? (
         <EmptyState

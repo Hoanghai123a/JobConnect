@@ -20,6 +20,7 @@ import {
   formatMoney,
 } from "@/lib/advances";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { ResponsiveOverlay } from "@/components/layout/ResponsiveOverlay";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusChip, toneBorder } from "@/components/ui/status-chip";
@@ -762,7 +763,8 @@ export function AdvancesPage() {
       "Ngân hàng": row.bank_name || "",
       "Số tài khoản": row.bank_account_number || "",
       "Tên chủ tài khoản": row.bank_account_name || "",
-      "Hình thức nhận tiền": PAYOUT_METHOD_META[normalizeAdvancePayoutMethod(row.payout_method)].label,
+      "Hình thức nhận tiền":
+        PAYOUT_METHOD_META[normalizeAdvancePayoutMethod(row.payout_method)].label,
       "Số tiền": row.amount,
       "Số tiền ban đầu":
         row.original_amount && row.original_amount !== row.amount ? row.original_amount : "",
@@ -778,7 +780,11 @@ export function AdvancesPage() {
       "Ngày giải ngân": formatDateOnly(row.disbursed_at),
       "Ngày thu hồi": formatDateOnly(row.recovered_at),
     }));
-    exportToExcel(`ung_luong_${Date.now()}`, { "Ứng lương": rows }, { "Ứng lương": ["Ngày vào làm", "Ngày gửi", "Ngày duyệt", "Ngày giải ngân", "Ngày thu hồi"] });
+    exportToExcel(
+      `ung_luong_${Date.now()}`,
+      { "Ứng lương": rows },
+      { "Ứng lương": ["Ngày vào làm", "Ngày gửi", "Ngày duyệt", "Ngày giải ngân", "Ngày thu hồi"] },
+    );
   };
 
   if (!isAdmin && !isStaff) {
@@ -796,140 +802,137 @@ export function AdvancesPage() {
           <Send className="h-4 w-4" /> Báo ứng mới
         </Button>
 
-        <Dialog open={showProfile} onOpenChange={setShowProfile}>
-          <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-[26rem] overflow-y-auto rounded-2xl p-4">
-            <DialogHeader>
-              <DialogTitle>Báo ứng mới</DialogTitle>
-              <DialogDescription>Nhập thông tin và gửi yêu cầu ứng lương.</DialogDescription>
-            </DialogHeader>
-            <form
-              onSubmit={async (e) => {
-                const ok = await submit(e);
-                if (ok) setShowProfile(false);
-              }}
-              className="min-w-0 space-y-3"
-            >
-              <div className="min-w-0 space-y-3">
-                <UserProfileCollapsible user={selectedAdvanceUser} policy={advancePolicy} />
+        <ResponsiveOverlay
+          open={showProfile}
+          onOpenChange={setShowProfile}
+          title="Báo ứng mới"
+          description="Nhập thông tin và gửi yêu cầu ứng lương."
+          presentation="full"
+        >
+          <form
+            onSubmit={async (e) => {
+              const ok = await submit(e);
+              if (ok) setShowProfile(false);
+            }}
+            className="min-w-0 space-y-3"
+          >
+            <div className="min-w-0 space-y-3">
+              <UserProfileCollapsible user={selectedAdvanceUser} policy={advancePolicy} />
 
-                {advancePolicyLoading && (
-                  <div className="rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
-                    Đang kiểm tra nhà máy và hạn mức ứng tiền...
-                  </div>
-                )}
-                {!advancePolicyLoading && advancePolicyError && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                    {advancePolicyError}
-                  </div>
-                )}
-                {advancePolicy && (
-                  <div className="flex flex-wrap items-center gap-1.5 rounded-xl border bg-primary/5 p-3 text-xs">
-                    <span className="text-muted-foreground">Nhà máy áp dụng:</span>
-                    <span className="font-semibold">{advancePolicy.factoryName}</span>
-                    {!advancePolicy.isWorking && <StatusChip tone="warning">Đã nghỉ</StatusChip>}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-2">
-                  <StatCard
-                    label="Hạn mức"
-                    value={limit > 0 ? formatMoney(limit) : "Chưa cài"}
-                    icon={Wallet}
-                    tone="primary"
-                  />
-                  <StatCard
-                    label="Đã báo ứng chưa thu hồi"
-                    value={formatMoney(outstanding)}
-                    icon={Banknote}
-                    tone="warning"
-                  />
+              {advancePolicyLoading && (
+                <div className="rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  Đang kiểm tra nhà máy và hạn mức ứng tiền...
                 </div>
-                <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2 text-xs text-muted-foreground">
-                  Còn có thể báo ứng:{" "}
-                  <span className="font-semibold text-foreground">
-                    {limit > 0 ? formatMoney(available) : "—"}
-                  </span>
+              )}
+              {!advancePolicyLoading && advancePolicyError && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                  {advancePolicyError}
                 </div>
+              )}
+              {advancePolicy && (
+                <div className="flex flex-wrap items-center gap-1.5 rounded-xl border bg-primary/5 p-3 text-xs">
+                  <span className="text-muted-foreground">Nhà máy áp dụng:</span>
+                  <span className="font-semibold">{advancePolicy.factoryName}</span>
+                  {!advancePolicy.isWorking && <StatusChip tone="warning">Đã nghỉ</StatusChip>}
+                </div>
+              )}
 
-                <AdvancePayoutMethodPicker
-                  value={payoutMethod}
-                  onChange={setPayoutMethod}
+              <div className="grid grid-cols-2 gap-2">
+                <StatCard
+                  label="Hạn mức"
+                  value={limit > 0 ? formatMoney(limit) : "Chưa cài"}
+                  icon={Wallet}
+                  tone="primary"
                 />
+                <StatCard
+                  label="Đã báo ứng chưa thu hồi"
+                  value={formatMoney(outstanding)}
+                  icon={Banknote}
+                  tone="warning"
+                />
+              </div>
+              <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2 text-xs text-muted-foreground">
+                Còn có thể báo ứng:{" "}
+                <span className="font-semibold text-foreground">
+                  {limit > 0 ? formatMoney(available) : "—"}
+                </span>
+              </div>
 
-                {payoutMethod === "bank_transfer" && (
-                  <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
-                    <div className="text-xs font-semibold text-muted-foreground">
-                      Tài khoản nhận tiền
+              <AdvancePayoutMethodPicker value={payoutMethod} onChange={setPayoutMethod} />
+
+              {payoutMethod === "bank_transfer" && (
+                <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
+                  <div className="text-xs font-semibold text-muted-foreground">
+                    Tài khoản nhận tiền
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Ngân hàng</Label>
+                    <Select
+                      value={bankForm.bank_name || ""}
+                      onValueChange={(value) => setBankForm({ ...bankForm, bank_name: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Chọn ngân hàng" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {VN_BANKS.map((bank) => (
+                          <SelectItem key={bank.code} value={bank.name}>
+                            {bank.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="min-w-0 space-y-1">
+                      <Label>Số TK</Label>
+                      <Input
+                        value={bankForm.bank_account_number}
+                        inputMode="numeric"
+                        onChange={(e) =>
+                          setBankForm({
+                            ...bankForm,
+                            bank_account_number: e.target.value.replace(/\D/g, ""),
+                          })
+                        }
+                      />
                     </div>
-                    <div className="space-y-1">
-                      <Label>Ngân hàng</Label>
-                      <Select
-                        value={bankForm.bank_name || ""}
-                        onValueChange={(value) => setBankForm({ ...bankForm, bank_name: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Chọn ngân hàng" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-72">
-                          {VN_BANKS.map((bank) => (
-                            <SelectItem key={bank.code} value={bank.name}>
-                              {bank.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="min-w-0 space-y-1">
-                        <Label>Số TK</Label>
-                        <Input
-                          value={bankForm.bank_account_number}
-                          inputMode="numeric"
-                          onChange={(e) =>
-                            setBankForm({
-                              ...bankForm,
-                              bank_account_number: e.target.value.replace(/\D/g, ""),
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="min-w-0 space-y-1">
-                        <Label>Tên TK</Label>
-                        <Input
-                          value={bankForm.bank_account_name}
-                          onChange={(e) =>
-                            setBankForm({ ...bankForm, bank_account_name: e.target.value })
-                          }
-                        />
-                      </div>
+                    <div className="min-w-0 space-y-1">
+                      <Label>Tên TK</Label>
+                      <Input
+                        value={bankForm.bank_account_name}
+                        onChange={(e) =>
+                          setBankForm({ ...bankForm, bank_account_name: e.target.value })
+                        }
+                      />
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                <div className="space-y-1">
-                  <Label>Số tiền xin ứng</Label>
-                  <Input
-                    value={amountText}
-                    onChange={(e) => setAmountText(formatMoneyInput(e.target.value))}
-                    inputMode="numeric"
-                    placeholder="0"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Lý do ứng</Label>
-                  <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={sending || advancePolicyLoading || !advancePolicy}
-                >
-                  <Send className="h-4 w-4" /> {sending ? "Đang gửi…" : "Gửi Ứng lương"}
-                </Button>
+              <div className="space-y-1">
+                <Label>Số tiền xin ứng</Label>
+                <Input
+                  value={amountText}
+                  onChange={(e) => setAmountText(formatMoneyInput(e.target.value))}
+                  inputMode="numeric"
+                  placeholder="0"
+                />
               </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+              <div className="space-y-1">
+                <Label>Lý do ứng</Label>
+                <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={sending || advancePolicyLoading || !advancePolicy}
+              >
+                <Send className="h-4 w-4" /> {sending ? "Đang gửi…" : "Gửi Ứng lương"}
+              </Button>
+            </div>
+          </form>
+        </ResponsiveOverlay>
 
         <div className="flex items-center gap-2 px-1 pt-2">
           <History className="h-4 w-4 text-muted-foreground" />
@@ -1311,7 +1314,8 @@ export function AdvancesPage() {
                   onCheckedChange={(checked) =>
                     setSelectedIds((current) => {
                       const next = new Set(current);
-                      checked ? next.add(row.id) : next.delete(row.id);
+                      if (checked) next.add(row.id);
+                      else next.delete(row.id);
                       return next;
                     })
                   }
@@ -1726,7 +1730,9 @@ function AdvanceDetailDialog({
               <div className="text-[11px] text-muted-foreground">Hình thức nhận tiền</div>
               <div className="mt-1 font-medium">{PAYOUT_METHOD_META[payoutMethod].label}</div>
               {payoutMethod === "cash" ? (
-                <div className="mt-0.5 text-muted-foreground">Nhận tiền trực tiếp, không tạo mã QR.</div>
+                <div className="mt-0.5 text-muted-foreground">
+                  Nhận tiền trực tiếp, không tạo mã QR.
+                </div>
               ) : (
                 <>
                   <div className="mt-1 font-medium">{advanceDetail.bank_name || "-"}</div>
@@ -1908,10 +1914,7 @@ function getAdvanceRequesterName(row: AdvanceRecord) {
 function getAdvanceRequesterMeta(row: AdvanceRecord) {
   const requester = row.expand?.requested_by;
   if (requester) {
-    return (
-      [requester.phone].filter(Boolean).join(" - ") ||
-      "-"
-    );
+    return [requester.phone].filter(Boolean).join(" - ") || "-";
   }
   if (row.requested_by && row.user && row.requested_by === row.user) {
     return [row.employee_code, row.company, row.phone].filter(Boolean).join(" - ") || "-";
@@ -1919,7 +1922,10 @@ function getAdvanceRequesterMeta(row: AdvanceRecord) {
   return row.requested_by || "-";
 }
 
-function getAdvanceRequesterField(row: AdvanceRecord, field: "employee_code" | "company" | "phone") {
+function getAdvanceRequesterField(
+  row: AdvanceRecord,
+  field: "employee_code" | "company" | "phone",
+) {
   if (row.requested_by && row.user && row.requested_by === row.user) return row[field] || "";
   return field === "phone" ? row.expand?.requested_by?.phone || "" : "";
 }

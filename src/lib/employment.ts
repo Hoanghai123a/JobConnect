@@ -5,6 +5,7 @@ import type { CccdVersionRecord } from "./cccd-versions";
 import { relationInFilter } from "./delegations";
 import { updateCachedHistory, updateCachedUser } from "./staff-cache";
 import { fetchAppSettings } from "./app-settings";
+import { normalizeDate } from "./date-utils";
 
 export type EmploymentStatus = "working" | "left";
 
@@ -51,6 +52,10 @@ export interface EmploymentHistoryRecord {
   employee_code?: string;
   worker_name_snapshot: string;
   worker_cccd_snapshot: string;
+  worker_date_of_birth_snapshot?: string;
+  worker_address_snapshot?: string;
+  hometown_snapshot?: string;
+  cccd_issue_date?: string;
   worker_tax_code_snapshot?: string;
   recruiter_staff?: string;
   cccd_version?: string;
@@ -76,6 +81,10 @@ export interface EmploymentDraft {
   employee_code?: string;
   worker_name_snapshot: string;
   worker_cccd_snapshot: string;
+  worker_date_of_birth_snapshot: string;
+  worker_address_snapshot: string;
+  hometown_snapshot?: string;
+  cccd_issue_date: string;
   worker_tax_code_snapshot?: string;
   recruiter_staff?: string;
   cccd_version?: string;
@@ -83,6 +92,93 @@ export interface EmploymentDraft {
   leave_date?: string;
   status: EmploymentStatus;
   note?: string;
+}
+
+export type EmploymentPersonalSnapshot = Pick<
+  EmploymentDraft,
+  | "worker_name_snapshot"
+  | "worker_cccd_snapshot"
+  | "worker_date_of_birth_snapshot"
+  | "worker_address_snapshot"
+  | "cccd_issue_date"
+>;
+
+const SNAPSHOT_FIELD_LABELS: Record<keyof EmploymentPersonalSnapshot, string> = {
+  worker_name_snapshot: "họ tên",
+  worker_cccd_snapshot: "CCCD",
+  worker_date_of_birth_snapshot: "ngày sinh",
+  worker_address_snapshot: "địa chỉ thường trú",
+  cccd_issue_date: "ngày cấp CCCD",
+};
+
+function cleanSnapshotText(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+/**
+ * Trả về thông tin cá nhân đã lưu của một lịch sử.
+ * Chỉ khi chưa có lịch sử mới lấy hồ sơ users làm dữ liệu gợi ý tạo mới.
+ */
+export function getEmploymentPersonalSnapshot(
+  history?: Partial<EmploymentHistoryRecord> | null,
+  user?: Partial<UserRecord> | null,
+): EmploymentPersonalSnapshot {
+  if (history) {
+    return {
+      worker_name_snapshot: cleanSnapshotText(history.worker_name_snapshot),
+      worker_cccd_snapshot: cleanSnapshotText(history.worker_cccd_snapshot),
+      worker_date_of_birth_snapshot: normalizeDate(history.worker_date_of_birth_snapshot),
+      worker_address_snapshot:
+        cleanSnapshotText(history.worker_address_snapshot) ||
+        cleanSnapshotText(history.hometown_snapshot),
+      cccd_issue_date: normalizeDate(history.cccd_issue_date),
+    };
+  }
+
+  return {
+    worker_name_snapshot:
+      cleanSnapshotText(user?.full_name) || cleanSnapshotText(user?.username),
+    worker_cccd_snapshot: cleanSnapshotText(user?.cccd),
+    worker_date_of_birth_snapshot: normalizeDate(user?.date_of_birth),
+    worker_address_snapshot: cleanSnapshotText(user?.address),
+    cccd_issue_date: normalizeDate(user?.cccd_issue_date),
+  };
+}
+
+export function getMissingEmploymentSnapshotFields(
+  snapshot: Partial<EmploymentPersonalSnapshot>,
+) {
+  return (Object.keys(SNAPSHOT_FIELD_LABELS) as Array<keyof EmploymentPersonalSnapshot>)
+    .filter((field) => !cleanSnapshotText(snapshot[field]))
+    .map((field) => SNAPSHOT_FIELD_LABELS[field]);
+}
+
+function normalizeEmploymentPayload<T extends Partial<EmploymentDraft>>(payload: T): T {
+  const normalized = { ...payload } as T & Partial<EmploymentDraft>;
+
+  if ("worker_name_snapshot" in payload) {
+    normalized.worker_name_snapshot = cleanSnapshotText(payload.worker_name_snapshot);
+  }
+  if ("worker_cccd_snapshot" in payload) {
+    normalized.worker_cccd_snapshot = cleanSnapshotText(payload.worker_cccd_snapshot);
+  }
+  if ("worker_date_of_birth_snapshot" in payload) {
+    normalized.worker_date_of_birth_snapshot = normalizeDate(
+      payload.worker_date_of_birth_snapshot,
+    );
+  }
+  if ("cccd_issue_date" in payload) {
+    normalized.cccd_issue_date = normalizeDate(payload.cccd_issue_date);
+  }
+  if ("worker_address_snapshot" in payload || "hometown_snapshot" in payload) {
+    const address = cleanSnapshotText(
+      payload.worker_address_snapshot ?? payload.hometown_snapshot,
+    );
+    normalized.worker_address_snapshot = address;
+    normalized.hometown_snapshot = address;
+  }
+
+  return normalized as T;
 }
 
 export function buildHistoryUid(prefix: string, year: number, month: number, seq: number): string {
@@ -145,7 +241,7 @@ export async function fetchEmploymentHistories(userIds?: string[]) {
   return (await pb.collection("employment_histories").getFullList({
     filter,
     sort: "-join_date,-created",
-    expand: "user,factory,recruiter_staff,main_house",
+    expand: "user,factory,recruiter_staff,main_house,cccd_version",
   })) as unknown as EmploymentHistoryRecord[];
 }
 
@@ -247,11 +343,17 @@ export async function findActiveEmploymentByUser(userId: string) {
 }
 
 export async function createEmploymentHistory(draft: EmploymentDraft, opts?: { uid?: string }) {
+  const normalizedDraft = normalizeEmploymentPayload(draft);
+  const missingFields = getMissingEmploymentSnapshotFields(normalizedDraft);
+  if (missingFields.length) {
+    throw new Error(`Thiếu thông tin cá nhân của lịch sử đi làm: ${missingFields.join(", ")}.`);
+  }
+
   const uid = opts?.uid || (await generateEmploymentHistoryUid());
   const record = (await pb
     .collection("employment_histories")
     .create(
-      { ...draft, uid },
+      { ...normalizedDraft, uid },
       { expand: "user,factory,recruiter_staff,main_house,cccd_version" },
     )) as unknown as EmploymentHistoryRecord;
   await updateCachedHistory(record);
@@ -259,7 +361,8 @@ export async function createEmploymentHistory(draft: EmploymentDraft, opts?: { u
 }
 
 export async function updateEmploymentHistory(id: string, payload: Partial<EmploymentDraft>) {
-  const record = (await pb.collection("employment_histories").update(id, payload, {
+  const normalizedPayload = normalizeEmploymentPayload(payload);
+  const record = (await pb.collection("employment_histories").update(id, normalizedPayload, {
     expand: "user,factory,recruiter_staff,cccd_version",
   })) as unknown as EmploymentHistoryRecord;
   await updateCachedHistory(record);

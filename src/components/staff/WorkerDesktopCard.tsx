@@ -1,5 +1,5 @@
-﻿import type { ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+﻿import { ChevronRight } from "lucide-react";
+import { StatusChip } from "@/components/ui/status-chip";
 import { cn } from "@/lib/utils";
 
 export interface WorkerDesktopCardProps {
@@ -19,7 +19,6 @@ export interface WorkerDesktopCardProps {
   joinDate?: string;
   leaveDate?: string;
   isWorking: boolean;
-  badges?: ReactNode;
   onClick: () => void;
 }
 
@@ -49,7 +48,6 @@ export function WorkerDesktopCard({
   joinDate,
   leaveDate,
   isWorking,
-  badges,
   onClick,
 }: WorkerDesktopCardProps) {
   const initial = name.trim().charAt(0).toLocaleUpperCase("vi-VN") || "N";
@@ -97,13 +95,15 @@ export function WorkerDesktopCard({
       </div>
 
       <div className="min-w-0 space-y-1 border-l border-border/60 pl-4">
-        <InfoLine
-          label="Trạng thái"
-          value={isWorking ? "Đang làm" : "Đã nghỉ"}
-          valueClassName={
-            isWorking ? "font-medium text-success" : "font-medium text-muted-foreground"
-          }
-        />
+        <div className="flex items-center gap-2 text-[11px] leading-4">
+          <span className="shrink-0 text-muted-foreground">Trạng thái:</span>
+          <StatusChip
+            tone={isWorking ? "success" : "danger"}
+            className="px-2 py-1 text-xs font-semibold shadow-sm"
+          >
+            {isWorking ? "Đang làm" : "Đã nghỉ"}
+          </StatusChip>
+        </div>
         <InfoLine label="Mã NV" value={employeeCode} />
         <InfoLine label="Ngày vào" value={joinDate} />
         <InfoLine label="Ngày nghỉ" value={leaveDate} />
@@ -114,7 +114,6 @@ export function WorkerDesktopCard({
         <InfoLine label="Nhà chính" value={mainHouseName} />
         <InfoLine label="Số điện thoại" value={phone} />
         <InfoLine label="Mã số thuế" value={taxCode} />
-        {badges && <div className="flex flex-wrap gap-1 pt-1">{badges}</div>}
       </div>
 
       <ChevronRight className="h-5 w-5 justify-self-end text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />

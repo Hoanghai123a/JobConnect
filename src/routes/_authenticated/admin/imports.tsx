@@ -13,6 +13,8 @@ import {
   createEmploymentHistory,
   fetchEmploymentHistories,
   getLatestEmploymentHistory,
+  getEmploymentPersonalSnapshot,
+  getMissingEmploymentSnapshotFields,
   updateEmploymentHistory,
   updateUserAndCache,
   buildHistoryUid,
@@ -76,13 +78,18 @@ function AdminImportsPage() {
             "Ngày vào mới": "",
             "Ngày nghỉ": "",
             "Trạng thái": "",
+            "Họ tên tại thời điểm đi làm": "",
+            "CCCD tại thời điểm đi làm": "",
+            "Ngày sinh": "",
+            "Địa chỉ thường trú": "",
+            "Ngày cấp CCCD": "",
             "Người tuyển": "staff01",
             "Ghi chú": "Cập nhật mã NV",
             "SĐT mới": "0900000999",
           },
         ],
       },
-      { "Cập nhật nhanh": ["Ngày vào hiện tại", "Ngày vào mới", "Ngày nghỉ"] },
+      { "Cập nhật nhanh": ["Ngày vào hiện tại", "Ngày vào mới", "Ngày nghỉ", "Ngày sinh", "Ngày cấp CCCD"] },
     );
   };
 
@@ -283,7 +290,34 @@ function AdminImportsPage() {
         const recruiterUsername = pickValue(row, ["recruiter_username", "Người tuyển"]);
         const note = pickValue(row, ["note", "Ghi chú"]);
         const phone = pickValue(row, ["phone", "SĐT mới"]);
+        const workerName = pickValue(row, [
+          "worker_name_snapshot",
+          "Họ tên tại thời điểm đi làm",
+          "Họ tên tại nhà máy",
+        ]);
+        const workerCccd = pickValue(row, [
+          "worker_cccd_snapshot",
+          "CCCD tại thời điểm đi làm",
+          "CCCD tại nhà máy",
+        ]);
+        const birthRaw = row["worker_date_of_birth_snapshot"] ?? row["Ngày sinh"] ?? "";
+        const workerDateOfBirth = normalizeExcelDate(birthRaw);
+        const workerAddress = pickValue(row, [
+          "worker_address_snapshot",
+          "Địa chỉ thường trú",
+          "hometown_snapshot",
+        ]);
+        const issueRaw = row["cccd_issue_date"] ?? row["Ngày cấp CCCD"] ?? "";
+        const cccdIssueDate = normalizeExcelDate(issueRaw);
 
+        if (String(birthRaw).trim() && !workerDateOfBirth) {
+          addFailedRow(row, rowNumber, "Ngày sinh không hợp lệ");
+          continue;
+        }
+        if (String(issueRaw).trim() && !cccdIssueDate) {
+          addFailedRow(row, rowNumber, "Ngày cấp CCCD không hợp lệ");
+          continue;
+        }
         if (String(joinRaw).trim() && !joinDate) {
           addFailedRow(row, rowNumber, "join_date không hợp lệ");
           continue;
@@ -294,6 +328,16 @@ function AdminImportsPage() {
         }
 
         const historyPayload: Parameters<typeof updateEmploymentHistory>[1] = {};
+        if (workerName) historyPayload.worker_name_snapshot = workerName;
+        if (workerCccd) historyPayload.worker_cccd_snapshot = workerCccd;
+        if (workerDateOfBirth) {
+          historyPayload.worker_date_of_birth_snapshot = workerDateOfBirth;
+        }
+        if (workerAddress) {
+          historyPayload.worker_address_snapshot = workerAddress;
+          historyPayload.hometown_snapshot = workerAddress;
+        }
+        if (cccdIssueDate) historyPayload.cccd_issue_date = cccdIssueDate;
         if (employeeCode) historyPayload.employee_code = employeeCode;
         if (factoryName || factoryCode) {
           const nextFactoryResult = resolveFactory(factoryName, factoryCode);
@@ -319,6 +363,17 @@ function AdminImportsPage() {
           historyPayload.recruiter_staff = recruiter.id;
         }
         if (note) historyPayload.note = note;
+
+        const finalSnapshot = getEmploymentPersonalSnapshot({ ...target, ...historyPayload });
+        const missingSnapshotFields = getMissingEmploymentSnapshotFields(finalSnapshot);
+        if (missingSnapshotFields.length) {
+          addFailedRow(
+            row,
+            rowNumber,
+            `Thiếu thông tin cá nhân của lịch sử: ${missingSnapshotFields.join(", ")}`,
+          );
+          continue;
+        }
 
         const finalJoinDate = String(historyPayload.join_date ?? target.join_date ?? "");
         const finalLeaveDate = String(historyPayload.leave_date ?? target.leave_date ?? "");
@@ -404,6 +459,9 @@ function AdminImportsPage() {
           "Mã nhân viên": "NM001",
           "Họ tên tại nhà máy": "Nguyễn Văn A",
           "CCCD tại nhà máy": "012345678901",
+          "Ngày sinh": "01/01/2000",
+          "Địa chỉ thường trú": "Hà Nội",
+          "Ngày cấp CCCD": "01/01/2020",
           "Mã số thuế": "0123456789",
           "Người tuyển": "staff01",
           "Ngày vào làm": "01/05/2026",
@@ -413,7 +471,7 @@ function AdminImportsPage() {
         },
       ],
     },
-    { "Lịch sử đi làm": ["Ngày vào làm", "Ngày nghỉ"] }
+    { "Lịch sử đi làm": ["Ngày sinh", "Ngày cấp CCCD", "Ngày vào làm", "Ngày nghỉ"] }
     );
   };
 
@@ -476,6 +534,17 @@ function AdminImportsPage() {
           "Ngày nghỉ": formatDateOnly((row["leave_date"] ?? row["Ngày nghỉ"]) as string),
           "Họ tên tại nhà máy": pickValue(row, ["worker_name_snapshot", "Họ tên tại nhà máy"]),
           "CCCD tại nhà máy": pickValue(row, ["worker_cccd_snapshot", "CCCD tại nhà máy"]),
+          "Ngày sinh": formatDateOnly(
+            (row["worker_date_of_birth_snapshot"] ?? row["Ngày sinh"]) as string,
+          ),
+          "Địa chỉ thường trú": pickValue(row, [
+            "worker_address_snapshot",
+            "Địa chỉ thường trú",
+            "hometown_snapshot",
+          ]),
+          "Ngày cấp CCCD": formatDateOnly(
+            (row["cccd_issue_date"] ?? row["Ngày cấp CCCD"]) as string,
+          ),
           "Mã số thuế": pickValue(row, ["worker_tax_code_snapshot", "Mã số thuế", "MST"]),
           "Người tuyển": pickValue(row, ["recruiter_username", "Người tuyển"]),
           "Trạng thái": pickValue(row, ["status", "Trạng thái"]),
@@ -493,6 +562,17 @@ function AdminImportsPage() {
         const employeeCode = pickValue(row, ["employee_code", "Mã nhân viên", "Mã NV"]);
         const workerName = pickValue(row, ["worker_name_snapshot", "Họ tên tại nhà máy"]);
         const workerCccd = pickValue(row, ["worker_cccd_snapshot", "CCCD tại nhà máy"]);
+        const workerDateOfBirth = normalizeExcelDate(
+          row["worker_date_of_birth_snapshot"] ?? row["Ngày sinh"],
+        );
+        const workerAddress = pickValue(row, [
+          "worker_address_snapshot",
+          "Địa chỉ thường trú",
+          "hometown_snapshot",
+        ]);
+        const cccdIssueDate = normalizeExcelDate(
+          row["cccd_issue_date"] ?? row["Ngày cấp CCCD"],
+        );
         const workerTaxCode = pickValue(row, ["worker_tax_code_snapshot", "Mã số thuế", "MST"]);
         const recruiterUsername = pickValue(row, ["recruiter_username", "Người tuyển"]);
         const joinDate = normalizeExcelDate(
@@ -529,8 +609,19 @@ function AdminImportsPage() {
           addFailedRow(row, rowNumber, "Thiếu hoặc sai ngày vào làm.");
           continue;
         }
-        if (!workerName || !workerCccd) {
-          addFailedRow(row, rowNumber, "Thiếu họ tên hoặc CCCD snapshot tại nhà máy.");
+        const missingSnapshotFields = [
+          !workerName && "họ tên",
+          !workerCccd && "CCCD",
+          !workerDateOfBirth && "ngày sinh",
+          !workerAddress && "địa chỉ thường trú",
+          !cccdIssueDate && "ngày cấp CCCD",
+        ].filter(Boolean);
+        if (missingSnapshotFields.length) {
+          addFailedRow(
+            row,
+            rowNumber,
+            `Thiếu thông tin snapshot: ${missingSnapshotFields.join(", ")}.`,
+          );
           continue;
         }
 
@@ -559,6 +650,10 @@ function AdminImportsPage() {
           employee_code: employeeCode,
           worker_name_snapshot: workerName,
           worker_cccd_snapshot: workerCccd,
+          worker_date_of_birth_snapshot: workerDateOfBirth,
+          worker_address_snapshot: workerAddress,
+          hometown_snapshot: workerAddress,
+          cccd_issue_date: cccdIssueDate,
           worker_tax_code_snapshot: workerTaxCode,
           recruiter_staff: recruiter?.id || "",
           join_date: joinDate,
@@ -595,7 +690,7 @@ function AdminImportsPage() {
       setLastResult(summary);
       toast.success(summary);
       if (failedRows.length) {
-        exportToExcel(`lich_su_di_lam_loi_${Date.now()}`, { "Dòng lỗi": failedRows }, { "Dòng lỗi": ["Ngày vào làm", "Ngày nghỉ", "join_date", "leave_date"] });
+        exportToExcel(`lich_su_di_lam_loi_${Date.now()}`, { "Dòng lỗi": failedRows }, { "Dòng lỗi": ["Ngày sinh", "Ngày cấp CCCD", "Ngày vào làm", "Ngày nghỉ", "join_date", "leave_date"] });
         toast.warning("Đã xuất file các dòng lịch sử đi làm bị lỗi");
       }
       await createStaffActionLog({

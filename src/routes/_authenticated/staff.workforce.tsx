@@ -1,7 +1,16 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Users } from "lucide-react";
+import { LayoutGrid } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WorkforceDashboard } from "@/components/workforce/WorkforceDashboard";
+import { OtherDashboard } from "@/components/dashboard/OtherDashboard";
+import { ApprovalDashboard } from "@/components/dashboard/ApprovalDashboard";
+import {
+  createEmptyApprovalDashboardStats,
+  isApprovalDashboardStatus,
+  type ApprovalDashboardStats,
+} from "@/lib/approval-dashboard";
+import { fetchCccdVersionsByIds, type CccdVersionRecord } from "@/lib/cccd-versions";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import {
   fetchCachedStaffWorkspace,
@@ -11,8 +20,10 @@ import {
 } from "@/lib/staff-permissions";
 import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { useAuth } from "@/lib/auth";
+import { escapePb } from "@/lib/delegations";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import type { EmploymentHistoryRecord } from "@/lib/employment";
+import { getRecentDateKeys } from "@/lib/workforce-other-stats";
 
 export const Route = createFileRoute("/_authenticated/staff/workforce")({
   beforeLoad: () => {
@@ -24,6 +35,13 @@ export const Route = createFileRoute("/_authenticated/staff/workforce")({
   },
   component: StaffWorkforceDashboardPage,
 });
+
+type ActiveTab = "workforce" | "other";
+
+type ApprovalRequestSummary = {
+  status?: string;
+  amount?: number | string;
+};
 
 function getScopedHistories(viewer: UserRecord, workspace: StaffWorkspaceResult) {
   const uniqueHistories = new Map<string, EmploymentHistoryRecord>();
@@ -42,15 +60,23 @@ function getScopedHistories(viewer: UserRecord, workspace: StaffWorkspaceResult)
 
 function getScopedUsers(
   viewer: UserRecord,
+  workspace: StaffWorkspaceResult,
   histories: EmploymentHistoryRecord[],
   fetchedUsers: UserRecord[],
 ) {
+  const scopedWorkerIds = new Set(histories.map((history) => history.user));
   const recruiterIds = new Set(
     histories.map((history) => history.recruiter_staff).filter((id): id is string => Boolean(id)),
   );
-  const usersById = new Map(
-    fetchedUsers.filter((user) => recruiterIds.has(user.id)).map((user) => [user.id, user]),
-  );
+  const usersById = new Map<string, UserRecord>();
+
+  for (const worker of workspace.workers) {
+    if (scopedWorkerIds.has(worker.user.id)) usersById.set(worker.user.id, worker.user);
+  }
+
+  for (const user of fetchedUsers) {
+    if (recruiterIds.has(user.id)) usersById.set(user.id, user);
+  }
 
   for (const history of histories) {
     const recruiter = history.expand?.recruiter_staff as UserRecord | undefined;
@@ -85,15 +111,35 @@ function getScopedFactories(
   return [...factoriesById.values()].sort((a, b) => a.name.localeCompare(b.name, "vi"));
 }
 
+function buildApprovalStats(requests: ApprovalRequestSummary[]): ApprovalDashboardStats {
+  const stats = createEmptyApprovalDashboardStats();
+  for (const request of requests) {
+    if (!isApprovalDashboardStatus(request.status)) continue;
+    const amount = Math.max(0, Number(request.amount) || 0);
+    stats[request.status] += 1;
+    stats.amountByStatus[request.status] += amount;
+    stats.totalAmount += amount;
+  }
+  return stats;
+}
+
 function StaffWorkforceDashboardPage() {
   const { user } = useAuth();
   const viewer = user as UserRecord | null;
+  const [tab, setTab] = useState<ActiveTab>("workforce");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [histories, setHistories] = useState<EmploymentHistoryRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
   const [reloadToken, setReloadToken] = useState(0);
+  const [otherLoading, setOtherLoading] = useState(false);
+  const [otherError, setOtherError] = useState("");
+  const [otherReloadToken, setOtherReloadToken] = useState(0);
+  const [cccdVersions, setCccdVersions] = useState<CccdVersionRecord[]>([]);
+  const [approvalStats, setApprovalStats] = useState<ApprovalDashboardStats>(
+    createEmptyApprovalDashboardStats,
+  );
 
   const load = useCallback(async () => {
     if (!viewer?.id || viewer.role !== "staff") return;
@@ -117,7 +163,7 @@ function StaffWorkforceDashboardPage() {
 
       setHistories(scopedHistories);
       setFactories(getScopedFactories(scopedHistories, factoryRows));
-      setStaffUsers(getScopedUsers(viewer, scopedHistories, staffRows));
+      setStaffUsers(getScopedUsers(viewer, workspace, scopedHistories, staffRows));
     } catch {
       setHistories([]);
       setFactories([]);
@@ -143,11 +189,51 @@ function StaffWorkforceDashboardPage() {
       const scopedHistories = getScopedHistories(viewer, workspace);
       setHistories(scopedHistories);
       setFactories((current) => getScopedFactories(scopedHistories, current));
-      setStaffUsers((current) => getScopedUsers(viewer, scopedHistories, current));
+      setStaffUsers((current) => getScopedUsers(viewer, workspace, scopedHistories, current));
     }, 150);
 
     return () => clearTimeout(timer);
   }, [cacheSignal, viewer]);
+
+  useEffect(() => {
+    if (tab !== "other" || loading || !viewer?.id || viewer.role !== "staff") return;
+
+    let alive = true;
+    setOtherLoading(true);
+    setOtherError("");
+
+    const recentDates = new Set(getRecentDateKeys());
+    const referencedVersionIds = histories
+      .filter((history) => recentDates.has(history.join_date.slice(0, 10)))
+      .map((history) => history.cccd_version || "")
+      .filter(Boolean);
+
+    Promise.all([
+      fetchCccdVersionsByIds(referencedVersionIds),
+      pb.collection("approval_requests").getFullList<ApprovalRequestSummary>({
+        filter: `creator = "${escapePb(viewer.id)}"`,
+        fields: "status,amount",
+      }),
+    ])
+      .then(([versions, requests]) => {
+        if (!alive) return;
+        setCccdVersions(versions);
+        setApprovalStats(buildApprovalStats(requests));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setCccdVersions([]);
+        setApprovalStats(createEmptyApprovalDashboardStats());
+        setOtherError("Không tải được dữ liệu tab Khác. Vui lòng thử lại.");
+      })
+      .finally(() => {
+        if (alive) setOtherLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [histories, loading, otherReloadToken, tab, viewer?.id, viewer?.role]);
 
   const visibleFactories = useMemo(() => {
     const factoryIds = new Set(histories.map((history) => history.factory));
@@ -156,34 +242,71 @@ function StaffWorkforceDashboardPage() {
 
   if (viewer?.role !== "staff") return null;
 
+  const combinedOtherError = error || otherError;
+  const combinedOtherLoading = loading || otherLoading;
+  const retryOther = () => {
+    setReloadToken((value) => value + 1);
+    setOtherReloadToken((value) => value + 1);
+  };
+
   return (
     <main
-      data-staff-dashboard-content="nhan-luc"
+      data-staff-dashboard-content="dashboard"
       className="hidden min-h-[calc(100dvh-5rem)] min-w-0 bg-background desktop:block"
     >
       <div className="mx-auto w-full max-w-[110rem] space-y-6 px-8 py-7">
-        <section id="nhan-luc" className="space-y-4 scroll-mt-28">
+        <section id="dashboard" className="space-y-4 scroll-mt-28">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <Users className="h-5 w-5" />
+              <LayoutGrid className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold tracking-tight">Nhân lực</h2>
+              <h2 className="text-lg font-bold tracking-tight">Dashboard</h2>
               <p className="text-sm text-muted-foreground">
-                Theo dõi tình hình tuyển dụng, nghỉ việc và khả năng duy trì lao động.
+                Theo dõi nhân lực và các thông tin nghiệp vụ trong phạm vi quản lý của bạn.
               </p>
             </div>
           </div>
 
-          <WorkforceDashboard
-            histories={histories}
-            users={staffUsers}
-            factories={visibleFactories}
-            loading={loading}
-            error={error}
-            onRetry={() => setReloadToken((value) => value + 1)}
-            detailHref="/staff/workers"
-          />
+          <Tabs
+            value={tab}
+            onValueChange={(value) => setTab(value as ActiveTab)}
+            className="space-y-4"
+          >
+            <TabsList className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 grid h-10 w-full grid-cols-2 rounded-xl bg-muted shadow-sm">
+              <TabsTrigger value="workforce" className="rounded-lg text-xs">
+                Nhân lực
+              </TabsTrigger>
+              <TabsTrigger value="other" className="rounded-lg text-xs">
+                Khác
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="workforce" className="mt-0">
+              <WorkforceDashboard
+                histories={histories}
+                users={staffUsers}
+                factories={visibleFactories}
+                loading={loading}
+                error={error}
+                onRetry={() => setReloadToken((value) => value + 1)}
+                detailHref="/staff/workers"
+              />
+            </TabsContent>
+
+            <TabsContent value="other" className="mt-0 space-y-4">
+              <OtherDashboard
+                histories={histories}
+                users={staffUsers}
+                factories={visibleFactories}
+                cccdVersions={cccdVersions}
+                loading={combinedOtherLoading}
+                error={combinedOtherError}
+                onRetry={retryOther}
+              />
+              <ApprovalDashboard stats={approvalStats} />
+            </TabsContent>
+          </Tabs>
         </section>
       </div>
     </main>

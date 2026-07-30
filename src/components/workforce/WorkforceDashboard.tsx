@@ -7,9 +7,17 @@ import type { FactoryRecord } from "@/lib/factories";
 import type { UserRecord } from "@/lib/pocketbase";
 import { RecruitmentChart } from "./RecruitmentChart";
 import { WorkforceInsightsCharts } from "./WorkforceInsightsCharts";
-import { getWorkforceSummary, isIsoDate, localIsoDate, shiftIsoDate } from "./workforce-stats";
+import {
+  filterWorkforceHistoriesByRecruitmentScope,
+  getWorkforceSummary,
+  isIsoDate,
+  localIsoDate,
+  shiftIsoDate,
+  type RecruitmentSourceScope,
+} from "./workforce-stats";
 
 const STORAGE_KEY = "jobconnect:workforce-dashboard-date-range";
+const RECRUITMENT_SCOPE_STORAGE_KEY = "jobconnect:workforce-dashboard-recruitment-scope";
 
 type DateRange = { from: string; to: string };
 
@@ -25,6 +33,10 @@ function validRange(value: unknown): value is DateRange {
   return (
     isIsoDate(range.from) && isIsoDate(range.to) && range.from <= range.to && range.to <= today
   );
+}
+
+function validRecruitmentScope(value: unknown): value is RecruitmentSourceScope {
+  return value === "all" || value === "internal";
 }
 
 function formatDate(value: string) {
@@ -78,15 +90,21 @@ export function WorkforceDashboard({
   detailHref: string;
 }) {
   const [range, setRange] = useState<DateRange>(defaultRange);
+  const [recruitmentScope, setRecruitmentScope] = useState<RecruitmentSourceScope>("all");
   const [storageReady, setStorageReady] = useState(false);
   const today = localIsoDate();
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "null");
-      if (validRange(saved)) setRange(saved);
+      const savedRange = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "null");
+      if (validRange(savedRange)) setRange(savedRange);
+
+      const savedScope = JSON.parse(
+        window.localStorage.getItem(RECRUITMENT_SCOPE_STORAGE_KEY) || "null",
+      );
+      if (validRecruitmentScope(savedScope)) setRecruitmentScope(savedScope);
     } catch {
-      // Keep the default seven-day range when saved data is invalid.
+      // Keep the default values when saved data is invalid or unavailable.
     } finally {
       setStorageReady(true);
     }
@@ -94,12 +112,22 @@ export function WorkforceDashboard({
 
   useEffect(() => {
     if (!storageReady) return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(range));
-  }, [range, storageReady]);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(range));
+      window.localStorage.setItem(RECRUITMENT_SCOPE_STORAGE_KEY, JSON.stringify(recruitmentScope));
+    } catch {
+      // The dashboard remains usable when local storage is unavailable.
+    }
+  }, [range, recruitmentScope, storageReady]);
+
+  const filteredHistories = useMemo(
+    () => filterWorkforceHistoriesByRecruitmentScope(histories, users, recruitmentScope),
+    [histories, recruitmentScope, users],
+  );
 
   const summary = useMemo(
-    () => getWorkforceSummary(histories, range.from, range.to),
-    [histories, range],
+    () => getWorkforceSummary(filteredHistories, range.from, range.to),
+    [filteredHistories, range],
   );
 
   const setPreset = (days: number) =>
@@ -130,6 +158,35 @@ export function WorkforceDashboard({
                 max={today}
                 onChange={(to) => isIsoDate(to) && setRange((current) => ({ ...current, to }))}
               />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Nguồn tuyển</Label>
+            <div className="inline-flex rounded-xl border border-border bg-background p-1">
+              <button
+                type="button"
+                aria-pressed={recruitmentScope === "all"}
+                onClick={() => setRecruitmentScope("all")}
+                className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
+                  recruitmentScope === "all"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                Toàn bộ
+              </button>
+              <button
+                type="button"
+                aria-pressed={recruitmentScope === "internal"}
+                onClick={() => setRecruitmentScope("internal")}
+                className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
+                  recruitmentScope === "internal"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                Nội bộ
+              </button>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -199,13 +256,15 @@ export function WorkforceDashboard({
               Thử lại
             </button>
           </div>
-        ) : histories.length === 0 ? (
+        ) : filteredHistories.length === 0 ? (
           <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">
-            Chưa có dữ liệu nhân lực.
+            {recruitmentScope === "internal"
+              ? "Chưa có dữ liệu nhân lực nội bộ."
+              : "Chưa có dữ liệu nhân lực."}
           </div>
         ) : (
           <RecruitmentChart
-            histories={histories}
+            histories={filteredHistories}
             users={users}
             factories={factories}
             from={range.from}
@@ -217,7 +276,7 @@ export function WorkforceDashboard({
 
       {!loading && !error && (
         <WorkforceInsightsCharts
-          histories={histories}
+          histories={filteredHistories}
           users={users}
           factories={factories}
           from={range.from}

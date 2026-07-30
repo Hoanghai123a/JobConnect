@@ -10,6 +10,7 @@ import {
   IdCard,
   Landmark,
   Plus,
+  ZoomIn,
   RotateCcw,
   Wallet,
 } from "lucide-react";
@@ -36,7 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { pb, type UserRecord } from "@/lib/pocketbase";
+import { fileUrl, pb, type UserRecord } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import {
@@ -50,6 +51,8 @@ import {
   fetchEmploymentHistories,
   findActiveEmploymentByUser,
   getLatestEmploymentHistory,
+  getMissingEmploymentSnapshotFields,
+  getEmploymentPersonalSnapshot,
   isCurrentlyWorking,
   maskCccd,
   restoreEmploymentHistoryToWorking,
@@ -59,10 +62,23 @@ import {
 } from "@/lib/employment";
 import type { FactoryRecord } from "@/lib/factories";
 import type { MainHouseRecord } from "@/lib/main-houses";
-import { canReportJoin, isRecentRecruiter } from "@/lib/staff-permissions";
+import {
+  canReportJoin,
+  canViewHistoryInStaffScope,
+  isRecentRecruiter,
+} from "@/lib/staff-permissions";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
+import { JoinCccdSection } from "@/components/employment/JoinCccdSection";
 import { VN_BANKS } from "@/lib/vn-banks";
+import {
+  findOrCreateCccdVersion,
+  getCccdVersionByNumber,
+  getCurrentCccdVersion,
+  updateCccdVersionImages,
+  type CccdVersionRecord,
+} from "@/lib/cccd-versions";
+import { compressImage } from "@/lib/image-compress";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
 import type { AdvancePayoutMethod } from "@/lib/advances";
 
@@ -103,6 +119,120 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+function versionedCccdUrl(version: CccdVersionRecord | undefined, filename?: string) {
+  const url = fileUrl(version, filename);
+  if (!url || !version) return "";
+  const cacheKey = version.updated || version.id;
+  return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(cacheKey)}`;
+}
+
+function normalizeCccdNumber(value?: string) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function HistoryCccdImageSlot({
+  label,
+  url,
+  onPreview,
+}: {
+  label: string;
+  url: string;
+  onPreview: () => void;
+}) {
+  return (
+    <div className="min-w-0 space-y-1.5">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      {url ? (
+        <button
+          type="button"
+          onClick={onPreview}
+          className="group relative block aspect-[1.586/1] w-full overflow-hidden rounded-xl border bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label={`Xem ảnh CCCD ${label.toLowerCase()}`}
+        >
+          <img
+            src={url}
+            alt={`CCCD ${label.toLowerCase()}`}
+            className="h-full w-full object-contain"
+          />
+          <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-gradient-to-t from-black/65 to-transparent px-2 pb-2 pt-5 text-[11px] font-medium text-white">
+            <ZoomIn className="h-3.5 w-3.5" /> Nhấn để xem
+          </span>
+        </button>
+      ) : (
+        <div className="flex aspect-[1.586/1] w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/20 text-muted-foreground">
+          <IdCard className="h-5 w-5" />
+          <span className="text-[11px]">Chưa có ảnh</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HistoryCccdSnapshot({
+  history,
+  version,
+  currentUser,
+  loading,
+  onPreview,
+}: {
+  history: EmploymentHistoryRecord;
+  version?: CccdVersionRecord;
+  currentUser: UserRecord;
+  loading: boolean;
+  onPreview: (src: string, label: string) => void;
+}) {
+  const historyNumber = normalizeCccdNumber(history.worker_cccd_snapshot);
+  const currentNumber = normalizeCccdNumber(currentUser.cccd);
+  const canUseCurrentProfile = Boolean(historyNumber && historyNumber === currentNumber);
+  const frontFromHistory = versionedCccdUrl(version, version?.front_image);
+  const backFromHistory = versionedCccdUrl(version, version?.back_image);
+  const frontFromProfile =
+    canUseCurrentProfile && currentUser.cccd_front
+      ? fileUrl(currentUser, currentUser.cccd_front)
+      : "";
+  const backFromProfile =
+    canUseCurrentProfile && currentUser.cccd_back
+      ? fileUrl(currentUser, currentUser.cccd_back)
+      : "";
+  const frontUrl = frontFromHistory || frontFromProfile;
+  const backUrl = backFromHistory || backFromProfile;
+  const usesProfileFallback =
+    (!frontFromHistory && Boolean(frontFromProfile)) ||
+    (!backFromHistory && Boolean(backFromProfile));
+
+  return (
+    <div className="space-y-2 rounded-xl border border-border/60 p-3">
+      <div>
+        <div className="text-sm font-semibold">Ảnh CCCD 2 mặt</div>
+        <div className="text-[11px] text-muted-foreground">
+          {loading
+            ? "Đang tìm ảnh theo số CCCD của lịch sử..."
+            : usesProfileFallback
+              ? "Lịch sử chưa đủ ảnh riêng; ảnh còn thiếu được lấy từ hồ sơ hiện tại cùng số CCCD."
+              : "Nhấn vào ảnh để xem kích thước lớn."}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        <HistoryCccdImageSlot
+          label="Mặt trước"
+          url={frontUrl}
+          onPreview={() => onPreview(frontUrl, "CCCD mặt trước")}
+        />
+        <HistoryCccdImageSlot
+          label="Mặt sau"
+          url={backUrl}
+          onPreview={() => onPreview(backUrl, "CCCD mặt sau")}
+        />
+      </div>
+      {!loading && !frontUrl && !backUrl && (
+        <div className="text-[11px] text-muted-foreground">
+          Chưa có ảnh CCCD phù hợp với lịch sử này.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function validateRestoreRequest(histories: EmploymentHistoryRecord[], historyId: string) {
   const target = histories.find((history) => history.id === historyId);
   if (!target) throw new Error("Không tìm thấy bản ghi lịch sử cần khôi phục");
@@ -111,9 +241,7 @@ function validateRestoreRequest(histories: EmploymentHistoryRecord[], historyId:
     (history) => history.id !== historyId && isCurrentlyWorking(history),
   );
   if (otherActive) {
-    throw new Error(
-      "NLĐ đã có một bản ghi đang làm khác. Vui lòng kiểm tra lại lịch sử đi làm.",
-    );
+    throw new Error("NLĐ đã có một bản ghi đang làm khác. Vui lòng kiểm tra lại lịch sử đi làm.");
   }
 
   const latest = getLatestEmploymentHistory(histories);
@@ -129,13 +257,17 @@ function getPocketBaseFieldErrors(error: unknown) {
       ? (error.data as { data?: Record<string, unknown> }).data
       : undefined;
   if (!data) return "";
+  const fieldLabels: Record<string, string> = {
+    front_image: "Ảnh CCCD mặt trước",
+    back_image: "Ảnh CCCD mặt sau",
+  };
   return Object.entries(data)
     .map(([field, value]) => {
       const message =
         typeof value === "object" && value !== null && "message" in value
           ? String(value.message)
           : String(value);
-      return `${field}: ${message}`;
+      return `${fieldLabels[field] || field}: ${message}`;
     })
     .join("; ");
 }
@@ -244,15 +376,33 @@ export function WorkerEmploymentDrawer({
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
+    worker_date_of_birth_snapshot: "",
+    worker_address_snapshot: "",
+    cccd_issue_date: "",
+    hometown_snapshot: "",
     worker_tax_code_snapshot: "",
     recruiter_staff: "",
     join_date: todayIso(),
     note: "",
   });
+  const [joinCccdFront, setJoinCccdFront] = useState<File | null>(null);
+  const [joinCccdBack, setJoinCccdBack] = useState<File | null>(null);
+  const [editCccdFront, setEditCccdFront] = useState<File | null>(null);
+  const [editCccdBack, setEditCccdBack] = useState<File | null>(null);
+  const [oldHistoryCccdFront, setOldHistoryCccdFront] = useState<File | null>(null);
+  const [oldHistoryCccdBack, setOldHistoryCccdBack] = useState<File | null>(null);
   const [employeeCodeOpen, setEmployeeCodeOpen] = useState(false);
   const [employeeCodeForm, setEmployeeCodeForm] = useState("");
   const [employeeCodeSaving, setEmployeeCodeSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedHistory, setSelectedHistory] = useState<EmploymentHistoryRecord | null>(null);
+  const [selectedHistoryCccdVersion, setSelectedHistoryCccdVersion] =
+    useState<CccdVersionRecord | null>(null);
+  const [selectedHistoryCccdLoading, setSelectedHistoryCccdLoading] = useState(false);
+  const [historyCccdPreview, setHistoryCccdPreview] = useState<{
+    src: string;
+    label: string;
+  } | null>(null);
   const [restoreRequest, setRestoreRequest] = useState<RestoreRequest | null>(null);
   const [restoreSaving, setRestoreSaving] = useState(false);
   const [oldHistoryOpen, setOldHistoryOpen] = useState(false);
@@ -268,11 +418,12 @@ export function WorkerEmploymentDrawer({
   const [advanceBankChoice, setAdvanceBankChoice] = useState<"worker" | "actor">("worker");
   const [form, setForm] = useState({
     factory: "",
-    address: "",
-    phone: "",
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
+    worker_date_of_birth_snapshot: "",
+    worker_address_snapshot: "",
+    cccd_issue_date: "",
     worker_tax_code_snapshot: "",
     recruiter_staff: "",
     main_house: "",
@@ -286,6 +437,10 @@ export function WorkerEmploymentDrawer({
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
+    worker_date_of_birth_snapshot: "",
+    worker_address_snapshot: "",
+    cccd_issue_date: "",
+    hometown_snapshot: "",
     worker_tax_code_snapshot: "",
     recruiter_staff: "",
     join_date: "",
@@ -355,17 +510,25 @@ export function WorkerEmploymentDrawer({
       setLeaveDate(todayIso());
       setLeaveNote("");
       setJoinOpen(false);
+      setJoinCccdFront(null);
+      setJoinCccdBack(null);
+      setEditCccdFront(null);
+      setEditCccdBack(null);
+      setOldHistoryCccdFront(null);
+      setOldHistoryCccdBack(null);
       setEmployeeCodeOpen(false);
+      setSelectedHistory(null);
       setRestoreRequest(null);
       setRestoreSaving(false);
       setCccdViewerOpen(false);
       const latest = getLatestEmploymentHistory(histories);
+      const personalSnapshot = getEmploymentPersonalSnapshot(latest, user);
       setJoinForm({
         factory: "",
         main_house: "",
         employee_code: "",
-        worker_name_snapshot: latest?.worker_name_snapshot || user.full_name || user.username || "",
-        worker_cccd_snapshot: latest?.worker_cccd_snapshot || user.cccd || "",
+        ...personalSnapshot,
+        hometown_snapshot: personalSnapshot.worker_address_snapshot,
         worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
         recruiter_staff: actor?.id || "",
         join_date: todayIso(),
@@ -375,22 +538,72 @@ export function WorkerEmploymentDrawer({
     }
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!selectedHistory || !user?.id) {
+      setSelectedHistoryCccdVersion(null);
+      setSelectedHistoryCccdLoading(false);
+      setHistoryCccdPreview(null);
+      return;
+    }
+
+    const expandedVersion = selectedHistory.expand?.cccd_version;
+    setSelectedHistoryCccdVersion(expandedVersion || null);
+    if (expandedVersion) {
+      setSelectedHistoryCccdLoading(false);
+      return;
+    }
+
+    const cccdNumber = selectedHistory.worker_cccd_snapshot.trim();
+    if (!cccdNumber) {
+      setSelectedHistoryCccdLoading(false);
+      return;
+    }
+
+    let active = true;
+    setSelectedHistoryCccdLoading(true);
+    getCccdVersionByNumber(user.id, cccdNumber)
+      .then((version) => {
+        if (active) setSelectedHistoryCccdVersion(version);
+      })
+      .catch(() => {
+        if (active) setSelectedHistoryCccdVersion(null);
+      })
+      .finally(() => {
+        if (active) setSelectedHistoryCccdLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedHistory, user?.id]);
+
   const latestHistory = useMemo(() => getLatestEmploymentHistory(histories), [histories]);
+  const editingHistory = useMemo(
+    () => histories.find((history) => history.id === editingId),
+    [editingId, histories],
+  );
+  const editingCccdVersion = editingHistory?.expand?.cccd_version;
+  const editCccdFrontUrl = versionedCccdUrl(editingCccdVersion, editingCccdVersion?.front_image);
+  const editCccdBackUrl = versionedCccdUrl(editingCccdVersion, editingCccdVersion?.back_image);
   const canEditHistoryRecord = (history: EmploymentHistoryRecord) =>
-    permissions.canEditHistory && (actor?.role === "admin" || history.id === latestHistory?.id);
+    actor?.role === "admin" ||
+    (actor?.role === "staff" &&
+      permissions.canEditHistory &&
+      history.id === latestHistory?.id &&
+      canViewHistoryInStaffScope(actor, history, histories, managedIds));
   const restorableHistory =
-    latestHistory?.leave_date && permissions.canEditHistory ? latestHistory : null;
+    latestHistory?.leave_date && canEditHistoryRecord(latestHistory) ? latestHistory : null;
 
   const startEdit = (h: EmploymentHistoryRecord) => {
     if (!canEditHistoryRecord(h)) return;
     setEditingId(h.id);
+    setEditCccdFront(null);
+    setEditCccdBack(null);
+    const personalSnapshot = getEmploymentPersonalSnapshot(h);
     setForm({
       factory: h.factory || "",
-      address: user?.address || h.expand?.user?.address || "",
-      phone: user?.phone || h.expand?.user?.phone || "",
+      ...personalSnapshot,
       employee_code: h.employee_code || "",
-      worker_name_snapshot: h.worker_name_snapshot || "",
-      worker_cccd_snapshot: h.worker_cccd_snapshot || "",
       worker_tax_code_snapshot: h.worker_tax_code_snapshot || "",
       recruiter_staff: h.recruiter_staff || "",
       main_house: h.main_house || "",
@@ -401,11 +614,7 @@ export function WorkerEmploymentDrawer({
   };
 
   const openRestoreDialog = (history: EmploymentHistoryRecord) => {
-    if (
-      !permissions.canEditHistory ||
-      history.id !== latestHistory?.id ||
-      !history.leave_date
-    ) {
+    if (!canEditHistoryRecord(history) || !history.leave_date) {
       return;
     }
     setRestoreRequest({ history, source: "action" });
@@ -452,8 +661,14 @@ export function WorkerEmploymentDrawer({
     if (!user || !actor) return;
     if (!joinForm.factory) return toast.warning("Chọn nhà máy");
     if (!joinForm.join_date) return toast.warning("Nhập ngày vào làm");
-    if (!joinForm.recruiter_staff) return toast.warning("Chọn người tuyển");
+    if (!joinForm.recruiter_staff) return toast.warning("Chọn Người tuyển");
     if (!joinForm.main_house) return toast.warning("Chọn nhà chính");
+    const missingSnapshotFields = getMissingEmploymentSnapshotFields(joinForm);
+    if (missingSnapshotFields.length) {
+      return toast.warning(
+        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
+      );
+    }
     if (!canReportJoin(actor, histories, managedFactoryIds ?? new Set(), joinForm.factory)) {
       toast.error("Bạn không có quyền báo đi làm tại nhà máy đã chọn");
       return;
@@ -465,16 +680,42 @@ export function WorkerEmploymentDrawer({
         toast.error("Cần báo nghỉ nhà máy cũ trước");
         return;
       }
+      let cccdVersionId: string | undefined;
+      const cccdNumber = joinForm.worker_cccd_snapshot.trim() || user.cccd || "";
+      if (joinCccdFront || joinCccdBack) {
+        if (!cccdNumber) {
+          toast.warning("Cần có số CCCD để lưu ảnh");
+          return;
+        }
+        const [compressedFront, compressedBack] = await Promise.all([
+          joinCccdFront ? compressImage(joinCccdFront) : Promise.resolve(null),
+          joinCccdBack ? compressImage(joinCccdBack) : Promise.resolve(null),
+        ]);
+        const version = await findOrCreateCccdVersion(user.id, cccdNumber);
+        await updateCccdVersionImages(
+          version.id,
+          compressedFront || undefined,
+          compressedBack || undefined,
+        );
+        cccdVersionId = version.id;
+      } else {
+        const currentVersion = await getCurrentCccdVersion(user.id);
+        cccdVersionId = currentVersion?.id;
+      }
       const created = await createEmploymentHistory({
         user: user.id,
         factory: joinForm.factory,
         main_house: joinForm.main_house,
         employee_code: joinForm.employee_code.trim(),
-        worker_name_snapshot:
-          joinForm.worker_name_snapshot.trim() || user.full_name || user.username || "",
-        worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim() || user.cccd || "",
+        worker_name_snapshot: joinForm.worker_name_snapshot.trim(),
+        worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim(),
+        worker_date_of_birth_snapshot: joinForm.worker_date_of_birth_snapshot,
+        worker_address_snapshot: joinForm.worker_address_snapshot.trim(),
+        hometown_snapshot: joinForm.worker_address_snapshot.trim(),
+        cccd_issue_date: joinForm.cccd_issue_date,
         worker_tax_code_snapshot: joinForm.worker_tax_code_snapshot.trim(),
         recruiter_staff: joinForm.recruiter_staff,
+        cccd_version: cccdVersionId,
         join_date: joinForm.join_date,
         status: "working",
         note: joinForm.note.trim(),
@@ -489,6 +730,8 @@ export function WorkerEmploymentDrawer({
       });
       toast.success("Đã tạo bản ghi đi làm mới");
       setJoinOpen(false);
+      setJoinCccdFront(null);
+      setJoinCccdBack(null);
       await onDataChanged();
     } catch (error: unknown) {
       const fieldErrors = getPocketBaseFieldErrors(error);
@@ -534,18 +777,21 @@ export function WorkerEmploymentDrawer({
   const openOldHistory = () => {
     if (!user || !permissions.canAddOldHistory) return;
     const latest = getLatestEmploymentHistory(histories);
+    const personalSnapshot = getEmploymentPersonalSnapshot(latest, user);
     setOldHistoryForm({
       factory: "",
       main_house: latest?.main_house || "",
       employee_code: latest?.employee_code || "",
-      worker_name_snapshot: latest?.worker_name_snapshot || user.full_name || user.username || "",
-      worker_cccd_snapshot: latest?.worker_cccd_snapshot || user.cccd || "",
+      ...personalSnapshot,
+      hometown_snapshot: personalSnapshot.worker_address_snapshot,
       worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
       recruiter_staff: latest?.recruiter_staff || actor?.id || "",
       join_date: "",
       leave_date: "",
       note: "",
     });
+    setOldHistoryCccdFront(null);
+    setOldHistoryCccdBack(null);
     setOldHistoryOpen(true);
   };
 
@@ -556,9 +802,15 @@ export function WorkerEmploymentDrawer({
     }
     if (!oldHistoryForm.factory) return toast.warning("Chọn nhà máy");
     if (!oldHistoryForm.main_house) return toast.warning("Chọn nhà chính");
-    if (!oldHistoryForm.recruiter_staff) return toast.warning("Chọn người tuyển");
+    if (!oldHistoryForm.recruiter_staff) return toast.warning("Chọn Người tuyển");
     if (!oldHistoryForm.join_date) return toast.warning("Chọn ngày vào");
     if (!oldHistoryForm.leave_date) return toast.warning("Chọn ngày nghỉ");
+    const missingSnapshotFields = getMissingEmploymentSnapshotFields(oldHistoryForm);
+    if (missingSnapshotFields.length) {
+      return toast.warning(
+        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
+      );
+    }
     if (oldHistoryForm.leave_date < oldHistoryForm.join_date) {
       return toast.warning("Ngày nghỉ không được trước ngày vào");
     }
@@ -582,23 +834,45 @@ export function WorkerEmploymentDrawer({
         return;
       }
 
+      let cccdVersionId: string | undefined;
+      if (oldHistoryCccdFront || oldHistoryCccdBack) {
+        const cccdNumber = oldHistoryForm.worker_cccd_snapshot.trim();
+        if (!cccdNumber) {
+          toast.warning("Cần có số CCCD để lưu ảnh");
+          return;
+        }
+        const [compressedFront, compressedBack] = await Promise.all([
+          oldHistoryCccdFront ? compressImage(oldHistoryCccdFront) : Promise.resolve(null),
+          oldHistoryCccdBack ? compressImage(oldHistoryCccdBack) : Promise.resolve(null),
+        ]);
+        const version = await findOrCreateCccdVersion(user.id, cccdNumber);
+        await updateCccdVersionImages(
+          version.id,
+          compressedFront || undefined,
+          compressedBack || undefined,
+        );
+        cccdVersionId = version.id;
+      }
+
       const created = await createEmploymentHistory({
         user: user.id,
         factory: oldHistoryForm.factory,
         main_house: oldHistoryForm.main_house,
         employee_code: oldHistoryForm.employee_code.trim(),
-        worker_name_snapshot:
-          oldHistoryForm.worker_name_snapshot.trim() || user.full_name || user.username || "",
-        worker_cccd_snapshot: oldHistoryForm.worker_cccd_snapshot.trim() || user.cccd || "",
+        worker_name_snapshot: oldHistoryForm.worker_name_snapshot.trim(),
+        worker_cccd_snapshot: oldHistoryForm.worker_cccd_snapshot.trim(),
+        worker_date_of_birth_snapshot: oldHistoryForm.worker_date_of_birth_snapshot,
+        worker_address_snapshot: oldHistoryForm.worker_address_snapshot.trim(),
+        hometown_snapshot: oldHistoryForm.worker_address_snapshot.trim(),
+        cccd_issue_date: oldHistoryForm.cccd_issue_date,
         worker_tax_code_snapshot: oldHistoryForm.worker_tax_code_snapshot.trim(),
         recruiter_staff: oldHistoryForm.recruiter_staff,
+        cccd_version: cccdVersionId,
         join_date: oldHistoryForm.join_date,
         leave_date: oldHistoryForm.leave_date,
         status: deriveEmploymentStatus({ leave_date: oldHistoryForm.leave_date }),
         note: oldHistoryForm.note.trim(),
       });
-
-      const updatedRows = await fetchEmploymentHistories([user.id]);
       await createStaffActionLog({
         actor,
         targetUserId: user.id,
@@ -609,6 +883,8 @@ export function WorkerEmploymentDrawer({
         note: "Bổ sung lịch sử đi làm cũ",
       });
       setOldHistoryOpen(false);
+      setOldHistoryCccdFront(null);
+      setOldHistoryCccdBack(null);
       await onDataChanged();
       toast.success("Đã bổ sung lịch sử đi làm cũ");
     } catch (error: unknown) {
@@ -623,6 +899,13 @@ export function WorkerEmploymentDrawer({
     if (!editingId || !user?.id) return;
     if (!form.factory) {
       toast.warning("Chọn nhà máy");
+      return;
+    }
+    const missingSnapshotFields = getMissingEmploymentSnapshotFields(form);
+    if (missingSnapshotFields.length) {
+      toast.warning(
+        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
+      );
       return;
     }
     setSaving(true);
@@ -646,12 +929,38 @@ export function WorkerEmploymentDrawer({
       }
       if (isRestoring) validateRestoreRequest(latestHistories, editingId);
 
+      let cccdVersionId = before.cccd_version;
+      const cccdNumber = form.worker_cccd_snapshot.trim() || user.cccd || "";
+      if (editCccdFront || editCccdBack) {
+        if (!cccdNumber) {
+          toast.warning("Cần có số CCCD để lưu ảnh");
+          return;
+        }
+        const [compressedFront, compressedBack] = await Promise.all([
+          editCccdFront ? compressImage(editCccdFront) : Promise.resolve(null),
+          editCccdBack ? compressImage(editCccdBack) : Promise.resolve(null),
+        ]);
+        const version = await findOrCreateCccdVersion(user.id, cccdNumber);
+        await updateCccdVersionImages(
+          version.id,
+          compressedFront || undefined,
+          compressedBack || undefined,
+        );
+        cccdVersionId = version.id;
+      }
+
+      const normalizedAddress = form.worker_address_snapshot.trim();
       const historyPayload = {
         factory: form.factory,
         employee_code: form.employee_code.trim(),
         worker_name_snapshot: form.worker_name_snapshot.trim(),
         worker_cccd_snapshot: form.worker_cccd_snapshot.trim(),
+        worker_date_of_birth_snapshot: form.worker_date_of_birth_snapshot,
+        worker_address_snapshot: normalizedAddress,
+        cccd_issue_date: form.cccd_issue_date,
+        hometown_snapshot: normalizedAddress,
         worker_tax_code_snapshot: form.worker_tax_code_snapshot.trim(),
+        cccd_version: cccdVersionId || undefined,
         recruiter_staff: form.recruiter_staff || undefined,
         main_house: form.main_house || undefined,
         join_date: form.join_date || undefined,
@@ -662,10 +971,6 @@ export function WorkerEmploymentDrawer({
       const updated = isRestoring
         ? await restoreEmploymentHistoryToWorking(editingId, historyPayload)
         : await updateEmploymentHistory(editingId, historyPayload);
-      await updateUserAndCache(user.id, {
-        address: form.address.trim(),
-        phone: form.phone.trim(),
-      });
       await createStaffActionLog({
         actor,
         targetUserId: user.id,
@@ -680,6 +985,8 @@ export function WorkerEmploymentDrawer({
       });
       toast.success(isRestoring ? "Đã khôi phục trạng thái đang làm" : "Đã lưu thay đổi");
       setRestoreRequest(null);
+      setEditCccdFront(null);
+      setEditCccdBack(null);
       setEditingId(null);
       await onDataChanged();
     } catch (error: unknown) {
@@ -721,9 +1028,7 @@ export function WorkerEmploymentDrawer({
       await onDataChanged();
     } catch (error: unknown) {
       const fieldErrors = getPocketBaseFieldErrors(error);
-      toast.error(
-        fieldErrors || getErrorMessage(error, "Không thể khôi phục trạng thái đang làm"),
-      );
+      toast.error(fieldErrors || getErrorMessage(error, "Không thể khôi phục trạng thái đang làm"));
     } finally {
       setRestoreSaving(false);
     }
@@ -771,8 +1076,7 @@ export function WorkerEmploymentDrawer({
         bank_name: advancePayoutMethod === "cash" ? "" : bankSource.bank_name || "",
         bank_account_number:
           advancePayoutMethod === "cash" ? "" : bankSource.bank_account_number || "",
-        bank_account_name:
-          advancePayoutMethod === "cash" ? "" : bankSource.bank_account_name || "",
+        bank_account_name: advancePayoutMethod === "cash" ? "" : bankSource.bank_account_name || "",
         payout_method: advancePayoutMethod,
         amount,
         reason: advanceReason.trim(),
@@ -861,12 +1165,15 @@ export function WorkerEmploymentDrawer({
 
   const openJoinDialog = () => {
     const latest = getLatestEmploymentHistory(histories);
+    const personalSnapshot = getEmploymentPersonalSnapshot(latest, user);
+    setJoinCccdFront(null);
+    setJoinCccdBack(null);
     setJoinForm({
       factory: "",
       main_house: "",
       employee_code: "",
-      worker_name_snapshot: latest?.worker_name_snapshot || user.full_name || user.username || "",
-      worker_cccd_snapshot: latest?.worker_cccd_snapshot || user.cccd || "",
+      ...personalSnapshot,
+      hometown_snapshot: personalSnapshot.worker_address_snapshot,
       worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
       recruiter_staff: actor?.id || "",
       join_date: todayIso(),
@@ -1312,9 +1619,9 @@ export function WorkerEmploymentDrawer({
                       <Card
                         key={h.id}
                         className={`min-w-0 space-y-2 overflow-hidden rounded-2xl p-3 transition-colors desktop:grid desktop:grid-cols-[minmax(13rem,1.35fr)_minmax(10rem,1fr)_minmax(8rem,.8fr)_minmax(9rem,.9fr)_minmax(11rem,1.1fr)_auto] desktop:items-center desktop:gap-3 desktop:space-y-0 desktop:rounded-xl desktop:px-3 desktop:py-2 ${
-                          canEdit ? "cursor-pointer hover:bg-muted/30" : ""
+                          "cursor-pointer hover:bg-muted/30"
                         }`}
-                        onClick={canEdit ? () => startEdit(h) : undefined}
+                        onClick={() => setSelectedHistory(h)}
                       >
                         <div className="flex items-start justify-between gap-2 desktop:contents">
                           <div className="min-w-0 flex-1 desktop:col-start-1 desktop:row-start-1">
@@ -1338,11 +1645,9 @@ export function WorkerEmploymentDrawer({
                             <StatusChip tone={isCurrentlyWorking(h) ? "success" : "neutral"}>
                               {isCurrentlyWorking(h) ? "Đang làm" : "Đã nghỉ"}
                             </StatusChip>
-                            {canEdit && (
-                              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                            )}
+                            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            </div>
                           </div>
-                        </div>
                         <div className="min-w-0 space-y-1 text-[11px] text-muted-foreground desktop:contents">
                           <div
                             title={employmentPeriod}
@@ -1401,6 +1706,166 @@ export function WorkerEmploymentDrawer({
       </Dialog>
 
       <Dialog
+        open={Boolean(selectedHistory)}
+        onOpenChange={(value) => {
+          if (!value) {
+            setSelectedHistory(null);
+            setHistoryCccdPreview(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Thông tin cá nhân tại thời điểm đi làm</DialogTitle>
+            <DialogDescription>
+              Dữ liệu được lưu riêng theo lịch sử, không thay đổi theo hồ sơ hiện tại.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedHistory && (
+            <div className="space-y-3">
+              <div className="rounded-xl border bg-muted/30 p-3">
+                <div className="text-sm font-semibold">
+                  {selectedHistory.expand?.factory?.name || "Nhà máy"}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Mã NV: {selectedHistory.employee_code || "Chưa có"}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="rounded-xl bg-muted/35 p-3">
+                  <div className="text-[11px] text-muted-foreground">Trạng thái</div>
+                  <div className="mt-1">
+                    <StatusChip tone={isCurrentlyWorking(selectedHistory) ? "success" : "neutral"}>
+                      {isCurrentlyWorking(selectedHistory) ? "Đang làm" : "Đã nghỉ"}
+                    </StatusChip>
+                  </div>
+                </div>
+                <div className="rounded-xl bg-muted/35 p-3">
+                  <div className="text-[11px] text-muted-foreground">Nhà chính</div>
+                  <div className="mt-1 font-medium">
+                    {selectedHistory.expand?.main_house?.name || "Chưa gán"}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-muted/35 p-3">
+                  <div className="text-[11px] text-muted-foreground">Ngày vào làm</div>
+                  <div className="mt-1 font-medium">{formatDate(selectedHistory.join_date)}</div>
+                </div>
+                <div className="rounded-xl bg-muted/35 p-3">
+                  <div className="text-[11px] text-muted-foreground">Ngày nghỉ</div>
+                  <div className="mt-1 font-medium">{formatDate(selectedHistory.leave_date)}</div>
+                </div>
+              </div>
+
+              <div className="space-y-2 rounded-xl border p-3 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Họ tên tại nhà máy: </span>
+                  <span className="font-medium">
+                    {selectedHistory.worker_name_snapshot || "Chưa có"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">CCCD tại nhà máy: </span>
+                  <span className="font-medium">
+                    {selectedHistory.worker_cccd_snapshot || "Chưa có"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Ngày sinh: </span>
+                  <span className="font-medium">
+                    {formatDate(selectedHistory.worker_date_of_birth_snapshot)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Ngày cấp CCCD: </span>
+                  <span className="font-medium">{formatDate(selectedHistory.cccd_issue_date)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Địa chỉ thường trú: </span>
+                  <span className="font-medium">
+                    {selectedHistory.worker_address_snapshot ||
+                      selectedHistory.hometown_snapshot ||
+                      "Chưa có"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Mã số thuế: </span>
+                  <span className="font-medium">
+                    {selectedHistory.worker_tax_code_snapshot || "Chưa có"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Người tuyển: </span>
+                  <span className="font-medium">
+                    {selectedHistory.expand?.recruiter_staff?.full_name ||
+                      selectedHistory.expand?.recruiter_staff?.username ||
+                      "Chưa có"}
+                  </span>
+                </div>
+              </div>
+
+              <HistoryCccdSnapshot
+                history={selectedHistory}
+                version={selectedHistoryCccdVersion || undefined}
+                currentUser={user}
+                loading={selectedHistoryCccdLoading}
+                onPreview={(src, label) => src && setHistoryCccdPreview({ src, label })}
+              />
+
+              {selectedHistory.note && (
+                <div className="rounded-xl bg-muted/40 p-3 text-sm text-muted-foreground">
+                  <div className="mb-1 text-[11px] font-medium uppercase tracking-wide">
+                    Ghi chú
+                  </div>
+                  {selectedHistory.note}
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            {selectedHistory && canEditHistoryRecord(selectedHistory) && (
+              <Button
+                type="button"
+                onClick={() => {
+                  const history = selectedHistory;
+                  setSelectedHistory(null);
+                  startEdit(history);
+                }}
+              >
+                Sửa lịch sử
+              </Button>
+            )}
+            <Button type="button" variant="outline" onClick={() => setSelectedHistory(null)}>
+              Đóng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(historyCccdPreview)}
+        onOpenChange={(value) => !value && setHistoryCccdPreview(null)}
+      >
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-3xl rounded-2xl p-2 sm:p-4">
+          <DialogHeader className="px-1 pt-1">
+            <DialogTitle>{historyCccdPreview?.label || "Ảnh CCCD"}</DialogTitle>
+            <DialogDescription>Ảnh CCCD của bản ghi lịch sử đi làm.</DialogDescription>
+          </DialogHeader>
+          {historyCccdPreview && (
+            <div className="flex max-h-[calc(100dvh-8rem)] items-center justify-center overflow-auto rounded-xl bg-muted/30">
+              <img
+                src={historyCccdPreview.src}
+                alt={historyCccdPreview.label}
+                className="h-auto max-h-[calc(100dvh-8rem)] w-auto max-w-full rounded-xl object-contain"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={Boolean(restoreRequest)}
         onOpenChange={(value) => {
           if (!value && !restoreSaving && !saving) setRestoreRequest(null);
@@ -1419,7 +1884,8 @@ export function WorkerEmploymentDrawer({
               <div className="rounded-xl border bg-muted/30 p-3">
                 <div className="text-sm font-semibold">
                   {restoreRequest.history.expand?.factory?.name ||
-                    factories.find((factory) => factory.id === restoreRequest.history.factory)?.name ||
+                    factories.find((factory) => factory.id === restoreRequest.history.factory)
+                      ?.name ||
                     "Nhà máy"}
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
@@ -1439,8 +1905,8 @@ export function WorkerEmploymentDrawer({
               </div>
 
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
-                Sau khi xác nhận, bản ghi này sẽ không còn ngày nghỉ và giao diện NLĐ sẽ chuyển
-                sang “Đang làm”. Hệ thống sẽ chặn nếu đã có bản ghi đang làm khác.
+                Sau khi xác nhận, bản ghi này sẽ không còn ngày nghỉ và giao diện NLĐ sẽ chuyển sang
+                "Đang làm". Hệ thống sẽ chặn nếu đã có bản ghi đang làm khác.
               </div>
             </div>
           )}
@@ -1545,7 +2011,7 @@ export function WorkerEmploymentDrawer({
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Chọn người tuyển" />
+                    <SelectValue placeholder="Chọn Người tuyển" />
                   </SelectTrigger>
                   <SelectContent>
                     {staffUsers.map((staff) => (
@@ -1584,29 +2050,17 @@ export function WorkerEmploymentDrawer({
                 />
               </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Họ tên tại nhà máy</Label>
-              <Input
-                value={oldHistoryForm.worker_name_snapshot}
-                onChange={(event) =>
-                  setOldHistoryForm((current) => ({
-                    ...current,
-                    worker_name_snapshot: event.target.value,
-                  }))
+            <div className="space-y-2">
+              <div className="text-sm font-semibold">Thông tin CCCD</div>
+              <JoinCccdSection
+                value={oldHistoryForm}
+                onChange={(changes) =>
+                  setOldHistoryForm((current) => ({ ...current, ...changes }))
                 }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">CCCD tại nhà máy</Label>
-              <Input
-                value={oldHistoryForm.worker_cccd_snapshot}
-                onChange={(event) =>
-                  setOldHistoryForm((current) => ({
-                    ...current,
-                    worker_cccd_snapshot: event.target.value.replace(/[^\d]/g, ""),
-                  }))
-                }
-                inputMode="numeric"
+                frontFile={oldHistoryCccdFront}
+                backFile={oldHistoryCccdBack}
+                onFrontFileChange={setOldHistoryCccdFront}
+                onBackFileChange={setOldHistoryCccdBack}
               />
             </div>
             <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
@@ -1669,163 +2123,158 @@ export function WorkerEmploymentDrawer({
             </DialogDescription>
           </DialogHeader>
           <form
-            className="space-y-3 desktop:grid desktop:grid-cols-6 desktop:gap-2 desktop:space-y-0"
+            className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
               void saveEdit();
             }}
           >
-            <div className="space-y-1 desktop:order-1 desktop:col-span-3">
-              <Label className="text-xs">Nhà máy *</Label>
-              <Select
-                value={form.factory}
-                onValueChange={(v) => setForm((f) => ({ ...f, factory: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn nhà máy" />
-                </SelectTrigger>
-                <SelectContent>
-                  {factories.map((factory) => (
-                    <SelectItem key={factory.id} value={factory.id}>
-                      {factory.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="space-y-3">
+              <div className="text-sm font-semibold">Thông tin đi làm</div>
+              <div className="space-y-1">
+                <Label className="text-xs">Nhà máy *</Label>
+                <Select
+                  value={form.factory}
+                  onValueChange={(value) => setForm((current) => ({ ...current, factory: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn nhà máy" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {factories.map((factory) => (
+                      <SelectItem key={factory.id} value={factory.id}>
+                        {factory.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Nhà chính</Label>
+                  <Select
+                    value={form.main_house}
+                    onValueChange={(value) =>
+                      setForm((current) => ({ ...current, main_house: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn nhà chính" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mainHouses.map((mainHouse) => (
+                        <SelectItem key={mainHouse.id} value={mainHouse.id}>
+                          {mainHouse.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Người tuyển</Label>
+                  <Select
+                    value={form.recruiter_staff}
+                    onValueChange={(value) =>
+                      setForm((current) => ({ ...current, recruiter_staff: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn người tuyển" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {staffUsers.map((staff) => (
+                        <SelectItem key={staff.id} value={staff.id}>
+                          {staff.full_name || staff.username || staff.id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Mã NV</Label>
+                  <Input
+                    value={form.employee_code}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, employee_code: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Ngày vào</Label>
+                  <DateInput
+                    value={form.join_date}
+                    onChange={(join_date) => setForm((current) => ({ ...current, join_date }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Ngày nghỉ</Label>
+                  <DateInput
+                    value={form.leave_date}
+                    onChange={(leave_date) => setForm((current) => ({ ...current, leave_date }))}
+                  />
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-1 gap-2 desktop:order-6 desktop:col-span-6 desktop:grid-cols-6">
-              <div className="space-y-1 desktop:col-span-4">
-                <Label className="text-xs">Địa chỉ NLĐ</Label>
-                <Input
-                  value={form.address}
-                  onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                  placeholder="Nhập địa chỉ người lao động"
-                />
-              </div>
-              <div className="space-y-1 desktop:col-span-2">
-                <Label className="text-xs">Số điện thoại NLĐ</Label>
-                <Input
-                  type="tel"
-                  inputMode="tel"
-                  value={form.phone}
-                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                  placeholder="Nhập số điện thoại"
-                  autoComplete="tel"
-                />
-              </div>
+
+            <div className="space-y-2">
+              <div className="text-sm font-semibold">Thông tin CCCD</div>
+              <JoinCccdSection
+                value={form}
+                onChange={(changes) => setForm((current) => ({ ...current, ...changes }))}
+                frontFile={editCccdFront}
+                backFile={editCccdBack}
+                frontImageUrl={editCccdFrontUrl}
+                backImageUrl={editCccdBackUrl}
+                onFrontFileChange={setEditCccdFront}
+                onBackFileChange={setEditCccdBack}
+              />
             </div>
-            <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2 desktop:contents">
-              <div className="space-y-1 desktop:order-3 desktop:col-span-2">
-                <Label className="text-xs">Họ tên (NM)</Label>
-                <Input
-                  value={form.worker_name_snapshot}
-                  onChange={(e) => setForm((f) => ({ ...f, worker_name_snapshot: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1 desktop:order-4 desktop:col-span-3">
-                <Label className="text-xs">CCCD (NM)</Label>
-                <Input
-                  value={form.worker_cccd_snapshot}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      worker_cccd_snapshot: e.target.value.replace(/[^\d]/g, ""),
-                    }))
-                  }
-                />
-              </div>
-              <div className="space-y-1 desktop:order-2 desktop:col-span-1">
-                <Label className="text-xs">Mã NV</Label>
-                <Input
-                  value={form.employee_code}
-                  onChange={(e) => setForm((f) => ({ ...f, employee_code: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1 desktop:order-5 desktop:col-span-3">
+
+            <div className="space-y-3">
+              <div className="text-sm font-semibold">Thông tin bổ sung</div>
+              <div className="space-y-1">
                 <Label className="text-xs">Mã số thuế</Label>
                 <Input
                   value={form.worker_tax_code_snapshot}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      worker_tax_code_snapshot: e.target.value.replace(/[^\d]/g, ""),
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      worker_tax_code_snapshot: event.target.value.replace(/[^\d]/g, ""),
                     }))
                   }
                   inputMode="numeric"
                 />
               </div>
-              <div className="space-y-1 desktop:order-7 desktop:col-span-2">
-                <Label className="text-xs">Ngày vào</Label>
-                <DateInput
-                  value={form.join_date}
-                  onChange={(v) => setForm((f) => ({ ...f, join_date: v }))}
+              <div className="space-y-1">
+                <Label className="text-xs">Ghi chú</Label>
+                <Textarea
+                  rows={3}
+                  value={form.note}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, note: event.target.value }))
+                  }
+                  placeholder="Tùy chọn"
                 />
               </div>
-              <div className="space-y-1 desktop:order-8 desktop:col-span-2">
-                <Label className="text-xs">Ngày nghỉ</Label>
-                <DateInput
-                  value={form.leave_date}
-                  onChange={(v) => setForm((f) => ({ ...f, leave_date: v }))}
-                />
-              </div>
-            </div>
-            <div className="space-y-1 desktop:order-9 desktop:col-span-2">
-              <Label className="text-xs">Người tuyển</Label>
-              <Select
-                value={form.recruiter_staff}
-                onValueChange={(v) => setForm((f) => ({ ...f, recruiter_staff: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn người tuyển" />
-                </SelectTrigger>
-                <SelectContent>
-                  {staffUsers.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.full_name || s.username || s.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1 desktop:order-10 desktop:col-span-2">
-              <Label className="text-xs">Nhà chính</Label>
-              <Select
-                value={form.main_house}
-                onValueChange={(v) => setForm((f) => ({ ...f, main_house: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn nhà chính" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mainHouses.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1 desktop:order-11 desktop:col-span-4">
-              <Label className="text-xs">Ghi chú</Label>
-              <Input
-                value={form.note}
-                onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
-                placeholder="Tuỳ chọn"
-              />
             </div>
 
-            <div className="space-y-1.5 desktop:order-12 desktop:col-span-6">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Ảnh CCCD
-              </Label>
-              <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} />
-            </div>
-            <DialogFooter className="desktop:order-13 desktop:col-span-6">
-              <Button type="button" variant="outline" onClick={() => setEditingId(null)}>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditCccdFront(null);
+                  setEditCccdBack(null);
+                  setEditingId(null);
+                }}
+                disabled={saving}
+              >
                 Huỷ
               </Button>
               <Button type="submit" disabled={saving}>
-                {saving ? "Đang lưu..." : "Lưu"}
+                {saving ? "Đang lưu..." : "Lưu thay đổi"}
               </Button>
             </DialogFooter>
           </form>
@@ -1865,7 +2314,8 @@ export function WorkerEmploymentDrawer({
             )}
             {advancePolicy && !advancePolicy.isWorking && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                NLĐ đã nghỉ; yêu cầu đang dùng hạn mức của {advancePolicy.factoryName} theo lịch sử gần nhất.
+                NLĐ đã nghỉ; yêu cầu đang dùng hạn mức của {advancePolicy.factoryName} theo lịch sử
+                gần nhất.
               </div>
             )}
 
@@ -1898,41 +2348,41 @@ export function WorkerEmploymentDrawer({
               <div className="space-y-1">
                 <Label className="text-xs">Tài khoản nhận tiền</Label>
                 <div className="space-y-1.5">
-                {workerBank && (
-                  <button
-                    type="button"
-                    onClick={() => setAdvanceBankChoice("worker")}
-                    className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${advanceBankChoice === "worker" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
-                  >
-                    <div
-                      className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${advanceBankChoice === "worker" ? "border-primary bg-primary" : "border-muted-foreground"}`}
-                    />
-                    <div>
-                      <div className="font-medium">STK của NLĐ</div>
-                      <div className="text-muted-foreground">{workerBank}</div>
+                  {workerBank && (
+                    <button
+                      type="button"
+                      onClick={() => setAdvanceBankChoice("worker")}
+                      className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${advanceBankChoice === "worker" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+                    >
+                      <div
+                        className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${advanceBankChoice === "worker" ? "border-primary bg-primary" : "border-muted-foreground"}`}
+                      />
+                      <div>
+                        <div className="font-medium">STK của NLĐ</div>
+                        <div className="text-muted-foreground">{workerBank}</div>
+                      </div>
+                    </button>
+                  )}
+                  {actorBank && (
+                    <button
+                      type="button"
+                      onClick={() => setAdvanceBankChoice("actor")}
+                      className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${advanceBankChoice === "actor" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+                    >
+                      <div
+                        className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${advanceBankChoice === "actor" ? "border-primary bg-primary" : "border-muted-foreground"}`}
+                      />
+                      <div>
+                        <div className="font-medium">STK của tôi ({actorBankRoleLabel})</div>
+                        <div className="text-muted-foreground">{actorBank}</div>
+                      </div>
+                    </button>
+                  )}
+                  {!workerBank && !actorBank && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+                      Chưa có STK nào. Cập nhật ngân hàng trước khi báo ứng.
                     </div>
-                  </button>
-                )}
-                {actorBank && (
-                  <button
-                    type="button"
-                    onClick={() => setAdvanceBankChoice("actor")}
-                    className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${advanceBankChoice === "actor" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
-                  >
-                    <div
-                      className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${advanceBankChoice === "actor" ? "border-primary bg-primary" : "border-muted-foreground"}`}
-                    />
-                    <div>
-                      <div className="font-medium">STK của tôi ({actorBankRoleLabel})</div>
-                      <div className="text-muted-foreground">{actorBank}</div>
-                    </div>
-                  </button>
-                )}
-                {!workerBank && !actorBank && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
-                    Chưa có STK nào. Cập nhật ngân hàng trước khi báo ứng.
-                  </div>
-                )}
+                  )}
                 </div>
               </div>
             )}
@@ -2038,6 +2488,7 @@ export function WorkerEmploymentDrawer({
               void submitJoin();
             }}
           >
+            <div className="text-sm font-semibold">Thông tin đi làm</div>
             <div className="space-y-1">
               <Label className="text-xs">Nhà máy *</Label>
               <Select
@@ -2082,7 +2533,7 @@ export function WorkerEmploymentDrawer({
                   onValueChange={(v) => setJoinForm((f) => ({ ...f, recruiter_staff: v }))}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Chọn người tuyển" />
+                    <SelectValue placeholder="Chọn Người tuyển" />
                   </SelectTrigger>
                   <SelectContent>
                     {staffUsers.map((s) => (
@@ -2111,28 +2562,18 @@ export function WorkerEmploymentDrawer({
                 />
               </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Họ tên tại nhà máy</Label>
-              <Input
-                value={joinForm.worker_name_snapshot}
-                onChange={(e) =>
-                  setJoinForm((f) => ({ ...f, worker_name_snapshot: e.target.value }))
-                }
+            <div className="space-y-2">
+              <div className="text-sm font-semibold">Thông tin CCCD</div>
+              <JoinCccdSection
+                value={joinForm}
+                onChange={(changes) => setJoinForm((current) => ({ ...current, ...changes }))}
+                frontFile={joinCccdFront}
+                backFile={joinCccdBack}
+                onFrontFileChange={setJoinCccdFront}
+                onBackFileChange={setJoinCccdBack}
               />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">CCCD tại nhà máy</Label>
-              <Input
-                value={joinForm.worker_cccd_snapshot}
-                onChange={(e) =>
-                  setJoinForm((f) => ({
-                    ...f,
-                    worker_cccd_snapshot: e.target.value.replace(/[^\d]/g, ""),
-                  }))
-                }
-                inputMode="numeric"
-              />
-            </div>
+            <div className="text-sm font-semibold">Thông tin bổ sung</div>
             <div className="space-y-1">
               <Label className="text-xs">Mã số thuế</Label>
               <Input
@@ -2152,7 +2593,7 @@ export function WorkerEmploymentDrawer({
                 rows={3}
                 value={joinForm.note}
                 onChange={(e) => setJoinForm((f) => ({ ...f, note: e.target.value }))}
-                placeholder="Tuỳ chọn"
+                placeholder="Tùy chọn"
               />
             </div>
             <DialogFooter>

@@ -40,6 +40,8 @@ import {
   fetchEmploymentHistories,
   findActiveEmploymentByUser,
   getLatestEmploymentHistory,
+  getMissingEmploymentSnapshotFields,
+  getEmploymentPersonalSnapshot,
   maskCccd,
   updateEmploymentHistory,
   updateUserAndCache,
@@ -64,6 +66,7 @@ import { resolveBankName } from "@/lib/vn-banks";
 import { BankNameInput } from "@/components/staff/BankNameInput";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
 import type { AdvancePayoutMethod } from "@/lib/advances";
+import { JoinCccdSection } from "@/components/employment/JoinCccdSection";
 
 function todayDate() {
   const now = new Date();
@@ -133,6 +136,10 @@ export function WorkerQuickDrawer({
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
+    worker_date_of_birth_snapshot: "",
+    worker_address_snapshot: "",
+    cccd_issue_date: "",
+    hometown_snapshot: "",
     worker_tax_code_snapshot: "",
     recruiter_staff: "",
     join_date: todayDate(),
@@ -161,12 +168,13 @@ export function WorkerQuickDrawer({
     setAdvanceReason("");
     setPayoutMethod("bank_transfer");
     const latest = worker.latestHistory;
+    const personalSnapshot = getEmploymentPersonalSnapshot(latest, worker.user);
     setJoinForm({
       factory: "",
       main_house: "",
       employee_code: "",
-      worker_name_snapshot: latest?.worker_name_snapshot || worker.user.full_name || "",
-      worker_cccd_snapshot: latest?.worker_cccd_snapshot || worker.user.cccd || "",
+      ...personalSnapshot,
+      hometown_snapshot: personalSnapshot.worker_address_snapshot,
       worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
       recruiter_staff: viewer?.id || "",
       join_date: todayDate(),
@@ -246,6 +254,13 @@ export function WorkerQuickDrawer({
       toast.warning("Chọn nhà chính");
       return;
     }
+    const missingSnapshotFields = getMissingEmploymentSnapshotFields(joinForm);
+    if (missingSnapshotFields.length) {
+      toast.warning(
+        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
+      );
+      return;
+    }
     if (!canReportJoin(viewer, worker.histories, managedFactoryIds, joinForm.factory)) {
       toast.error("Bạn không có quyền báo đi làm tại nhà máy đã chọn");
       return;
@@ -297,12 +312,12 @@ export function WorkerQuickDrawer({
         factory: joinForm.factory,
         main_house: joinForm.main_house,
         employee_code: joinForm.employee_code.trim(),
-        worker_name_snapshot:
-          joinForm.worker_name_snapshot.trim() ||
-          worker.user.full_name ||
-          worker.user.username ||
-          "",
-        worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim() || worker.user.cccd || "",
+        worker_name_snapshot: joinForm.worker_name_snapshot.trim(),
+        worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim(),
+        worker_date_of_birth_snapshot: joinForm.worker_date_of_birth_snapshot,
+        worker_address_snapshot: joinForm.worker_address_snapshot.trim(),
+        hometown_snapshot: joinForm.worker_address_snapshot.trim(),
+        cccd_issue_date: joinForm.cccd_issue_date,
         worker_tax_code_snapshot: joinForm.worker_tax_code_snapshot.trim(),
         recruiter_staff: joinForm.recruiter_staff,
         cccd_version: cccdVersionId,
@@ -650,6 +665,7 @@ export function WorkerQuickDrawer({
                 void submitJoin();
               }}
             >
+              <div className="text-sm font-semibold">Thông tin đi làm</div>
               <div className="text-sm font-semibold">Báo đi làm nhà máy mới</div>
               <div className="space-y-1">
                 <Label className="text-xs">Nhà máy</Label>
@@ -687,61 +703,18 @@ export function WorkerQuickDrawer({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Họ tên (NM)</Label>
-                  <Input
-                    value={joinForm.worker_name_snapshot}
-                    onChange={(e) =>
-                      setJoinForm((f) => ({ ...f, worker_name_snapshot: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">CCCD (NM)</Label>
-                  <Input
-                    value={joinForm.worker_cccd_snapshot}
-                    onChange={(e) =>
-                      setJoinForm((f) => ({
-                        ...f,
-                        worker_cccd_snapshot: e.target.value.replace(/[^\d]/g, ""),
-                      }))
-                    }
-                  />
-                </div>
+              <div className="space-y-2">
+                <div className="text-sm font-semibold">Thông tin CCCD</div>
+                <JoinCccdSection
+                  value={joinForm}
+                  onChange={(changes) => setJoinForm((current) => ({ ...current, ...changes }))}
+                  frontFile={joinCccdFront}
+                  backFile={joinCccdBack}
+                  onFrontFileChange={setJoinCccdFront}
+                  onBackFileChange={setJoinCccdBack}
+                />
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Ảnh CCCD mặt trước</Label>
-                  <label className="flex h-9 cursor-pointer items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground hover:bg-muted/40">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        setJoinCccdFront(e.target.files?.[0] || null);
-                        e.target.value = "";
-                      }}
-                    />
-                    {joinCccdFront ? joinCccdFront.name.slice(0, 15) + "…" : "Chọn ảnh trước"}
-                  </label>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Ảnh CCCD mặt sau</Label>
-                  <label className="flex h-9 cursor-pointer items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground hover:bg-muted/40">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        setJoinCccdBack(e.target.files?.[0] || null);
-                        e.target.value = "";
-                      }}
-                    />
-                    {joinCccdBack ? joinCccdBack.name.slice(0, 15) + "…" : "Chọn ảnh sau"}
-                  </label>
-                </div>
-              </div>
+              <div className="text-sm font-semibold">Thông tin bổ sung</div>
               <div className="space-y-1">
                 <Label className="text-xs">Mã số thuế</Label>
                 <Input

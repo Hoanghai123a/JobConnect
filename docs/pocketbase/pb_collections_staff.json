@@ -381,6 +381,56 @@
         "type": "text"
       },
       {
+        "hidden": false,
+        "id": "date_emphist_birth_snapshot",
+        "max": "",
+        "min": "",
+        "name": "worker_date_of_birth_snapshot",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text_emphist_address_snapshot",
+        "max": 0,
+        "min": 0,
+        "name": "worker_address_snapshot",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "date_emphist_cccd_issue",
+        "max": "",
+        "min": "",
+        "name": "cccd_issue_date",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text_emphist_hometown",
+        "max": 0,
+        "min": 0,
+        "name": "hometown_snapshot",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
         "autogeneratePattern": "",
         "hidden": false,
         "id": "text_emphist_tax_code",

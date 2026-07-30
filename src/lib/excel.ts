@@ -139,6 +139,30 @@ function applyDateColumns(ws: XLSX.WorkSheet, dateColumns: string[]) {
   }
 }
 
+function getCellDisplayLength(cell: XLSX.CellObject | undefined) {
+  if (!cell || cell.v == null || cell.v === "") return 0;
+
+  const displayValue = cell.z === EXCEL_DATE_FORMAT ? EXCEL_DATE_FORMAT : cell.w ?? cell.v;
+  return Math.max(...String(displayValue).split(/\r\n?|\n/).map((line) => Array.from(line).length));
+}
+
+function applyAutoColumnWidths(ws: XLSX.WorkSheet) {
+  if (!ws["!ref"]) return;
+
+  const range = XLSX.utils.decode_range(ws["!ref"]);
+  ws["!cols"] = Array.from({ length: range.e.c - range.s.c + 1 }, (_, index) => {
+    const column = range.s.c + index;
+    let maxLength = 0;
+
+    for (let row = range.s.r; row <= range.e.r; row++) {
+      const address = XLSX.utils.encode_cell({ r: row, c: column });
+      maxLength = Math.max(maxLength, getCellDisplayLength(ws[address]));
+    }
+
+    return { wch: maxLength + 2 };
+  });
+}
+
 export function exportToExcel(
   filename: string,
   sheets: Record<string, any[]>,
@@ -148,6 +172,7 @@ export function exportToExcel(
   for (const [name, rows] of Object.entries(sheets)) {
     const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{}]);
     applyDateColumns(ws, dateColumnsBySheet[name] ?? []);
+    applyAutoColumnWidths(ws);
     XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
   }
   XLSX.writeFile(wb, filename.endsWith(".xlsx") ? filename : filename + ".xlsx");

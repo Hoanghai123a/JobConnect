@@ -128,7 +128,6 @@ function buildRecruitmentDayDetails({
 
   const workers = dayHistories
     .map((history) => {
-      const worker = history.expand?.user || userById.get(history.user);
       const recruiter =
         history.expand?.recruiter_staff ||
         (history.recruiter_staff ? userById.get(history.recruiter_staff) : undefined);
@@ -139,11 +138,7 @@ function buildRecruitmentDayDetails({
         id: history.id,
         factoryName: factory?.name?.trim() || "—",
         employeeCode: history.employee_code?.trim() || "—",
-        workerName:
-          history.worker_name_snapshot?.trim() ||
-          worker?.full_name?.trim() ||
-          worker?.username?.trim() ||
-          "—",
+        workerName: history.worker_name_snapshot?.trim() || "Thiếu thông tin",
         mainHouseName: history.expand?.main_house?.name?.trim() || "—",
         recruiterName: recruiter ? displayUserName(recruiter) : "—",
         joinDate: joinDate ? new Date(`${joinDate}T12:00:00`).toLocaleDateString("vi-VN") : "—",

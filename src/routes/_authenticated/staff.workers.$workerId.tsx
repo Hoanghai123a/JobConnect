@@ -60,6 +60,8 @@ import {
   fetchEmploymentHistories,
   findActiveEmploymentByUser,
   getLatestEmploymentHistory,
+  getEmploymentPersonalSnapshot,
+  getMissingEmploymentSnapshotFields,
   maskCccd,
   updateEmploymentHistory,
   updateUserAndCache,
@@ -68,6 +70,7 @@ import {
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
+import { JoinCccdSection } from "@/components/employment/JoinCccdSection";
 import {
   resolveAdvancePolicy,
   validateAdvanceAmount,
@@ -94,6 +97,7 @@ import {
   canViewPayroll,
   fetchStaffWorkerWorkspace,
   filterHistoriesForStaffScope,
+  canViewHistoryInStaffScope,
   isRecentRecruiter,
 } from "@/lib/staff-permissions";
 import { pb, fileUrl, type UserRecord } from "@/lib/pocketbase";
@@ -118,6 +122,23 @@ type AdvanceItem = {
   payout_method?: AdvancePayoutMethod;
   created?: string;
 };
+
+function recordTime(value?: string) {
+  const time = new Date(value || 0).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function getLatestHistoryByJoinDate(histories: EmploymentHistoryRecord[]) {
+  return histories.reduce<EmploymentHistoryRecord | null>((latest, history) => {
+    if (!latest) return history;
+
+    const joinDiff = recordTime(history.join_date) - recordTime(latest.join_date);
+    if (joinDiff > 0) return history;
+    if (joinDiff < 0) return latest;
+
+    return recordTime(history.created) > recordTime(latest.created) ? history : latest;
+  }, null);
+}
 
 function StaffWorkerDetailPage() {
   const { workerId } = Route.useParams();
@@ -162,6 +183,10 @@ function StaffWorkerDetailPage() {
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
+    worker_date_of_birth_snapshot: "",
+    worker_address_snapshot: "",
+    cccd_issue_date: "",
+    hometown_snapshot: "",
     worker_tax_code_snapshot: "",
     recruiter_staff: "",
     join_date: todayDate(),
@@ -169,6 +194,10 @@ function StaffWorkerDetailPage() {
   });
   const [joinCccdFront, setJoinCccdFront] = useState<File | null>(null);
   const [joinCccdBack, setJoinCccdBack] = useState<File | null>(null);
+  const [editCccdFront, setEditCccdFront] = useState<File | null>(null);
+  const [editCccdBack, setEditCccdBack] = useState<File | null>(null);
+  const [oldHistoryCccdFront, setOldHistoryCccdFront] = useState<File | null>(null);
+  const [oldHistoryCccdBack, setOldHistoryCccdBack] = useState<File | null>(null);
   const [bankForm, setBankForm] = useState({
     bank_name: "",
     bank_account_number: "",
@@ -178,6 +207,10 @@ function StaffWorkerDetailPage() {
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
+    worker_date_of_birth_snapshot: "",
+    worker_address_snapshot: "",
+    cccd_issue_date: "",
+    hometown_snapshot: "",
     worker_tax_code_snapshot: "",
     recruiter_staff: "",
     main_house: "",
@@ -192,6 +225,10 @@ function StaffWorkerDetailPage() {
     employee_code: "",
     worker_name_snapshot: "",
     worker_cccd_snapshot: "",
+    worker_date_of_birth_snapshot: "",
+    worker_address_snapshot: "",
+    cccd_issue_date: "",
+    hometown_snapshot: "",
     worker_tax_code_snapshot: "",
     recruiter_staff: "",
     join_date: "",
@@ -260,11 +297,12 @@ function StaffWorkerDetailPage() {
         setMainHouses(mainHouseRows);
         setStaffUsers(staffRows as UserRecord[]);
         setAdvances(advanceRows as AdvanceItem[]);
+        const personalSnapshot = getEmploymentPersonalSnapshot(latest, userRecord);
         setJoinForm((prev) => ({
           ...prev,
           employee_code: latest?.employee_code || "",
-          worker_name_snapshot: latest?.worker_name_snapshot || userRecord?.full_name || "",
-          worker_cccd_snapshot: latest?.worker_cccd_snapshot || userRecord?.cccd || "",
+          ...personalSnapshot,
+          hometown_snapshot: personalSnapshot.worker_address_snapshot,
           worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
           recruiter_staff: latest?.recruiter_staff || viewer.id,
           main_house: latest?.main_house || "",
@@ -300,6 +338,15 @@ function StaffWorkerDetailPage() {
     () => getLatestEmploymentHistory(allWorkerHistories),
     [allWorkerHistories],
   );
+  const latestHistoryByJoinDate = useMemo(
+    () => getLatestHistoryByJoinDate(allWorkerHistories),
+    [allWorkerHistories],
+  );
+  const canEditHistory = (history: EmploymentHistoryRecord) =>
+    viewer?.role === "admin" ||
+    (viewer?.role === "staff" &&
+      history.id === latestHistoryByJoinDate?.id &&
+      canViewHistoryInStaffScope(viewer, history, allWorkerHistories, managedFactoryIds));
   const activeHistory = useMemo(
     () => histories.find((item) => item.status === "working" && !item.leave_date) || null,
     [histories],
@@ -389,7 +436,11 @@ function StaffWorkerDetailPage() {
         "Mã nhân viên": history.employee_code || "",
         "Họ tên tại nhà máy": history.worker_name_snapshot,
         CCCD: history.worker_cccd_snapshot,
+        "Ngày sinh": formatDateOnly(history.worker_date_of_birth_snapshot),
+        "Địa chỉ thường trú":
+          history.worker_address_snapshot || history.hometown_snapshot || "",
         "Mã số thuế": history.worker_tax_code_snapshot || "",
+        "Ngày cấp CCCD": formatDateOnly(history.cccd_issue_date),
         "Người tuyển":
           history.expand?.recruiter_staff?.full_name ||
           history.expand?.recruiter_staff?.username ||
@@ -400,7 +451,7 @@ function StaffWorkerDetailPage() {
         "Ghi chú": history.note || "",
       })),
     },
-    { "Lịch sử đi làm": ["Ngày vào", "Ngày nghỉ"] }
+    { "Lịch sử đi làm": ["Ngày cấp CCCD", "Ngày vào", "Ngày nghỉ"] }
     );
 
     toast.success("Đã xuất Excel");
@@ -523,6 +574,13 @@ function StaffWorkerDetailPage() {
     if (!joinForm.join_date) return toast.warning("Nhập ngày vào làm");
     if (!joinForm.recruiter_staff) return toast.warning("Chọn người tuyển");
     if (!joinForm.main_house) return toast.warning("Chọn nhà chính");
+    const missingSnapshotFields = getMissingEmploymentSnapshotFields(joinForm);
+    if (missingSnapshotFields.length) {
+      toast.warning(
+        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
+      );
+      return;
+    }
     if (!canSubmitJoinForWorker) {
       toast.error("Bạn không có quyền báo đi làm tại nhà máy đã chọn");
       return;
@@ -579,9 +637,12 @@ function StaffWorkerDetailPage() {
       factory: joinForm.factory,
       main_house: joinForm.main_house,
       employee_code: joinForm.employee_code.trim(),
-      worker_name_snapshot:
-        joinForm.worker_name_snapshot.trim() || workerUser.full_name || workerUser.username || "",
-      worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim() || workerUser.cccd || "",
+      worker_name_snapshot: joinForm.worker_name_snapshot.trim(),
+      worker_cccd_snapshot: joinForm.worker_cccd_snapshot.trim(),
+      worker_date_of_birth_snapshot: joinForm.worker_date_of_birth_snapshot,
+      worker_address_snapshot: joinForm.worker_address_snapshot.trim(),
+      hometown_snapshot: joinForm.worker_address_snapshot.trim(),
+      cccd_issue_date: joinForm.cccd_issue_date,
       worker_tax_code_snapshot: joinForm.worker_tax_code_snapshot.trim(),
       recruiter_staff: joinForm.recruiter_staff,
       cccd_version: cccdVersionId,
@@ -642,11 +703,18 @@ function StaffWorkerDetailPage() {
   };
 
   const openEditHistory = (history: EmploymentHistoryRecord) => {
+    if (!canEditHistory(history)) {
+      toast.error("Staff chỉ được chỉnh sửa lịch sử có ngày vào gần nhất");
+      return;
+    }
     setEditingHistory(history);
+    setEditCccdFront(null);
+    setEditCccdBack(null);
+    const personalSnapshot = getEmploymentPersonalSnapshot(history);
     setHistoryForm({
       employee_code: history.employee_code || "",
-      worker_name_snapshot: history.worker_name_snapshot || "",
-      worker_cccd_snapshot: history.worker_cccd_snapshot || "",
+      ...personalSnapshot,
+      hometown_snapshot: personalSnapshot.worker_address_snapshot,
       worker_tax_code_snapshot: history.worker_tax_code_snapshot || "",
       recruiter_staff: history.recruiter_staff || "",
       main_house: history.main_house || "",
@@ -660,19 +728,21 @@ function StaffWorkerDetailPage() {
   const openOldHistory = () => {
     if (!workerUser || viewer?.role !== "admin") return;
     const latest = getLatestEmploymentHistory(allWorkerHistories);
+    const personalSnapshot = getEmploymentPersonalSnapshot(latest, workerUser);
     setOldHistoryForm({
       factory: "",
       main_house: latest?.main_house || "",
       employee_code: latest?.employee_code || "",
-      worker_name_snapshot:
-        latest?.worker_name_snapshot || workerUser.full_name || workerUser.username || "",
-      worker_cccd_snapshot: latest?.worker_cccd_snapshot || workerUser.cccd || "",
+      ...personalSnapshot,
+      hometown_snapshot: personalSnapshot.worker_address_snapshot,
       worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
       recruiter_staff: latest?.recruiter_staff || viewer.id,
       join_date: "",
       leave_date: "",
       note: "",
     });
+    setOldHistoryCccdFront(null);
+    setOldHistoryCccdBack(null);
     setOldHistoryOpen(true);
   };
 
@@ -686,6 +756,13 @@ function StaffWorkerDetailPage() {
     if (!oldHistoryForm.recruiter_staff) return toast.warning("Chọn người tuyển");
     if (!oldHistoryForm.join_date) return toast.warning("Chọn ngày vào");
     if (!oldHistoryForm.leave_date) return toast.warning("Chọn ngày nghỉ");
+    const missingSnapshotFields = getMissingEmploymentSnapshotFields(oldHistoryForm);
+    if (missingSnapshotFields.length) {
+      toast.warning(
+        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
+      );
+      return;
+    }
     if (oldHistoryForm.leave_date < oldHistoryForm.join_date) {
       toast.warning("Ngày nghỉ không được trước ngày vào");
       return;
@@ -711,19 +788,40 @@ function StaffWorkerDetailPage() {
         return;
       }
 
+      let cccdVersionId: string | undefined;
+      if (oldHistoryCccdFront || oldHistoryCccdBack) {
+        const cccdNumber = oldHistoryForm.worker_cccd_snapshot.trim();
+        if (!cccdNumber) {
+          toast.warning("Cần có số CCCD để lưu ảnh");
+          return;
+        }
+        const [compressedFront, compressedBack] = await Promise.all([
+          oldHistoryCccdFront ? compressImage(oldHistoryCccdFront) : Promise.resolve(null),
+          oldHistoryCccdBack ? compressImage(oldHistoryCccdBack) : Promise.resolve(null),
+        ]);
+        const version = await findOrCreateCccdVersion(workerId, cccdNumber);
+        await updateCccdVersionImages(
+          version.id,
+          compressedFront || undefined,
+          compressedBack || undefined,
+        );
+        cccdVersionId = version.id;
+      }
+
       const created = await createEmploymentHistory({
         user: workerUser.id,
         factory: oldHistoryForm.factory,
         main_house: oldHistoryForm.main_house,
         employee_code: oldHistoryForm.employee_code.trim(),
-        worker_name_snapshot:
-          oldHistoryForm.worker_name_snapshot.trim() ||
-          workerUser.full_name ||
-          workerUser.username ||
-          "",
-        worker_cccd_snapshot: oldHistoryForm.worker_cccd_snapshot.trim() || workerUser.cccd || "",
+        worker_name_snapshot: oldHistoryForm.worker_name_snapshot.trim(),
+        worker_cccd_snapshot: oldHistoryForm.worker_cccd_snapshot.trim(),
+        worker_date_of_birth_snapshot: oldHistoryForm.worker_date_of_birth_snapshot,
+        worker_address_snapshot: oldHistoryForm.worker_address_snapshot.trim(),
+        hometown_snapshot: oldHistoryForm.worker_address_snapshot.trim(),
+        cccd_issue_date: oldHistoryForm.cccd_issue_date,
         worker_tax_code_snapshot: oldHistoryForm.worker_tax_code_snapshot.trim(),
         recruiter_staff: oldHistoryForm.recruiter_staff,
+        cccd_version: cccdVersionId,
         join_date: oldHistoryForm.join_date,
         leave_date: oldHistoryForm.leave_date,
         status: "left",
@@ -741,6 +839,8 @@ function StaffWorkerDetailPage() {
         note: "Admin bổ sung lịch sử đi làm cũ",
       });
       setOldHistoryOpen(false);
+      setOldHistoryCccdFront(null);
+      setOldHistoryCccdBack(null);
       toast.success("Đã bổ sung lịch sử đi làm cũ");
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Không thể bổ sung lịch sử cũ");
@@ -751,12 +851,48 @@ function StaffWorkerDetailPage() {
 
   const saveEditedHistory = async () => {
     if (!editingHistory || !viewer?.id) return;
+    if (!canEditHistory(editingHistory)) {
+      toast.error("Bạn không có quyền chỉnh sửa lịch sử này");
+      setEditingHistory(null);
+      return;
+    }
+    const missingSnapshotFields = getMissingEmploymentSnapshotFields(historyForm);
+    if (missingSnapshotFields.length) {
+      toast.warning(
+        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
+      );
+      return;
+    }
     const before = { ...editingHistory };
+    let cccdVersionId = editingHistory.cccd_version;
+    if (editCccdFront || editCccdBack) {
+      const cccdNumber = historyForm.worker_cccd_snapshot.trim();
+      if (!cccdNumber) {
+        toast.warning("Cần có số CCCD để lưu ảnh");
+        return;
+      }
+      const [compressedFront, compressedBack] = await Promise.all([
+        editCccdFront ? compressImage(editCccdFront) : Promise.resolve(null),
+        editCccdBack ? compressImage(editCccdBack) : Promise.resolve(null),
+      ]);
+      const version = await findOrCreateCccdVersion(workerId, cccdNumber);
+      await updateCccdVersionImages(
+        version.id,
+        compressedFront || undefined,
+        compressedBack || undefined,
+      );
+      cccdVersionId = version.id;
+    }
     const updated = await updateEmploymentHistory(editingHistory.id, {
       employee_code: historyForm.employee_code.trim(),
       worker_name_snapshot: historyForm.worker_name_snapshot.trim(),
       worker_cccd_snapshot: historyForm.worker_cccd_snapshot.trim(),
+      worker_date_of_birth_snapshot: historyForm.worker_date_of_birth_snapshot,
+      worker_address_snapshot: historyForm.worker_address_snapshot.trim(),
+      hometown_snapshot: historyForm.worker_address_snapshot.trim(),
+      cccd_issue_date: historyForm.cccd_issue_date,
       worker_tax_code_snapshot: historyForm.worker_tax_code_snapshot.trim(),
+      cccd_version: cccdVersionId,
       recruiter_staff: historyForm.recruiter_staff || undefined,
       main_house: historyForm.main_house || undefined,
       join_date: historyForm.join_date,
@@ -774,9 +910,14 @@ function StaffWorkerDetailPage() {
       action: "update",
       before,
       after: updated,
-      note: "Admin chỉnh sửa trực tiếp lịch sử đi làm",
+      note:
+        viewer.role === "admin"
+          ? "Admin chỉnh sửa trực tiếp lịch sử đi làm"
+          : "Staff chỉnh sửa lịch sử đi làm gần nhất",
     });
 
+    setEditCccdFront(null);
+    setEditCccdBack(null);
     setEditingHistory(null);
     toast.success("Đã lưu thay đổi lịch sử");
   };
@@ -1023,7 +1164,7 @@ function StaffWorkerDetailPage() {
                   <StatusChip tone={history.status === "working" ? "success" : "neutral"}>
                     {history.status === "working" ? "Đang làm" : "Đã nghỉ"}
                   </StatusChip>
-                  {viewer?.role === "admin" && (
+                  {canEditHistory(history) && (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -1193,6 +1334,7 @@ function StaffWorkerDetailPage() {
               void submitJoin();
             }}
           >
+            <div className="text-sm font-semibold">Thông tin đi làm</div>
             <FormField label="Nhà máy">
               <Select
                 value={joinForm.factory}
@@ -1243,30 +1385,18 @@ function StaffWorkerDetailPage() {
                 className="rounded-xl"
               />
             </FormField>
-            <FormField label="Họ tên dùng tại nhà máy">
-              <Input
-                value={joinForm.worker_name_snapshot}
-                onChange={(event) =>
-                  setJoinForm((current) => ({
-                    ...current,
-                    worker_name_snapshot: event.target.value,
-                  }))
-                }
-                className="rounded-xl"
+            <div className="space-y-2">
+              <div className="text-sm font-semibold">Thông tin CCCD</div>
+              <JoinCccdSection
+                value={joinForm}
+                onChange={(changes) => setJoinForm((current) => ({ ...current, ...changes }))}
+                frontFile={joinCccdFront}
+                backFile={joinCccdBack}
+                onFrontFileChange={setJoinCccdFront}
+                onBackFileChange={setJoinCccdBack}
               />
-            </FormField>
-            <FormField label="CCCD dùng tại nhà máy">
-              <Input
-                value={joinForm.worker_cccd_snapshot}
-                onChange={(event) =>
-                  setJoinForm((current) => ({
-                    ...current,
-                    worker_cccd_snapshot: event.target.value,
-                  }))
-                }
-                className="rounded-xl"
-              />
-            </FormField>
+            </div>
+            <div className="text-sm font-semibold">Thông tin bổ sung</div>
             <FormField label="Mã số thuế">
               <Input
                 value={joinForm.worker_tax_code_snapshot}
@@ -1325,23 +1455,6 @@ function StaffWorkerDetailPage() {
               />
             </FormField>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Ảnh CCCD (tuỳ chọn)</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <CccdPickSlot
-                  label="Mặt trước"
-                  file={joinCccdFront}
-                  onPick={(f) => setJoinCccdFront(f)}
-                  onClear={() => setJoinCccdFront(null)}
-                />
-                <CccdPickSlot
-                  label="Mặt sau"
-                  file={joinCccdBack}
-                  onPick={(f) => setJoinCccdBack(f)}
-                  onClear={() => setJoinCccdBack(null)}
-                />
-              </div>
-            </div>
             <DrawerFooter>
               <Button
                 type="button"
@@ -1512,30 +1625,19 @@ function StaffWorkerDetailPage() {
                 className="rounded-xl"
               />
             </FormField>
-            <FormField label="Họ tên tại nhà máy">
-              <Input
-                value={oldHistoryForm.worker_name_snapshot}
-                onChange={(event) =>
-                  setOldHistoryForm((current) => ({
-                    ...current,
-                    worker_name_snapshot: event.target.value,
-                  }))
+            <div className="space-y-2">
+              <div className="text-sm font-semibold">Thông tin CCCD</div>
+              <JoinCccdSection
+                value={oldHistoryForm}
+                onChange={(changes) =>
+                  setOldHistoryForm((current) => ({ ...current, ...changes }))
                 }
-                className="rounded-xl"
+                frontFile={oldHistoryCccdFront}
+                backFile={oldHistoryCccdBack}
+                onFrontFileChange={setOldHistoryCccdFront}
+                onBackFileChange={setOldHistoryCccdBack}
               />
-            </FormField>
-            <FormField label="CCCD tại nhà máy">
-              <Input
-                value={oldHistoryForm.worker_cccd_snapshot}
-                onChange={(event) =>
-                  setOldHistoryForm((current) => ({
-                    ...current,
-                    worker_cccd_snapshot: event.target.value,
-                  }))
-                }
-                className="rounded-xl"
-              />
-            </FormField>
+            </div>
             <FormField label="Mã số thuế">
               <Input
                 value={oldHistoryForm.worker_tax_code_snapshot}
@@ -1611,7 +1713,7 @@ function StaffWorkerDetailPage() {
           <DialogHeader>
             <DialogTitle>Sửa lịch sử đi làm</DialogTitle>
             <DialogDescription>
-              Chỉ admin mới được chỉnh trực tiếp lịch sử đi làm của user.
+              Admin được sửa mọi lịch sử; Staff chỉ được sửa lịch sử gần nhất.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -1630,30 +1732,19 @@ function StaffWorkerDetailPage() {
                 className="rounded-xl"
               />
             </FormField>
-            <FormField label="Họ tên tại nhà máy">
-              <Input
-                value={historyForm.worker_name_snapshot}
-                onChange={(event) =>
-                  setHistoryForm((current) => ({
-                    ...current,
-                    worker_name_snapshot: event.target.value,
-                  }))
+            <div className="space-y-2">
+              <div className="text-sm font-semibold">Thông tin CCCD</div>
+              <JoinCccdSection
+                value={historyForm}
+                onChange={(changes) =>
+                  setHistoryForm((current) => ({ ...current, ...changes }))
                 }
-                className="rounded-xl"
+                frontFile={editCccdFront}
+                backFile={editCccdBack}
+                onFrontFileChange={setEditCccdFront}
+                onBackFileChange={setEditCccdBack}
               />
-            </FormField>
-            <FormField label="CCCD tại nhà máy">
-              <Input
-                value={historyForm.worker_cccd_snapshot}
-                onChange={(event) =>
-                  setHistoryForm((current) => ({
-                    ...current,
-                    worker_cccd_snapshot: event.target.value,
-                  }))
-                }
-                className="rounded-xl"
-              />
-            </FormField>
+            </div>
             <FormField label="Mã số thuế">
               <Input
                 value={historyForm.worker_tax_code_snapshot}
@@ -1771,7 +1862,7 @@ function StaffWorkerDetailPage() {
         <DrawerContent className="max-h-[85vh] w-full max-w-full overflow-hidden">
           <DrawerHeader className="min-w-0">
             <DrawerTitle className="break-words [overflow-wrap:anywhere]">
-              Chi tiết lịch sử đi làm
+              Thông tin cá nhân tại thời điểm đi làm
             </DrawerTitle>
             <DrawerDescription className="break-words [overflow-wrap:anywhere]">
               {detailHistory?.expand?.factory?.name || "Nhà máy"} ·{" "}
@@ -1780,6 +1871,11 @@ function StaffWorkerDetailPage() {
           </DrawerHeader>
           {detailHistory && (
             <div className="min-w-0 space-y-4 overflow-x-hidden overflow-y-auto px-4 pb-6">
+              {!canEditHistory(detailHistory) && (
+                <div className="rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+                  Lịch sử cũ · Chỉ xem
+                </div>
+              )}
               <div className="grid min-w-0 grid-cols-1 gap-2 text-sm min-[360px]:grid-cols-2">
                 <InfoCell label="Nhà máy" value={detailHistory.expand?.factory?.name || "—"} />
                 <InfoCell
@@ -1790,6 +1886,22 @@ function StaffWorkerDetailPage() {
                 <InfoCell label="Ngày nghỉ" value={formatDate(detailHistory.leave_date)} />
                 <InfoCell label="Mã NV" value={detailHistory.employee_code || "Chưa có"} />
                 <InfoCell label="CCCD" value={detailHistory.worker_cccd_snapshot || "—"} />
+                <InfoCell
+                  label="Ngày sinh"
+                  value={formatDate(detailHistory.worker_date_of_birth_snapshot)}
+                />
+                <InfoCell
+                  label="Ngày cấp CCCD"
+                  value={formatDate(detailHistory.cccd_issue_date)}
+                />
+                <InfoCell
+                  label="Địa chỉ thường trú"
+                  value={
+                    detailHistory.worker_address_snapshot ||
+                    detailHistory.hometown_snapshot ||
+                    "Chưa có"
+                  }
+                />
                 <InfoCell
                   label="Mã số thuế"
                   value={detailHistory.worker_tax_code_snapshot || "Chưa có"}
@@ -1823,32 +1935,46 @@ function StaffWorkerDetailPage() {
                     version={detailCccdVersion}
                     history={detailHistory}
                     actor={viewer as UserRecord}
-                    onUpdated={async () => {
-                      if (!detailHistory.cccd_version) return;
-                      const refreshed = await pb
-                        .collection("cccd_versions")
-                        .getOne(detailHistory.cccd_version)
-                        .catch(() => null);
-                      if (refreshed)
-                        setDetailCccdVersion(refreshed as unknown as CccdVersionRecord);
-                    }}
+                    readOnly={!canEditHistory(detailHistory)}
+                    onUpdated={(updatedVersion) => setDetailCccdVersion(updatedVersion)}
                   />
                 ) : (
                   <HistoryCccdUpload
                     history={detailHistory}
                     workerUser={workerUser}
                     actor={viewer as UserRecord}
+                    readOnly={!canEditHistory(detailHistory)}
                     onCreated={async (version) => {
                       setDetailCccdVersion(version);
                       await updateEmploymentHistory(detailHistory.id, {
                         cccd_version: version.id,
                       });
+                      setDetailHistory((current) =>
+                        current?.id === detailHistory.id
+                          ? { ...current, cccd_version: version.id }
+                          : current,
+                      );
                       await reloadHistories();
                     }}
                   />
                 )}
               </div>
             </div>
+          )}
+          {detailHistory && canEditHistory(detailHistory) && (
+            <DrawerFooter className="border-t border-border/60 px-4 py-3">
+              <Button
+                type="button"
+                className="w-full rounded-xl"
+                onClick={() => {
+                  const history = detailHistory;
+                  setDetailHistory(null);
+                  openEditHistory(history);
+                }}
+              >
+                <Pencil className="h-4 w-4" /> Sửa lịch sử
+              </Button>
+            </DrawerFooter>
           )}
         </DrawerContent>
       </Drawer>
@@ -1922,39 +2048,53 @@ function formatMoney(value: number) {
   }).format(value || 0);
 }
 
+function versionedCccdUrl(version: CccdVersionRecord, filename?: string) {
+  const url = fileUrl(version, filename);
+  if (!url) return "";
+  const cacheKey = version.updated || version.id;
+  return url + (url.includes("?") ? "&" : "?") + "v=" + encodeURIComponent(cacheKey);
+}
+
 function HistoryCccdImages({
   version,
   history,
   actor,
+  readOnly,
   onUpdated,
 }: {
   version: CccdVersionRecord;
   history: EmploymentHistoryRecord;
   actor: Partial<UserRecord> | null;
-  onUpdated: () => void;
+  readOnly: boolean;
+  onUpdated: (version: CccdVersionRecord) => void | Promise<void>;
 }) {
   const [uploading, setUploading] = useState(false);
   const [zoomSrc, setZoomSrc] = useState("");
 
-  const frontUrl = version.front_image ? fileUrl(version, version.front_image) : "";
-  const backUrl = version.back_image ? fileUrl(version, version.back_image) : "";
+  const frontUrl = version.front_image ? versionedCccdUrl(version, version.front_image) : "";
+  const backUrl = version.back_image ? versionedCccdUrl(version, version.back_image) : "";
 
   const upload =
     (side: "front_image" | "back_image") => async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file || !file.type.startsWith("image/")) return;
+      if (readOnly) {
+        toast.error("Bạn không có quyền cập nhật ảnh CCCD của lịch sử này");
+        e.target.value = "";
+        return;
+      }
       setUploading(true);
       try {
         const compressed = await compressImage(file);
-        await updateCccdVersionImages(
+        const updatedVersion = await updateCccdVersionImages(
           version.id,
           side === "front_image" ? compressed : undefined,
           side === "back_image" ? compressed : undefined,
         );
+        await onUpdated(updatedVersion);
         toast.success("Đã cập nhật ảnh CCCD");
-        onUpdated();
-      } catch (err: any) {
-        toast.error(err?.message || "Lỗi upload ảnh");
+      } catch (error: unknown) {
+        toast.error(error instanceof Error ? error.message : "Lỗi upload ảnh");
       } finally {
         setUploading(false);
         e.target.value = "";
@@ -1962,14 +2102,18 @@ function HistoryCccdImages({
     };
 
   const remove = async (side: "front_image" | "back_image") => {
+    if (readOnly) {
+      toast.error("Bạn không có quyền xoá ảnh CCCD của lịch sử này");
+      return;
+    }
     if (!confirm(`Xoá ảnh ${side === "front_image" ? "mặt trước" : "mặt sau"}?`)) return;
     setUploading(true);
     try {
-      await updateCccdVersionAndCache(version.id, { [side]: null });
+      const updatedVersion = await updateCccdVersionAndCache(version.id, { [side]: null });
+      await onUpdated(updatedVersion);
       toast.success("Đã xoá ảnh CCCD");
-      onUpdated();
-    } catch (err: any) {
-      toast.error(err?.message || "Lỗi xoá ảnh");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Lỗi xoá ảnh");
     } finally {
       setUploading(false);
     }
@@ -1997,6 +2141,7 @@ function HistoryCccdImages({
         <CccdImageSlot
           label="Mặt trước"
           url={frontUrl}
+          readOnly={readOnly}
           uploading={uploading}
           onPick={upload("front_image")}
           onDelete={() => remove("front_image")}
@@ -2006,6 +2151,7 @@ function HistoryCccdImages({
         <CccdImageSlot
           label="Mặt sau"
           url={backUrl}
+          readOnly={readOnly}
           uploading={uploading}
           onPick={upload("back_image")}
           onDelete={() => remove("back_image")}
@@ -2028,6 +2174,7 @@ function HistoryCccdImages({
 function CccdImageSlot({
   label,
   url,
+  readOnly,
   uploading,
   onPick,
   onDelete,
@@ -2036,6 +2183,7 @@ function CccdImageSlot({
 }: {
   label: string;
   url: string;
+  readOnly: boolean;
   uploading: boolean;
   onPick: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDelete: () => void;
@@ -2066,17 +2214,24 @@ function CccdImageSlot({
               >
                 <Download className="h-3.5 w-3.5" />
               </button>
-              <button
-                type="button"
-                onClick={onDelete}
-                disabled={uploading}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-destructive shadow"
-                aria-label="Xoá"
-              >
-                <Trash className="h-3.5 w-3.5" />
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  disabled={uploading}
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-destructive shadow"
+                  aria-label="Xoá"
+                >
+                  <Trash className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </>
+        ) : readOnly ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
+            <IdCard className="h-6 w-6" />
+            <span className="text-[11px]">Chưa có ảnh</span>
+          </div>
         ) : (
           <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1 text-muted-foreground">
             <input type="file" accept="image/*" hidden onChange={onPick} disabled={uploading} />
@@ -2085,7 +2240,7 @@ function CccdImageSlot({
           </label>
         )}
       </div>
-      {url && (
+      {url && !readOnly && (
         <label className="block cursor-pointer">
           <input type="file" accept="image/*" hidden onChange={onPick} disabled={uploading} />
           <span className="inline-flex items-center gap-1 text-[11px] text-primary">
@@ -2101,11 +2256,13 @@ function HistoryCccdUpload({
   history,
   workerUser,
   actor,
+  readOnly,
   onCreated,
 }: {
   history: EmploymentHistoryRecord;
   workerUser: UserRecord | null;
   actor: Partial<UserRecord> | null;
+  readOnly: boolean;
   onCreated: (version: CccdVersionRecord) => void;
 }) {
   const [uploading, setUploading] = useState(false);
@@ -2114,6 +2271,11 @@ function HistoryCccdUpload({
     (side: "front" | "back") => async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file || !file.type.startsWith("image/")) return;
+      if (readOnly) {
+        toast.error("Bạn không có quyền thêm ảnh CCCD cho lịch sử này");
+        e.target.value = "";
+        return;
+      }
       const userId = history.user;
       const cccdNumber = history.worker_cccd_snapshot || workerUser?.cccd || "";
       if (!cccdNumber) {
@@ -2131,13 +2293,40 @@ function HistoryCccdUpload({
         );
         toast.success("Đã thêm ảnh CCCD");
         onCreated(version);
-      } catch (err: any) {
-        toast.error(err?.message || "Lỗi upload ảnh");
+      } catch (error: unknown) {
+        toast.error(error instanceof Error ? error.message : "Lỗi upload ảnh");
       } finally {
         setUploading(false);
         e.target.value = "";
       }
     };
+
+  if (readOnly) {
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        <CccdImageSlot
+          label="Mặt trước"
+          url=""
+          readOnly
+          uploading={false}
+          onPick={() => undefined}
+          onDelete={() => undefined}
+          onZoom={() => undefined}
+          onDownload={() => undefined}
+        />
+        <CccdImageSlot
+          label="Mặt sau"
+          url=""
+          readOnly
+          uploading={false}
+          onPick={() => undefined}
+          onDelete={() => undefined}
+          onZoom={() => undefined}
+          onDownload={() => undefined}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-2 gap-3">
@@ -2188,73 +2377,4 @@ function AdvanceStatusChip({
     return <StatusChip tone="info">Thu hồi 1 phần</StatusChip>;
   if (status === "accepted") return <StatusChip tone="success">Đã duyệt</StatusChip>;
   return <StatusChip tone="neutral">{status || "—"}</StatusChip>;
-}
-
-function CccdPickSlot({
-  label,
-  file,
-  onPick,
-  onClear,
-}: {
-  label: string;
-  file: File | null;
-  onPick: (f: File) => void;
-  onClear: () => void;
-}) {
-  const preview = file ? URL.createObjectURL(file) : "";
-
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs">{label}</Label>
-      <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-muted/30">
-        {preview ? (
-          <>
-            <img src={preview} alt={label} className="h-full w-full object-cover" />
-            <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1.5 bg-gradient-to-t from-black/50 to-transparent px-2 pb-1.5 pt-4">
-              <button
-                type="button"
-                onClick={onClear}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-destructive shadow"
-                aria-label="Xoá"
-              >
-                <Trash className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </>
-        ) : (
-          <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1 text-muted-foreground">
-            <input
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f && f.type.startsWith("image/")) onPick(f);
-                e.target.value = "";
-              }}
-            />
-            <IdCard className="h-6 w-6" />
-            <span className="text-[11px] font-medium">Chọn ảnh</span>
-          </label>
-        )}
-      </div>
-      {preview && (
-        <label className="block cursor-pointer">
-          <input
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f && f.type.startsWith("image/")) onPick(f);
-              e.target.value = "";
-            }}
-          />
-          <span className="inline-flex items-center gap-1 text-[11px] text-primary">
-            <ImagePlus className="h-3 w-3" /> Đổi ảnh
-          </span>
-        </label>
-      )}
-    </div>
-  );
 }

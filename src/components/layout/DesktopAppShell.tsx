@@ -91,7 +91,7 @@ const staffNavigation: readonly NavigationSection[] = [
     label: "Lao động",
     items: [
       { to: "/staff/workers", label: "Danh sách lao động", icon: Users },
-      { to: "/staff/workforce", label: "Dashboard nhân lực", icon: BarChart3 },
+      { to: "/staff/workforce", label: "Dashboard", icon: BarChart3 },
       { to: "/staff/recruited", label: "Người tôi tuyển", icon: ClipboardList },
     ],
   },

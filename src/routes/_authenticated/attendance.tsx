@@ -4,6 +4,7 @@ import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { ResponsiveOverlay } from "@/components/layout/ResponsiveOverlay";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
@@ -132,7 +133,7 @@ function AdminAttendance() {
     }
   };
   useEffect(() => {
-    fetchMonth(); /* eslint-disable-next-line */
+    fetchMonth();
   }, [monthDate.getTime()]);
 
   /* Group by user */
@@ -218,7 +219,11 @@ function AdminAttendance() {
         "Lương tạm tính": Math.round(s.total),
       };
     });
-    exportToExcel(`cham_cong_${ym(monthDate)}`, { "Tổng hợp": summary, "Chi tiết": detail }, { "Chi tiết": ["Ngày"] });
+    exportToExcel(
+      `cham_cong_${ym(monthDate)}`,
+      { "Tổng hợp": summary, "Chi tiết": detail },
+      { "Chi tiết": ["Ngày"] },
+    );
   };
 
   return (
@@ -286,7 +291,8 @@ function AdminAttendance() {
                 {user.full_name || user.username}
               </div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">
-                {getFactoryNameAtDate(user.id, lastWorkDate) || "Chưa có lịch sử đi làm"} · {user.phone || "—"}
+                {getFactoryNameAtDate(user.id, lastWorkDate) || "Chưa có lịch sử đi làm"} ·{" "}
+                {user.phone || "—"}
               </div>
               <div className="mt-1 flex flex-wrap gap-1">
                 <span className="chip chip-info">{rs.length} ngày</span>
@@ -457,7 +463,7 @@ function UserAttendance() {
     }
   };
   useEffect(() => {
-    fetchMonth(); /* eslint-disable-next-line */
+    fetchMonth();
   }, [user?.id, payrollPeriod.start, payrollPeriod.end]);
 
   const buckets = useMemo(() => aggregate(rows), [rows]);
@@ -544,9 +550,12 @@ function UserAttendance() {
   const selectedRow = rows.find((r) => r.date === date);
 
   return (
-    <div>
-      <AppHeader title="Tự chấm công" />
-      <div className="worker-attendance-page space-y-4 p-4">
+    <PageContainer
+      title="Tự chấm công"
+      subtitle="Chạm ngày trên lịch để nhập hoặc chỉnh sửa"
+      className="worker-attendance-page"
+    >
+      <div className="space-y-4">
         <div className="worker-attendance-layout">
           <aside className="worker-attendance-summary">
             <Card className="worker-attendance-salary overflow-hidden">
@@ -554,7 +563,9 @@ function UserAttendance() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-xs uppercase opacity-80">Bảng lương tạm tính</div>
-                    <div className="text-xl font-bold">{currentEmployment?.expand?.factory?.name || "Chưa có lịch sử đi làm"}</div>
+                    <div className="text-xl font-bold">
+                      {currentEmployment?.expand?.factory?.name || "Chưa có lịch sử đi làm"}
+                    </div>
                   </div>
                   <button
                     onClick={() => setSettingsOpen(true)}
@@ -604,88 +615,85 @@ function UserAttendance() {
           </div>
         </div>
 
-        <Dialog open={entryOpen} onOpenChange={setEntryOpen}>
-          <DialogContent className="max-h-[90dvh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{selectedRow ? "Cập nhật chấm công" : "Nhập chấm công"}</DialogTitle>
-              <DialogDescription className="sr-only">
-                Nhập hoặc cập nhật ca làm, ngày lễ, giờ hành chính và giờ tăng ca cho ngày đã chọn.
-              </DialogDescription>
-            </DialogHeader>
-            <form
-              className="space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                submit();
-              }}
-            >
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Ngày</Label>
-                  <DateInput value={date} onChange={(v) => setDate(v)} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Ca</Label>
-                  <ShiftToggle value={shift} onChange={setShift} />
-                </div>
+        <ResponsiveOverlay
+          open={entryOpen}
+          onOpenChange={setEntryOpen}
+          title={selectedRow ? "Cập nhật chấm công" : "Nhập chấm công"}
+          description="Nhập ca làm, ngày lễ, giờ hành chính và giờ tăng ca cho ngày đã chọn."
+        >
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submit();
+            }}
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Ngày</Label>
+                <DateInput value={date} onChange={(v) => setDate(v)} />
               </div>
-
-              <label className="flex items-center gap-3 rounded-lg border bg-secondary/50 p-3">
-                <Checkbox checked={isHoliday} onCheckedChange={(c) => setIsHoliday(c === true)} />
-                <div className="flex-1">
-                  <div className="text-sm font-medium">Ngày lễ</div>
-                  <div className="text-xs text-muted-foreground">Áp dụng hệ số 300% / 390%</div>
-                </div>
-              </label>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Giờ hành chính</Label>
-                  <Input
-                    type="number"
-                    inputMode="decimal"
-                    enterKeyHint="done"
-                    step="0.5"
-                    value={hcHours}
-                    onChange={(e) => setHcHours(Number(e.target.value))}
-                    onKeyDown={submitFromHours}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Giờ tăng ca</Label>
-                  <Input
-                    type="number"
-                    inputMode="decimal"
-                    enterKeyHint="done"
-                    step="0.5"
-                    value={otHours}
-                    onChange={(e) => setOtHours(Number(e.target.value))}
-                    onKeyDown={submitFromHours}
-                  />
-                </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Ca</Label>
+                <ShiftToggle value={shift} onChange={setShift} />
               </div>
+            </div>
 
-              <div className="flex gap-2">
-                {selectedRow && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-none"
-                    onClick={() => {
-                      remove(selectedRow.id);
-                      setEntryOpen(false);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                )}
-                <Button type="submit" className="flex-1" disabled={saving}>
-                  <Plus className="h-4 w-4" /> Lưu / Cập nhật
+            <label className="flex items-center gap-3 rounded-lg border bg-secondary/50 p-3">
+              <Checkbox checked={isHoliday} onCheckedChange={(c) => setIsHoliday(c === true)} />
+              <div className="flex-1">
+                <div className="text-sm font-medium">Ngày lễ</div>
+                <div className="text-xs text-muted-foreground">Áp dụng hệ số 300% / 390%</div>
+              </div>
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Giờ hành chính</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  enterKeyHint="done"
+                  step="0.5"
+                  value={hcHours}
+                  onChange={(e) => setHcHours(Number(e.target.value))}
+                  onKeyDown={submitFromHours}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Giờ tăng ca</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  enterKeyHint="done"
+                  step="0.5"
+                  value={otHours}
+                  onChange={(e) => setOtHours(Number(e.target.value))}
+                  onKeyDown={submitFromHours}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              {selectedRow && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-none"
+                  onClick={() => {
+                    remove(selectedRow.id);
+                    setEntryOpen(false);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+              )}
+              <Button type="submit" className="flex-1" disabled={saving}>
+                <Plus className="h-4 w-4" /> Lưu / Cập nhật
+              </Button>
+            </div>
+          </form>
+        </ResponsiveOverlay>
 
         <AttendanceSettingsDialog
           open={settingsOpen}
@@ -693,7 +701,7 @@ function UserAttendance() {
           onSaved={refresh}
         />
       </div>
-    </div>
+    </PageContainer>
   );
 }
 
@@ -914,76 +922,73 @@ function AttendanceSettingsDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
-        <DialogHeader>
-          <DialogTitle>Cài đặt chấm công</DialogTitle>
-          <DialogDescription>
-            Các thông số phục vụ tính lương tạm tính khi tự chấm công.
-          </DialogDescription>
-        </DialogHeader>
+    <ResponsiveOverlay
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Cài đặt chấm công"
+      description="Các thông số phục vụ tính lương tạm tính khi tự chấm công."
+      presentation="full"
+    >
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <SettingsNumberField
+          label="Ngày chốt công (1–31, để trống = theo tháng dương lịch)"
+          value={form.attendance_cutoff_day || ""}
+          onChange={(v) => setForm({ ...form, attendance_cutoff_day: v })}
+          min={0}
+          max={31}
+          placeholder="Để trống"
+        />
 
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void save();
-          }}
-        >
+        <SettingsMoneyField
+          label="LCB (Lương cơ bản)"
+          value={form.lcb}
+          onChange={(v) => setForm({ ...form, lcb: v })}
+        />
+        <SettingsMoneyField
+          label="Chuyên cần"
+          value={form.chuyen_can}
+          onChange={(v) => setForm({ ...form, chuyen_can: v })}
+        />
+        <SettingsMoneyField
+          label="Đời sống"
+          value={form.doi_song}
+          onChange={(v) => setForm({ ...form, doi_song: v })}
+        />
+        <SettingsMoneyField
+          label="Thâm niên"
+          value={form.tham_nien}
+          onChange={(v) => setForm({ ...form, tham_nien: v })}
+        />
+
+        <div className="grid grid-cols-2 gap-3">
           <SettingsNumberField
-            label="Ngày chốt công (1–31, để trống = theo tháng dương lịch)"
-            value={form.attendance_cutoff_day || ""}
-            onChange={(v) => setForm({ ...form, attendance_cutoff_day: v })}
-            min={0}
-            max={31}
-            placeholder="Để trống"
+            label="Giờ HC mặc định"
+            value={form.default_hc_hours}
+            onChange={(v) => setForm({ ...form, default_hc_hours: v })}
           />
+          <SettingsNumberField
+            label="Giờ TC mặc định"
+            value={form.default_ot_hours}
+            onChange={(v) => setForm({ ...form, default_ot_hours: v })}
+          />
+        </div>
 
-          <SettingsMoneyField
-            label="LCB (Lương cơ bản)"
-            value={form.lcb}
-            onChange={(v) => setForm({ ...form, lcb: v })}
-          />
-          <SettingsMoneyField
-            label="Chuyên cần"
-            value={form.chuyen_can}
-            onChange={(v) => setForm({ ...form, chuyen_can: v })}
-          />
-          <SettingsMoneyField
-            label="Đời sống"
-            value={form.doi_song}
-            onChange={(v) => setForm({ ...form, doi_song: v })}
-          />
-          <SettingsMoneyField
-            label="Thâm niên"
-            value={form.tham_nien}
-            onChange={(v) => setForm({ ...form, tham_nien: v })}
-          />
-
-          <div className="grid grid-cols-2 gap-3">
-            <SettingsNumberField
-              label="Giờ HC mặc định"
-              value={form.default_hc_hours}
-              onChange={(v) => setForm({ ...form, default_hc_hours: v })}
-            />
-            <SettingsNumberField
-              label="Giờ TC mặc định"
-              value={form.default_ot_hours}
-              onChange={(v) => setForm({ ...form, default_ot_hours: v })}
-            />
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Đóng
-            </Button>
-            <Button type="submit" disabled={saving}>
-              <Save className="h-4 w-4" /> {saving ? "Đang lưu..." : "Lưu cài đặt"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Đóng
+          </Button>
+          <Button type="submit" disabled={saving}>
+            <Save className="h-4 w-4" /> {saving ? "Đang lưu..." : "Lưu cài đặt"}
+          </Button>
+        </DialogFooter>
+      </form>
+    </ResponsiveOverlay>
   );
 }
 

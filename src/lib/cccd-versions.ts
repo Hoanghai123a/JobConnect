@@ -1,5 +1,6 @@
 import { pb } from "./pocketbase";
 import { updateCachedCccdVersion } from "./staff-cache";
+import { relationInFilter } from "./delegations";
 
 export interface CccdVersionRecord {
   id: string;
@@ -15,9 +16,7 @@ export interface CccdVersionRecord {
   collectionName?: string;
 }
 
-export async function getCurrentCccdVersion(
-  userId: string,
-): Promise<CccdVersionRecord | null> {
+export async function getCurrentCccdVersion(userId: string): Promise<CccdVersionRecord | null> {
   try {
     return (await pb
       .collection("cccd_versions")
@@ -66,9 +65,7 @@ export async function findOrCreateCccdVersion(
   if (frontFile) fd.append("front_image", frontFile);
   if (backFile) fd.append("back_image", backFile);
 
-  const created = (await pb
-    .collection("cccd_versions")
-    .create(fd)) as unknown as CccdVersionRecord;
+  const created = (await pb.collection("cccd_versions").create(fd)) as unknown as CccdVersionRecord;
   await updateCachedCccdVersion(created);
   return created;
 }
@@ -96,11 +93,41 @@ export async function updateCccdVersionAndCache(
   return updated;
 }
 
-export async function fetchCccdVersionsByUser(
-  userId: string,
-): Promise<CccdVersionRecord[]> {
+export async function fetchCccdVersionsByIds(ids: string[]): Promise<CccdVersionRecord[]> {
+  const uniqueIds = [...new Set(ids.filter(Boolean))];
+  if (!uniqueIds.length) return [];
+
+  const items: CccdVersionRecord[] = [];
+  for (let i = 0; i < uniqueIds.length; i += 50) {
+    const batch = uniqueIds.slice(i, i + 50);
+    const records = (await pb.collection("cccd_versions").getFullList({
+      filter: relationInFilter("id", batch),
+      sort: "-updated,-created",
+    })) as unknown as CccdVersionRecord[];
+    items.push(...records);
+  }
+  return items;
+}
+
+export async function fetchCccdVersionsByUser(userId: string): Promise<CccdVersionRecord[]> {
   return (await pb.collection("cccd_versions").getFullList({
     filter: `user="${userId}"`,
     sort: "-created",
   })) as unknown as CccdVersionRecord[];
+}
+
+export async function fetchCccdVersionsByUsers(userIds: string[]): Promise<CccdVersionRecord[]> {
+  const uniqueIds = [...new Set(userIds.filter(Boolean))];
+  if (!uniqueIds.length) return [];
+
+  const items: CccdVersionRecord[] = [];
+  for (let i = 0; i < uniqueIds.length; i += 50) {
+    const batch = uniqueIds.slice(i, i + 50);
+    const records = (await pb.collection("cccd_versions").getFullList({
+      filter: relationInFilter("user", batch),
+      sort: "-updated,-created",
+    })) as unknown as CccdVersionRecord[];
+    items.push(...records);
+  }
+  return items;
 }

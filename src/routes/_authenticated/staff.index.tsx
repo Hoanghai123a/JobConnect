@@ -118,6 +118,7 @@ function StaffDashboardPage() {
         <DashboardLink
           to="/staff/workers"
           title="Danh sách lao động"
+          mobileTitle="Lao động trong quyền"
           description="Tìm kiếm, xem lịch sử và xử lý nghiệp vụ."
           icon={Users}
         />
@@ -125,7 +126,7 @@ function StaffDashboardPage() {
           <div className="hidden desktop:block">
             <DashboardLink
               to="/staff/workforce"
-              title="Dashboard nhân lực"
+              title="Dashboard"
               description="Theo dõi số liệu tuyển dụng trong phạm vi quyền của bạn."
               icon={BarChart3}
             />
@@ -231,11 +232,13 @@ function StaffDashboardPage() {
 function DashboardLink({
   to,
   title,
+  mobileTitle,
   description,
   icon: Icon,
 }: {
   to: string;
   title: string;
+  mobileTitle?: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
 }) {
@@ -247,7 +250,16 @@ function DashboardLink({
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
         <Icon className="h-5 w-5" />
       </div>
-      <div className="mt-3 text-sm font-semibold">{title}</div>
+      <div className="mt-3 text-sm font-semibold">
+        {mobileTitle ? (
+          <>
+            <span className="desktop:hidden">{mobileTitle}</span>
+            <span className="hidden desktop:inline">{title}</span>
+          </>
+        ) : (
+          title
+        )}
+      </div>
       <div className="mt-1 text-xs leading-5 text-muted-foreground">{description}</div>
     </Link>
   );

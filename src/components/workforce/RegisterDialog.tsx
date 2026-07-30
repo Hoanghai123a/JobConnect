@@ -29,10 +29,16 @@ import {
   createEmploymentHistory,
   fetchEmploymentHistories,
   fetchRegisterableUsers,
+  getEmploymentPersonalSnapshot,
+  getLatestEmploymentHistory,
+  getMissingEmploymentSnapshotFields,
   maskCccd,
   updateEmploymentHistory,
 } from "@/lib/employment";
 import { createStaffActionLog } from "@/lib/staff-log";
+import { JoinCccdSection } from "@/components/employment/JoinCccdSection";
+import { compressImage } from "@/lib/image-compress";
+import { findOrCreateCccdVersion, updateCccdVersionImages } from "@/lib/cccd-versions";
 
 function todayIso() {
   const now = new Date();
@@ -92,15 +98,38 @@ export function RegisterDialog({
   const [employeeCode, setEmployeeCode] = useState("");
   const [workerName, setWorkerName] = useState("");
   const [workerCccd, setWorkerCccd] = useState("");
+  const [workerDateOfBirth, setWorkerDateOfBirth] = useState("");
+  const [workerAddress, setWorkerAddress] = useState("");
+  const [cccdIssueDate, setCccdIssueDate] = useState("");
   const [workerTaxCode, setWorkerTaxCode] = useState("");
   const [joinDate, setJoinDate] = useState(todayIso());
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [candidateUsers, setCandidateUsers] = useState<UserRecord[]>([]);
+  const [cccdFront, setCccdFront] = useState<File | null>(null);
+  const [cccdBack, setCccdBack] = useState<File | null>(null);
 
   const staffUsers = useMemo(() => users.filter((u) => u.role === "staff"), [users]);
   const selectedUser = candidateUsers.find((u) => u.id === userId);
   const roleLabel = actorRoleLabel || (actor?.role === "admin" ? "Quản trị viên" : "Nhân sự");
+  const personalSnapshotValue = {
+    worker_name_snapshot: workerName,
+    worker_cccd_snapshot: workerCccd,
+    worker_date_of_birth_snapshot: workerDateOfBirth,
+    worker_address_snapshot: workerAddress,
+    cccd_issue_date: cccdIssueDate,
+  };
+  const updatePersonalSnapshot = (changes: Partial<typeof personalSnapshotValue>) => {
+    if (changes.worker_name_snapshot !== undefined) setWorkerName(changes.worker_name_snapshot);
+    if (changes.worker_cccd_snapshot !== undefined) setWorkerCccd(changes.worker_cccd_snapshot);
+    if (changes.worker_date_of_birth_snapshot !== undefined) {
+      setWorkerDateOfBirth(changes.worker_date_of_birth_snapshot);
+    }
+    if (changes.worker_address_snapshot !== undefined) {
+      setWorkerAddress(changes.worker_address_snapshot);
+    }
+    if (changes.cccd_issue_date !== undefined) setCccdIssueDate(changes.cccd_issue_date);
+  };
 
   const reset = () => {
     setUserId("");
@@ -110,7 +139,12 @@ export function RegisterDialog({
     setEmployeeCode("");
     setWorkerName("");
     setWorkerCccd("");
+    setWorkerDateOfBirth("");
+    setWorkerAddress("");
+    setCccdIssueDate("");
     setWorkerTaxCode("");
+    setCccdFront(null);
+    setCccdBack(null);
     setJoinDate(todayIso());
     setNote("");
   };
@@ -128,8 +162,29 @@ export function RegisterDialog({
 
   useEffect(() => {
     if (!selectedUser) return;
-    setWorkerName((cur) => cur || selectedUser.full_name || selectedUser.username || "");
-    setWorkerCccd((cur) => cur || selectedUser.cccd || "");
+    let active = true;
+
+    const applySnapshot = (snapshot: ReturnType<typeof getEmploymentPersonalSnapshot>) => {
+      if (!active) return;
+      setWorkerName(snapshot.worker_name_snapshot);
+      setWorkerCccd(snapshot.worker_cccd_snapshot);
+      setWorkerDateOfBirth(snapshot.worker_date_of_birth_snapshot);
+      setWorkerAddress(snapshot.worker_address_snapshot);
+      setCccdIssueDate(snapshot.cccd_issue_date);
+    };
+
+    applySnapshot(getEmploymentPersonalSnapshot(null, selectedUser));
+    fetchEmploymentHistories([selectedUser.id])
+      .then((rows) =>
+        applySnapshot(
+          getEmploymentPersonalSnapshot(getLatestEmploymentHistory(rows), selectedUser),
+        ),
+      )
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
   }, [selectedUser]);
 
   const submit = async (e: React.FormEvent) => {
@@ -140,6 +195,20 @@ export function RegisterDialog({
     if (!recruiterId) return toast.error("Chọn người tuyển");
     if (!mainHouseId) return toast.error("Chọn nhà chính");
     if (!selectedUser) return;
+
+    const personalSnapshot = {
+      worker_name_snapshot: workerName.trim(),
+      worker_cccd_snapshot: workerCccd.trim(),
+      worker_date_of_birth_snapshot: workerDateOfBirth,
+      worker_address_snapshot: workerAddress.trim(),
+      cccd_issue_date: cccdIssueDate,
+    };
+    const missingSnapshotFields = getMissingEmploymentSnapshotFields(personalSnapshot);
+    if (missingSnapshotFields.length) {
+      return toast.error(
+        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
+      );
+    }
 
     const workerCccdDigits = workerCccd.replace(/\D/g, "");
     if (workerCccd && workerCccdDigits.length !== 12) {
@@ -177,16 +246,40 @@ export function RegisterDialog({
         return;
       }
 
+      let cccdVersionId: string | undefined;
+      if (cccdFront || cccdBack) {
+        const cccdNumber = workerCccd.trim();
+        if (!cccdNumber) {
+          toast.error("Cần có số CCCD để lưu ảnh");
+          return;
+        }
+        const [compressedFront, compressedBack] = await Promise.all([
+          cccdFront ? compressImage(cccdFront) : Promise.resolve(null),
+          cccdBack ? compressImage(cccdBack) : Promise.resolve(null),
+        ]);
+        const version = await findOrCreateCccdVersion(userId, cccdNumber);
+        await updateCccdVersionImages(
+          version.id,
+          compressedFront || undefined,
+          compressedBack || undefined,
+        );
+        cccdVersionId = version.id;
+      }
+
       const created = await createEmploymentHistory({
         user: userId,
         factory: factoryId,
         main_house: mainHouseId,
         employee_code: employeeCode.trim() || undefined,
-        worker_name_snapshot:
-          workerName.trim() || selectedUser.full_name || selectedUser.username || "",
-        worker_cccd_snapshot: workerCccd || selectedUser.cccd || "",
+        worker_name_snapshot: workerName.trim(),
+        worker_cccd_snapshot: workerCccd.trim(),
+        worker_date_of_birth_snapshot: workerDateOfBirth,
+        worker_address_snapshot: workerAddress.trim(),
+        hometown_snapshot: workerAddress.trim(),
+        cccd_issue_date: cccdIssueDate,
         worker_tax_code_snapshot: workerTaxCode.trim(),
         recruiter_staff: recruiterId,
+        cccd_version: cccdVersionId,
         join_date: joinDate,
         status: "working",
         note: note.trim() || undefined,
@@ -200,6 +293,8 @@ export function RegisterDialog({
         after: created,
         note: `${roleLabel} đăng ký đi làm`,
       });
+      setCccdFront(null);
+      setCccdBack(null);
       toast.success("Đã đăng ký đi làm");
       onClose();
       onCreated();
@@ -253,24 +348,16 @@ export function RegisterDialog({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label className="text-xs">Họ tên (theo nhà máy)</Label>
-              <Input
-                value={workerName}
-                onChange={(e) => setWorkerName(e.target.value)}
-                placeholder="Họ tên ghi nhận"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">CCCD (theo nhà máy)</Label>
-              <Input
-                value={workerCccd}
-                onChange={(e) => setWorkerCccd(e.target.value)}
-                inputMode="text"
-                placeholder="12 số, có thể kèm ký tự"
-              />
-            </div>
+          <div className="space-y-2">
+            <div className="text-sm font-semibold">Thông tin CCCD</div>
+            <JoinCccdSection
+              value={personalSnapshotValue}
+              onChange={updatePersonalSnapshot}
+              frontFile={cccdFront}
+              backFile={cccdBack}
+              onFrontFileChange={setCccdFront}
+              onBackFileChange={setCccdBack}
+            />
           </div>
 
           <div className="space-y-1">

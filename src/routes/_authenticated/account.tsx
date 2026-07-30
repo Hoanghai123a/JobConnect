@@ -87,6 +87,9 @@ import {
   CircleX,
   ImagePlus,
   MoreHorizontal,
+  Download,
+  Info,
+  ChevronRight,
   Trash,
 } from "lucide-react";
 
@@ -122,19 +125,18 @@ function AccountPage() {
       <AppHeader
         title="Tài khoản"
         right={
-          <>
-            <div>Đăng xuất</div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                logout();
-                nav({ to: "/login" });
-              }}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="Đăng xuất"
+            title="Đăng xuất"
+            onClick={() => {
+              logout();
+              nav({ to: "/login" });
+            }}
+          >
+            <LogOut className="h-5 w-5" />
+          </Button>
         }
       />
 
@@ -189,10 +191,14 @@ function AccountPage() {
             </TabsContent>
             <TabsContent value="profile" className="mt-0 space-y-3">
               <UserProfileForm />
+              <AccountAppLinks />
             </TabsContent>
           </Tabs>
         ) : (
-          <UserProfileForm />
+          <div className="space-y-4">
+            <UserProfileForm />
+            <AccountAppLinks />
+          </div>
         )}
       </div>
     </div>
@@ -200,6 +206,44 @@ function AccountPage() {
 }
 
 /* ───────── USER PROFILE (non-admin) ───────── */
+
+function AccountAppLinks() {
+  return (
+    <Section title="Ứng dụng và hỗ trợ">
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new Event("jobconnect:open-install"))}
+        className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-muted/55 px-3 text-left transition active:scale-[0.99]"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Download className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">Cài ứng dụng</span>
+          <span className="block text-xs leading-5 text-muted-foreground">
+            Mở hướng dẫn cài app trên thiết bị này
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </button>
+      <Link
+        to="/about"
+        className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-muted/55 px-3 text-left transition active:scale-[0.99]"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Info className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">Thông tin ứng dụng</span>
+          <span className="block text-xs leading-5 text-muted-foreground">
+            Giới thiệu, liên hệ và thông tin công ty
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </Link>
+    </Section>
+  );
+}
 
 function UserProfileForm() {
   const { user, refresh, isAdmin } = useAuth();
@@ -580,14 +624,22 @@ function AdminUsersPanel() {
 
   const exportExcel = () => {
     const rows = filtered.map(formatUserRow);
-    exportToExcel("danh_sach_tai_khoan_" + Date.now(), { "Tài khoản": rows }, { "Tài khoản": ["Ngày sinh", "Ngày tạo"] });
+    exportToExcel(
+      "danh_sach_tai_khoan_" + Date.now(),
+      { "Tài khoản": rows },
+      { "Tài khoản": ["Ngày sinh", "Ngày tạo"] },
+    );
   };
 
   const exportAll = async () => {
     try {
       const all = await pb.collection("users").getFullList({ sort: "-created" });
       const rows = all.map(formatUserRow);
-      exportToExcel("tat_ca_tai_khoan_" + Date.now(), { "Tài khoản": rows }, { "Tài khoản": ["Ngày sinh", "Ngày tạo"] });
+      exportToExcel(
+        "tat_ca_tai_khoan_" + Date.now(),
+        { "Tài khoản": rows },
+        { "Tài khoản": ["Ngày sinh", "Ngày tạo"] },
+      );
     } catch (e: any) {
       toast.error(e?.message || "Lỗi xuất dữ liệu");
     }
@@ -1208,14 +1260,24 @@ function AdminUsersPanel() {
       }
       toast.success("Đã nhập " + ok + " tài khoản" + (fail ? ", " + fail + " lỗi" : ""));
       if (failedRows.length) {
-        exportToExcel(`import_tai_khoan_loi_${Date.now()}`, { "Dòng lỗi": failedRows }, { "Dòng lỗi": ["Ngày sinh", "date_of_birth"] });
+        exportToExcel(
+          `import_tai_khoan_loi_${Date.now()}`,
+          { "Dòng lỗi": failedRows },
+          { "Dòng lỗi": ["Ngày sinh", "date_of_birth"] },
+        );
         toast.warning("Đã xuất file các dòng lỗi");
       }
       await createStaffActionLog({
         actor: me as UserRecord,
         targetCollection: "users",
         action: "import",
-        after: { created: ok, updated: 0, failed: fail, file: f.name, exported_errors: failedRows.length },
+        after: {
+          created: ok,
+          updated: 0,
+          failed: fail,
+          file: f.name,
+          exported_errors: failedRows.length,
+        },
         note: "Admin import tài khoản NLĐ từ Excel",
       });
       load();
@@ -1365,7 +1427,8 @@ function AdminUsersPanel() {
                     }}
                     disabled={importing}
                   />
-                  <Upload className="h-4 w-4" /> {importing ? "Đang nhập..." : "Nhập Excel tài khoản"}
+                  <Upload className="h-4 w-4" />{" "}
+                  {importing ? "Đang nhập..." : "Nhập Excel tài khoản"}
                 </label>
                 <Button
                   variant="outline"
@@ -2284,22 +2347,24 @@ function StaffPanel() {
   );
 
   const downloadTemplate = () => {
-    exportToExcel("mau_import_staff", {
-      "Tài khoản Staff": [
-        {
-          "Tên đăng nhập": "nguyenvana",
-          "Họ tên": "Nguyễn Văn A",
-          "Số điện thoại": "0901234567",
-          "Ngày sinh": "15/05/1990",
-          "Địa chỉ": "Hà Nội",
-          "Mật khẩu": "",
-          "Nhà máy 1": "Nhà máy A",
-          "Nhà máy 2": "Nhà máy B",
-          "Nhà máy 3": "",
-        },
-      ],
-    },
-    { "Tài khoản Staff": ["Ngày sinh"] }
+    exportToExcel(
+      "mau_import_staff",
+      {
+        "Tài khoản Staff": [
+          {
+            "Tên đăng nhập": "nguyenvana",
+            "Họ tên": "Nguyễn Văn A",
+            "Số điện thoại": "0901234567",
+            "Ngày sinh": "15/05/1990",
+            "Địa chỉ": "Hà Nội",
+            "Mật khẩu": "",
+            "Nhà máy 1": "Nhà máy A",
+            "Nhà máy 2": "Nhà máy B",
+            "Nhà máy 3": "",
+          },
+        ],
+      },
+      { "Tài khoản Staff": ["Ngày sinh"] },
     );
   };
 
@@ -2432,7 +2497,11 @@ function StaffPanel() {
       setImportResult(resultText);
       toast.success(resultText);
       if (failedRows.length) {
-        exportToExcel(`staff_import_loi_${Date.now()}`, { "Dòng lỗi": failedRows }, { "Dòng lỗi": ["Ngày sinh", "date_of_birth"] });
+        exportToExcel(
+          `staff_import_loi_${Date.now()}`,
+          { "Dòng lỗi": failedRows },
+          { "Dòng lỗi": ["Ngày sinh", "date_of_birth"] },
+        );
         toast.warning("Đã xuất file các dòng lỗi");
       }
       await load();
@@ -2739,7 +2808,6 @@ function CreateStaffDialog({
     </Dialog>
   );
 }
-
 
 function AccountListCell({ label, value }: { label: string; value: string }) {
   return (

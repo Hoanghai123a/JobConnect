@@ -1,33 +1,34 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
 import { isUserApproved } from "@/lib/user-approval";
 import { getSeen } from "@/lib/seen";
 import { getClientDeviceProfile } from "@/lib/device-profile";
+import { MobileSection } from "@/components/layout/MobileSection";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { FeatureTile } from "@/components/dashboard/FeatureTile";
 import { DesktopAppShell } from "@/components/layout/DesktopAppShell";
 import { WorkforceDashboard } from "@/components/workforce/WorkforceDashboard";
 import { FinanceDashboard } from "@/components/dashboard/FinanceDashboard";
+import { OtherDashboard } from "@/components/dashboard/OtherDashboard";
+import { ApprovalDashboard } from "@/components/dashboard/ApprovalDashboard";
+import {
+  createEmptyApprovalDashboardStats,
+  isApprovalDashboardStatus,
+  type ApprovalDashboardStats,
+} from "@/lib/approval-dashboard";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import { findActiveEmploymentByUser, type EmploymentHistoryRecord } from "@/lib/employment";
 import { fetchFreshStaffWorkspace } from "@/lib/staff-permissions";
 import { escapePb } from "@/lib/delegations";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip as RechartsTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { fetchCccdVersionsByIds, type CccdVersionRecord } from "@/lib/cccd-versions";
+import { getRecentDateKeys } from "@/lib/workforce-other-stats";
 import {
   Newspaper,
+  BriefcaseBusiness,
   Clock,
   BookOpen,
   MessageSquareWarning,
@@ -41,6 +42,7 @@ import {
   ShieldCheck,
   Sprout,
   History,
+  User,
   Users,
   LayoutGrid,
   ListOrdered,
@@ -80,43 +82,10 @@ const APPROVAL_STATUSES = ["pending", "approved", "completed", "rejected"] as co
 
 type ApprovalStatusKey = (typeof APPROVAL_STATUSES)[number];
 
-type ApprovalStats = Record<ApprovalStatusKey, number> & {
-  totalAmount: number;
-  amountByStatus: Record<ApprovalStatusKey, number>;
-};
-
 type ApprovalRequestSummary = {
   status?: string;
   amount?: number | string;
 };
-
-const APPROVAL_STATUS_META: Array<{
-  key: ApprovalStatusKey;
-  label: string;
-  color: string;
-}> = [
-  { key: "pending", label: "Chờ duyệt", color: "#f59e0b" },
-  { key: "approved", label: "Đã duyệt", color: "#10b981" },
-  { key: "completed", label: "Hoàn thành", color: "#3b82f6" },
-  { key: "rejected", label: "Từ chối", color: "#ef4444" },
-];
-
-const createEmptyApprovalStats = (): ApprovalStats => ({
-  pending: 0,
-  approved: 0,
-  completed: 0,
-  rejected: 0,
-  totalAmount: 0,
-  amountByStatus: {
-    pending: 0,
-    approved: 0,
-    completed: 0,
-    rejected: 0,
-  },
-});
-
-const isApprovalStatus = (value?: string): value is ApprovalStatusKey =>
-  Boolean(value && APPROVAL_STATUSES.includes(value as ApprovalStatusKey));
 
 function DashboardPage() {
   const { loading, user, isAdmin } = useAuth();
@@ -129,10 +98,11 @@ function DashboardPage() {
   const [workforceHistories, setWorkforceHistories] = useState<EmploymentHistoryRecord[]>([]);
   const [workforceUsers, setWorkforceUsers] = useState<UserRecord[]>([]);
   const [workforceFactories, setWorkforceFactories] = useState<FactoryRecord[]>([]);
+  const [workforceCccdVersions, setWorkforceCccdVersions] = useState<CccdVersionRecord[]>([]);
   const [workforceLoading, setWorkforceLoading] = useState(true);
   const [workforceError, setWorkforceError] = useState("");
   const [workforceReloadToken, setWorkforceReloadToken] = useState(0);
-  const [approvalStats, setApprovalStats] = useState<ApprovalStats>(createEmptyApprovalStats);
+  const [approvalStats, setApprovalStats] = useState<ApprovalDashboardStats>(createEmptyApprovalDashboardStats);
   const [currentEmployment, setCurrentEmployment] = useState<EmploymentHistoryRecord | null>(null);
   const nav = useNavigate();
   const { hash } = useLocation();
@@ -252,7 +222,7 @@ function DashboardPage() {
           const memberships = await pb.collection("chat_room_members").getFullList({
             filter: `user = "${user.id}"`,
           });
-          const roomIds = (memberships as Array<{ room: string }>).map((m) => m.room);
+          const roomIds = (memberships as unknown as Array<{ room: string }>).map((m) => m.room);
           if (!roomIds.length) return 0;
           let total = 0;
           for (const roomId of roomIds) {
@@ -289,7 +259,12 @@ function DashboardPage() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (!isAdmin || !user?.id || desktopSection !== "nhan-luc" || typeof window === "undefined") {
+    if (
+      !isAdmin ||
+      !user?.id ||
+      (desktopSection !== "nhan-luc" && desktopSection !== "khac") ||
+      typeof window === "undefined"
+    ) {
       return;
     }
     if (!window.matchMedia("(min-width: 1024px)").matches) return;
@@ -306,22 +281,37 @@ function DashboardPage() {
       }),
       fetchFactories(),
     ])
-      .then(([workspace, staffAdminUsers, factories]) => {
+      .then(async ([workspace, staffAdminUsers, factories]) => {
+        const histories = workspace.workers.flatMap((worker) => worker.histories);
+        const recentDates = new Set(getRecentDateKeys());
+        const referencedVersionIds =
+          desktopSection === "khac"
+            ? histories
+                .filter((history) => recentDates.has(history.join_date.slice(0, 10)))
+                .map((history) => history.cccd_version || "")
+                .filter(Boolean)
+            : [];
+        const cccdVersions = referencedVersionIds.length
+          ? await fetchCccdVersionsByIds(referencedVersionIds).catch(() => [])
+          : [];
+
         if (!alive) return;
         const workerUsers = workspace.workers.map((worker) => worker.user);
         const workerIds = new Set(workerUsers.map((worker) => worker.id));
-        setWorkforceHistories(workspace.workers.flatMap((worker) => worker.histories));
+        setWorkforceHistories(histories);
         setWorkforceUsers([
           ...workerUsers,
           ...staffAdminUsers.filter((staff) => !workerIds.has(staff.id)),
         ]);
         setWorkforceFactories(factories);
+        setWorkforceCccdVersions(cccdVersions);
       })
       .catch(() => {
         if (!alive) return;
         setWorkforceHistories([]);
         setWorkforceUsers([]);
         setWorkforceFactories([]);
+        setWorkforceCccdVersions([]);
         setWorkforceError("Không tải được dữ liệu nhân lực. Vui lòng thử lại.");
       })
       .finally(() => {
@@ -350,10 +340,10 @@ function DashboardPage() {
       })
       .then((requests) => {
         if (!alive) return;
-        const nextStats = createEmptyApprovalStats();
+        const nextStats = createEmptyApprovalDashboardStats();
 
         for (const request of requests) {
-          if (!isApprovalStatus(request.status)) continue;
+          if (!isApprovalDashboardStatus(request.status)) continue;
           const status = request.status;
           const amount = Math.max(0, Number(request.amount) || 0);
           nextStats[status] += 1;
@@ -364,7 +354,7 @@ function DashboardPage() {
         setApprovalStats(nextStats);
       })
       .catch(() => {
-        if (alive) setApprovalStats(createEmptyApprovalStats());
+        if (alive) setApprovalStats(createEmptyApprovalDashboardStats());
       });
 
     return () => {
@@ -405,6 +395,7 @@ function DashboardPage() {
             histories={workforceHistories}
             users={workforceUsers}
             factories={workforceFactories}
+            cccdVersions={workforceCccdVersions}
             loading={workforceLoading}
             error={workforceError}
             approvalStats={approvalStats}
@@ -412,13 +403,13 @@ function DashboardPage() {
           />
         </DesktopAppShell>
       )}
-      <div className="sticky top-0 z-10 px-4 pb-2 pt-4 desktop:hidden">
-        <div className="gradient-hero relative overflow-hidden rounded-[1.75rem] px-5 py-5 text-white shadow-soft">
-          <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/20 blur-2xl" />
-          <div className="absolute -bottom-16 -left-8 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
+      <div className="px-4 pb-2 pt-3 desktop:hidden">
+        <div className="gradient-hero relative overflow-hidden rounded-3xl px-4 py-4 text-white shadow-soft">
+          <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-white/20 blur-2xl" />
+          <div className="absolute -bottom-16 -left-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
 
           <div className="relative flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-white/95 shadow-soft">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/95 shadow-soft">
               {logoUrl ? (
                 <img src={logoUrl} alt="logo" className="logo-fit" />
               ) : (
@@ -426,11 +417,11 @@ function DashboardPage() {
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-base font-semibold leading-tight">
+              <div className="truncate text-base font-semibold leading-6">
                 {settings.company_name}
               </div>
               {settings.slogan && (
-                <div className="truncate text-xs text-white/80">{settings.slogan}</div>
+                <div className="truncate text-xs leading-5 text-white/80">{settings.slogan}</div>
               )}
             </div>
             <button
@@ -438,211 +429,260 @@ function DashboardPage() {
               onClick={handleReload}
               disabled={reloading}
               aria-label="Tải lại trang"
-              title="Tải lại trang"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20 text-white shadow-sm backdrop-blur transition hover:bg-white/30 active:scale-95 disabled:opacity-70"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur transition active:scale-95 disabled:opacity-70"
             >
               <RefreshCw className={reloading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
             </button>
           </div>
 
-          <div className="relative mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <div className="text-sm text-white/80">Xin chào,</div>
-            <div className="text-base font-semibold leading-tight">
+          <div className="relative mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-sm text-white/80">Xin chào,</span>
+            <span className="text-base font-semibold leading-6">
               {user?.full_name || user?.username || "Bạn"}
-            </div>
-
-            <div className="inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-[8px] uppercase tracking-wider backdrop-blur">
+            </span>
+            <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold backdrop-blur">
               {isAdmin ? "Quản trị viên" : "Nhân viên"}
-            </div>
+            </span>
             {!isAdmin && hasEmployment && (
-              <div className="inline-flex items-center rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] backdrop-blur">
+              <span className="max-w-full truncate rounded-full bg-white/15 px-2.5 py-1 text-xs backdrop-blur">
                 {currentEmployment?.expand?.factory?.name || "Chưa có nhà máy"}
-              </div>
+              </span>
             )}
           </div>
 
           {summaryText && (
-            <div className="relative mt-3 flex items-start gap-2 rounded-2xl bg-white/15 px-3 py-2 backdrop-blur">
+            <div className="relative mt-3 flex items-start gap-2 rounded-2xl bg-white/15 px-3 py-2.5 text-sm leading-5 backdrop-blur">
               <Bell className="mt-0.5 h-4 w-4 shrink-0" />
-              <div className="text-xs leading-snug">{summaryText}</div>
+              <div>{summaryText}</div>
             </div>
           )}
         </div>
       </div>
 
-      <div className="space-y-4 px-4 pt-2 desktop:hidden">
-        {isAdmin && (
-          <section className="rounded-3xl bg-card p-3 shadow-soft">
-            <div className="flex items-center justify-between px-1 pb-2 pt-1">
-              <div>
-                <div className="text-sm font-semibold tracking-tight">Quản trị</div>
-                <div className="text-[11px] text-muted-foreground">Chỉ dành cho admin</div>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <FeatureTile
-                to="/admin/workforce"
-                label="Nhân sự đi làm"
-                description="Tuyển dụng & danh sách NLĐ"
-                icon={Users}
-              />
-              <FeatureTile
-                to="/staff/approvals"
-                label="Phê duyệt"
-                description="Yêu cầu từ staff"
-                icon={ClipboardCheck}
-                badge={toBadge(pendingApprovalCount)}
-              />
-              <FeatureTile
-                to="/staff/salary-holds"
-                label="Giữ lương"
-                description="Duyệt và giải ngân yêu cầu"
-                icon={Wallet}
-              />
-              <FeatureTile
-                to="/admin/staff"
-                label="Quản lý staff"
-                description="Tạo, import tài khoản staff"
-                icon={ShieldCheck}
-              />
-              <FeatureTile
-                to="/admin/settings"
-                label="Cài đặt"
-                description="Quản trị hệ thống"
-                icon={Settings}
-              />
-            </div>
-          </section>
-        )}
-
-        <section>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setOpenUtil("utilities")}
-              className="group relative overflow-hidden rounded-3xl border bg-card p-4 text-left shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-card)] active:scale-[0.98]"
+      <div className="space-y-5 px-4 pt-2 desktop:hidden">
+        {isAdmin ? (
+          <>
+            <MobileSection
+              title="Nhóm chính"
+              description="Các nghiệp vụ nhân sự và tài chính cần xử lý thường xuyên"
             >
-              <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary/10 blur-2xl transition-transform group-hover:scale-110" />
-              <div className="relative flex items-start justify-between gap-2">
-                <div className="gradient-primary flex h-11 w-11 items-center justify-center rounded-2xl text-primary-foreground shadow-sm">
-                  <LayoutGrid className="h-5 w-5" />
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              <div className="grid grid-cols-2 gap-3">
+                <FeatureTile
+                  to="/admin/workforce"
+                  label="Nhân sự đi làm"
+                  description="Danh sách và tình trạng lao động"
+                  icon={Users}
+                  variant="accent"
+                />
+                <FeatureTile
+                  to="/advances"
+                  label="Ứng lương"
+                  description="Tiếp nhận và giải ngân"
+                  icon={Wallet}
+                  variant="accent"
+                />
+                <FeatureTile
+                  to="/staff/approvals"
+                  label="Phê duyệt"
+                  description="Yêu cầu nghiệp vụ"
+                  icon={ClipboardCheck}
+                  badge={toBadge(pendingApprovalCount)}
+                />
+                <FeatureTile
+                  to="/staff/salary-holds"
+                  label="Giữ lương"
+                  description="Duyệt và giải ngân yêu cầu"
+                  icon={ShieldCheck}
+                />
               </div>
-              <div className="relative mt-3">
-                <div className="text-sm font-semibold tracking-tight">Tiện ích</div>
-                <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                  Bảng tin, nhà xe, trò chuyện, hướng dẫn
-                </div>
-              </div>
-              {(unread.news > 0 || unread.chat > 0) && (
-                <span className="absolute right-3 top-3 inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm">
-                  {(() => {
-                    const total = unread.news + unread.chat;
-                    return total > 9 ? "9+" : total;
-                  })()}
-                </span>
-              )}
-            </button>
+            </MobileSection>
 
-            <button
-              type="button"
-              onClick={() => setOpenUtil("entertainment")}
-              className="group relative overflow-hidden rounded-3xl border bg-card p-4 text-left shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-card)] active:scale-[0.98]"
+            <MobileSection
+              title="Quản trị"
+              description="Kiểm tra dữ liệu và cấu hình hệ thống"
             >
-              <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-accent/40 blur-2xl transition-transform group-hover:scale-110" />
-              <div className="relative flex items-start justify-between gap-2">
-                <div className="gradient-accent flex h-11 w-11 items-center justify-center rounded-2xl text-accent-foreground shadow-sm">
-                  <Gamepad2 className="h-5 w-5" />
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              <div className="grid grid-cols-2 gap-3">
+                <FeatureTile
+                  to="/check-attendance"
+                  label="Check công/lương"
+                  description="Kiểm tra bảng công và lương"
+                  icon={CalendarCheck}
+                  variant="accent"
+                />
+                <FeatureTile
+                  to="/complaints"
+                  label="Khiếu nại"
+                  description="Tiếp nhận phản ánh"
+                  icon={MessageSquareWarning}
+                  variant="accent"
+                  badge={toBadge(pendingComplaintCount)}
+                />
+                <FeatureTile
+                  to="/attendance"
+                  label="Tự chấm công"
+                  description="Ghi nhận giờ làm"
+                  icon={Clock}
+                />
+                <FeatureTile
+                  to="/admin/settings"
+                  label="Cài đặt"
+                  description="Thiết lập hệ thống"
+                  icon={Settings}
+                />
               </div>
-              <div className="relative mt-3">
-                <div className="text-sm font-semibold tracking-tight">Giải trí</div>
-                <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                  Vườn cây và các trò chơi thư giãn
-                </div>
-              </div>
-            </button>
-          </div>
-        </section>
+            </MobileSection>
 
-        <section className="rounded-3xl bg-card p-3 shadow-soft">
-          <div className="flex items-center justify-between px-1 pb-2 pt-1">
-            <div>
-              <div className="text-sm font-semibold tracking-tight">Khi bạn đã đi làm</div>
-              <div className="text-[11px] text-muted-foreground">
-                {workDisabled
-                  ? "Cần admin gắn mã NV để mở khoá"
-                  : "Dành cho nhân sự đã được admin xác nhận"}
+            <MobileSection title="Khác" description="Tiện ích, giải trí và thông tin tài khoản">
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOpenUtil("utilities")}
+                  className="group relative flex min-h-[94px] flex-col items-center gap-2 rounded-2xl border border-border/70 bg-card p-3 text-center shadow-soft transition-colors active:scale-[0.98]"
+                >
+                  <div className="gradient-primary flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground">
+                    <LayoutGrid className="h-[18px] w-[18px]" />
+                  </div>
+                  <span className="w-full text-xs font-semibold">Tiện ích</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpenUtil("entertainment")}
+                  className="group relative flex min-h-[94px] flex-col items-center gap-2 rounded-2xl border border-border/70 bg-card p-3 text-center shadow-soft transition-colors active:scale-[0.98]"
+                >
+                  <div className="gradient-accent flex h-10 w-10 items-center justify-center rounded-xl text-accent-foreground">
+                    <Gamepad2 className="h-[18px] w-[18px]" />
+                  </div>
+                  <span className="w-full text-xs font-semibold">Giải trí</span>
+                </button>
+                <FeatureTile to="/account" label="Tài khoản" icon={User} size="compact" />
               </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <FeatureTile
-              to="/advances"
-              label="Ứng lương"
-              description="Xin ứng lương"
-              icon={Wallet}
-              variant="accent"
-              disabled={workDisabled}
-              disabledReason={workDisabledReason}
-              badge={workDisabled ? undefined : toBadge(unread.advances)}
-            />
-            <FeatureTile
-              to="/complaints"
-              label="Khiếu nại"
-              description="Gửi phản ánh"
-              icon={MessageSquareWarning}
-              variant="accent"
-              disabled={workDisabled}
-              disabledReason={workDisabledReason}
-              badge={
-                !workDisabled && isAdmin && pendingComplaintCount > 0
-                  ? pendingComplaintCount > 9
-                    ? "9+"
-                    : String(pendingComplaintCount)
-                  : undefined
+            </MobileSection>
+          </>
+        ) : (
+          <>
+            <section aria-label="Tiện ích và giải trí">
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setOpenUtil("utilities")}
+                  className="group relative overflow-hidden rounded-3xl border border-border/70 bg-card p-4 text-left shadow-soft transition active:scale-[0.98]"
+                >
+                  <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary/10 blur-2xl" />
+                  <div className="relative flex items-start justify-between gap-2">
+                    <div className="gradient-primary flex h-11 w-11 items-center justify-center rounded-2xl text-primary-foreground shadow-sm">
+                      <LayoutGrid className="h-5 w-5" />
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="relative mt-3 text-sm font-semibold">Tiện ích</div>
+                  <div className="relative mt-1 text-xs leading-5 text-muted-foreground">
+                    Bảng tin, sổ tay và công cụ
+                  </div>
+                  {(unread.news > 0 || unread.chat > 0) && (
+                    <span className="absolute right-3 top-3 inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold text-white shadow-sm">
+                      {toBadge(unread.news + unread.chat)}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setOpenUtil("entertainment")}
+                  className="group relative overflow-hidden rounded-3xl border border-border/70 bg-card p-4 text-left shadow-soft transition active:scale-[0.98]"
+                >
+                  <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-accent/40 blur-2xl" />
+                  <div className="relative flex items-start justify-between gap-2">
+                    <div className="gradient-accent flex h-11 w-11 items-center justify-center rounded-2xl text-accent-foreground shadow-sm">
+                      <Gamepad2 className="h-5 w-5" />
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="relative mt-3 text-sm font-semibold">Giải trí</div>
+                  <div className="relative mt-1 text-xs leading-5 text-muted-foreground">
+                    Ba trò chơi thư giãn
+                  </div>
+                </button>
+              </div>
+            </section>
+
+            <MobileSection
+              title="Khi đã đi làm"
+              description={
+                workDisabled
+                  ? "Cần admin gắn mã nhân viên và nhà máy để mở khóa"
+                  : "Các chức năng dành cho người lao động đang đi làm"
               }
-            />
-            <FeatureTile
-              to="/check-attendance"
-              label="Check công/lương"
-              description="Kiểm tra bảng công"
-              icon={CalendarCheck}
-              variant="accent"
-              disabled={workDisabled}
-              disabledReason={workDisabledReason}
-              badge={workDisabled ? undefined : toBadge(unread.check)}
-            />
-            <FeatureTile
-              to="/attendance"
-              label="Tự chấm công"
-              description="Ghi nhận giờ làm"
-              icon={Clock}
-              variant="accent"
-              disabled={workDisabled}
-              disabledReason={workDisabledReason}
-            />
-            {!isAdmin && (
-              <FeatureTile
-                to="/work-history"
-                label="Lịch sử đi làm"
-                description="Nhà máy, ngày vào/nghỉ"
-                icon={History}
-                variant="accent"
-                disabled={workDisabled}
-                disabledReason={workDisabledReason}
-              />
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <FeatureTile
+                  to="/advances"
+                  label="Ứng lương"
+                  description="Gửi và theo dõi yêu cầu"
+                  icon={Wallet}
+                  variant="accent"
+                  disabled={workDisabled}
+                  disabledReason={workDisabledReason}
+                  badge={workDisabled ? undefined : toBadge(unread.advances)}
+                />
+                <FeatureTile
+                  to="/complaints"
+                  label="Khiếu nại"
+                  description="Gửi phản ánh"
+                  icon={MessageSquareWarning}
+                  variant="accent"
+                  disabled={workDisabled}
+                  disabledReason={workDisabledReason}
+                />
+                <FeatureTile
+                  to="/check-attendance"
+                  label="Check công/lương"
+                  description="Kiểm tra bảng công"
+                  icon={CalendarCheck}
+                  variant="accent"
+                  disabled={workDisabled}
+                  disabledReason={workDisabledReason}
+                  badge={workDisabled ? undefined : toBadge(unread.check)}
+                />
+                <FeatureTile
+                  to="/attendance"
+                  label="Tự chấm công"
+                  description="Ghi nhận giờ làm"
+                  icon={Clock}
+                  variant="accent"
+                  disabled={workDisabled}
+                  disabledReason={workDisabledReason}
+                />
+                <FeatureTile
+                  to="/work-history"
+                  label="Lịch sử đi làm"
+                  description="Nhà máy, ngày vào/nghỉ"
+                  icon={History}
+                  variant="accent"
+                  disabled={workDisabled}
+                  disabledReason={workDisabledReason}
+                />
+              </div>
+            </MobileSection>
+
+            {workDisabled && (
+              <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-5 text-amber-900">
+                <BriefcaseBusiness className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <div className="font-semibold">Hoàn thiện hồ sơ để mở chức năng</div>
+                  <div className="mt-1">
+                    Admin cần gắn mã nhân viên và nhà máy trước khi bạn chấm công hoặc ứng lương.
+                  </div>
+                </div>
+              </div>
             )}
-          </div>
-        </section>
+          </>
+        )}
       </div>
 
       <BottomNav />
 
-      <Dialog open={openUtil !== null} onOpenChange={(o) => !o && setOpenUtil(null)}>
-        <DialogContent className="rounded-3xl">
+      <Dialog open={openUtil !== null} onOpenChange={(open) => !open && setOpenUtil(null)}>
+        <DialogContent className="rounded-3xl desktop:hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {openUtil === "utilities" ? (
@@ -662,41 +702,59 @@ function DashboardPage() {
               )}
             </DialogTitle>
             <DialogDescription>
-              {openUtil === "utilities"
-                ? "Các tiện ích dành cho mọi người dùng"
-                : "Chơi và thư giãn"}
+              {openUtil === "utilities" ? "Chọn tiện ích cần sử dụng" : "Chơi và thư giãn"}
             </DialogDescription>
           </DialogHeader>
 
           {openUtil === "utilities" && (
             <div className="grid grid-cols-3 gap-2" onClick={() => setOpenUtil(null)}>
-              <FeatureTile
-                to="/news"
-                label="Bảng tin"
-                icon={Newspaper}
-                size="compact"
-                badge={toBadge(unread.news)}
-              />
-              <FeatureTile to="/transport" label="Tìm nhà xe" icon={BusFront} size="compact" />
-              <FeatureTile
-                to="/chat"
-                label="Trò chuyện"
-                icon={MessagesSquare}
-                size="compact"
-                badge={toBadge(unread.chat)}
-              />
-              <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
-              <FeatureTile to="/notebook" label="Sổ tay" icon={NotebookPen} size="compact" />
-              {!isAdmin && (
-                <FeatureTile to="/counter" label="Bộ đếm" icon={ListOrdered} size="compact" />
-              )}
-              {isAdmin && (
-                <FeatureTile
-                  to="/admin/accounts/stats"
-                  label="Thống kê TK"
-                  icon={Users}
-                  size="compact"
-                />
+              {isAdmin ? (
+                <>
+                  <FeatureTile
+                    to="/news"
+                    label="Bảng tin"
+                    icon={Newspaper}
+                    size="compact"
+                    badge={toBadge(unread.news)}
+                  />
+                  <FeatureTile to="/notebook" label="Sổ tay" icon={NotebookPen} size="compact" />
+                  <FeatureTile
+                    to="/admin/accounts/stats"
+                    label="Thống kê"
+                    icon={Users}
+                    size="compact"
+                  />
+                  <FeatureTile
+                    to="/chat"
+                    label="Trò chuyện"
+                    icon={MessagesSquare}
+                    size="compact"
+                    badge={toBadge(unread.chat)}
+                  />
+                  <FeatureTile to="/transport" label="Tìm nhà xe" icon={BusFront} size="compact" />
+                  <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
+                </>
+              ) : (
+                <>
+                  <FeatureTile
+                    to="/news"
+                    label="Bảng tin"
+                    icon={Newspaper}
+                    size="compact"
+                    badge={toBadge(unread.news)}
+                  />
+                  <FeatureTile to="/transport" label="Tìm nhà xe" icon={BusFront} size="compact" />
+                  <FeatureTile
+                    to="/chat"
+                    label="Trò chuyện"
+                    icon={MessagesSquare}
+                    size="compact"
+                    badge={toBadge(unread.chat)}
+                  />
+                  <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
+                  <FeatureTile to="/notebook" label="Sổ tay" icon={NotebookPen} size="compact" />
+                  <FeatureTile to="/counter" label="Bộ đếm" icon={ListOrdered} size="compact" />
+                </>
               )}
             </div>
           )}
@@ -721,6 +779,7 @@ function DesktopAdminDashboard({
   histories,
   users,
   factories,
+  cccdVersions,
   loading,
   error,
   approvalStats,
@@ -730,6 +789,7 @@ function DesktopAdminDashboard({
   histories: EmploymentHistoryRecord[];
   users: UserRecord[];
   factories: FactoryRecord[];
+  cccdVersions: CccdVersionRecord[];
   loading: boolean;
   error: string;
   approvalStats: ApprovalStats;
@@ -784,158 +844,21 @@ function DesktopAdminDashboard({
           ) : section === "tai-chinh" ? (
             <FinanceDashboard />
           ) : (
-            <ApprovalDashboard stats={approvalStats} />
+            <div className="space-y-4">
+              <OtherDashboard
+                histories={histories}
+                users={users}
+                factories={factories}
+                cccdVersions={cccdVersions}
+                loading={loading}
+                error={error}
+                onRetry={onRetry}
+              />
+              <ApprovalDashboard stats={approvalStats} />
+            </div>
           )}
         </section>
       </div>
     </main>
-  );
-}
-
-function formatApprovalMoney(value: number) {
-  return `${Math.round(value).toLocaleString("vi-VN")} đ`;
-}
-
-function formatCompactMoney(value: number) {
-  if (value >= 1_000_000_000) {
-    return `${(value / 1_000_000_000).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} tỷ`;
-  }
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} tr`;
-  }
-  if (value >= 1_000) {
-    return `${(value / 1_000).toLocaleString("vi-VN", { maximumFractionDigits: 0 })} nghìn`;
-  }
-  return value.toLocaleString("vi-VN");
-}
-
-function ApprovalDashboard({ stats }: { stats: ApprovalStats }) {
-  const totalRequests = APPROVAL_STATUSES.reduce((total, status) => total + stats[status], 0);
-  const chartData = APPROVAL_STATUS_META.map((item) => ({
-    ...item,
-    count: stats[item.key],
-    amount: stats.amountByStatus[item.key],
-  }));
-  const tooltipStyle = {
-    borderRadius: "12px",
-    borderColor: "var(--border)",
-    backgroundColor: "var(--card)",
-    color: "var(--foreground)",
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold">Thống kê phê duyệt</h3>
-            <p className="text-xs text-muted-foreground">
-              Trực quan hóa số lượng và số tiền theo trạng thái yêu cầu.
-            </p>
-          </div>
-          <Link
-            to="/staff/approvals"
-            className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-          >
-            Xem chi tiết
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-6">
-          <DesktopSummaryCard label="Tổng yêu cầu" value={totalRequests} icon={ClipboardCheck} />
-          <DesktopSummaryCard
-            label="Tổng số tiền"
-            value={formatApprovalMoney(stats.totalAmount)}
-            icon={Wallet}
-          />
-          <DesktopSummaryCard label="Chờ duyệt" value={stats.pending} icon={Clock} />
-          <DesktopSummaryCard label="Đã duyệt" value={stats.approved} icon={ShieldCheck} />
-          <DesktopSummaryCard label="Hoàn thành" value={stats.completed} icon={CalendarCheck} />
-          <DesktopSummaryCard label="Từ chối" value={stats.rejected} icon={MessageSquareWarning} />
-        </div>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <div className="min-w-0 rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold">Số lượng theo trạng thái</h3>
-            <p className="text-xs text-muted-foreground">Mỗi cột là tổng số yêu cầu.</p>
-          </div>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="label" axisLine={false} tickLine={false} fontSize={12} />
-                <YAxis axisLine={false} tickLine={false} allowDecimals={false} fontSize={12} />
-                <RechartsTooltip
-                  cursor={{ fill: "var(--muted)" }}
-                  contentStyle={tooltipStyle}
-                  formatter={(value) => [Number(value || 0).toLocaleString("vi-VN"), "Số yêu cầu"]}
-                />
-                <Bar dataKey="count" radius={[8, 8, 0, 0]} maxBarSize={58}>
-                  {chartData.map((item) => (
-                    <Cell key={item.key} fill={item.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="min-w-0 rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold">Số tiền theo trạng thái</h3>
-            <p className="text-xs text-muted-foreground">
-              Tổng tiền của các yêu cầu có khai báo số tiền.
-            </p>
-          </div>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="label" axisLine={false} tickLine={false} fontSize={12} />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  fontSize={12}
-                  width={58}
-                  tickFormatter={(value) => formatCompactMoney(Number(value))}
-                />
-                <RechartsTooltip
-                  cursor={{ fill: "var(--muted)" }}
-                  contentStyle={tooltipStyle}
-                  formatter={(value) => [formatApprovalMoney(Number(value || 0)), "Số tiền"]}
-                />
-                <Bar dataKey="amount" radius={[8, 8, 0, 0]} maxBarSize={58}>
-                  {chartData.map((item) => (
-                    <Cell key={item.key} fill={item.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DesktopSummaryCard({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: number | string;
-  icon: React.ComponentType<{ className?: string }>;
-}) {
-  return (
-    <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-soft">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">{label}</span>
-        <Icon className="h-4 w-4 text-primary" />
-      </div>
-      <div className="mt-2 text-2xl font-bold tabular-nums">{value}</div>
-    </div>
   );
 }

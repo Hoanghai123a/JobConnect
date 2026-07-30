@@ -143,7 +143,7 @@ function LoginPage() {
       <MobileBrandHeader />
       <DesktopBrandPanel />
 
-      <section className="relative flex flex-1 desktop:items-center desktop:justify-center desktop:bg-muted/30 desktop:px-12">
+      <section className="relative flex min-w-0 flex-1 desktop:items-center desktop:justify-center desktop:bg-muted/30 desktop:px-12">
         <LoginFormCard
           identity={identity}
           password={password}
@@ -276,8 +276,8 @@ function LoginFormCard({
   onSubmit: (event: React.FormEvent) => void;
 }) {
   return (
-    <Card className="mx-4 -mt-8 flex flex-1 rounded-[1.75rem] border-border/70 bg-card/95 shadow-soft backdrop-blur desktop:mx-0 desktop:mt-0 desktop:w-full desktop:max-w-[460px] desktop:flex-none desktop:rounded-2xl">
-      <form onSubmit={onSubmit} noValidate className="flex h-full flex-col">
+    <Card className="mx-4 -mt-8 flex w-[calc(100%-2rem)] min-w-0 flex-none rounded-[1.75rem] border-border/70 bg-card/95 shadow-soft backdrop-blur desktop:mx-0 desktop:mt-0 desktop:w-full desktop:max-w-[460px] desktop:flex-none desktop:rounded-2xl">
+      <form onSubmit={onSubmit} noValidate className="flex h-full w-full min-w-0 flex-col">
         <CardHeader className="hidden px-8 pb-2 pt-8 text-center desktop:flex">
           <CardTitle className="text-3xl font-bold tracking-tight">Chào mừng trở lại</CardTitle>
           <CardDescription className="text-base">
@@ -322,11 +322,7 @@ function LoginFormCard({
                 title={showPassword ? "Ẩn mật khẩu" : "Hiển thị mật khẩu"}
                 className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
-                {showPassword ? (
-                  <EyeOff aria-hidden="true" />
-                ) : (
-                  <Eye aria-hidden="true" />
-                )}
+                {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
               </Button>
             </div>
           </div>

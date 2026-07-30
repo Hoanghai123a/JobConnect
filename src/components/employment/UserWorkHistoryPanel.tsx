@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, Clock3, NotebookPen } from "lucide-react";
+import { CalendarClock, Eye, IdCard, NotebookPen, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { DateInput } from "@/components/ui/date-input";
-import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -18,18 +14,97 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
-import {
-  fetchEmploymentHistories,
-  getLatestEmploymentHistory,
-  maskCccd,
-  updateEmploymentHistory,
-  type EmploymentHistoryRecord,
-} from "@/lib/employment";
-import { createStaffActionLog } from "@/lib/staff-log";
+import { fileUrl } from "@/lib/pocketbase";
+import type { CccdVersionRecord } from "@/lib/cccd-versions";
+import { fetchEmploymentHistories, maskCccd, type EmploymentHistoryRecord } from "@/lib/employment";
 
-function todayDate() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+function SnapshotRow({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="mt-1 font-medium">{value || "Chưa có"}</div>
+    </div>
+  );
+}
+
+function versionedCccdUrl(version: CccdVersionRecord | undefined, filename?: string) {
+  const url = fileUrl(version, filename);
+  if (!url || !version) return "";
+  const cacheKey = version.updated || version.id;
+  return url + (url.includes("?") ? "&" : "?") + "v=" + encodeURIComponent(cacheKey);
+}
+
+function CccdImageSlot({
+  label,
+  url,
+  onPreview,
+}: {
+  label: string;
+  url: string;
+  onPreview: () => void;
+}) {
+  return (
+    <div className="min-w-0 space-y-1.5">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      {url ? (
+        <button
+          type="button"
+          onClick={onPreview}
+          className="group relative block aspect-[1.586/1] w-full overflow-hidden rounded-xl border bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label={`Xem ảnh CCCD ${label.toLowerCase()}`}
+        >
+          <img
+            src={url}
+            alt={`CCCD ${label.toLowerCase()}`}
+            className="h-full w-full object-contain"
+          />
+          <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-gradient-to-t from-black/65 to-transparent px-2 pb-2 pt-5 text-[11px] font-medium text-white">
+            <ZoomIn className="h-3.5 w-3.5" /> Nhấn để xem
+          </span>
+        </button>
+      ) : (
+        <div className="flex aspect-[1.586/1] w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/20 text-muted-foreground">
+          <IdCard className="h-5 w-5" />
+          <span className="text-[11px]">Chưa có ảnh</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SnapshotCccdImages({
+  version,
+  onPreview,
+}: {
+  version?: CccdVersionRecord;
+  onPreview: (src: string, label: string) => void;
+}) {
+  const frontUrl = versionedCccdUrl(version, version?.front_image);
+  const backUrl = versionedCccdUrl(version, version?.back_image);
+
+  return (
+    <div className="space-y-2 rounded-xl border border-border/60 p-3">
+      <div>
+        <div className="text-sm font-medium">Ảnh CCCD tại thời điểm đi làm</div>
+        <div className="text-[11px] text-muted-foreground">Nhấn vào ảnh để xem kích thước lớn.</div>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        <CccdImageSlot
+          label="Mặt trước"
+          url={frontUrl}
+          onPreview={() => onPreview(frontUrl, "CCCD mặt trước")}
+        />
+        <CccdImageSlot
+          label="Mặt sau"
+          url={backUrl}
+          onPreview={() => onPreview(backUrl, "CCCD mặt sau")}
+        />
+      </div>
+      {!frontUrl && !backUrl && (
+        <div className="text-[11px] text-muted-foreground">Lịch sử này chưa được lưu ảnh CCCD.</div>
+      )}
+    </div>
+  );
 }
 
 function formatDate(value?: string) {
@@ -44,15 +119,12 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 export function UserWorkHistoryPanel() {
-  const { user, refresh } = useAuth();
+  const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [histories, setHistories] = useState<EmploymentHistoryRecord[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-
-  const [leaveOpen, setLeaveOpen] = useState(false);
-  const [leaveDate, setLeaveDate] = useState(todayDate());
-  const [leaveNote, setLeaveNote] = useState("");
+  const [selectedHistory, setSelectedHistory] = useState<EmploymentHistoryRecord | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ src: string; label: string } | null>(null);
 
   const loadAll = async () => {
     if (!user?.id) return;
@@ -77,53 +149,6 @@ export function UserWorkHistoryPanel() {
     [histories],
   );
 
-  const reload = async () => {
-    if (!user?.id) return;
-    const nextRows = await fetchEmploymentHistories([user.id]);
-    setHistories(nextRows);
-    await refresh();
-  };
-
-  const submitLeave = async () => {
-    if (!user?.id || !activeHistory) {
-      toast.warning("Bạn chưa có nhà máy đang làm để báo nghỉ");
-      return;
-    }
-    if (!leaveDate) {
-      toast.warning("Chọn ngày nghỉ");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const before = { ...activeHistory };
-      await updateEmploymentHistory(activeHistory.id, {
-        leave_date: leaveDate,
-        status: "left",
-        note: leaveNote.trim(),
-      });
-      await reload();
-      await createStaffActionLog({
-        actor: user,
-        targetUserId: user.id,
-        targetCollection: "employment_histories",
-        targetRecord: activeHistory.id,
-        action: "report_leave",
-        before,
-        after: { leave_date: leaveDate, status: "left", note: leaveNote.trim() },
-        note: "User tự báo nghỉ",
-      });
-      setLeaveOpen(false);
-      setLeaveNote("");
-      setLeaveDate(todayDate());
-      toast.success("Đã ghi nhận ngày nghỉ");
-    } catch (error: unknown) {
-      toast.error(errorMessage(error, "Không thể báo nghỉ"));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   return (
     <div className="space-y-3">
       <Card className="space-y-3 p-4">
@@ -140,27 +165,6 @@ export function UserWorkHistoryPanel() {
             {activeHistory ? "Đang làm" : "Đang nghỉ"}
           </StatusChip>
         </div>
-
-        <div className="grid grid-cols-1 gap-2">
-          <Button
-            variant="outline"
-            className="rounded-xl"
-            disabled={!activeHistory}
-            onClick={() => {
-              setLeaveDate(todayDate());
-              setLeaveNote("");
-              setLeaveOpen(true);
-            }}
-          >
-            <Clock3 className="h-4 w-4" /> Báo nghỉ
-          </Button>
-        </div>
-        {activeHistory && (
-          <p className="text-[11px] text-muted-foreground">
-            Muốn chuyển nhà máy mới, hãy báo nghỉ nhà máy hiện tại trước rồi liên hệ người tuyển
-            hoặc QLNM.
-          </p>
-        )}
       </Card>
 
       <div className="space-y-2">
@@ -217,58 +221,85 @@ export function UserWorkHistoryPanel() {
                   {history.note}
                 </div>
               )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full rounded-xl"
+                onClick={() => setSelectedHistory(history)}
+              >
+                <Eye className="h-4 w-4" /> Xem thông tin cá nhân
+              </Button>
             </Card>
           ))
         )}
       </div>
 
-      <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
-        <DialogContent className="rounded-2xl">
+      <Dialog
+        open={Boolean(selectedHistory)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedHistory(null);
+            setPreviewImage(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Báo nghỉ</DialogTitle>
+            <DialogTitle>Thông tin cá nhân tại thời điểm đi làm</DialogTitle>
             <DialogDescription>
-              Ghi nhận ngày nghỉ tại {activeHistory?.expand?.factory?.name || "nhà máy hiện tại"}.
+              Dữ liệu được lưu riêng theo lịch sử, không thay đổi theo hồ sơ hiện tại.
             </DialogDescription>
           </DialogHeader>
-          <form
-            className="space-y-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submitLeave();
-            }}
-          >
-            <div className="space-y-1.5">
-              <Label className="text-xs">Ngày nghỉ</Label>
-              <DateInput
-                value={leaveDate}
-                onChange={(value) => setLeaveDate(value)}
-                className="rounded-xl"
+          {selectedHistory && (
+            <div className="space-y-2 text-sm">
+              <SnapshotRow label="Họ tên" value={selectedHistory.worker_name_snapshot} />
+              <SnapshotRow label="CCCD" value={maskCccd(selectedHistory.worker_cccd_snapshot)} />
+              <SnapshotRow
+                label="Ngày sinh"
+                value={formatDate(selectedHistory.worker_date_of_birth_snapshot)}
+              />
+              <SnapshotRow
+                label="Ngày cấp CCCD"
+                value={formatDate(selectedHistory.cccd_issue_date)}
+              />
+              <SnapshotRow
+                label="Địa chỉ thường trú"
+                value={
+                  selectedHistory.worker_address_snapshot ||
+                  selectedHistory.hometown_snapshot ||
+                  "Chưa có"
+                }
+              />
+              <SnapshotCccdImages
+                version={selectedHistory.expand?.cccd_version}
+                onPreview={(src, label) => src && setPreviewImage({ src, label })}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Ghi chú</Label>
-              <Textarea
-                rows={3}
-                value={leaveNote}
-                onChange={(e) => setLeaveNote(e.target.value)}
-                className="rounded-xl"
-                placeholder="Ví dụ: nghỉ việc, chuyển nhà máy..."
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setSelectedHistory(null)}>
+              Đóng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(previewImage)} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-3xl rounded-2xl p-2 sm:p-4">
+          <DialogHeader className="px-1 pt-1">
+            <DialogTitle>{previewImage?.label || "Ảnh CCCD"}</DialogTitle>
+            <DialogDescription>Ảnh CCCD được lưu cùng lịch sử đi làm.</DialogDescription>
+          </DialogHeader>
+          {previewImage && (
+            <div className="flex max-h-[calc(100dvh-8rem)] items-center justify-center overflow-auto rounded-xl bg-muted/30">
+              <img
+                src={previewImage.src}
+                alt={previewImage.label}
+                className="h-auto max-h-[calc(100dvh-8rem)] w-auto max-w-full rounded-xl object-contain"
               />
             </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-xl"
-                onClick={() => setLeaveOpen(false)}
-              >
-                Đóng
-              </Button>
-              <Button type="submit" className="rounded-xl" disabled={submitting}>
-                Xác nhận nghỉ
-              </Button>
-            </DialogFooter>
-          </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

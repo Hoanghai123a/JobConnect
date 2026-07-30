@@ -36,6 +36,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ResponsiveOverlay } from "@/components/layout/ResponsiveOverlay";
 
 export const Route = createFileRoute("/_authenticated/chat")({
   component: GroupChatPage,
@@ -389,7 +390,7 @@ function GroupChatPage() {
           isAdmin ? (
             <button
               onClick={openCreateRoom}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm active:scale-95"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm active:scale-95"
               aria-label="Tạo phòng"
             >
               <Plus className="h-4 w-4" />
@@ -503,146 +504,138 @@ function GroupChatPage() {
         )}
       </div>
 
-      <Dialog open={showRoomForm !== null} onOpenChange={(o) => !o && setShowRoomForm(null)}>
-        <DialogContent className="rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {showRoomForm?.mode === "edit" ? "Sửa phòng chat" : "Tạo phòng chat"}
-            </DialogTitle>
-            <DialogDescription>Đặt tên và mô tả ngắn để user dễ tìm phòng.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-medium">Tên phòng *</label>
-              <Input
-                value={roomForm.name}
-                onChange={(e) => setRoomForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="VD: Thông báo, Nhà xưởng A..."
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium">Mô tả</label>
-              <Textarea
-                value={roomForm.description}
-                onChange={(e) => setRoomForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="Mô tả ngắn về phòng này..."
-                rows={3}
-                className="mt-1 rounded-xl"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            {showRoomForm?.mode === "edit" &&
-              showRoomForm.room &&
-              !showRoomForm.room.is_default && (
-                <Button
-                  variant="destructive"
-                  onClick={() => showRoomForm.room && void deleteRoom(showRoomForm.room)}
-                  className="sm:mr-auto"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Xoá phòng
-                </Button>
-              )}
-            <Button variant="outline" onClick={() => setShowRoomForm(null)}>
-              Huỷ
-            </Button>
-            <Button onClick={() => void submitRoomForm()}>
-              <Check className="h-4 w-4" />
-              Lưu
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showRequestsDialog} onOpenChange={(o) => !o && setShowRequestsDialog(false)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>Yêu cầu tham gia phòng</DialogTitle>
-            <DialogDescription>
-              Chọn nhiều yêu cầu để duyệt hoặc từ chối cùng lúc.
-            </DialogDescription>
-          </DialogHeader>
-
-          {pendingRequests.length === 0 ? (
-            <EmptyState
-              icon={UserPlus}
-              title="Không có yêu cầu"
-              description="Tất cả yêu cầu đã được xử lý."
+      <ResponsiveOverlay
+        open={showRoomForm !== null}
+        onOpenChange={(open) => !open && setShowRoomForm(null)}
+        title={showRoomForm?.mode === "edit" ? "Sửa phòng chat" : "Tạo phòng chat"}
+        description="Đặt tên và mô tả ngắn để người dùng dễ tìm phòng."
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium">Tên phòng *</label>
+            <Input
+              value={roomForm.name}
+              onChange={(e) => setRoomForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="VD: Thông báo, Nhà xưởng A..."
+              className="mt-1"
             />
-          ) : (
-            <>
-              <label className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-                <Checkbox
-                  checked={
-                    selectedRequests.size === pendingRequests.length && pendingRequests.length > 0
-                  }
-                  onCheckedChange={(c) =>
-                    setSelectedRequests(c ? new Set(pendingRequests.map((r) => r.id)) : new Set())
-                  }
-                />
-                Chọn tất cả ({pendingRequests.length})
-              </label>
-
-              <div className="space-y-2">
-                {pendingRequests.map((req) => {
-                  const u = req.expand?.user;
-                  const room = req.expand?.room;
-                  return (
-                    <label
-                      key={req.id}
-                      className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card px-3 py-2 shadow-sm"
-                    >
-                      <Checkbox
-                        checked={selectedRequests.has(req.id)}
-                        onCheckedChange={() => toggleRequestSelected(req.id)}
-                        className="mt-1"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold">
-                          {u?.full_name || u?.username || "Ẩn danh"}
-                        </div>
-                        <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                          Xin vào: <span className="font-medium">{room?.name || "?"}</span>
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          <StatusChip tone="warning">Chờ duyệt</StatusChip>
-                          {req.created && (
-                            <StatusChip tone="neutral">
-                              {new Date(req.created).toLocaleDateString("vi-VN")}
-                            </StatusChip>
-                          )}
-                        </div>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-
-              {selectedRequests.size > 0 && (
-                <div className="flex items-center justify-between gap-2 rounded-xl bg-primary/10 px-3 py-2">
-                  <span className="text-xs font-medium text-primary">
-                    {selectedRequests.size} đã chọn
-                  </span>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => void handleRequests(true)}>
-                      <Check className="h-3.5 w-3.5" /> Duyệt
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => void handleRequests(false)}
-                    >
-                      <X className="h-3.5 w-3.5" /> Từ chối
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
+          </div>
+          <div>
+            <label className="text-xs font-medium">Mô tả</label>
+            <Textarea
+              value={roomForm.description}
+              onChange={(e) => setRoomForm((f) => ({ ...f, description: e.target.value }))}
+              placeholder="Mô tả ngắn về phòng này..."
+              rows={3}
+              className="mt-1 rounded-xl"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          {showRoomForm?.mode === "edit" && showRoomForm.room && !showRoomForm.room.is_default && (
+            <Button
+              variant="destructive"
+              onClick={() => showRoomForm.room && void deleteRoom(showRoomForm.room)}
+              className="sm:mr-auto"
+            >
+              <Trash2 className="h-4 w-4" />
+              Xoá phòng
+            </Button>
           )}
-        </DialogContent>
-      </Dialog>
+          <Button variant="outline" onClick={() => setShowRoomForm(null)}>
+            Huỷ
+          </Button>
+          <Button onClick={() => void submitRoomForm()}>
+            <Check className="h-4 w-4" />
+            Lưu
+          </Button>
+        </DialogFooter>
+      </ResponsiveOverlay>
+
+      <ResponsiveOverlay
+        open={showRequestsDialog}
+        onOpenChange={(open) => !open && setShowRequestsDialog(false)}
+        title="Yêu cầu tham gia phòng"
+        description="Chọn nhiều yêu cầu để duyệt hoặc từ chối cùng lúc."
+        presentation="full"
+      >
+        {pendingRequests.length === 0 ? (
+          <EmptyState
+            icon={UserPlus}
+            title="Không có yêu cầu"
+            description="Tất cả yêu cầu đã được xử lý."
+          />
+        ) : (
+          <>
+            <label className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+              <Checkbox
+                checked={
+                  selectedRequests.size === pendingRequests.length && pendingRequests.length > 0
+                }
+                onCheckedChange={(c) =>
+                  setSelectedRequests(c ? new Set(pendingRequests.map((r) => r.id)) : new Set())
+                }
+              />
+              Chọn tất cả ({pendingRequests.length})
+            </label>
+
+            <div className="space-y-2">
+              {pendingRequests.map((req) => {
+                const u = req.expand?.user;
+                const room = req.expand?.room;
+                return (
+                  <label
+                    key={req.id}
+                    className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card px-3 py-2 shadow-sm"
+                  >
+                    <Checkbox
+                      checked={selectedRequests.has(req.id)}
+                      onCheckedChange={() => toggleRequestSelected(req.id)}
+                      className="mt-1"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">
+                        {u?.full_name || u?.username || "Ẩn danh"}
+                      </div>
+                      <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                        Xin vào: <span className="font-medium">{room?.name || "?"}</span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        <StatusChip tone="warning">Chờ duyệt</StatusChip>
+                        {req.created && (
+                          <StatusChip tone="neutral">
+                            {new Date(req.created).toLocaleDateString("vi-VN")}
+                          </StatusChip>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            {selectedRequests.size > 0 && (
+              <div className="flex items-center justify-between gap-2 rounded-xl bg-primary/10 px-3 py-2">
+                <span className="text-xs font-medium text-primary">
+                  {selectedRequests.size} đã chọn
+                </span>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => void handleRequests(true)}>
+                    <Check className="h-3.5 w-3.5" /> Duyệt
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => void handleRequests(false)}
+                  >
+                    <X className="h-3.5 w-3.5" /> Từ chối
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </ResponsiveOverlay>
     </div>
   );
 }

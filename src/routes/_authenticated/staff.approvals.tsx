@@ -181,7 +181,7 @@ function ApprovalsPage() {
         <button
           type="button"
           onClick={() => setShowForm(true)}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-primary shadow-sm transition hover:bg-muted active:scale-95"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-primary shadow-sm transition hover:bg-muted active:scale-95"
           aria-label="Tạo yêu cầu phê duyệt"
         >
           <Plus className="h-4 w-4" />
@@ -261,14 +261,6 @@ function ApprovalsPage() {
           })}
         </div>
       </div>
-
-      <button
-        type="button"
-        onClick={() => setShowForm(true)}
-        className="fixed bottom-20 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition active:scale-95"
-      >
-        <Plus className="h-6 w-6" />
-      </button>
 
       <ApprovalForm
         open={showForm}

@@ -295,13 +295,25 @@ function buildWorkspace(
   }
 
   const workerMap = new Map(users.map((item) => [item.id, item]));
+  const workerEntries =
+    viewer.role === "admin"
+      ? users
+          .filter((item) => item.role === "user")
+          .map((item) => [item.id, grouped.get(item.id) || []] as const)
+      : [...grouped.entries()];
 
-  const workers = [...grouped.entries()]
+  const workers = workerEntries
     .map(([userId, userHistories]) => {
       const user = workerMap.get(userId);
       if (!user) return null;
 
-      if (!isWorkerInStaffScope(viewer, userHistories, managedFactoryIds, bypassScope)) return null;
+      // Tài khoản NLĐ mới import chưa có lịch sử đi làm vẫn phải hiện cho quản trị viên.
+      if (
+        userHistories.length > 0 &&
+        !isWorkerInStaffScope(viewer, userHistories, managedFactoryIds, bypassScope)
+      ) {
+        return null;
+      }
 
       const visibleHistories = userHistories;
 
@@ -358,14 +370,42 @@ async function getManagedFactoryIds(viewer: UserRecord) {
   );
 }
 
+async function fetchAdminWorkerAccounts(viewer: UserRecord): Promise<UserRecord[]> {
+  if (viewer.role !== "admin") return [];
+
+  return pb
+    .collection("users")
+    .getFullList<UserRecord>({
+      filter: 'role="user"',
+      sort: "full_name,username",
+    })
+    .catch(() => [] as UserRecord[]);
+}
+
+function mergeUsers(...groups: UserRecord[][]): UserRecord[] {
+  const usersById = new Map<string, UserRecord>();
+  for (const group of groups) {
+    for (const user of group) usersById.set(user.id, user);
+  }
+  return [...usersById.values()];
+}
+
 export async function fetchCachedStaffWorkspace(viewer: UserRecord) {
   const managedFactoryIds = await getManagedFactoryIds(viewer);
   const useCache = viewer.role === "admin" || viewer.role === "staff";
   const fingerprint = buildScopeFingerprint(viewer.id, managedFactoryIds, viewer.role);
   const cacheValid = useCache ? await isCacheScopeValid(fingerprint) : false;
   const cached = useCache && cacheValid ? await readCachedStaffData() : null;
+  const adminWorkerAccounts = await fetchAdminWorkerAccounts(viewer);
 
-  return cached ? buildWorkspace(viewer, cached.histories, cached.users, managedFactoryIds) : null;
+  return cached
+    ? buildWorkspace(
+        viewer,
+        cached.histories,
+        mergeUsers(cached.users, adminWorkerAccounts),
+        managedFactoryIds,
+      )
+    : null;
 }
 
 export async function fetchFreshStaffWorkspace(
@@ -395,9 +435,16 @@ export async function fetchFreshStaffWorkspace(
     await saveScopeFingerprint(buildScopeFingerprint(viewer.id, managedFactoryIds, viewer.role));
   }
 
-  return buildWorkspace(viewer, synced.histories, synced.users, managedFactoryIds, {
-    bypassScope: opts?.bypassScope,
-  });
+  const adminWorkerAccounts = await fetchAdminWorkerAccounts(viewer);
+  return buildWorkspace(
+    viewer,
+    synced.histories,
+    mergeUsers(synced.users, adminWorkerAccounts),
+    managedFactoryIds,
+    {
+      bypassScope: opts?.bypassScope,
+    },
+  );
 }
 
 export async function fetchStaffWorkspace(
@@ -464,7 +511,13 @@ export async function fetchStaffWorkspace(
     synced.users.push(...extra);
   }
 
-  return buildWorkspace(viewer, synced.histories, synced.users, managedFactoryIds);
+  const adminWorkerAccounts = await fetchAdminWorkerAccounts(viewer);
+  return buildWorkspace(
+    viewer,
+    synced.histories,
+    mergeUsers(synced.users, adminWorkerAccounts),
+    managedFactoryIds,
+  );
 }
 
 export async function fetchStaffWorkerWorkspace(viewer: UserRecord, workerId: string) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { pb } from "@/lib/pocketbase";
 import { getSeen } from "@/lib/seen";
@@ -22,7 +22,7 @@ const SPEAK_INTERVAL_MS = 10000;
 const SPEAK_DURATION_MS = 2000;
 const REACT_INTERVAL_MS = 4500;
 
-const NAV_SAFE_PX = 96;
+const NAV_SAFE_PX = 112;
 const PET_SIZE = 56;
 
 // Tốc độ đi (px/giây) theo từng tâm trạng.
@@ -41,6 +41,7 @@ const MIN_LEG_DISTANCE_PX = 50;
 
 export function RoamingPet() {
   const { user, loading } = useAuth();
+  const { pathname } = useLocation();
   const nav = useNavigate();
 
   const [garden, setGarden] = useState<GardenState | null>(null);
@@ -124,7 +125,12 @@ export function RoamingPet() {
   }, [userId]);
 
   const isStaff = user?.role === "staff";
-  const enabled = Boolean(userId) && !loading && !isStaff && garden?.roamingEnabled !== false;
+  const enabled =
+    Boolean(userId) &&
+    !loading &&
+    !isStaff &&
+    (pathname === "/" || pathname === "/garden") &&
+    garden?.roamingEnabled !== false;
   const starving = garden ? hunger(garden.pet) <= 0 : false;
 
   const glideDurationRef = useRef(0);
@@ -225,20 +231,21 @@ export function RoamingPet() {
       const starving = hunger(current.pet) <= 0;
       const lonely = happiness(current.pet) <= 0;
       if (starving || lonely) {
-        const lines = starving && lonely
-          ? [
-              "Chủ nhân ơi, mình đói và buồn quá...",
-              "Mình kiệt sức rồi, chủ nhân ghé chăm mình với!",
-            ]
-          : starving
+        const lines =
+          starving && lonely
             ? [
-                "Chủ nhân ơi, cho mình ăn với, đói lả rồi...",
-                "Bụng mình kêu to lắm rồi chủ nhân ơi...",
+                "Chủ nhân ơi, mình đói và buồn quá...",
+                "Mình kiệt sức rồi, chủ nhân ghé chăm mình với!",
               ]
-            : [
-                "Chủ nhân ơi, chơi với mình một chút đi...",
-                "Lâu quá rồi chủ nhân không vuốt ve mình...",
-              ];
+            : starving
+              ? [
+                  "Chủ nhân ơi, cho mình ăn với, đói lả rồi...",
+                  "Bụng mình kêu to lắm rồi chủ nhân ơi...",
+                ]
+              : [
+                  "Chủ nhân ơi, chơi với mình một chút đi...",
+                  "Lâu quá rồi chủ nhân không vuốt ve mình...",
+                ];
         const text = lines[Math.abs(seedRef.current) % lines.length];
         const tone = starving ? "hungry" : "sad";
         setSpeech({ text, tone });
@@ -289,25 +296,25 @@ export function RoamingPet() {
     };
   }, [enabled, garden, userId]);
 
-
   if (!enabled || !garden || !pos) return null;
 
   const pet = petById(garden.pet.id);
 
   return (
     <div
-      className="pointer-events-none fixed left-0 top-0 z-30"
+      className="roaming-pet pointer-events-none fixed left-0 top-0 z-30"
       style={{
         width: PET_SIZE,
         transform: `translate(${pos.x}px, ${pos.y}px)`,
-        transition: glide && glideDurationRef.current > 0
-          ? `transform ${glideDurationRef.current}ms linear`
-          : "none",
+        transition:
+          glide && glideDurationRef.current > 0
+            ? `transform ${glideDurationRef.current}ms linear`
+            : "none",
       }}
     >
       <div className="pointer-events-auto relative flex flex-col items-center">
         {speech && (
-          <div className="absolute bottom-full left-1/2 mb-1 w-max max-w-[170px] -translate-x-1/2 animate-in fade-in slide-in-from-bottom-1 rounded-2xl border border-border/60 bg-card px-3 py-1.5 text-center text-[11px] font-medium leading-snug text-foreground shadow-soft">
+          <div className="absolute bottom-full left-1/2 mb-1 w-max max-w-[170px] -translate-x-1/2 animate-in fade-in slide-in-from-bottom-1 rounded-2xl border border-border/60 bg-card px-3 py-1.5 text-center text-xs font-medium leading-snug text-foreground shadow-soft">
             {speech.text}
             <span className="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 border-b border-r border-border/60 bg-card" />
           </div>
@@ -326,10 +333,7 @@ export function RoamingPet() {
               {reaction.emoji}
             </span>
           )}
-          <span
-            className="pet-face inline-block"
-            style={{ transform: `scaleX(${facing})` }}
-          >
+          <span className="pet-face inline-block" style={{ transform: `scaleX(${facing})` }}>
             {starving && pet.sleepSprite ? (
               <img
                 src={pet.sleepSprite}
@@ -351,7 +355,11 @@ export function RoamingPet() {
                   backgroundImage: `url(${pet.sprite})`,
                   backgroundSize: `${(pet.frameSize ?? 40) * 4}px ${pet.frameSize ?? 40}px`,
                   animationDuration: moving
-                    ? mood === "great" ? "0.4s" : mood === "ok" ? "0.6s" : "1s"
+                    ? mood === "great"
+                      ? "0.4s"
+                      : mood === "ok"
+                        ? "0.6s"
+                        : "1s"
                     : "0s",
                 }}
                 onAnimationIteration={() => {}}

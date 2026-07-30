@@ -364,7 +364,7 @@ function WorkforcePage() {
         <div className="flex gap-2">
           <button
             onClick={() => setOpenRegister(true)}
-            className="flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm active:scale-[0.98]"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm active:scale-[0.98]"
             aria-label="Đăng ký đi làm"
           >
             <BriefcaseBusiness className="h-4 w-4" />
@@ -372,7 +372,7 @@ function WorkforcePage() {
           </button>
           <button
             onClick={() => setQuickCreateOpen(true)}
-            className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground shadow active:scale-[0.98]"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow active:scale-[0.98]"
             aria-label="Tạo nhanh tài khoản NLĐ"
           >
             <Plus className="h-4 w-4" />
@@ -791,7 +791,7 @@ function collectWorkersForFactory(
     if (isWorkingAtEndDate(h, to)) {
       seen.set(`${userId}:working`, {
         userId,
-        fullName: h.expand?.user?.full_name || h.worker_name_snapshot || "Người lao động",
+        fullName: h.worker_name_snapshot || "Thiếu thông tin",
         factoryName: h.expand?.factory?.name || "",
         state: "working",
         date: h.join_date,
@@ -803,7 +803,7 @@ function collectWorkersForFactory(
     if (inDateRange(h.join_date, from, to)) {
       seen.set(`${h.user}:joined:${h.id}`, {
         userId: h.user,
-        fullName: h.expand?.user?.full_name || h.worker_name_snapshot,
+        fullName: h.worker_name_snapshot || "Thiếu thông tin",
         factoryName: h.expand?.factory?.name || "",
         state: "joined",
         date: h.join_date,
@@ -812,7 +812,7 @@ function collectWorkersForFactory(
     if (h.status === "left" && inDateRange(h.leave_date, from, to)) {
       seen.set(`${h.user}:left:${h.id}`, {
         userId: h.user,
-        fullName: h.expand?.user?.full_name || h.worker_name_snapshot,
+        fullName: h.worker_name_snapshot || "Thiếu thông tin",
         factoryName: h.expand?.factory?.name || "",
         state: "left",
         date: h.leave_date || "",
@@ -835,7 +835,7 @@ function collectWorkersForRecruiter(
     if (isWorkingAtEndDate(h, to)) {
       seen.set(`${userId}:working`, {
         userId,
-        fullName: h.expand?.user?.full_name || h.worker_name_snapshot || "Người lao động",
+        fullName: h.worker_name_snapshot || "Thiếu thông tin",
         factoryName: h.expand?.factory?.name || "",
         state: "working",
         date: h.join_date,
@@ -847,7 +847,7 @@ function collectWorkersForRecruiter(
     if (inDateRange(h.join_date, from, to)) {
       seen.set(`${h.user}:joined:${h.id}`, {
         userId: h.user,
-        fullName: h.expand?.user?.full_name || h.worker_name_snapshot,
+        fullName: h.worker_name_snapshot || "Thiếu thông tin",
         factoryName: h.expand?.factory?.name || "",
         state: "joined",
         date: h.join_date,
@@ -856,7 +856,7 @@ function collectWorkersForRecruiter(
     if (h.status === "left" && inDateRange(h.leave_date, from, to)) {
       seen.set(`${h.user}:left:${h.id}`, {
         userId: h.user,
-        fullName: h.expand?.user?.full_name || h.worker_name_snapshot,
+        fullName: h.worker_name_snapshot || "Thiếu thông tin",
         factoryName: h.expand?.factory?.name || "",
         state: "left",
         date: h.leave_date || "",
@@ -1039,10 +1039,8 @@ function WorkerList({
         if (scope === "left" && status !== "left") return false;
         if (!q) return true;
         const haystack = [
-          user.full_name,
           user.username,
           user.phone,
-          user.cccd,
           latest?.employee_code,
           latest?.worker_name_snapshot,
           latest?.worker_cccd_snapshot,
@@ -1062,8 +1060,8 @@ function WorkerList({
         if (aTime === null && bTime !== null) return 1;
         if (aTime !== null && bTime === null) return -1;
 
-        const aName = a.user?.full_name || a.user?.username || "";
-        const bName = b.user?.full_name || b.user?.username || "";
+        const aName = a.latest?.worker_name_snapshot || "Thiếu thông tin";
+        const bName = b.latest?.worker_name_snapshot || "Thiếu thông tin";
         const nameOrder = aName.localeCompare(bName, "vi", { sensitivity: "base" });
         return nameOrder || (a.user?.id || "").localeCompare(b.user?.id || "");
       });
@@ -1140,20 +1138,26 @@ function WorkerList({
                 latest?.expand?.recruiter_staff?.full_name ||
                 latest?.expand?.recruiter_staff?.username;
               const mainHouseName = latest?.expand?.main_house?.name;
+              const snapshotName = latest?.worker_name_snapshot?.trim() || "Thiếu thông tin";
+              const snapshotCccd = latest?.worker_cccd_snapshot || "";
 
               return (
                 <Fragment key={user.id}>
                   <WorkerDesktopCard
-                    name={user.full_name || user.username || "Người lao động"}
+                    name={snapshotName}
                     username={user.username}
                     uid={latest?.uid || user.uid}
                     employeeCode={latest?.employee_code || ""}
-                    cccd={maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
+                    cccd={maskCccd(snapshotCccd)}
                     taxCode={latest?.worker_tax_code_snapshot}
                     phone={user.phone}
-                    dateOfBirth={user.date_of_birth ? formatDate(user.date_of_birth) : undefined}
+                    dateOfBirth={
+                      latest?.worker_date_of_birth_snapshot
+                        ? formatDate(latest.worker_date_of_birth_snapshot)
+                        : undefined
+                    }
                     gender={user.gender}
-                    address={user.address}
+                    address={latest?.worker_address_snapshot || latest?.hometown_snapshot}
                     factoryName={factoryName || ""}
                     mainHouseName={mainHouseName}
                     recruiterName={recruiterName}
@@ -1171,7 +1175,7 @@ function WorkerList({
                   >
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold">
-                        {user.full_name || user.username || "Người lao động"}
+                        {snapshotName}
                       </div>
                       <div className="mt-0.5 text-[11px] text-muted-foreground">
                         {user.uid && (
@@ -1180,7 +1184,7 @@ function WorkerList({
                           </>
                         )}
                         Mã NV: {latest?.employee_code || "" || "—"} · CCCD:{" "}
-                        {maskCccd(latest?.worker_cccd_snapshot || user.cccd)}
+                        {maskCccd(snapshotCccd)}
                         {latest?.worker_tax_code_snapshot &&
                           ` · MST: ${latest.worker_tax_code_snapshot}`}
                       </div>

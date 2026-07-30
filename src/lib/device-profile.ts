@@ -22,17 +22,19 @@ export function getClientDeviceProfile(): DeviceProfile {
   if (typeof navigator === "undefined") return "mobile";
 
   const userAgentData = (navigator as NavigatorWithUserAgentData).userAgentData;
-  if (userAgentData?.mobile === false) return "desktop";
-  if (userAgentData?.mobile === true) return "mobile";
-  return isDesktopUserAgent(navigator.userAgent) ? "desktop" : "mobile";
+  const desktopUserAgent =
+    userAgentData?.mobile === false ||
+    (userAgentData?.mobile === undefined && isDesktopUserAgent(navigator.userAgent));
+
+  return desktopUserAgent && window.innerWidth >= 768 ? "desktop" : "mobile";
 }
 
 /** Runs in the document head before the application paints. */
 export const DEVICE_PROFILE_BOOTSTRAP = `try {
   var uaData = navigator.userAgentData;
   var ua = navigator.userAgent || "";
-  var desktop = uaData ? uaData.mobile === false : /Windows NT|Macintosh|X11|Linux x86_64|Linux i[3-6]86/i.test(ua) && !/Android|Mobile|iPhone|iPad|iPod/i.test(ua);
-  document.documentElement.dataset.uiDevice = desktop ? "desktop" : "mobile";
+  var desktopUserAgent = uaData ? uaData.mobile === false : /Windows NT|Macintosh|X11|Linux x86_64|Linux i[3-6]86/i.test(ua) && !/Android|Mobile|iPhone|iPad|iPod/i.test(ua);
+  document.documentElement.dataset.uiDevice = desktopUserAgent && window.innerWidth >= 768 ? "desktop" : "mobile";
 } catch (_) {
   document.documentElement.dataset.uiDevice = "mobile";
 }`;

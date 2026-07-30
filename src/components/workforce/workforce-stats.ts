@@ -16,6 +16,8 @@ export type WorkforceSummary = {
   working: number;
 };
 
+export type RecruitmentSourceScope = "all" | "internal";
+
 export function localIsoDate(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -101,6 +103,22 @@ export function getActiveHistoriesAtDate(
     if (history) active.push(history);
   }
   return active;
+}
+
+export function filterWorkforceHistoriesByRecruitmentScope(
+  histories: EmploymentHistoryRecord[],
+  users: UserRecord[],
+  scope: RecruitmentSourceScope,
+) {
+  if (scope === "all") return histories;
+
+  const userById = new Map(users.map((user) => [user.id, user]));
+  return histories.filter((history) => {
+    const recruiter =
+      history.expand?.recruiter_staff ||
+      (history.recruiter_staff ? userById.get(history.recruiter_staff) : undefined);
+    return !(recruiter?.username?.startsWith("vd_") ?? false);
+  });
 }
 
 export function getWorkforceSummary(

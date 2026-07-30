@@ -69,6 +69,7 @@ type QuickWorkerForm = {
   cccd: string;
   phone: string;
   date_of_birth: string;
+  cccd_issue_date: string;
   gender: string;
   address: string;
   bank_name: string;
@@ -121,6 +122,7 @@ const emptyForm = (): QuickWorkerForm => ({
   cccd: "",
   phone: "",
   date_of_birth: "",
+  cccd_issue_date: "",
   gender: "",
   address: "",
   bank_name: "",
@@ -248,6 +250,7 @@ export function QuickWorkerAccountDialog({
       real_name: data.fullName || "",
       worker_name_snapshot: data.fullName || "",
       date_of_birth: data.dateOfBirth ? displayDateToPocketBase(data.dateOfBirth) : "",
+      cccd_issue_date: data.issuedDate ? displayDateToPocketBase(data.issuedDate) : "",
       gender: data.gender || "",
       address: data.address || "",
     };
@@ -365,10 +368,12 @@ export function QuickWorkerAccountDialog({
     const cccdDigits = digitsOnly(cccdForValidation);
     const username = buildUsername(phone, cccd);
     const birthForPb = displayDateToPocketBase(form.date_of_birth);
+    const issueDateForPb = displayDateToPocketBase(form.cccd_issue_date);
     const errors: string[] = [];
 
     if (!realName) errors.push("Nhập tên thật");
-    if (!cccd && !phone) errors.push("Nhập CCCD hoặc số điện thoại");
+    if (!cccd) errors.push("Nhập CCCD để lưu lịch sử đi làm");
+    if (!phone) errors.push("Nhập số điện thoại");
     if (phoneForValidation && !hasRequiredDigits(phoneForValidation, 10)) {
       errors.push("Số điện thoại phải có đúng 10 chữ số; có thể thêm ký tự phía sau");
     }
@@ -376,7 +381,11 @@ export function QuickWorkerAccountDialog({
       errors.push("CCCD phải có đúng 12 chữ số; có thể thêm ký tự phía sau");
     }
     if (!username) errors.push("Không tạo được tên đăng nhập từ SĐT/CCCD");
-    if (form.date_of_birth.trim() && !birthForPb) errors.push("Ngày sinh không hợp lệ");
+    if (!form.date_of_birth.trim()) errors.push("Nhập ngày sinh");
+    else if (!birthForPb) errors.push("Ngày sinh không hợp lệ");
+    if (!form.cccd_issue_date.trim()) errors.push("Nhập ngày cấp CCCD");
+    else if (!issueDateForPb) errors.push("Ngày cấp CCCD không hợp lệ");
+    if (!form.address.trim()) errors.push("Nhập địa chỉ thường trú");
     if ((entry.frontFile || entry.backFile) && ![9, 12].includes(cccdDigits.length)) {
       errors.push("Nhập số CMND/CCCD hợp lệ trước khi lưu ảnh CCCD");
     }
@@ -396,6 +405,7 @@ export function QuickWorkerAccountDialog({
     const phone = form.phone;
     const username = buildUsername(phone, cccd);
     const birthForPb = displayDateToPocketBase(form.date_of_birth);
+    const issueDateForPb = displayDateToPocketBase(form.cccd_issue_date);
     const selectedFactory = factories.find((factory) => factory.id === form.factory);
 
     const existing = await findUserByUsernameInsensitive(username);
@@ -422,6 +432,7 @@ export function QuickWorkerAccountDialog({
     fd.append("cccd", cccd);
     fd.append("gender", form.gender.trim());
     if (birthForPb) fd.append("date_of_birth", birthForPb);
+    if (issueDateForPb) fd.append("cccd_issue_date", issueDateForPb);
     fd.append("address", form.address.trim());
     fd.append("bank_name", resolveBankName(form.bank_name.trim()));
     fd.append("bank_account_number", form.bank_account_number.replace(/\D/g, ""));
@@ -471,6 +482,10 @@ export function QuickWorkerAccountDialog({
         employee_code: form.employee_code.trim(),
         worker_name_snapshot: workerName,
         worker_cccd_snapshot: cccd,
+        worker_date_of_birth_snapshot: birthForPb,
+        worker_address_snapshot: form.address.trim(),
+        hometown_snapshot: form.address.trim(),
+        cccd_issue_date: issueDateForPb,
         recruiter_staff: form.recruiter_staff,
         cccd_version: cccdVersionId,
         join_date: form.join_date,
@@ -856,6 +871,14 @@ function QuickWorkerEntryFields({
           placeholder="Ngày sinh"
           desktopClassName="desktop:col-start-3 desktop:row-start-2"
         />
+        <TextField
+          label="Ngày cấp CCCD"
+          type="date"
+          value={form.cccd_issue_date}
+          onChange={(value) => setField("cccd_issue_date", value)}
+          placeholder="Ngày cấp CCCD"
+          desktopClassName="desktop:col-start-6 desktop:row-start-2"
+        />
         <div className="flex min-w-0 flex-col gap-1 desktop:col-start-4 desktop:row-start-2 desktop:gap-0 desktop:max-w-none">
           <Label className="truncate text-xs desktop:hidden">Giới tính</Label>
           <Select value={form.gender} onValueChange={(value) => setField("gender", value)}>
@@ -892,7 +915,7 @@ function QuickWorkerEntryFields({
           placeholder="Chủ TK"
           desktopClassName="desktop:col-start-6 desktop:row-start-1"
         />
-        <div className="sm:col-span-2 desktop:col-span-2 desktop:col-start-5 desktop:row-start-2 desktop:max-w-none">
+        <div className="sm:col-span-2 desktop:col-span-1 desktop:col-start-5 desktop:row-start-2 desktop:max-w-none">
           <TextField
             label="Địa chỉ"
             value={form.address}
@@ -973,6 +996,7 @@ const fieldLabels: Record<keyof QuickWorkerForm, string> = {
   cccd: "CCCD",
   phone: "số điện thoại",
   date_of_birth: "ngày sinh",
+  cccd_issue_date: "ngày cấp CCCD",
   gender: "giới tính",
   address: "địa chỉ",
   bank_name: "ngân hàng",

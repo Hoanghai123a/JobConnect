@@ -45,7 +45,8 @@ function ApprovalsPage() {
   const toggle = (id: string) => {
     setSelected((s) => {
       const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
   };
@@ -128,7 +129,11 @@ function ApprovalsPage() {
       "Tên chủ tài khoản": u.bank_account_name,
       "Tạo lúc": formatDateOnly(u.created),
     }));
-    exportToExcel(`danh_sach_user_${Date.now()}`, { "Tài khoản chờ duyệt": rows }, { "Tài khoản chờ duyệt": ["Tạo lúc"] });
+    exportToExcel(
+      `danh_sach_user_${Date.now()}`,
+      { "Tài khoản chờ duyệt": rows },
+      { "Tài khoản chờ duyệt": ["Tạo lúc"] },
+    );
   };
 
   return (
@@ -138,7 +143,7 @@ function ApprovalsPage() {
       right={
         <button
           onClick={exportUsers}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-muted-foreground border border-border hover:bg-muted"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-muted-foreground border border-border hover:bg-muted"
           aria-label="Xuất Excel"
         >
           <FileDown className="h-4 w-4" />
