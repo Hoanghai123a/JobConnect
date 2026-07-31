@@ -140,12 +140,16 @@ function digitsOnly(value: string) {
   return value.replace(/\D/g, "");
 }
 
+function normalizeStoredNumericField(value: string) {
+  return value.trim().replace(/[^0-9]+$/, "");
+}
+
 function hasRequiredDigits(value: string, count: number) {
   return digitsOnly(value).length === count;
 }
 
 function buildUsername(phone: string, cccd: string) {
-  const base = (digitsOnly(phone) || digitsOnly(cccd)).trim();
+  const base = phone.trim() || cccd.trim();
   return normalizeAccountUsername(base);
 }
 
@@ -361,24 +365,27 @@ export function QuickWorkerAccountDialog({
   const validateEntry = (entry: QuickWorkerEntry) => {
     const { form } = entry;
     const realName = form.real_name.trim();
-    const cccd = form.cccd;
-    const phone = form.phone;
-    const cccdForValidation = cccd.trim();
-    const phoneForValidation = phone.trim();
+    const cccdRaw = form.cccd;
+    const phoneRaw = form.phone;
+    const cccdForValidation = cccdRaw.trim();
+    const phoneForValidation = phoneRaw.trim();
     const cccdDigits = digitsOnly(cccdForValidation);
-    const username = buildUsername(phone, cccd);
+    const username = buildUsername(phoneRaw, cccdRaw);
     const birthForPb = displayDateToPocketBase(form.date_of_birth);
     const issueDateForPb = displayDateToPocketBase(form.cccd_issue_date);
     const errors: string[] = [];
 
     if (!realName) errors.push("Nhập tên thật");
-    if (!cccd) errors.push("Nhập CCCD để lưu lịch sử đi làm");
-    if (!phone) errors.push("Nhập số điện thoại");
+    if (!cccdRaw) errors.push("Nhập CCCD để lưu lịch sử đi làm");
     if (phoneForValidation && !hasRequiredDigits(phoneForValidation, 10)) {
-      errors.push("Số điện thoại phải có đúng 10 chữ số; có thể thêm ký tự phía sau");
+      errors.push(
+        "Số điện thoại phải có đúng 10 chữ số; ký tự ở cuối chỉ dùng để phân biệt tài khoản và không được lưu",
+      );
     }
     if (cccdForValidation && !hasRequiredDigits(cccdForValidation, 12)) {
-      errors.push("CCCD phải có đúng 12 chữ số; có thể thêm ký tự phía sau");
+      errors.push(
+        "CCCD phải có đúng 12 chữ số; ký tự ở cuối chỉ dùng để phân biệt tài khoản và không được lưu",
+      );
     }
     if (!username) errors.push("Không tạo được tên đăng nhập từ SĐT/CCCD");
     if (!form.date_of_birth.trim()) errors.push("Nhập ngày sinh");
@@ -401,9 +408,11 @@ export function QuickWorkerAccountDialog({
     const { form } = entry;
     const realName = form.real_name.trim();
     const workerName = form.worker_name_snapshot.trim() || realName;
-    const cccd = form.cccd;
-    const phone = form.phone;
-    const username = buildUsername(phone, cccd);
+    const cccdRaw = form.cccd;
+    const phoneRaw = form.phone;
+    const cccd = normalizeStoredNumericField(cccdRaw);
+    const phone = normalizeStoredNumericField(phoneRaw);
+    const username = buildUsername(phoneRaw, cccdRaw);
     const birthForPb = displayDateToPocketBase(form.date_of_birth);
     const issueDateForPb = displayDateToPocketBase(form.cccd_issue_date);
     const selectedFactory = factories.find((factory) => factory.id === form.factory);
@@ -856,10 +865,10 @@ function QuickWorkerEntryFields({
           desktopClassName="desktop:col-start-2 desktop:row-start-2"
         />
         <TextField
-          label="SĐT"
+          label="SĐT (tùy chọn)"
           value={form.phone}
           onChange={(value) => setField("phone", value)}
-          placeholder="SĐT"
+          placeholder="SĐT (tùy chọn)"
           inputMode="tel"
           desktopClassName="desktop:col-start-3 desktop:row-start-1"
         />

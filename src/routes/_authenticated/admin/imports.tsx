@@ -85,7 +85,6 @@ function AdminImportsPage() {
             "Ngày cấp CCCD": "",
             "Người tuyển": "staff01",
             "Ghi chú": "Cập nhật mã NV",
-            "SĐT mới": "0900000999",
           },
         ],
       },
@@ -144,7 +143,6 @@ function AdminImportsPage() {
       let updated = 0;
       let skipped = 0;
       let failed = 0;
-      const touchedUsers = new Set<string>();
       const failedRows: Array<Record<string, unknown>> = [];
 
       const addFailedRow = (row: Record<string, unknown>, rowNumber: number, reason: string) => {
@@ -183,6 +181,16 @@ function AdminImportsPage() {
         const currentFactoryCode = pickValue(row, ["current_factory_code", "Mã nhà máy hiện tại"]);
         const currentJoinRaw = row["current_join_date"] ?? row["Ngày vào hiện tại"] ?? "";
         const currentJoinDate = normalizeExcelDate(currentJoinRaw);
+        const unsupportedPhone = pickValue(row, ["phone", "SĐT mới"]);
+
+        if (unsupportedPhone) {
+          addFailedRow(
+            row,
+            rowNumber,
+            "Cập nhật nhanh chỉ hỗ trợ collection lịch sử, không hỗ trợ sửa SĐT NLĐ",
+          );
+          continue;
+        }
 
         let target = historyKey ? historyById.get(historyKey) : undefined;
         let targetUser: UserRecord | undefined;
@@ -289,7 +297,6 @@ function AdminImportsPage() {
         const status = pickValue(row, ["status", "Trạng thái"]);
         const recruiterUsername = pickValue(row, ["recruiter_username", "Người tuyển"]);
         const note = pickValue(row, ["note", "Ghi chú"]);
-        const phone = pickValue(row, ["phone", "SĐT mới"]);
         const workerName = pickValue(row, [
           "worker_name_snapshot",
           "Họ tên tại thời điểm đi làm",
@@ -364,17 +371,6 @@ function AdminImportsPage() {
         }
         if (note) historyPayload.note = note;
 
-        const finalSnapshot = getEmploymentPersonalSnapshot({ ...target, ...historyPayload });
-        const missingSnapshotFields = getMissingEmploymentSnapshotFields(finalSnapshot);
-        if (missingSnapshotFields.length) {
-          addFailedRow(
-            row,
-            rowNumber,
-            `Thiếu thông tin cá nhân của lịch sử: ${missingSnapshotFields.join(", ")}`,
-          );
-          continue;
-        }
-
         const finalJoinDate = String(historyPayload.join_date ?? target.join_date ?? "");
         const finalLeaveDate = String(historyPayload.leave_date ?? target.leave_date ?? "");
         if (finalLeaveDate && finalJoinDate && finalLeaveDate < finalJoinDate) {
@@ -395,7 +391,7 @@ function AdminImportsPage() {
           }
         }
 
-        if (Object.keys(historyPayload).length === 0 && !phone) {
+        if (Object.keys(historyPayload).length === 0) {
           skipped++;
           continue;
         }
@@ -406,11 +402,6 @@ function AdminImportsPage() {
             const historyIndex = allHistories.findIndex((history) => history.id === target!.id);
             if (historyIndex >= 0) allHistories[historyIndex] = updatedHistory;
           }
-          if (phone) {
-            await updateUserAndCache(targetUser.id, { phone });
-            targetUser.phone = phone;
-          }
-          touchedUsers.add(targetUser.id);
           updated++;
         } catch (error: unknown) {
           addFailedRow(
@@ -421,7 +412,6 @@ function AdminImportsPage() {
         }
       }
 
-      await syncWorkersFromLatestHistories(touchedUsers);
       const summary = `Cập nhật nhanh: tạo mới 0, cập nhật ${updated}, bỏ qua ${skipped}, thất bại ${failed}`;
       setBulkEditResult(summary);
       toast.success(summary);
@@ -890,7 +880,7 @@ function AdminImportsPage() {
           <div className="text-sm text-muted-foreground">
             Chỉ điền các cột cần sửa. Ưu tiên <code>Mã lịch sử (UID)</code> đang hiển thị trên bản
             ghi; hệ thống vẫn chấp nhận PocketBase record ID. Nếu không có, dùng thông tin NLĐ kèm
-            nhà máy và ngày vào hiện tại. Ô để trống sẽ giữ nguyên dữ liệu.
+            nhà máy và ngày vào hiện tại. Ô để trống sẽ giữ nguyên dữ liệu; chỉ collection lịch sử được cập nhật.
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="rounded-full" onClick={downloadBulkEditTemplate}>
@@ -948,7 +938,7 @@ function AdminImportsPage() {
           <ul className="space-y-1 text-sm text-muted-foreground">
             <li>- Dòng lỗi không làm dừng các dòng hợp lệ; hệ thống xuất lại file để sửa.</li>
             <li>- Cập nhật nhanh không xóa dữ liệu bằng ô trống và không tự tạo lịch sử mới.</li>
-            <li>- Sau khi thay đổi lịch sử, mã NV và công ty của NLĐ được đồng bộ theo lịch sử mới nhất.</li>
+            <li>- Cập nhật nhanh chỉ ghi vào lịch sử; không thay đổi dữ liệu hồ sơ NLĐ.</li>
             <li>- Mọi lần import đều ghi Nhật ký thao tác hệ thống cùng tên file và kết quả tổng hợp.</li>
           </ul>
         </Card>
