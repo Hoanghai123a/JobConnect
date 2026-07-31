@@ -101,7 +101,8 @@ export function PushNotificationSettingsCard({ buttonOnly = false }: { buttonOnl
   const [submitting, setSubmitting] = useState(false);
 
   const status = useMemo(() => getStatus(state), [state]);
-  const Icon = state?.permission === "granted" ? BellRing : state?.permission === "denied" ? BellOff : Bell;
+  const Icon =
+    state?.permission === "granted" ? BellRing : state?.permission === "denied" ? BellOff : Bell;
 
   async function refresh() {
     setLoading(true);
@@ -150,7 +151,9 @@ export function PushNotificationSettingsCard({ buttonOnly = false }: { buttonOnl
     <Card className="mb-4 overflow-hidden rounded-2xl border-border/60 shadow-soft">
       <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 gap-3">
-          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${toneClass(status.tone)}`}>
+          <div
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${toneClass(status.tone)}`}
+          >
             <Icon className="h-5 w-5" />
           </div>
           <div className="min-w-0">

@@ -11,12 +11,7 @@ import {
   syncExistingPushSubscription,
 } from "@/lib/push-notifications";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export function PushPermissionPrompt() {
   const { user, loading } = useAuth();

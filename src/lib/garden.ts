@@ -48,8 +48,8 @@ export interface Pet {
   facesRight?: boolean;
 }
 
-export const PLOT_COUNT = 6;   // ô ban đầu
-export const PLOT_MAX = 16;    // tối đa 16 ô (mở thêm 10)
+export const PLOT_COUNT = 6; // ô ban đầu
+export const PLOT_MAX = 16; // tối đa 16 ô (mở thêm 10)
 
 /** Chi phí mở khóa từng ô bổ sung (slot 7 → 16). Index 0 = ô thứ 7. */
 export const PLOT_UNLOCK_COSTS = [60, 105, 165, 240, 330, 450, 600, 780, 990, 1260];
@@ -57,22 +57,132 @@ const HUNGER_FULL_MS = 8 * 60 * 60 * 1000; // 8h thì đói hẳn
 const HAPPY_FULL_MS = 12 * 60 * 60 * 1000; // 12h thì buồn hẳn
 
 export const FLOWERS: Flower[] = [
-  { id: "sunflower",  name: "Hướng dương", emoji: "🌻", sproutEmoji: "🌱", seedCost: 10, reward: 15,  growMinutes: 240 }, // 4h  +50%
-  { id: "hibiscus",   name: "Dâm bụt",     emoji: "🌺", sproutEmoji: "🌱", seedCost: 12, reward: 20,  growMinutes: 300 }, // 5h  +67%
-  { id: "tulip",      name: "Tulip",        emoji: "🌷", sproutEmoji: "🌱", seedCost: 15, reward: 28,  growMinutes: 360 }, // 6h  +87%
-  { id: "blossom",    name: "Hoa anh đào",  emoji: "🌸", sproutEmoji: "🌱", seedCost: 18, reward: 38,  growMinutes: 420 }, // 7h  +111%
-  { id: "rose",       name: "Hoa hồng",     emoji: "🌹", sproutEmoji: "🌱", seedCost: 22, reward: 50,  growMinutes: 480 }, // 8h  +127%
-  { id: "orchid",     name: "Lan",          emoji: "🌼", sproutEmoji: "🌱", seedCost: 30, reward: 85, growMinutes: 600 }, // 10h +183%
-  { id: "lotus",      name: "Cỏ 4 lá",     emoji: "🍀", sproutEmoji: "🌱", seedCost: 40, reward: 140, growMinutes: 720 }, // 12h +250%
+  {
+    id: "sunflower",
+    name: "Hướng dương",
+    emoji: "🌻",
+    sproutEmoji: "🌱",
+    seedCost: 10,
+    reward: 15,
+    growMinutes: 240,
+  }, // 4h  +50%
+  {
+    id: "hibiscus",
+    name: "Dâm bụt",
+    emoji: "🌺",
+    sproutEmoji: "🌱",
+    seedCost: 12,
+    reward: 20,
+    growMinutes: 300,
+  }, // 5h  +67%
+  {
+    id: "tulip",
+    name: "Tulip",
+    emoji: "🌷",
+    sproutEmoji: "🌱",
+    seedCost: 15,
+    reward: 28,
+    growMinutes: 360,
+  }, // 6h  +87%
+  {
+    id: "blossom",
+    name: "Hoa anh đào",
+    emoji: "🌸",
+    sproutEmoji: "🌱",
+    seedCost: 18,
+    reward: 38,
+    growMinutes: 420,
+  }, // 7h  +111%
+  {
+    id: "rose",
+    name: "Hoa hồng",
+    emoji: "🌹",
+    sproutEmoji: "🌱",
+    seedCost: 22,
+    reward: 50,
+    growMinutes: 480,
+  }, // 8h  +127%
+  {
+    id: "orchid",
+    name: "Lan",
+    emoji: "🌼",
+    sproutEmoji: "🌱",
+    seedCost: 30,
+    reward: 85,
+    growMinutes: 600,
+  }, // 10h +183%
+  {
+    id: "lotus",
+    name: "Cỏ 4 lá",
+    emoji: "🍀",
+    sproutEmoji: "🌱",
+    seedCost: 40,
+    reward: 140,
+    growMinutes: 720,
+  }, // 12h +250%
 ];
 
 export const PETS: Pet[] = [
-  { id: "cat", name: "Mèo", emoji: "🐈", cost: 0, sprite: "/pets/cat-sprite.png", sleepSprite: "/pets/cat-sleep.png", frameSize: 40, facesRight: true },
-  { id: "dog", name: "Cún", emoji: "🐕", cost: 60, sprite: "/pets/dog-sprite.png", sleepSprite: "/pets/dog-sleep.png", frameSize: 40, facesRight: true },
-  { id: "rabbit", name: "Thỏ", emoji: "🐇", cost: 80, sprite: "/pets/rabbit-sprite.png", sleepSprite: "/pets/rabbit-sleep.png", frameSize: 40, facesRight: true },
-  { id: "chick", name: "Gà con", emoji: "🐤", cost: 50, sprite: "/pets/chick-sprite.png", sleepSprite: "/pets/chick-sleep.png", frameSize: 40, facesRight: true },
-  { id: "turtle", name: "Rùa", emoji: "🐢", cost: 150, sprite: "/pets/turtle-sprite.png", sleepSprite: "/pets/turtle-sleep.png", frameSize: 40, facesRight: true },
-  { id: "hedgehog", name: "Nhím", emoji: "🦔", cost: 120, sprite: "/pets/hedgehog-sprite.png", sleepSprite: "/pets/hedgehog-sleep.png", frameSize: 40, facesRight: true },
+  {
+    id: "cat",
+    name: "Mèo",
+    emoji: "🐈",
+    cost: 0,
+    sprite: "/pets/cat-sprite.png",
+    sleepSprite: "/pets/cat-sleep.png",
+    frameSize: 40,
+    facesRight: true,
+  },
+  {
+    id: "dog",
+    name: "Cún",
+    emoji: "🐕",
+    cost: 60,
+    sprite: "/pets/dog-sprite.png",
+    sleepSprite: "/pets/dog-sleep.png",
+    frameSize: 40,
+    facesRight: true,
+  },
+  {
+    id: "rabbit",
+    name: "Thỏ",
+    emoji: "🐇",
+    cost: 80,
+    sprite: "/pets/rabbit-sprite.png",
+    sleepSprite: "/pets/rabbit-sleep.png",
+    frameSize: 40,
+    facesRight: true,
+  },
+  {
+    id: "chick",
+    name: "Gà con",
+    emoji: "🐤",
+    cost: 50,
+    sprite: "/pets/chick-sprite.png",
+    sleepSprite: "/pets/chick-sleep.png",
+    frameSize: 40,
+    facesRight: true,
+  },
+  {
+    id: "turtle",
+    name: "Rùa",
+    emoji: "🐢",
+    cost: 150,
+    sprite: "/pets/turtle-sprite.png",
+    sleepSprite: "/pets/turtle-sleep.png",
+    frameSize: 40,
+    facesRight: true,
+  },
+  {
+    id: "hedgehog",
+    name: "Nhím",
+    emoji: "🦔",
+    cost: 120,
+    sprite: "/pets/hedgehog-sprite.png",
+    sleepSprite: "/pets/hedgehog-sleep.png",
+    frameSize: 40,
+    facesRight: true,
+  },
 ];
 
 export function flowerById(id: string | null): Flower | undefined {

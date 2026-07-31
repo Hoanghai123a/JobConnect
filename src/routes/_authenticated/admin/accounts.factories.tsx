@@ -62,9 +62,7 @@ type EditingAssignment = Partial<FactoryManagerRecord> & { staff?: string };
 function staffSearchFilter(search: string) {
   const q = escapePb(search.trim());
   const searchFilter = q
-    ? `(${["full_name", "username", "phone"]
-        .map((field) => `${field}~"${q}"`)
-        .join(" || ")})`
+    ? `(${["full_name", "username", "phone"].map((field) => `${field}~"${q}"`).join(" || ")})`
     : "";
   return ['role="staff"', searchFilter].filter(Boolean).join(" && ");
 }

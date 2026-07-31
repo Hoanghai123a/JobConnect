@@ -136,8 +136,7 @@ export function getEmploymentPersonalSnapshot(
   }
 
   return {
-    worker_name_snapshot:
-      cleanSnapshotText(user?.full_name) || cleanSnapshotText(user?.username),
+    worker_name_snapshot: cleanSnapshotText(user?.full_name) || cleanSnapshotText(user?.username),
     worker_cccd_snapshot: cleanSnapshotText(user?.cccd),
     worker_date_of_birth_snapshot: normalizeDate(user?.date_of_birth),
     worker_address_snapshot: cleanSnapshotText(user?.address),
@@ -145,9 +144,7 @@ export function getEmploymentPersonalSnapshot(
   };
 }
 
-export function getMissingEmploymentSnapshotFields(
-  snapshot: Partial<EmploymentPersonalSnapshot>,
-) {
+export function getMissingEmploymentSnapshotFields(snapshot: Partial<EmploymentPersonalSnapshot>) {
   return (Object.keys(SNAPSHOT_FIELD_LABELS) as Array<keyof EmploymentPersonalSnapshot>)
     .filter((field) => !cleanSnapshotText(snapshot[field]))
     .map((field) => SNAPSHOT_FIELD_LABELS[field]);
@@ -163,17 +160,13 @@ function normalizeEmploymentPayload<T extends Partial<EmploymentDraft>>(payload:
     normalized.worker_cccd_snapshot = cleanSnapshotText(payload.worker_cccd_snapshot);
   }
   if ("worker_date_of_birth_snapshot" in payload) {
-    normalized.worker_date_of_birth_snapshot = normalizeDate(
-      payload.worker_date_of_birth_snapshot,
-    );
+    normalized.worker_date_of_birth_snapshot = normalizeDate(payload.worker_date_of_birth_snapshot);
   }
   if ("cccd_issue_date" in payload) {
     normalized.cccd_issue_date = normalizeDate(payload.cccd_issue_date);
   }
   if ("worker_address_snapshot" in payload || "hometown_snapshot" in payload) {
-    const address = cleanSnapshotText(
-      payload.worker_address_snapshot ?? payload.hometown_snapshot,
-    );
+    const address = cleanSnapshotText(payload.worker_address_snapshot ?? payload.hometown_snapshot);
     normalized.worker_address_snapshot = address;
     normalized.hometown_snapshot = address;
   }
@@ -297,18 +290,21 @@ export function getEmploymentHistoryAtDate(
   referenceDate: Date = new Date(),
 ) {
   const referenceDay = startOfDay(referenceDate);
-  return histories
-    .filter((history) => {
-      const joinDay = historyDate(history.join_date);
-      if (!joinDay || joinDay > referenceDay) return false;
-      const leaveDay = historyDate(history.leave_date);
-      return !leaveDay || leaveDay > referenceDay;
-    })
-    .sort((a, b) => {
-      const joinDiff = (historyDate(b.join_date)?.getTime() || 0) - (historyDate(a.join_date)?.getTime() || 0);
-      if (joinDiff) return joinDiff;
-      return new Date(b.created || 0).getTime() - new Date(a.created || 0).getTime();
-    })[0] || null;
+  return (
+    histories
+      .filter((history) => {
+        const joinDay = historyDate(history.join_date);
+        if (!joinDay || joinDay > referenceDay) return false;
+        const leaveDay = historyDate(history.leave_date);
+        return !leaveDay || leaveDay > referenceDay;
+      })
+      .sort((a, b) => {
+        const joinDiff =
+          (historyDate(b.join_date)?.getTime() || 0) - (historyDate(a.join_date)?.getTime() || 0);
+        if (joinDiff) return joinDiff;
+        return new Date(b.created || 0).getTime() - new Date(a.created || 0).getTime();
+      })[0] || null
+  );
 }
 
 /** Returns the worker's current employment without using fields on the user record. */
@@ -414,9 +410,7 @@ export async function fetchRegisterableUsers(opts: { includeLongLeft?: boolean }
   const cutoff90 = new Date(today);
   cutoff90.setDate(cutoff90.getDate() - 90);
 
-  const activeUserIds = new Set(
-    histories.filter((h) => isCurrentlyWorking(h)).map((h) => h.user),
-  );
+  const activeUserIds = new Set(histories.filter((h) => isCurrentlyWorking(h)).map((h) => h.user));
   const recentUserIds = new Set(
     histories
       .filter((h) => {

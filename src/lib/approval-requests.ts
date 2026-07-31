@@ -60,9 +60,7 @@ export async function createApprovalRequest(data: {
   for (const img of data.images) formData.append("images", img);
   for (const file of data.excelFiles) formData.append("excel_files", file);
 
-  const request = await pb
-    .collection("approval_requests")
-    .create<ApprovalRequestRecord>(formData);
+  const request = await pb.collection("approval_requests").create<ApprovalRequestRecord>(formData);
 
   await Promise.all(
     data.adminIds.map((adminId) =>
@@ -112,9 +110,7 @@ export async function respondToApproval(
       .getOne<ApprovalRequestRecord>(response.request, { fields: "status" })
       .catch(() => null);
 
-    await pb
-      .collection("approval_requests")
-      .update(response.request, { status: overall });
+    await pb.collection("approval_requests").update(response.request, { status: overall });
 
     if (!previousRequest || previousRequest.status === "pending") {
       notifyApprovalResolved(response.request).catch(() => undefined);
@@ -137,28 +133,20 @@ export async function getPendingApprovalCount(adminId: string): Promise<number> 
 }
 
 export async function withdrawApprovalRequest(requestId: string): Promise<void> {
-  const responses = await pb
-    .collection("approval_responses")
-    .getFullList<ApprovalResponseRecord>({
-      filter: `request = "${escapePb(requestId)}"`,
-    });
+  const responses = await pb.collection("approval_responses").getFullList<ApprovalResponseRecord>({
+    filter: `request = "${escapePb(requestId)}"`,
+  });
 
-  await Promise.all(
-    responses.map((r) => pb.collection("approval_responses").delete(r.id)),
-  );
+  await Promise.all(responses.map((r) => pb.collection("approval_responses").delete(r.id)));
   await pb.collection("approval_requests").delete(requestId);
 }
 
 export async function deleteOldRequests(beforeDate: string): Promise<number> {
-  const requests = await pb
-    .collection("approval_requests")
-    .getFullList<ApprovalRequestRecord>({
-      filter: `created < "${escapePb(beforeDate)}"`,
-    });
+  const requests = await pb.collection("approval_requests").getFullList<ApprovalRequestRecord>({
+    filter: `created < "${escapePb(beforeDate)}"`,
+  });
 
-  await Promise.all(
-    requests.map((r) => pb.collection("approval_requests").delete(r.id)),
-  );
+  await Promise.all(requests.map((r) => pb.collection("approval_requests").delete(r.id)));
 
   return requests.length;
 }

@@ -58,15 +58,13 @@ async function readJson(response: Response) {
   return response.json().catch(() => null);
 }
 
-export async function getAuthUser(request: Request): Promise<{ token: string; user: AuthUser } | null> {
+export async function getAuthUser(
+  request: Request,
+): Promise<{ token: string; user: AuthUser } | null> {
   const token = getBearerToken(request);
   if (!token) return null;
 
-  const response = await pbFetch(
-    "/api/collections/users/auth-refresh",
-    { method: "POST" },
-    token,
-  );
+  const response = await pbFetch("/api/collections/users/auth-refresh", { method: "POST" }, token);
   if (!response.ok) return null;
 
   const body = await readJson(response);
@@ -85,7 +83,10 @@ async function getAdminToken() {
   const password = env("PB_ADMIN_PASSWORD");
   if (!identity || !password) return "";
 
-  for (const path of ["/api/collections/_superusers/auth-with-password", "/api/admins/auth-with-password"]) {
+  for (const path of [
+    "/api/collections/_superusers/auth-with-password",
+    "/api/admins/auth-with-password",
+  ]) {
     const response = await pbFetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -129,7 +130,8 @@ export async function savePushSubscription(request: Request) {
   const endpoint = String(body?.endpoint || "").trim();
   const p256dh = String(body?.p256dh || "").trim();
   const authKey = String(body?.auth || "").trim();
-  if (!endpoint || !p256dh || !authKey) return jsonError("Thiếu thông tin thiết bị nhận thông báo.");
+  if (!endpoint || !p256dh || !authKey)
+    return jsonError("Thiếu thông tin thiết bị nhận thông báo.");
 
   const payload = {
     user: auth.user.id,
@@ -257,7 +259,8 @@ export async function sendApprovalPush(request: Request) {
   if (!approval) return jsonError("Không tìm thấy yêu cầu phê duyệt.", 404);
 
   if (type === "approval:new") {
-    if (approval.creator !== auth.user.id) return jsonError("Bạn không phải người tạo yêu cầu.", 403);
+    if (approval.creator !== auth.user.id)
+      return jsonError("Bạn không phải người tạo yêu cầu.", 403);
     return Response.json(
       await sendToUsers(
         approval.admins || [],
@@ -283,9 +286,7 @@ export async function sendApprovalPush(request: Request) {
       [approval.creator],
       {
         title:
-          approval.status === "approved"
-            ? "Yêu cầu đã được phê duyệt"
-            : "Yêu cầu đã bị từ chối",
+          approval.status === "approved" ? "Yêu cầu đã được phê duyệt" : "Yêu cầu đã bị từ chối",
         body: approval.title || "Yêu cầu phê duyệt",
         url: "/staff/approvals",
       },

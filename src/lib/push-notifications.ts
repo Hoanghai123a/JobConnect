@@ -97,7 +97,8 @@ async function saveSubscription(subscription: PushSubscription) {
 
 export async function enablePushNotifications() {
   if (!isPushBrowserSupported()) throw new Error("Thiết bị chưa hỗ trợ thông báo.");
-  if (!import.meta.env.DEV && !isStandaloneMode()) throw new Error("Chỉ bật thông báo khi dùng app đã cài.");
+  if (!import.meta.env.DEV && !isStandaloneMode())
+    throw new Error("Chỉ bật thông báo khi dùng app đã cài.");
 
   const publicKey = await getVapidPublicKey();
   if (!publicKey) throw new Error("Máy chủ chưa cấu hình khóa thông báo.");
@@ -130,7 +131,10 @@ export async function syncExistingPushSubscription() {
   if (subscription) await saveSubscription(subscription);
 }
 
-async function postApprovalNotification(type: "approval:new" | "approval:result", requestId: string) {
+async function postApprovalNotification(
+  type: "approval:new" | "approval:result",
+  requestId: string,
+) {
   if (!pb.authStore.token) return;
   await fetch("/api/push/approval", {
     method: "POST",

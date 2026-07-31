@@ -45,6 +45,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { escapePb } from "@/lib/delegations";
 import { markSeen } from "@/lib/seen";
@@ -87,6 +97,11 @@ const ADVANCE_FILTERS_STORAGE_KEY = "jobconnect.advanceFilters";
 const DEFAULT_TRANSFER_DESCRIPTION_TEMPLATE = "Giải ngân ứng + tên";
 
 type DisbursementFilter = "all" | "yes" | "no";
+type AdvanceUndoKind = "recovery" | "rejection";
+type AdvanceUndoRequest = {
+  row: AdvanceRecord;
+  kind: AdvanceUndoKind;
+};
 
 type StoredAdvanceFilters = {
   search?: string;
@@ -220,6 +235,8 @@ export function AdvancesPage() {
   );
   const [showMobileStats, setShowMobileStats] = useState(false);
   const [showFilters, setShowFilters] = useState(Boolean(storedFilters.showFilters));
+  const [undoRequest, setUndoRequest] = useState<AdvanceUndoRequest | null>(null);
+  const [undoing, setUndoing] = useState(false);
 
   const selectedAdvanceUser = user as UserRecord | null;
   const selectedFactoryName = useMemo(
@@ -749,6 +766,71 @@ export function AdvancesPage() {
     }
   };
 
+  const requestAdvanceUndo = (row: AdvanceRecord, kind: AdvanceUndoKind) => {
+    if (!isAdmin) return;
+    setUndoRequest({ row, kind });
+  };
+
+  const confirmAdvanceUndo = async () => {
+    if (!undoRequest || !isAdmin) return;
+    const { row, kind } = undoRequest;
+    setUndoing(true);
+    try {
+      if (kind === "recovery") {
+        const previousRecovery = (row.recovery_status || "none") as RecoveryStatus;
+        const after: Partial<AdvanceRecord> = {
+          status: "accepted",
+          recovery_status: "none",
+          recovered_at: "",
+        };
+        await updateRow(row.id, after);
+        await createStaffActionLog({
+          actor: user,
+          targetUserId: row.user,
+          targetCollection: "advances",
+          targetRecord: row.id,
+          action: "update",
+          before: {
+            status: row.status || "accepted",
+            recovery_status: previousRecovery,
+            recovered_at: row.recovered_at || "",
+          },
+          after,
+          note:
+            previousRecovery === "recovered"
+              ? "Admin hoàn tác đã thu hồi về đã tiếp nhận"
+              : "Admin hoàn tác không thể thu hồi về đã tiếp nhận",
+        });
+        toast.success("Đã hoàn tác về trạng thái Đã tiếp nhận");
+      } else {
+        const after: Partial<AdvanceRecord> = {
+          status: "recruiter_approved",
+          resolved_at: "",
+        };
+        await updateRow(row.id, after);
+        await createStaffActionLog({
+          actor: user,
+          targetUserId: row.user,
+          targetCollection: "advances",
+          targetRecord: row.id,
+          action: "update",
+          before: { status: row.status || "rejected", resolved_at: row.resolved_at || "" },
+          after,
+          note: "Admin hoàn tác từ chối ứng lương về chờ duyệt",
+        });
+        toast.success("Đã đưa yêu cầu về trạng thái Chờ duyệt");
+      }
+      setUndoRequest(null);
+      setAdvanceDetail((current) => (current?.id === row.id ? null : current));
+      await load();
+      loadStats().catch(() => {});
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Không thể hoàn tác trạng thái");
+    } finally {
+      setUndoing(false);
+    }
+  };
+
   const exportCurrent = () => {
     const rows = filtered.map((row) => ({
       "Họ tên": row.full_name,
@@ -1004,6 +1086,7 @@ export function AdvancesPage() {
           setSavingNotes={setSavingNotes}
           updateRow={updateRow}
           setDisbursed={setDisbursed}
+          requestAdvanceUndo={requestAdvanceUndo}
           load={load}
         />
       </PageContainer>
@@ -1288,6 +1371,8 @@ export function AdvancesPage() {
           const selectable = isActionable(row);
           const canRecover = status === "accepted" && recovery === "none";
           const canAdminResolve = status === "pending" || status === "recruiter_approved";
+          const canUndoRecovery = status === "accepted" && recovery !== "none";
+          const canUndoRejection = status === "rejected";
           const requesterName = getAdvanceRequesterName(row);
           return (
             <div
@@ -1471,6 +1556,36 @@ export function AdvancesPage() {
                     </Button>
                   </>
                 )}
+                {canUndoRecovery && (
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8 border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                    title="Hoàn tác về Đã tiếp nhận"
+                    aria-label="Hoàn tác trạng thái thu hồi về Đã tiếp nhận"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      requestAdvanceUndo(row, "recovery");
+                    }}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+                {canUndoRejection && (
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8 border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                    title="Hoàn tác về Chờ duyệt"
+                    aria-label="Hoàn tác từ chối về Chờ duyệt"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      requestAdvanceUndo(row, "rejection");
+                    }}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             </div>
           );
@@ -1491,8 +1606,58 @@ export function AdvancesPage() {
         setSavingNotes={setSavingNotes}
         updateRow={updateRow}
         setDisbursed={setDisbursed}
+        requestAdvanceUndo={requestAdvanceUndo}
         load={load}
       />
+
+      <AlertDialog
+        open={!!undoRequest}
+        onOpenChange={(open) => {
+          if (!open && !undoing) setUndoRequest(null);
+        }}
+      >
+        <AlertDialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl">
+          <AlertDialogHeader>
+            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 text-amber-700 sm:mx-0">
+              <TriangleAlert className="h-5 w-5" />
+            </div>
+            <AlertDialogTitle>Xác nhận hoàn tác</AlertDialogTitle>
+            <AlertDialogDescription className="leading-relaxed">
+              {undoRequest?.kind === "recovery" ? (
+                <>
+                  Bạn đang đưa yêu cầu của{" "}
+                  <strong>{undoRequest.row.full_name || "người lao động"}</strong> từ “
+                  {undoRequest.row.recovery_status === "recovered"
+                    ? "Đã thu hồi"
+                    : "Không thể thu hồi"}
+                  ” về “Đã tiếp nhận”. Ngày thu hồi sẽ được xóa, các thông tin giải ngân và ghi chú
+                  vẫn được giữ nguyên.
+                </>
+              ) : (
+                <>
+                  Bạn đang đưa yêu cầu đã từ chối của{" "}
+                  <strong>{undoRequest?.row.full_name || "người lao động"}</strong> về “Chờ duyệt”.
+                  Admin có thể tiếp nhận hoặc từ chối lại yêu cầu này.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={undoing}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              className="gap-2 bg-amber-600 text-white hover:bg-amber-700"
+              disabled={undoing}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmAdvanceUndo();
+              }}
+            >
+              <RotateCcw className="h-4 w-4" />
+              {undoing ? "Đang hoàn tác…" : "Xác nhận hoàn tác"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageContainer>
   );
 }
@@ -1511,6 +1676,7 @@ function AdvanceDetailDialog({
   setSavingNotes,
   updateRow,
   setDisbursed,
+  requestAdvanceUndo,
   load,
 }: {
   advanceDetail: AdvanceRecord | null;
@@ -1526,6 +1692,7 @@ function AdvanceDetailDialog({
   setSavingNotes: (v: boolean) => void;
   updateRow: (id: string, payload: Partial<AdvanceRecord>) => Promise<void>;
   setDisbursed: (row: AdvanceRecord, disbursed: boolean) => Promise<void>;
+  requestAdvanceUndo: (row: AdvanceRecord, kind: AdvanceUndoKind) => void;
   load: () => void;
 }) {
   const touchStartX = useRef(0);
@@ -1537,9 +1704,13 @@ function AdvanceDetailDialog({
   }, [advanceDetail?.id]);
 
   const status = advanceDetail?.status;
+  const recovery = (advanceDetail?.recovery_status || "none") as RecoveryStatus;
   const payoutMethod = normalizeAdvancePayoutMethod(advanceDetail?.payout_method);
   const disbursed = Boolean(advanceDetail?.disbursed);
-  const canDisburse = isAdmin && status === "accepted" && !disbursed;
+  const isAcceptedTabStatus = status === "accepted" && recovery === "none";
+  const canDisburse = isAdmin && isAcceptedTabStatus && !disbursed;
+  const canUndoRecovery = isAdmin && status === "accepted" && recovery !== "none";
+  const canUndoRejection = isAdmin && status === "rejected";
 
   const currentIndex = useMemo(() => {
     if (!advanceDetail) return -1;
@@ -1726,6 +1897,19 @@ function AdvanceDetailDialog({
                 value={formatDateTime(advanceDetail.recovered_at)}
               />
             </div>
+            {isAdmin && (canUndoRecovery || canUndoRejection) && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2 border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                onClick={() =>
+                  requestAdvanceUndo(advanceDetail, canUndoRecovery ? "recovery" : "rejection")
+                }
+              >
+                <RotateCcw className="h-4 w-4" />
+                {canUndoRecovery ? "Hoàn tác về Đã tiếp nhận" : "Hoàn tác về Chờ duyệt"}
+              </Button>
+            )}
             <div className="rounded-xl border bg-card p-3 text-sm">
               <div className="text-[11px] text-muted-foreground">Hình thức nhận tiền</div>
               <div className="mt-1 font-medium">{PAYOUT_METHOD_META[payoutMethod].label}</div>
@@ -1743,7 +1927,7 @@ function AdvanceDetailDialog({
                 </>
               )}
               {payoutMethod === "bank_transfer" &&
-                advanceDetail.status === "accepted" &&
+                isAcceptedTabStatus &&
                 (() => {
                   const qrUrl = buildVietQrUrl({
                     bankName: advanceDetail.bank_name || "",

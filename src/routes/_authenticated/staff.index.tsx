@@ -1,6 +1,23 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Banknote, BarChart3, BookOpen, Building2, BusFront, ChevronRight, ClipboardCheck, Download, LayoutGrid, ListOrdered, MessagesSquare, Newspaper, NotebookPen, RefreshCw, UserCheck, Users } from "lucide-react";
+import {
+  Banknote,
+  BarChart3,
+  BookOpen,
+  Building2,
+  BusFront,
+  ChevronRight,
+  ClipboardCheck,
+  Download,
+  LayoutGrid,
+  ListOrdered,
+  MessagesSquare,
+  Newspaper,
+  NotebookPen,
+  RefreshCw,
+  UserCheck,
+  Users,
+} from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -110,7 +127,12 @@ function StaffDashboardPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-2.5">
-        <StatCard label="Nhà máy phụ trách" value={activeAssignments.length} icon={Building2} tone="info" />
+        <StatCard
+          label="Nhà máy phụ trách"
+          value={activeAssignments.length}
+          icon={Building2}
+          tone="info"
+        />
         <StatCard label="Lao động trong quyền" value={workersCount} icon={Users} tone="primary" />
       </div>
 
@@ -162,7 +184,9 @@ function StaffDashboardPage() {
             <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </div>
           <div className="mt-3 text-sm font-semibold">Tiện ích</div>
-          <div className="mt-1 text-xs leading-5 text-muted-foreground">Bảng tin, nhà xe, trò chuyện, hướng dẫn</div>
+          <div className="mt-1 text-xs leading-5 text-muted-foreground">
+            Bảng tin, nhà xe, trò chuyện, hướng dẫn
+          </div>
         </button>
         <DashboardLink
           to="/staff/export"
@@ -194,7 +218,12 @@ function StaffDashboardPage() {
                 <FeatureTile to="/counter" label="Bộ đếm" icon={ListOrdered} size="compact" />
               </div>
             )}
-            <FeatureTile to="/staff/approvals" label="Phê duyệt" icon={ClipboardCheck} size="compact" />
+            <FeatureTile
+              to="/staff/approvals"
+              label="Phê duyệt"
+              icon={ClipboardCheck}
+              size="compact"
+            />
           </div>
         </DialogContent>
       </Dialog>

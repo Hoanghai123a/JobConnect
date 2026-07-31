@@ -75,6 +75,7 @@ type QuickWorkerForm = {
   bank_name: string;
   bank_account_number: string;
   bank_account_name: string;
+  bank_account_note: string;
   recruiter_staff: string;
   join_date: string;
   main_house: string;
@@ -128,6 +129,7 @@ const emptyForm = (): QuickWorkerForm => ({
   bank_name: "",
   bank_account_number: "",
   bank_account_name: "",
+  bank_account_note: "",
   recruiter_staff: "",
   join_date: todayIso(),
   main_house: "",
@@ -446,6 +448,7 @@ export function QuickWorkerAccountDialog({
     fd.append("bank_name", resolveBankName(form.bank_name.trim()));
     fd.append("bank_account_number", form.bank_account_number.replace(/\D/g, ""));
     fd.append("bank_account_name", form.bank_account_name.trim());
+    fd.append("bank_account_note", form.bank_account_note.trim());
     if (compressedFront) fd.append("cccd_front", compressedFront);
     if (compressedBack) fd.append("cccd_back", compressedBack);
 
@@ -923,6 +926,12 @@ function QuickWorkerEntryFields({
           onChange={(value) => setField("bank_account_name", value)}
           placeholder="Chủ TK"
           desktopClassName="desktop:col-start-6 desktop:row-start-1"
+        />
+        <TextField
+          label="Ghi chú STK"
+          value={form.bank_account_note}
+          onChange={(value) => setField("bank_account_note", value)}
+          placeholder="Ghi chú STK"
         />
         <div className="sm:col-span-2 desktop:col-span-1 desktop:col-start-5 desktop:row-start-2 desktop:max-w-none">
           <TextField

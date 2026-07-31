@@ -74,11 +74,7 @@ export function ImageViewer({
               className="group relative h-16 w-16 overflow-hidden rounded-lg border shadow-sm transition hover:shadow-md active:scale-95"
               aria-label={`Xem ảnh ${i + 1} kích thước lớn`}
             >
-              <img
-                src={img.thumbUrl}
-                alt={`Ảnh ${i + 1}`}
-                className="h-full w-full object-cover"
-              />
+              <img src={img.thumbUrl} alt={`Ảnh ${i + 1}`} className="h-full w-full object-cover" />
               <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition group-hover:bg-black/30 group-hover:opacity-100">
                 <ZoomIn className="h-4 w-4" />
               </span>

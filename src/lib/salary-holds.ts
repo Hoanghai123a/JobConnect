@@ -78,7 +78,11 @@ export async function createSalaryHold(payload: ReturnType<typeof createSalaryHo
 }
 
 export function removeVietnameseTone(value: string) {
-  return value.replace(/đ/g, "d").replace(/Đ/g, "D").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return value
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
 export function buildSalaryHoldTransferDescription(template: string, workerName: string) {

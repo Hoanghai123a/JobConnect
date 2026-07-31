@@ -67,7 +67,12 @@ import {
   canViewHistoryInStaffScope,
   isRecentRecruiter,
 } from "@/lib/staff-permissions";
-import { createStaffActionLog } from "@/lib/staff-log";
+import {
+  createStaffActionLog,
+  fetchStaffActionLogsForUser,
+  type StaffActionLogRecord,
+} from "@/lib/staff-log";
+import { StaffActionHistoryPanel } from "@/components/employment/StaffActionHistoryPanel";
 import { CccdManager } from "@/components/cccd/CccdManager";
 import { JoinCccdSection } from "@/components/employment/JoinCccdSection";
 import { VN_BANKS } from "@/lib/vn-banks";
@@ -451,6 +456,10 @@ export function WorkerEmploymentDrawer({
   const [submittingAdvance, setSubmittingAdvance] = useState(false);
   const [bankEditing, setBankEditing] = useState(false);
   const [cccdViewerOpen, setCccdViewerOpen] = useState(false);
+  const [actionLogs, setActionLogs] = useState<StaffActionLogRecord[]>([]);
+  const [actionLogsLoading, setActionLogsLoading] = useState(false);
+  const [actionLogsError, setActionLogsError] = useState("");
+  const [actionLogsRefreshKey, setActionLogsRefreshKey] = useState(0);
   useEffect(() => {
     if (!advanceOpen || !user?.id) return;
 
@@ -482,6 +491,7 @@ export function WorkerEmploymentDrawer({
     bank_name: "",
     bank_account_number: "",
     bank_account_name: "",
+    bank_account_note: "",
   });
   const [bankSaving, setBankSaving] = useState(false);
 
@@ -491,6 +501,52 @@ export function WorkerEmploymentDrawer({
   );
 
   const managedIds = useMemo(() => managedFactoryIds ?? new Set<string>(), [managedFactoryIds]);
+
+  const canViewActionLogs = useMemo(
+    () =>
+      actor?.role === "admin" ||
+      (actor?.role === "staff" &&
+        histories.some((history) =>
+          canViewHistoryInStaffScope(actor, history, histories, managedIds),
+        )),
+    [actor, histories, managedIds],
+  );
+
+  useEffect(() => {
+    let active = true;
+    if (!open || !user?.id || !canViewActionLogs) {
+      setActionLogs([]);
+      setActionLogsError("");
+      setActionLogsLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setActionLogsLoading(true);
+    setActionLogsError("");
+    fetchStaffActionLogsForUser(user.id)
+      .then((logs) => {
+        if (active) setActionLogs(logs);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setActionLogs([]);
+        setActionLogsError(getErrorMessage(error, "Không tải được lịch sử chỉnh sửa"));
+      })
+      .finally(() => {
+        if (active) setActionLogsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [actionLogsRefreshKey, canViewActionLogs, open, user?.id]);
+
+  const notifyDataChanged = async () => {
+    await onDataChanged();
+    setActionLogsRefreshKey((current) => current + 1);
+  };
 
   const joinableFactories = useMemo(() => {
     if (actor?.role === "admin") return factories;
@@ -505,6 +561,7 @@ export function WorkerEmploymentDrawer({
         bank_name: user.bank_name || "",
         bank_account_number: user.bank_account_number || "",
         bank_account_name: user.bank_account_name || "",
+        bank_account_note: user.bank_account_note || "",
       });
       setLeaveOpen(false);
       setLeaveDate(todayIso());
@@ -649,7 +706,7 @@ export function WorkerEmploymentDrawer({
       });
       toast.success("Đã cập nhật ngày nghỉ");
       setLeaveOpen(false);
-      await onDataChanged();
+      await notifyDataChanged();
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Lỗi báo nghỉ"));
     } finally {
@@ -730,7 +787,7 @@ export function WorkerEmploymentDrawer({
       setJoinOpen(false);
       setJoinCccdFront(null);
       setJoinCccdBack(null);
-      await onDataChanged();
+      await notifyDataChanged();
     } catch (error: unknown) {
       const fieldErrors = getPocketBaseFieldErrors(error);
       toast.error(fieldErrors || getErrorMessage(error, "Lỗi báo đi làm"));
@@ -764,7 +821,7 @@ export function WorkerEmploymentDrawer({
       });
       toast.success("Đã cập nhật mã nhân viên");
       setEmployeeCodeOpen(false);
-      await onDataChanged();
+      await notifyDataChanged();
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Lỗi cập nhật mã NV"));
     } finally {
@@ -881,7 +938,7 @@ export function WorkerEmploymentDrawer({
       setOldHistoryOpen(false);
       setOldHistoryCccdFront(null);
       setOldHistoryCccdBack(null);
-      await onDataChanged();
+      await notifyDataChanged();
       toast.success("Đã bổ sung lịch sử đi làm cũ");
     } catch (error: unknown) {
       const fieldErrors = getPocketBaseFieldErrors(error);
@@ -912,7 +969,7 @@ export function WorkerEmploymentDrawer({
       if (actor?.role === "staff" && latest?.id !== editingId) {
         toast.error("Staff chỉ được sửa lịch sử đi làm gần nhất");
         setEditingId(null);
-        await onDataChanged();
+        await notifyDataChanged();
         return;
       }
 
@@ -982,7 +1039,7 @@ export function WorkerEmploymentDrawer({
       setEditCccdFront(null);
       setEditCccdBack(null);
       setEditingId(null);
-      await onDataChanged();
+      await notifyDataChanged();
     } catch (error: unknown) {
       const fieldErrors = getPocketBaseFieldErrors(error);
       if (fieldErrors) {
@@ -1019,7 +1076,7 @@ export function WorkerEmploymentDrawer({
       });
       toast.success("Đã khôi phục trạng thái đang làm");
       setRestoreRequest(null);
-      await onDataChanged();
+      await notifyDataChanged();
     } catch (error: unknown) {
       const fieldErrors = getPocketBaseFieldErrors(error);
       toast.error(fieldErrors || getErrorMessage(error, "Không thể khôi phục trạng thái đang làm"));
@@ -1091,7 +1148,7 @@ export function WorkerEmploymentDrawer({
       setAdvanceReason("");
       setAdvancePayoutMethod("bank_transfer");
       setAdvanceOpen(false);
-      onDataChanged();
+      void notifyDataChanged();
     } catch (error: unknown) {
       const fieldErrors = getPocketBaseFieldErrors(error);
       toast.error(fieldErrors || getErrorMessage(error, "Lỗi báo ứng"));
@@ -1115,13 +1172,14 @@ export function WorkerEmploymentDrawer({
           bank_name: user.bank_name || "",
           bank_account_number: user.bank_account_number || "",
           bank_account_name: user.bank_account_name || "",
+          bank_account_note: user.bank_account_note || "",
         },
         after: bankForm,
         note: "Cập nhật STK ngân hàng cho NLĐ",
       });
       setBankEditing(false);
       toast.success("Đã cập nhật STK ngân hàng");
-      onDataChanged();
+      void notifyDataChanged();
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Không cập nhật được STK"));
     } finally {
@@ -1291,399 +1349,458 @@ export function WorkerEmploymentDrawer({
                 </div>
               )}
 
-              <div className="min-w-0 space-y-4 desktop:col-start-2 desktop:row-start-1">
-                <div className="hidden rounded-xl border border-border/60 bg-card p-3 shadow-soft desktop:block">
-                  <div className="space-y-1.5">
-                    <div className="grid grid-cols-4 gap-1.5">
-                      <CompactInfoCell label="Mã tài khoản" value={user.uid || "—"} />
-                      <CompactInfoCell label="Tên đăng nhập" value={user.username || "—"} />
-                      <CompactInfoCell label="CCCD" value={maskCccd(user.cccd)} />
-                      <CompactInfoCell label="SĐT" value={user.phone || "—"} />
-                    </div>
-                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.15fr)_auto] gap-1.5">
-                      <CompactInfoCell label="Ngân hàng" value={user.bank_name || "—"} />
-                      <CompactInfoCell
-                        label="Số tài khoản"
-                        value={user.bank_account_number || "—"}
-                      />
-                      <CompactInfoCell
-                        label="Tên chủ tài khoản"
-                        value={user.bank_account_name || "—"}
-                      />
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setCccdViewerOpen(true)}
-                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-                        >
-                          <IdCard className="h-3.5 w-3.5" />
-                          Xem CCCD
-                        </button>
-                        {permissions.canUpdateBank && !bankEditing && (
+              <div className="min-w-0 desktop:col-start-2 desktop:row-start-1 desktop:grid desktop:grid-cols-[minmax(0,1fr)_minmax(17rem,21rem)] desktop:items-start desktop:gap-3">
+                <div className="min-w-0 space-y-4 desktop:col-start-1">
+                  <div className="hidden rounded-xl border border-border/60 bg-card p-3 shadow-soft desktop:block">
+                    <div className="space-y-1.5">
+                      <div className="grid grid-cols-4 gap-1.5">
+                        <CompactInfoCell label="Mã tài khoản" value={user.uid || "—"} />
+                        <CompactInfoCell label="Tên đăng nhập" value={user.username || "—"} />
+                        <CompactInfoCell label="CCCD" value={maskCccd(user.cccd)} />
+                        <CompactInfoCell label="SĐT" value={user.phone || "—"} />
+                      </div>
+                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_auto] gap-1.5">
+                        <CompactInfoCell label="Ngân hàng" value={user.bank_name || "—"} />
+                        <CompactInfoCell
+                          label="Số tài khoản"
+                          value={user.bank_account_number || "—"}
+                        />
+                        <CompactInfoCell
+                          label="Tên chủ tài khoản"
+                          value={user.bank_account_name || "—"}
+                        />
+                        <CompactInfoCell
+                          label="Ghi chú STK"
+                          value={user.bank_account_note || "—"}
+                        />
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            onClick={() => setBankEditing(true)}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-success/25 bg-success/5 px-2.5 text-xs font-medium text-success transition-colors hover:bg-success/10"
+                            onClick={() => setCccdViewerOpen(true)}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
                           >
-                            <Landmark className="h-3.5 w-3.5" />
-                            Sửa STK
+                            <IdCard className="h-3.5 w-3.5" />
+                            Xem CCCD
                           </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {bankEditing && (
-                    <form
-                      className="mt-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-1.5 border-t border-border/60 pt-2"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        void saveBankInfo();
-                      }}
-                    >
-                      <div className="min-w-0 space-y-1">
-                        <Label className="text-[10px]">Ngân hàng</Label>
-                        <Select
-                          value={bankForm.bank_name}
-                          onValueChange={(v) => setBankForm((c) => ({ ...c, bank_name: v }))}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Chọn ngân hàng" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-72">
-                            {VN_BANKS.map((bank) => (
-                              <SelectItem key={bank.code} value={bank.name}>
-                                {bank.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="min-w-0 space-y-1">
-                        <Label className="text-[10px]">Số tài khoản</Label>
-                        <Input
-                          className="h-8 text-xs"
-                          value={bankForm.bank_account_number}
-                          onChange={(e) =>
-                            setBankForm((c) => ({
-                              ...c,
-                              bank_account_number: e.target.value.replace(/\D/g, ""),
-                            }))
-                          }
-                          inputMode="numeric"
-                          placeholder="Nhập số tài khoản"
-                        />
-                      </div>
-                      <div className="min-w-0 space-y-1">
-                        <Label className="text-[10px]">Tên chủ tài khoản</Label>
-                        <Input
-                          className="h-8 text-xs"
-                          value={bankForm.bank_account_name}
-                          onChange={(e) =>
-                            setBankForm((c) => ({ ...c, bank_account_name: e.target.value }))
-                          }
-                          placeholder="Nhập tên chủ tài khoản"
-                        />
-                      </div>
-                      <div className="flex gap-1.5">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 px-2 text-xs"
-                          onClick={() => setBankEditing(false)}
-                        >
-                          Hủy
-                        </Button>
-                        <Button
-                          type="submit"
-                          size="sm"
-                          className="h-8 px-2 text-xs"
-                          disabled={bankSaving}
-                        >
-                          {bankSaving ? "Đang lưu..." : "Lưu STK"}
-                        </Button>
-                      </div>
-                    </form>
-                  )}
-                </div>
-                <div className="flex items-center justify-between desktop:hidden">
-                  <span className="text-xs font-medium text-muted-foreground">Thông tin</span>
-                  <button
-                    type="button"
-                    onClick={() => setInfoOpen((v) => !v)}
-                    className="flex items-center gap-1 rounded-full border border-border/60 bg-card px-3 py-1 text-xs font-medium text-foreground active:scale-[0.98]"
-                    aria-expanded={infoOpen}
-                  >
-                    {infoOpen ? (
-                      <ChevronUp className="h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    )}
-                    {infoOpen ? "Thu gọn" : "Mở rộng"}
-                  </button>
-                </div>
-
-                {infoOpen && (
-                  <div className="desktop:hidden">
-                    <>
-                      <div className="grid min-w-0 grid-cols-2 gap-2 text-sm">
-                        {user.uid && (
-                          <div className="col-span-2 min-w-0 overflow-hidden rounded-xl bg-primary/10 p-2.5">
-                            <div className="text-[10px] text-muted-foreground">Mã tài khoản</div>
-                            <div className="mt-0.5 break-words text-sm font-semibold text-primary [overflow-wrap:anywhere]">
-                              {user.uid}
-                            </div>
-                          </div>
-                        )}
-                        <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                          <div className="text-[10px] text-muted-foreground">Họ tên tài khoản</div>
-                          <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                            {user.full_name || "—"}
-                          </div>
-                        </div>
-                        <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                          <div className="text-[10px] text-muted-foreground">CCCD tài khoản</div>
-                          <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                            {maskCccd(user.cccd)}
-                          </div>
-                        </div>
-                        <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                          <div className="text-[10px] text-muted-foreground">SĐT</div>
-                          <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                            {user.phone || "—"}
-                          </div>
-                        </div>
-                        <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                          <div className="text-[10px] text-muted-foreground">Tên đăng nhập</div>
-                          <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                            {user.username || "—"}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            <Landmark className="h-3.5 w-3.5" />
-                            Tài khoản ngân hàng
-                          </div>
                           {permissions.canUpdateBank && !bankEditing && (
-                            <Button
+                            <button
                               type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs"
                               onClick={() => setBankEditing(true)}
+                              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-success/25 bg-success/5 px-2.5 text-xs font-medium text-success transition-colors hover:bg-success/10"
                             >
+                              <Landmark className="h-3.5 w-3.5" />
                               Sửa STK
-                            </Button>
+                            </button>
                           )}
                         </div>
-                        {bankEditing ? (
-                          <form
-                            className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3"
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              void saveBankInfo();
-                            }}
+                      </div>
+                    </div>
+
+                    {bankEditing && (
+                      <form
+                        className="mt-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-1.5 border-t border-border/60 pt-2"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void saveBankInfo();
+                        }}
+                      >
+                        <div className="min-w-0 space-y-1">
+                          <Label className="text-[10px]">Ngân hàng</Label>
+                          <Select
+                            value={bankForm.bank_name}
+                            onValueChange={(v) => setBankForm((c) => ({ ...c, bank_name: v }))}
                           >
-                            <div className="space-y-1">
-                              <Label className="text-xs">Ngân hàng</Label>
-                              <Select
-                                value={bankForm.bank_name}
-                                onValueChange={(v) => setBankForm((c) => ({ ...c, bank_name: v }))}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Chọn ngân hàng" />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-72">
-                                  {VN_BANKS.map((bank) => (
-                                    <SelectItem key={bank.code} value={bank.name}>
-                                      {bank.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Chọn ngân hàng" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-72">
+                              {VN_BANKS.map((bank) => (
+                                <SelectItem key={bank.code} value={bank.name}>
+                                  {bank.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="min-w-0 space-y-1">
+                          <Label className="text-[10px]">Số tài khoản</Label>
+                          <Input
+                            className="h-8 text-xs"
+                            value={bankForm.bank_account_number}
+                            onChange={(e) =>
+                              setBankForm((c) => ({
+                                ...c,
+                                bank_account_number: e.target.value.replace(/\D/g, ""),
+                              }))
+                            }
+                            inputMode="numeric"
+                            placeholder="Nhập số tài khoản"
+                          />
+                        </div>
+                        <div className="min-w-0 space-y-1">
+                          <Label className="text-[10px]">Tên chủ tài khoản</Label>
+                          <Input
+                            className="h-8 text-xs"
+                            value={bankForm.bank_account_name}
+                            onChange={(e) =>
+                              setBankForm((c) => ({ ...c, bank_account_name: e.target.value }))
+                            }
+                            placeholder="Nhập tên chủ tài khoản"
+                          />
+                        </div>
+                        <div className="min-w-0 space-y-1">
+                          <Label className="text-[10px]">Ghi chú STK</Label>
+                          <Textarea
+                            className="min-h-8 text-xs"
+                            value={bankForm.bank_account_note}
+                            onChange={(e) =>
+                              setBankForm((c) => ({ ...c, bank_account_note: e.target.value }))
+                            }
+                            placeholder="Ghi chú thêm về tài khoản"
+                            rows={2}
+                          />
+                        </div>
+                        <div className="flex gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-2 text-xs"
+                            onClick={() => setBankEditing(false)}
+                          >
+                            Hủy
+                          </Button>
+                          <Button
+                            type="submit"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            disabled={bankSaving}
+                          >
+                            {bankSaving ? "Đang lưu..." : "Lưu STK"}
+                          </Button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between desktop:hidden">
+                    <span className="text-xs font-medium text-muted-foreground">Thông tin</span>
+                    <button
+                      type="button"
+                      onClick={() => setInfoOpen((v) => !v)}
+                      className="flex items-center gap-1 rounded-full border border-border/60 bg-card px-3 py-1 text-xs font-medium text-foreground active:scale-[0.98]"
+                      aria-expanded={infoOpen}
+                    >
+                      {infoOpen ? (
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      )}
+                      {infoOpen ? "Thu gọn" : "Mở rộng"}
+                    </button>
+                  </div>
+
+                  {infoOpen && (
+                    <div className="desktop:hidden">
+                      <>
+                        <div className="grid min-w-0 grid-cols-2 gap-2 text-sm">
+                          {user.uid && (
+                            <div className="col-span-2 min-w-0 overflow-hidden rounded-xl bg-primary/10 p-2.5">
+                              <div className="text-[10px] text-muted-foreground">Mã tài khoản</div>
+                              <div className="mt-0.5 break-words text-sm font-semibold text-primary [overflow-wrap:anywhere]">
+                                {user.uid}
+                              </div>
                             </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Số tài khoản</Label>
-                              <Input
-                                value={bankForm.bank_account_number}
-                                onChange={(e) =>
-                                  setBankForm((c) => ({
-                                    ...c,
-                                    bank_account_number: e.target.value.replace(/\D/g, ""),
-                                  }))
-                                }
-                                inputMode="numeric"
-                                placeholder="Nhập số tài khoản"
-                              />
+                          )}
+                          <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                            <div className="text-[10px] text-muted-foreground">
+                              Họ tên tài khoản
                             </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Tên chủ tài khoản</Label>
-                              <Input
-                                value={bankForm.bank_account_name}
-                                onChange={(e) =>
-                                  setBankForm((c) => ({ ...c, bank_account_name: e.target.value }))
-                                }
-                                placeholder="Nhập tên chủ tài khoản"
-                              />
+                            <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                              {user.full_name || "—"}
                             </div>
-                            <div className="flex gap-2 pt-1">
+                          </div>
+                          <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                            <div className="text-[10px] text-muted-foreground">CCCD tài khoản</div>
+                            <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                              {maskCccd(user.cccd)}
+                            </div>
+                          </div>
+                          <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                            <div className="text-[10px] text-muted-foreground">SĐT</div>
+                            <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                              {user.phone || "—"}
+                            </div>
+                          </div>
+                          <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                            <div className="text-[10px] text-muted-foreground">Tên đăng nhập</div>
+                            <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                              {user.username || "—"}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              <Landmark className="h-3.5 w-3.5" />
+                              Tài khoản ngân hàng
+                            </div>
+                            {permissions.canUpdateBank && !bankEditing && (
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                className="flex-1"
-                                onClick={() => setBankEditing(false)}
+                                className="h-7 text-xs"
+                                onClick={() => setBankEditing(true)}
                               >
-                                Hủy
+                                Sửa STK
                               </Button>
-                              <Button
-                                type="submit"
-                                size="sm"
-                                className="flex-1"
-                                disabled={bankSaving}
-                              >
-                                {bankSaving ? "Đang lưu..." : "Lưu STK"}
-                              </Button>
-                            </div>
-                          </form>
-                        ) : (
-                          <div className="grid min-w-0 grid-cols-1 gap-1.5 text-sm">
-                            <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                              <div className="text-[10px] text-muted-foreground">Ngân hàng</div>
-                              <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                                {user.bank_name || "—"}
+                            )}
+                          </div>
+                          {bankEditing ? (
+                            <form
+                              className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3"
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                void saveBankInfo();
+                              }}
+                            >
+                              <div className="space-y-1">
+                                <Label className="text-xs">Ngân hàng</Label>
+                                <Select
+                                  value={bankForm.bank_name}
+                                  onValueChange={(v) =>
+                                    setBankForm((c) => ({ ...c, bank_name: v }))
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Chọn ngân hàng" />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-72">
+                                    {VN_BANKS.map((bank) => (
+                                      <SelectItem key={bank.code} value={bank.name}>
+                                        {bank.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </div>
-                            </div>
-                            <div className="grid min-w-0 grid-cols-2 gap-1.5">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Số tài khoản</Label>
+                                <Input
+                                  value={bankForm.bank_account_number}
+                                  onChange={(e) =>
+                                    setBankForm((c) => ({
+                                      ...c,
+                                      bank_account_number: e.target.value.replace(/\D/g, ""),
+                                    }))
+                                  }
+                                  inputMode="numeric"
+                                  placeholder="Nhập số tài khoản"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Tên chủ tài khoản</Label>
+                                <Input
+                                  value={bankForm.bank_account_name}
+                                  onChange={(e) =>
+                                    setBankForm((c) => ({
+                                      ...c,
+                                      bank_account_name: e.target.value,
+                                    }))
+                                  }
+                                  placeholder="Nhập tên chủ tài khoản"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Ghi chú STK</Label>
+                                <Textarea
+                                  value={bankForm.bank_account_note}
+                                  onChange={(e) =>
+                                    setBankForm((c) => ({
+                                      ...c,
+                                      bank_account_note: e.target.value,
+                                    }))
+                                  }
+                                  placeholder="Ghi chú thêm về tài khoản"
+                                  rows={2}
+                                />
+                              </div>
+                              <div className="flex gap-2 pt-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="flex-1"
+                                  onClick={() => setBankEditing(false)}
+                                >
+                                  Hủy
+                                </Button>
+                                <Button
+                                  type="submit"
+                                  size="sm"
+                                  className="flex-1"
+                                  disabled={bankSaving}
+                                >
+                                  {bankSaving ? "Đang lưu..." : "Lưu STK"}
+                                </Button>
+                              </div>
+                            </form>
+                          ) : (
+                            <div className="grid min-w-0 grid-cols-1 gap-1.5 text-sm">
                               <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                                <div className="text-[10px] text-muted-foreground">
-                                  Số tài khoản
-                                </div>
+                                <div className="text-[10px] text-muted-foreground">Ngân hàng</div>
                                 <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                                  {user.bank_account_number || "—"}
+                                  {user.bank_name || "—"}
                                 </div>
                               </div>
-                              <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
-                                <div className="text-[10px] text-muted-foreground">Tên chủ TK</div>
-                                <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-                                  {user.bank_account_name || "—"}
+                              <div className="grid min-w-0 grid-cols-2 gap-1.5">
+                                <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                                  <div className="text-[10px] text-muted-foreground">
+                                    Số tài khoản
+                                  </div>
+                                  <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                                    {user.bank_account_number || "—"}
+                                  </div>
+                                </div>
+                                <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                                  <div className="text-[10px] text-muted-foreground">
+                                    Tên chủ TK
+                                  </div>
+                                  <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                                    {user.bank_account_name || "—"}
+                                  </div>
+                                </div>
+                                <div className="min-w-0 overflow-hidden rounded-xl bg-muted/35 p-2.5">
+                                  <div className="text-[10px] text-muted-foreground">
+                                    Ghi chú STK
+                                  </div>
+                                  <div className="mt-0.5 break-words text-sm font-semibold [overflow-wrap:anywhere]">
+                                    {user.bank_account_note || "—"}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Ảnh CCCD
-                      </div>
-                      <CccdManager
-                        targetUser={user}
-                        actor={actor}
-                        onUpdated={onDataChanged}
-                        readOnly
-                      />
-                    </>
-                  </div>
-                )}
-
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Lịch sử đi làm ({histories.length})
-                </div>
-
-                {histories.length === 0 ? (
-                  <div className="rounded-xl border bg-card p-3 text-center text-xs text-muted-foreground">
-                    Chưa có lịch sử
-                  </div>
-                ) : (
-                  histories.map((h) => {
-                    const canEdit = canEditHistoryRecord(h);
-                    const factoryName = h.expand?.factory?.name || "Nhà máy";
-                    const mainHouseName = h.expand?.main_house?.name || "—";
-                    const recruiterName =
-                      h.expand?.recruiter_staff?.full_name ||
-                      h.expand?.recruiter_staff?.username ||
-                      "—";
-                    const employmentPeriod = `Vào: ${formatDate(h.join_date)} · Nghỉ: ${formatDate(h.leave_date) || "—"}`;
-                    return (
-                      <Card
-                        key={h.id}
-                        className="min-w-0 space-y-2 overflow-hidden rounded-2xl p-3 transition-colors desktop:grid desktop:grid-cols-[minmax(13rem,1.35fr)_minmax(10rem,1fr)_minmax(8rem,.8fr)_minmax(9rem,.9fr)_minmax(11rem,1.1fr)_auto] desktop:items-center desktop:gap-3 desktop:space-y-0 desktop:rounded-xl desktop:px-3 desktop:py-2 cursor-pointer hover:bg-muted/30"
-                        onClick={() => setSelectedHistory(h)}
-                      >
-                        <div className="flex items-start justify-between gap-2 desktop:contents">
-                          <div className="min-w-0 flex-1 desktop:col-start-1 desktop:row-start-1">
-                            <div
-                              title={`${factoryName} · Mã NV: ${h.employee_code || "—"}`}
-                              className="break-words text-sm font-semibold [overflow-wrap:anywhere] desktop:truncate"
-                            >
-                              {factoryName}
-                              <span className="ml-1 text-[11px] font-normal text-muted-foreground">
-                                · Mã: {h.employee_code || "—"}
-                              </span>
-                            </div>
-                            <div
-                              title={h.worker_name_snapshot || "—"}
-                              className="break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere] desktop:truncate"
-                            >
-                              {h.worker_name_snapshot || "—"}
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1.5 desktop:col-start-6 desktop:row-start-1 desktop:justify-self-end">
-                            <StatusChip tone={isCurrentlyWorking(h) ? "success" : "neutral"}>
-                              {isCurrentlyWorking(h) ? "Đang làm" : "Đã nghỉ"}
-                            </StatusChip>
-                            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          </div>
-                        </div>
-                        <div className="min-w-0 space-y-1 text-[11px] text-muted-foreground desktop:contents">
-                          <div
-                            title={employmentPeriod}
-                            className="min-w-0 break-words [overflow-wrap:anywhere] desktop:col-start-2 desktop:row-start-1 desktop:truncate"
-                          >
-                            <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground desktop:block">
-                              Thời gian
-                            </span>
-                            {employmentPeriod}
-                          </div>
-                          <div
-                            title={mainHouseName}
-                            className="hidden min-w-0 desktop:col-start-3 desktop:row-start-1 desktop:block desktop:truncate"
-                          >
-                            <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                              Nhà chính
-                            </span>
-                            {mainHouseName}
-                          </div>
-                          <div
-                            title={recruiterName}
-                            className="min-w-0 break-words [overflow-wrap:anywhere] desktop:col-start-4 desktop:row-start-1 desktop:truncate"
-                          >
-                            <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground desktop:block">
-                              Người tuyển
-                            </span>
-                            <span className="desktop:hidden">Người tuyển: </span>
-                            {recruiterName}
-                          </div>
-                          {h.note && (
-                            <div
-                              title={h.note}
-                              className="min-w-0 break-words [overflow-wrap:anywhere] desktop:col-start-5 desktop:row-start-1 desktop:truncate"
-                            >
-                              <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground desktop:block">
-                                Ghi chú
-                              </span>
-                              {h.note}
                             </div>
                           )}
                         </div>
-                      </Card>
-                    );
-                  })
+
+                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Ảnh CCCD
+                        </div>
+                        <CccdManager
+                          targetUser={user}
+                          actor={actor}
+                          onUpdated={() => void notifyDataChanged()}
+                          readOnly
+                        />
+                      </>
+                    </div>
+                  )}
+
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Lịch sử đi làm ({histories.length})
+                  </div>
+
+                  {histories.length === 0 ? (
+                    <div className="rounded-xl border bg-card p-3 text-center text-xs text-muted-foreground">
+                      Chưa có lịch sử
+                    </div>
+                  ) : (
+                    histories.map((h) => {
+                      const canEdit = canEditHistoryRecord(h);
+                      const factoryName = h.expand?.factory?.name || "Nhà máy";
+                      const mainHouseName = h.expand?.main_house?.name || "—";
+                      const recruiterName =
+                        h.expand?.recruiter_staff?.full_name ||
+                        h.expand?.recruiter_staff?.username ||
+                        "—";
+                      const employmentPeriod = `Vào: ${formatDate(h.join_date)} · Nghỉ: ${formatDate(h.leave_date) || "—"}`;
+                      return (
+                        <Card
+                          key={h.id}
+                          className="min-w-0 space-y-2 overflow-hidden rounded-2xl p-3 transition-colors desktop:grid desktop:grid-cols-[minmax(13rem,1.35fr)_minmax(10rem,1fr)_minmax(8rem,.8fr)_minmax(9rem,.9fr)_minmax(11rem,1.1fr)_auto] desktop:items-center desktop:gap-3 desktop:space-y-0 desktop:rounded-xl desktop:px-3 desktop:py-2 cursor-pointer hover:bg-muted/30"
+                          onClick={() => setSelectedHistory(h)}
+                        >
+                          <div className="flex items-start justify-between gap-2 desktop:contents">
+                            <div className="min-w-0 flex-1 desktop:col-start-1 desktop:row-start-1">
+                              <div
+                                title={`${factoryName} · Mã NV: ${h.employee_code || "—"}`}
+                                className="break-words text-sm font-semibold [overflow-wrap:anywhere] desktop:truncate"
+                              >
+                                {factoryName}
+                                <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                                  · Mã: {h.employee_code || "—"}
+                                </span>
+                              </div>
+                              <div
+                                title={h.worker_name_snapshot || "—"}
+                                className="break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere] desktop:truncate"
+                              >
+                                {h.worker_name_snapshot || "—"}
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1.5 desktop:col-start-6 desktop:row-start-1 desktop:justify-self-end">
+                              <StatusChip tone={isCurrentlyWorking(h) ? "success" : "neutral"}>
+                                {isCurrentlyWorking(h) ? "Đang làm" : "Đã nghỉ"}
+                              </StatusChip>
+                              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            </div>
+                          </div>
+                          <div className="min-w-0 space-y-1 text-[11px] text-muted-foreground desktop:contents">
+                            <div
+                              title={employmentPeriod}
+                              className="min-w-0 break-words [overflow-wrap:anywhere] desktop:col-start-2 desktop:row-start-1 desktop:truncate"
+                            >
+                              <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground desktop:block">
+                                Thời gian
+                              </span>
+                              {employmentPeriod}
+                            </div>
+                            <div
+                              title={mainHouseName}
+                              className="hidden min-w-0 desktop:col-start-3 desktop:row-start-1 desktop:block desktop:truncate"
+                            >
+                              <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                Nhà chính
+                              </span>
+                              {mainHouseName}
+                            </div>
+                            <div
+                              title={recruiterName}
+                              className="min-w-0 break-words [overflow-wrap:anywhere] desktop:col-start-4 desktop:row-start-1 desktop:truncate"
+                            >
+                              <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground desktop:block">
+                                Người tuyển
+                              </span>
+                              <span className="desktop:hidden">Người tuyển: </span>
+                              {recruiterName}
+                            </div>
+                            {h.note && (
+                              <div
+                                title={h.note}
+                                className="min-w-0 break-words [overflow-wrap:anywhere] desktop:col-start-5 desktop:row-start-1 desktop:truncate"
+                              >
+                                <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground desktop:block">
+                                  Ghi chú
+                                </span>
+                                {h.note}
+                              </div>
+                            )}
+                          </div>
+                        </Card>
+                      );
+                    })
+                  )}
+                </div>
+
+                {canViewActionLogs && (
+                  <StaffActionHistoryPanel
+                    workerId={user.id}
+                    logs={actionLogs}
+                    loading={actionLogsLoading}
+                    error={actionLogsError}
+                    className="desktop:col-start-2 desktop:row-start-1 desktop:sticky desktop:top-0"
+                  />
                 )}
               </div>
             </div>
@@ -1931,7 +2048,12 @@ export function WorkerEmploymentDrawer({
               {user.full_name || user.username || "Người lao động"}
             </DialogDescription>
           </DialogHeader>
-          <CccdManager targetUser={user} actor={actor} onUpdated={onDataChanged} readOnly />
+          <CccdManager
+            targetUser={user}
+            actor={actor}
+            onUpdated={() => void notifyDataChanged()}
+            readOnly
+          />
         </DialogContent>
       </Dialog>
 

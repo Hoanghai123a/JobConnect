@@ -1,7 +1,15 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import * as XLSX from "xlsx";
-import { Building2, ExternalLink, FileInput, FileSpreadsheet, Upload, UsersRound, Workflow } from "lucide-react";
+import {
+  Building2,
+  ExternalLink,
+  FileInput,
+  FileSpreadsheet,
+  Upload,
+  UsersRound,
+  Workflow,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
@@ -88,7 +96,15 @@ function AdminImportsPage() {
           },
         ],
       },
-      { "Cập nhật nhanh": ["Ngày vào hiện tại", "Ngày vào mới", "Ngày nghỉ", "Ngày sinh", "Ngày cấp CCCD"] },
+      {
+        "Cập nhật nhanh": [
+          "Ngày vào hiện tại",
+          "Ngày vào mới",
+          "Ngày nghỉ",
+          "Ngày sinh",
+          "Ngày cấp CCCD",
+        ],
+      },
     );
   };
 
@@ -105,7 +121,9 @@ function AdminImportsPage() {
         pb.collection("users").getFullList<UserRecord>({ sort: "full_name,username" }),
         fetchEmploymentHistories(),
       ]);
-      const factoryByName = new Map(factoryRows.map((factory) => [accountIdentityKey(factory.name), factory]));
+      const factoryByName = new Map(
+        factoryRows.map((factory) => [accountIdentityKey(factory.name), factory]),
+      );
       const factoryByCode = new Map(
         factoryRows
           .filter((factory) => factory.code)
@@ -113,7 +131,9 @@ function AdminImportsPage() {
       );
       const userById = new Map(allUsers.map((user) => [user.id, user]));
       const userByUsername = new Map(
-        allUsers.filter((user) => user.username).map((user) => [accountIdentityKey(user.username), user]),
+        allUsers
+          .filter((user) => user.username)
+          .map((user) => [accountIdentityKey(user.username), user]),
       );
       const usersByPhone = new Map<string, UserRecord[]>();
       for (const user of allUsers) {
@@ -224,7 +244,11 @@ function AdminImportsPage() {
             continue;
           }
           if (!currentFactoryName && !currentFactoryCode) {
-            addFailedRow(row, rowNumber, "Thiếu current_factory_name hoặc current_factory_code để xác định lịch sử");
+            addFailedRow(
+              row,
+              rowNumber,
+              "Thiếu current_factory_name hoặc current_factory_code để xác định lịch sử",
+            );
             continue;
           }
           if (String(currentJoinRaw).trim() && !currentJoinDate) {
@@ -241,7 +265,11 @@ function AdminImportsPage() {
           else {
             const phoneMatches = usersByPhone.get(accountIdentityKey(lookupPhone)) || [];
             if (phoneMatches.length > 1) {
-              addFailedRow(row, rowNumber, `Tìm thấy ${phoneMatches.length} NLĐ trùng lookup_phone; hãy dùng user_id hoặc username`);
+              addFailedRow(
+                row,
+                rowNumber,
+                `Tìm thấy ${phoneMatches.length} NLĐ trùng lookup_phone; hãy dùng user_id hoặc username`,
+              );
               continue;
             }
             targetUser = phoneMatches[0];
@@ -267,7 +295,11 @@ function AdminImportsPage() {
               history.join_date === currentJoinDate,
           );
           if (matches.length === 0) {
-            addFailedRow(row, rowNumber, "Không tìm thấy lịch sử theo NLĐ, nhà máy hiện tại và ngày vào hiện tại");
+            addFailedRow(
+              row,
+              rowNumber,
+              "Không tìm thấy lịch sử theo NLĐ, nhà máy hiện tại và ngày vào hiện tại",
+            );
             continue;
           }
           if (matches.length > 1) {
@@ -360,7 +392,11 @@ function AdminImportsPage() {
         }
         if (joinDate) historyPayload.join_date = joinDate;
         if (leaveDate) historyPayload.leave_date = leaveDate;
-        if (status) historyPayload.status = pickHistoryStatus(status, String(historyPayload.leave_date ?? target.leave_date ?? ""));
+        if (status)
+          historyPayload.status = pickHistoryStatus(
+            status,
+            String(historyPayload.leave_date ?? target.leave_date ?? ""),
+          );
         if (recruiterUsername) {
           const recruiter = staffByUsername.get(accountIdentityKey(recruiterUsername));
           if (!recruiter) {
@@ -386,7 +422,11 @@ function AdminImportsPage() {
               pickHistoryStatus(history.status || "", history.leave_date || "") === "working",
           );
           if (anotherWorkingHistory) {
-            addFailedRow(row, rowNumber, "Xung đột hai lịch sử đang làm; cần kết thúc lịch sử còn lại trước");
+            addFailedRow(
+              row,
+              rowNumber,
+              "Xung đột hai lịch sử đang làm; cần kết thúc lịch sử còn lại trước",
+            );
             continue;
           }
         }
@@ -427,7 +467,14 @@ function AdminImportsPage() {
         actor: currentUser,
         targetCollection: "employment_histories",
         action: "import",
-        after: { created: 0, updated, skipped, failed, file: file.name, exported_errors: failedRows.length },
+        after: {
+          created: 0,
+          updated,
+          skipped,
+          failed,
+          file: file.name,
+          exported_errors: failedRows.length,
+        },
         note: "Admin cập nhật nhanh lịch sử đi làm/NLĐ từ Excel",
       });
     } catch (error: unknown) {
@@ -438,30 +485,32 @@ function AdminImportsPage() {
   };
 
   const downloadHistoriesTemplate = () => {
-    exportToExcel("mau_import_lich_su_di_lam", {
-      "Lịch sử đi làm": [
-        {
-          "Mã tài khoản (UID)": "",
-          "Tên đăng nhập": "nguyenvana",
-          "Tên nhà máy": "Nhà máy A",
-          "Mã nhà máy": "",
-          "Nhà chính": "Nhà chính HN",
-          "Mã nhân viên": "NM001",
-          "Họ tên tại nhà máy": "Nguyễn Văn A",
-          "CCCD tại nhà máy": "012345678901",
-          "Ngày sinh": "01/01/2000",
-          "Địa chỉ thường trú": "Hà Nội",
-          "Ngày cấp CCCD": "01/01/2020",
-          "Mã số thuế": "0123456789",
-          "Người tuyển": "staff01",
-          "Ngày vào làm": "01/05/2026",
-          "Ngày nghỉ": "",
-          "Trạng thái": "Đang làm",
-          "Ghi chú": "Nhập mẫu",
-        },
-      ],
-    },
-    { "Lịch sử đi làm": ["Ngày sinh", "Ngày cấp CCCD", "Ngày vào làm", "Ngày nghỉ"] }
+    exportToExcel(
+      "mau_import_lich_su_di_lam",
+      {
+        "Lịch sử đi làm": [
+          {
+            "Mã tài khoản (UID)": "",
+            "Tên đăng nhập": "nguyenvana",
+            "Tên nhà máy": "Nhà máy A",
+            "Mã nhà máy": "",
+            "Nhà chính": "Nhà chính HN",
+            "Mã nhân viên": "NM001",
+            "Họ tên tại nhà máy": "Nguyễn Văn A",
+            "CCCD tại nhà máy": "012345678901",
+            "Ngày sinh": "01/01/2000",
+            "Địa chỉ thường trú": "Hà Nội",
+            "Ngày cấp CCCD": "01/01/2020",
+            "Mã số thuế": "0123456789",
+            "Người tuyển": "staff01",
+            "Ngày vào làm": "01/05/2026",
+            "Ngày nghỉ": "",
+            "Trạng thái": "Đang làm",
+            "Ghi chú": "Nhập mẫu",
+          },
+        ],
+      },
+      { "Lịch sử đi làm": ["Ngày sinh", "Ngày cấp CCCD", "Ngày vào làm", "Ngày nghỉ"] },
     );
   };
 
@@ -520,7 +569,9 @@ function AdminImportsPage() {
           "Tên đăng nhập": pickValue(row, ["username", "Tên đăng nhập"]),
           "Tên nhà máy": pickValue(row, ["Tên nhà máy", "factory_name", "Nhà máy"]),
           "Mã nhà máy": pickValue(row, ["factory_code", "Mã nhà máy"]),
-          "Ngày vào làm": formatDateOnly((row["Ngày vào làm"] ?? row["join_date"] ?? row["Ngày vào"]) as string),
+          "Ngày vào làm": formatDateOnly(
+            (row["Ngày vào làm"] ?? row["join_date"] ?? row["Ngày vào"]) as string,
+          ),
           "Ngày nghỉ": formatDateOnly((row["leave_date"] ?? row["Ngày nghỉ"]) as string),
           "Họ tên tại nhà máy": pickValue(row, ["worker_name_snapshot", "Họ tên tại nhà máy"]),
           "CCCD tại nhà máy": pickValue(row, ["worker_cccd_snapshot", "CCCD tại nhà máy"]),
@@ -560,9 +611,7 @@ function AdminImportsPage() {
           "Địa chỉ thường trú",
           "hometown_snapshot",
         ]);
-        const cccdIssueDate = normalizeExcelDate(
-          row["cccd_issue_date"] ?? row["Ngày cấp CCCD"],
-        );
+        const cccdIssueDate = normalizeExcelDate(row["cccd_issue_date"] ?? row["Ngày cấp CCCD"]);
         const workerTaxCode = pickValue(row, ["worker_tax_code_snapshot", "Mã số thuế", "MST"]);
         const recruiterUsername = pickValue(row, ["recruiter_username", "Người tuyển"]);
         const joinDate = normalizeExcelDate(
@@ -680,7 +729,20 @@ function AdminImportsPage() {
       setLastResult(summary);
       toast.success(summary);
       if (failedRows.length) {
-        exportToExcel(`lich_su_di_lam_loi_${Date.now()}`, { "Dòng lỗi": failedRows }, { "Dòng lỗi": ["Ngày sinh", "Ngày cấp CCCD", "Ngày vào làm", "Ngày nghỉ", "join_date", "leave_date"] });
+        exportToExcel(
+          `lich_su_di_lam_loi_${Date.now()}`,
+          { "Dòng lỗi": failedRows },
+          {
+            "Dòng lỗi": [
+              "Ngày sinh",
+              "Ngày cấp CCCD",
+              "Ngày vào làm",
+              "Ngày nghỉ",
+              "join_date",
+              "leave_date",
+            ],
+          },
+        );
         toast.warning("Đã xuất file các dòng lịch sử đi làm bị lỗi");
       }
       await createStaffActionLog({
@@ -715,6 +777,7 @@ function AdminImportsPage() {
             "Ngân hàng": "VCB",
             "Số tài khoản": "1234567890",
             "Tên tài khoản": "NGUYEN VAN A",
+            "Ghi chú STK": "Tài khoản nhận lương",
           },
         ],
       },
@@ -740,7 +803,9 @@ function AdminImportsPage() {
       const usernameKeys = new Set(
         existingUsers.map((user) => accountIdentityKey(user.username)).filter(Boolean),
       );
-      const uidKeys = new Set(existingUsers.map((user) => accountIdentityKey(user.uid)).filter(Boolean));
+      const uidKeys = new Set(
+        existingUsers.map((user) => accountIdentityKey(user.uid)).filter(Boolean),
+      );
       const failedRows: Array<Record<string, unknown>> = [];
       let created = 0;
       let failed = 0;
@@ -761,6 +826,11 @@ function AdminImportsPage() {
         const bankName = resolveBankName(pickValue(row, ["Ngân hàng", "bank_name"]));
         const bankAccountNumber = pickValue(row, ["Số tài khoản", "Số TK", "bank_account_number"]);
         const bankAccountName = pickValue(row, ["Tên tài khoản", "Tên TK", "bank_account_name"]);
+        const bankAccountNote = pickValue(row, [
+          "Ghi chú STK",
+          "Ghi chú tài khoản",
+          "bank_account_note",
+        ]);
 
         const addFailedRow = (reason: string) => {
           failed++;
@@ -804,6 +874,7 @@ function AdminImportsPage() {
             bank_name: bankName,
             bank_account_number: bankAccountNumber,
             bank_account_name: bankAccountName,
+            bank_account_note: bankAccountNote,
             role: "user",
             approvalStatus: "approved",
             approved: "true",
@@ -814,9 +885,7 @@ function AdminImportsPage() {
           uidKeys.add(accountIdentityKey(uid));
           created++;
         } catch (error: unknown) {
-          addFailedRow(
-            error instanceof Error ? error.message : "Lỗi PocketBase khi tạo tài khoản",
-          );
+          addFailedRow(error instanceof Error ? error.message : "Lỗi PocketBase khi tạo tài khoản");
         }
       }
 
@@ -856,17 +925,23 @@ function AdminImportsPage() {
             <FileSpreadsheet className="h-4 w-4 text-primary" /> Import lịch sử đi làm đầy đủ
           </div>
           <div className="text-sm text-muted-foreground">
-            Dùng UID hoặc tên đăng nhập của tài khoản đã tồn tại để tạo mới/cập nhật lịch sử, kèm nhà máy,
-            ngày vào và thông tin snapshot tại nhà máy.
+            Dùng UID hoặc tên đăng nhập của tài khoản đã tồn tại để tạo mới/cập nhật lịch sử, kèm
+            nhà máy, ngày vào và thông tin snapshot tại nhà máy.
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="rounded-full" onClick={downloadHistoriesTemplate}>
               <FileSpreadsheet className="h-4 w-4" /> Tải file mẫu
             </Button>
             <label className="inline-flex">
-              <input type="file" accept=".xlsx,.xls" className="hidden" onChange={importHistories} />
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={importHistories}
+              />
               <span className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground">
-                <Upload className="h-4 w-4" /> {importingHistories ? "Đang nhập..." : "Chọn file lịch sử"}
+                <Upload className="h-4 w-4" />{" "}
+                {importingHistories ? "Đang nhập..." : "Chọn file lịch sử"}
               </span>
             </label>
           </div>
@@ -880,16 +955,23 @@ function AdminImportsPage() {
           <div className="text-sm text-muted-foreground">
             Chỉ điền các cột cần sửa. Ưu tiên <code>Mã lịch sử (UID)</code> đang hiển thị trên bản
             ghi; hệ thống vẫn chấp nhận PocketBase record ID. Nếu không có, dùng thông tin NLĐ kèm
-            nhà máy và ngày vào hiện tại. Ô để trống sẽ giữ nguyên dữ liệu; chỉ collection lịch sử được cập nhật.
+            nhà máy và ngày vào hiện tại. Ô để trống sẽ giữ nguyên dữ liệu; chỉ collection lịch sử
+            được cập nhật.
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="rounded-full" onClick={downloadBulkEditTemplate}>
               <FileSpreadsheet className="h-4 w-4" /> Tải file mẫu
             </Button>
             <label className="inline-flex">
-              <input type="file" accept=".xlsx,.xls" className="hidden" onChange={bulkEditHistories} />
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={bulkEditHistories}
+              />
               <span className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground">
-                <Upload className="h-4 w-4" /> {importingBulkEdit ? "Đang xử lý..." : "Chọn file cập nhật"}
+                <Upload className="h-4 w-4" />{" "}
+                {importingBulkEdit ? "Đang xử lý..." : "Chọn file cập nhật"}
               </span>
             </label>
           </div>
@@ -901,7 +983,8 @@ function AdminImportsPage() {
             <UsersRound className="h-4 w-4 text-primary" /> Import tài khoản NLĐ
           </div>
           <div className="text-sm text-muted-foreground">
-            Tạo mới tài khoản NLĐ từ Excel. File lỗi sẽ được xuất lại, kèm số dòng và nguyên nhân cụ thể.
+            Tạo mới tài khoản NLĐ từ Excel. File lỗi sẽ được xuất lại, kèm số dòng và nguyên nhân cụ
+            thể.
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="rounded-full" onClick={downloadAccountsTemplate}>
@@ -910,7 +993,8 @@ function AdminImportsPage() {
             <label className="inline-flex">
               <input type="file" accept=".xlsx,.xls" className="hidden" onChange={importAccounts} />
               <span className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground">
-                <Upload className="h-4 w-4" /> {importingAccounts ? "Đang nhập..." : "Chọn file tài khoản"}
+                <Upload className="h-4 w-4" />{" "}
+                {importingAccounts ? "Đang nhập..." : "Chọn file tài khoản"}
               </span>
             </label>
           </div>
@@ -922,7 +1006,8 @@ function AdminImportsPage() {
             <Building2 className="h-4 w-4 text-primary" /> Check công và bảng lương
           </div>
           <div className="text-sm text-muted-foreground">
-            Các file chấm công và bảng lương có luồng nghiệp vụ riêng, tiếp tục xử lý tại màn hình Check công/lương.
+            Các file chấm công và bảng lương có luồng nghiệp vụ riêng, tiếp tục xử lý tại màn hình
+            Check công/lương.
           </div>
           <Button asChild variant="outline" className="rounded-full">
             <Link to="/check-attendance">
@@ -939,7 +1024,9 @@ function AdminImportsPage() {
             <li>- Dòng lỗi không làm dừng các dòng hợp lệ; hệ thống xuất lại file để sửa.</li>
             <li>- Cập nhật nhanh không xóa dữ liệu bằng ô trống và không tự tạo lịch sử mới.</li>
             <li>- Cập nhật nhanh chỉ ghi vào lịch sử; không thay đổi dữ liệu hồ sơ NLĐ.</li>
-            <li>- Mọi lần import đều ghi Nhật ký thao tác hệ thống cùng tên file và kết quả tổng hợp.</li>
+            <li>
+              - Mọi lần import đều ghi Nhật ký thao tác hệ thống cùng tên file và kết quả tổng hợp.
+            </li>
           </ul>
         </Card>
       </div>
@@ -968,14 +1055,19 @@ function normalizeExcelDate(value: unknown) {
   return normalizeDate(value);
 }
 
-
 function ImportResult({ children }: { children: ReactNode }) {
-  return <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm text-primary">{children}</div>;
+  return (
+    <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm text-primary">
+      {children}
+    </div>
+  );
 }
 
 async function syncWorkersFromLatestHistories(userIds: Iterable<string>) {
   for (const userId of userIds) {
-    const histories = (await fetchEmploymentHistories([userId])).filter((history) => history.user === userId);
+    const histories = (await fetchEmploymentHistories([userId])).filter(
+      (history) => history.user === userId,
+    );
     const latest = getLatestEmploymentHistory(histories);
     await updateUserAndCache(userId, {
       company: latest?.expand?.factory?.name || "",

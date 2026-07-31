@@ -269,6 +269,7 @@ function UserProfileForm() {
       bank_name: user?.bank_name || "",
       bank_account_number: user?.bank_account_number || "",
       bank_account_name: user?.bank_account_name || "",
+      bank_account_note: user?.bank_account_note || "",
     });
     setAvatarFile(null);
     setAvatarPreview(user?.avatar ? fileUrl(user, user.avatar) : "");
@@ -286,6 +287,7 @@ function UserProfileForm() {
             bank_name: form.bank_name || "",
             bank_account_number: form.bank_account_number || "",
             bank_account_name: form.bank_account_name || "",
+            bank_account_note: form.bank_account_note || "",
           }
         : {
             full_name: form.full_name || "",
@@ -294,6 +296,7 @@ function UserProfileForm() {
             bank_name: form.bank_name || "",
             bank_account_number: form.bank_account_number || "",
             bank_account_name: form.bank_account_name || "",
+            bank_account_note: form.bank_account_note || "",
           };
 
       if (avatarFile || removeAvatar) {
@@ -436,6 +439,12 @@ function UserProfileForm() {
           value={form.bank_account_name}
           onChange={(v) => setForm({ ...form, bank_account_name: v })}
         />
+        <TextField
+          label="Ghi chú STK"
+          value={form.bank_account_note}
+          onChange={(v) => setForm({ ...form, bank_account_note: v })}
+          placeholder="Ghi chú thêm về tài khoản"
+        />
       </Section>
 
       <Button onClick={save} disabled={saving} className="w-full">
@@ -537,6 +546,7 @@ function AdminUsersPanel() {
     bank_name: "",
     bank_account_number: "",
     bank_account_name: "",
+    bank_account_note: "",
   });
   const [detailBankSaving, setDetailBankSaving] = useState(false);
   const [detailProfileEditing, setDetailProfileEditing] = useState(false);
@@ -617,6 +627,7 @@ function AdminUsersPanel() {
     "Ngân hàng": u.bank_name || "",
     "Số tài khoản": u.bank_account_number || "",
     "Tên tài khoản": u.bank_account_name || "",
+    "Ghi chú STK": u.bank_account_note || "",
     "Vai trò": ROLE_LABELS[(u.role || "user") as Role],
     "Ngày tạo": formatDateOnly(u.created),
     "Trạng thái": isUserApproved(u) ? "Hoạt động" : "Vô hiệu hoá",
@@ -886,6 +897,7 @@ function AdminUsersPanel() {
       bank_name: user.bank_name || "",
       bank_account_number: user.bank_account_number || "",
       bank_account_name: user.bank_account_name || "",
+      bank_account_note: user.bank_account_note || "",
     });
     setDetailProfileForm({
       full_name: user.full_name || "",
@@ -923,6 +935,7 @@ function AdminUsersPanel() {
       bank_name: detailUser.bank_name || "",
       bank_account_number: detailUser.bank_account_number || "",
       bank_account_name: detailUser.bank_account_name || "",
+      bank_account_note: detailUser.bank_account_note || "",
     });
     setDetailBankEditing(true);
   };
@@ -942,6 +955,7 @@ function AdminUsersPanel() {
           bank_name: detailUser.bank_name || "",
           bank_account_number: detailUser.bank_account_number || "",
           bank_account_name: detailUser.bank_account_name || "",
+          bank_account_note: detailUser.bank_account_note || "",
         },
         after: detailBankForm,
         note: "Admin cập nhật STK ngân hàng cho NLĐ",
@@ -1138,6 +1152,7 @@ function AdminUsersPanel() {
         "Ngân hàng": "VCB",
         "Số tài khoản": "1234567890",
         "Tên tài khoản": "NGUYEN VAN A",
+        "Ghi chú STK": "Tài khoản nhận lương",
       },
       {
         "Họ tên": "Trần Thị B",
@@ -1152,6 +1167,7 @@ function AdminUsersPanel() {
         "Ngân hàng": "TCB",
         "Số tài khoản": "0987654321",
         "Tên tài khoản": "TRAN THI B",
+        "Ghi chú STK": "",
       },
     ];
     exportToExcel("mau_nhap_tai_khoan", { "Tài khoản": sample }, { "Tài khoản": ["Ngày sinh"] });
@@ -1200,6 +1216,9 @@ function AdminUsersPanel() {
         const bank_account_name = String(
           r["Tên tài khoản"] || r["Tên TK"] || r["bank_account_name"] || "",
         ).trim();
+        const bank_account_note = String(
+          r["Ghi chú STK"] || r["Ghi chú tài khoản"] || r["bank_account_note"] || "",
+        ).trim();
         if (!full_name || !phone || !normalizedUsername || !password) {
           fail++;
           failedRows.push({
@@ -1241,6 +1260,7 @@ function AdminUsersPanel() {
             bank_name,
             bank_account_number,
             bank_account_name,
+            bank_account_note,
             role: "user",
             approvalStatus: "approved",
             status: "active",
@@ -1987,6 +2007,10 @@ function AdminUsersPanel() {
                         <DetailField label="Ngân hàng" value={detailUser.bank_name} />
                         <DetailField label="Số tài khoản" value={detailUser.bank_account_number} />
                         <DetailField label="Tên tài khoản" value={detailUser.bank_account_name} />
+                        <DetailField
+                          label="Ghi chú STK"
+                          value={detailUser.bank_account_note || "—"}
+                        />
                       </div>
                     </DetailSection>
 
@@ -2189,6 +2213,20 @@ function AdminUsersPanel() {
                   }))
                 }
                 placeholder="Nhập tên chủ tài khoản"
+                className={DETAIL_EDITOR_CONTROL_CLASS}
+              />
+            </DetailEditorField>
+            <DetailEditorField label="Ghi chú STK">
+              <Textarea
+                value={detailBankForm.bank_account_note}
+                onChange={(e) =>
+                  setDetailBankForm((current) => ({
+                    ...current,
+                    bank_account_note: e.target.value,
+                  }))
+                }
+                placeholder="Ghi chú thêm về tài khoản"
+                rows={2}
                 className={DETAIL_EDITOR_CONTROL_CLASS}
               />
             </DetailEditorField>

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
   Drawer,
@@ -53,6 +54,7 @@ function AdminAccountsPage() {
     bank_name: "",
     bank_account_number: "",
     bank_account_name: "",
+    bank_account_note: "",
   });
   const [profileForm, setProfileForm] = useState({
     full_name: "",
@@ -95,6 +97,7 @@ function AdminAccountsPage() {
       bank_name: user.bank_name || "",
       bank_account_number: user.bank_account_number || "",
       bank_account_name: user.bank_account_name || "",
+      bank_account_note: user.bank_account_note || "",
     });
     setProfileForm({
       full_name: user.full_name || "",
@@ -108,9 +111,7 @@ function AdminAccountsPage() {
     setSaving(true);
     try {
       await pb.collection("users").update(detailUser.id, bankForm);
-      setUsers((prev) =>
-        prev.map((u) => (u.id === detailUser.id ? { ...u, ...bankForm } : u)),
-      );
+      setUsers((prev) => prev.map((u) => (u.id === detailUser.id ? { ...u, ...bankForm } : u)));
       setDetailUser((prev) => (prev ? { ...prev, ...bankForm } : prev));
       toast.success("Đã cập nhật tài khoản ngân hàng");
     } catch (error: any) {
@@ -150,9 +151,7 @@ function AdminAccountsPage() {
         after: payload,
         note: "Admin cập nhật thông tin cá nhân",
       });
-      setUsers((prev) =>
-        prev.map((u) => (u.id === detailUser.id ? { ...u, ...payload } : u)),
-      );
+      setUsers((prev) => prev.map((u) => (u.id === detailUser.id ? { ...u, ...payload } : u)));
       setDetailUser((prev) => (prev ? { ...prev, ...payload } : prev));
       toast.success("Đã cập nhật thông tin cá nhân");
     } catch (error: any) {
@@ -243,13 +242,13 @@ function AdminAccountsPage() {
                     {item.bank_account_number && (
                       <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
                         <Landmark className="h-3 w-3" />
-                        <span>{item.bank_name || "NH"} · {item.bank_account_number}</span>
+                        <span>
+                          {item.bank_name || "NH"} · {item.bank_account_number}
+                        </span>
                       </div>
                     )}
                   </div>
-                  <StatusChip tone="neutral">
-                    Người dùng
-                  </StatusChip>
+                  <StatusChip tone="neutral">Người dùng</StatusChip>
                 </div>
               </Card>
             );
@@ -279,9 +278,7 @@ function AdminAccountsPage() {
                     <Label className="text-xs">Họ tên</Label>
                     <Input
                       value={profileForm.full_name}
-                      onChange={(e) =>
-                        setProfileForm((c) => ({ ...c, full_name: e.target.value }))
-                      }
+                      onChange={(e) => setProfileForm((c) => ({ ...c, full_name: e.target.value }))}
                       placeholder="Nhập họ tên"
                       className="rounded-xl"
                     />
@@ -336,9 +333,7 @@ function AdminAccountsPage() {
                     <Label className="text-xs">Ngân hàng</Label>
                     <Select
                       value={bankForm.bank_name}
-                      onValueChange={(value) =>
-                        setBankForm((c) => ({ ...c, bank_name: value }))
-                      }
+                      onValueChange={(value) => setBankForm((c) => ({ ...c, bank_name: value }))}
                     >
                       <SelectTrigger className="rounded-xl">
                         <SelectValue placeholder="Chọn ngân hàng" />
@@ -378,16 +373,24 @@ function AdminAccountsPage() {
                       className="rounded-xl"
                     />
                   </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs">Ghi chú STK</Label>
+                    <Textarea
+                      value={bankForm.bank_account_note}
+                      onChange={(e) =>
+                        setBankForm((c) => ({ ...c, bank_account_note: e.target.value }))
+                      }
+                      placeholder="Ghi chú thêm về tài khoản"
+                      rows={2}
+                      className="rounded-xl"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
           )}
           <DrawerFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDetailUser(null)}
-              className="rounded-xl"
-            >
+            <Button variant="outline" onClick={() => setDetailUser(null)} className="rounded-xl">
               Đóng
             </Button>
             <Button onClick={saveBankUpdate} disabled={saving} className="rounded-xl">

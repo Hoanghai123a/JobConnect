@@ -104,11 +104,7 @@ async function main() {
     for (const [field, value] of Object.entries(next)) {
       if (!current[field] && value) payload[field] = value;
     }
-    if (
-      hasHometownSnapshot &&
-      !text(history.hometown_snapshot) &&
-      next.worker_address_snapshot
-    ) {
+    if (hasHometownSnapshot && !text(history.hometown_snapshot) && next.worker_address_snapshot) {
       payload.hometown_snapshot = next.worker_address_snapshot;
     }
 

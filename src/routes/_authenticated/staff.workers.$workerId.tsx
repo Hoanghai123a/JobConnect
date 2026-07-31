@@ -202,6 +202,7 @@ function StaffWorkerDetailPage() {
     bank_name: "",
     bank_account_number: "",
     bank_account_name: "",
+    bank_account_note: "",
   });
   const [historyForm, setHistoryForm] = useState({
     employee_code: "",
@@ -311,6 +312,7 @@ function StaffWorkerDetailPage() {
           bank_name: userRecord?.bank_name || "",
           bank_account_number: userRecord?.bank_account_number || "",
           bank_account_name: userRecord?.bank_account_name || "",
+          bank_account_note: userRecord?.bank_account_note || "",
         });
       })
       .finally(() => {
@@ -429,29 +431,30 @@ function StaffWorkerDetailPage() {
       return;
     }
 
-    exportToExcel(`lich_su_lao_dong_${workerId}_${Date.now()}`, {
-      "Lịch sử đi làm": histories.map((history, index) => ({
-        STT: index + 1,
-        "Nhà máy": history.expand?.factory?.name || "",
-        "Mã nhân viên": history.employee_code || "",
-        "Họ tên tại nhà máy": history.worker_name_snapshot,
-        CCCD: history.worker_cccd_snapshot,
-        "Ngày sinh": formatDateOnly(history.worker_date_of_birth_snapshot),
-        "Địa chỉ thường trú":
-          history.worker_address_snapshot || history.hometown_snapshot || "",
-        "Mã số thuế": history.worker_tax_code_snapshot || "",
-        "Ngày cấp CCCD": formatDateOnly(history.cccd_issue_date),
-        "Người tuyển":
-          history.expand?.recruiter_staff?.full_name ||
-          history.expand?.recruiter_staff?.username ||
-          "",
-        "Ngày vào": formatDateOnly(history.join_date),
-        "Ngày nghỉ": formatDateOnly(history.leave_date),
-        "Trạng thái": history.status === "working" ? "Đang làm" : "Đã nghỉ",
-        "Ghi chú": history.note || "",
-      })),
-    },
-    { "Lịch sử đi làm": ["Ngày cấp CCCD", "Ngày vào", "Ngày nghỉ"] }
+    exportToExcel(
+      `lich_su_lao_dong_${workerId}_${Date.now()}`,
+      {
+        "Lịch sử đi làm": histories.map((history, index) => ({
+          STT: index + 1,
+          "Nhà máy": history.expand?.factory?.name || "",
+          "Mã nhân viên": history.employee_code || "",
+          "Họ tên tại nhà máy": history.worker_name_snapshot,
+          CCCD: history.worker_cccd_snapshot,
+          "Ngày sinh": formatDateOnly(history.worker_date_of_birth_snapshot),
+          "Địa chỉ thường trú": history.worker_address_snapshot || history.hometown_snapshot || "",
+          "Mã số thuế": history.worker_tax_code_snapshot || "",
+          "Ngày cấp CCCD": formatDateOnly(history.cccd_issue_date),
+          "Người tuyển":
+            history.expand?.recruiter_staff?.full_name ||
+            history.expand?.recruiter_staff?.username ||
+            "",
+          "Ngày vào": formatDateOnly(history.join_date),
+          "Ngày nghỉ": formatDateOnly(history.leave_date),
+          "Trạng thái": history.status === "working" ? "Đang làm" : "Đã nghỉ",
+          "Ghi chú": history.note || "",
+        })),
+      },
+      { "Lịch sử đi làm": ["Ngày cấp CCCD", "Ngày vào", "Ngày nghỉ"] },
     );
 
     toast.success("Đã xuất Excel");
@@ -492,8 +495,7 @@ function StaffWorkerDetailPage() {
         bank_name: advancePayoutMethod === "cash" ? "" : workerUser.bank_name || "",
         bank_account_number:
           advancePayoutMethod === "cash" ? "" : workerUser.bank_account_number || "",
-        bank_account_name:
-          advancePayoutMethod === "cash" ? "" : workerUser.bank_account_name || "",
+        bank_account_name: advancePayoutMethod === "cash" ? "" : workerUser.bank_account_name || "",
         payout_method: advancePayoutMethod,
         amount,
         reason: advanceReason.trim(),
@@ -519,9 +521,7 @@ function StaffWorkerDetailPage() {
       setAdvancePayoutMethod("bank_transfer");
       toast.success("Đã gửi yêu cầu ứng lương");
     } catch (error: unknown) {
-      toast.error(
-        error instanceof Error ? error.message : "Không thể tạo yêu cầu ứng tiền",
-      );
+      toast.error(error instanceof Error ? error.message : "Không thể tạo yêu cầu ứng tiền");
     }
   };
 
@@ -576,9 +576,7 @@ function StaffWorkerDetailPage() {
     if (!joinForm.main_house) return toast.warning("Chọn nhà chính");
     const missingSnapshotFields = getMissingEmploymentSnapshotFields(joinForm);
     if (missingSnapshotFields.length) {
-      toast.warning(
-        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
-      );
+      toast.warning(`Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`);
       return;
     }
     if (!canSubmitJoinForWorker) {
@@ -679,6 +677,7 @@ function StaffWorkerDetailPage() {
       bank_name: workerUser.bank_name || "",
       bank_account_number: workerUser.bank_account_number || "",
       bank_account_name: workerUser.bank_account_name || "",
+      bank_account_note: workerUser.bank_account_note || "",
     };
 
     const payload = {
@@ -758,9 +757,7 @@ function StaffWorkerDetailPage() {
     if (!oldHistoryForm.leave_date) return toast.warning("Chọn ngày nghỉ");
     const missingSnapshotFields = getMissingEmploymentSnapshotFields(oldHistoryForm);
     if (missingSnapshotFields.length) {
-      toast.warning(
-        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
-      );
+      toast.warning(`Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`);
       return;
     }
     if (oldHistoryForm.leave_date < oldHistoryForm.join_date) {
@@ -858,9 +855,7 @@ function StaffWorkerDetailPage() {
     }
     const missingSnapshotFields = getMissingEmploymentSnapshotFields(historyForm);
     if (missingSnapshotFields.length) {
-      toast.warning(
-        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
-      );
+      toast.warning(`Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`);
       return;
     }
     const before = { ...editingHistory };
@@ -1227,7 +1222,8 @@ function StaffWorkerDetailPage() {
                   <span className="font-semibold">{advancePolicy.factoryName}</span>
                 </div>
                 <div className="mt-1 text-muted-foreground">
-                  Hạn mức {advancePolicy.limit.toLocaleString("vi-VN")} đ · Còn lại {advancePolicy.available.toLocaleString("vi-VN")} đ
+                  Hạn mức {advancePolicy.limit.toLocaleString("vi-VN")} đ · Còn lại{" "}
+                  {advancePolicy.available.toLocaleString("vi-VN")} đ
                 </div>
               </div>
             )}
@@ -1262,7 +1258,11 @@ function StaffWorkerDetailPage() {
               >
                 Đóng
               </Button>
-              <Button type="submit" className="rounded-xl" disabled={advancePolicyLoading || !advancePolicy || Boolean(advancePolicyError)}>
+              <Button
+                type="submit"
+                className="rounded-xl"
+                disabled={advancePolicyLoading || !advancePolicy || Boolean(advancePolicyError)}
+              >
                 Gửi yêu cầu
               </Button>
             </DialogFooter>
@@ -1514,6 +1514,17 @@ function StaffWorkerDetailPage() {
                 className="rounded-xl"
               />
             </FormField>
+            <FormField label="Ghi chú STK">
+              <Textarea
+                value={bankForm.bank_account_note}
+                onChange={(event) =>
+                  setBankForm((current) => ({ ...current, bank_account_note: event.target.value }))
+                }
+                placeholder="Ghi chú thêm về tài khoản"
+                rows={2}
+                className="rounded-xl"
+              />
+            </FormField>
             <DialogFooter>
               <Button
                 type="button"
@@ -1629,9 +1640,7 @@ function StaffWorkerDetailPage() {
               <div className="text-sm font-semibold">Thông tin CCCD</div>
               <JoinCccdSection
                 value={oldHistoryForm}
-                onChange={(changes) =>
-                  setOldHistoryForm((current) => ({ ...current, ...changes }))
-                }
+                onChange={(changes) => setOldHistoryForm((current) => ({ ...current, ...changes }))}
                 frontFile={oldHistoryCccdFront}
                 backFile={oldHistoryCccdBack}
                 onFrontFileChange={setOldHistoryCccdFront}
@@ -1736,9 +1745,7 @@ function StaffWorkerDetailPage() {
               <div className="text-sm font-semibold">Thông tin CCCD</div>
               <JoinCccdSection
                 value={historyForm}
-                onChange={(changes) =>
-                  setHistoryForm((current) => ({ ...current, ...changes }))
-                }
+                onChange={(changes) => setHistoryForm((current) => ({ ...current, ...changes }))}
                 frontFile={editCccdFront}
                 backFile={editCccdBack}
                 onFrontFileChange={setEditCccdFront}
@@ -1890,10 +1897,7 @@ function StaffWorkerDetailPage() {
                   label="Ngày sinh"
                   value={formatDate(detailHistory.worker_date_of_birth_snapshot)}
                 />
-                <InfoCell
-                  label="Ngày cấp CCCD"
-                  value={formatDate(detailHistory.cccd_issue_date)}
-                />
+                <InfoCell label="Ngày cấp CCCD" value={formatDate(detailHistory.cccd_issue_date)} />
                 <InfoCell
                   label="Địa chỉ thường trú"
                   value={

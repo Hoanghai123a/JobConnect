@@ -206,7 +206,11 @@ function ComplaintsPage() {
       "Thời gian gửi": formatDateOnly(i.created),
       "Thời gian xử lý": formatDateOnly(i.resolved_at),
     }));
-    exportToExcel(`khieu_nai_${Date.now()}`, { "Khiếu nại": rows }, { "Khiếu nại": ["Thời gian gửi", "Thời gian xử lý"] });
+    exportToExcel(
+      `khieu_nai_${Date.now()}`,
+      { "Khiếu nại": rows },
+      { "Khiếu nại": ["Thời gian gửi", "Thời gian xử lý"] },
+    );
   };
 
   /* ─── User view ─── */

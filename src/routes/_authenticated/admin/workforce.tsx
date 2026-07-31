@@ -758,7 +758,14 @@ function RecruitGroups({
                 subtitle={staff.phone || staff.username || ""}
                 icon={ShieldCheck}
                 stats={s}
-                workers={collectWorkersForRecruiter(histories, latestByUser, userById, staffId, from, to)}
+                workers={collectWorkersForRecruiter(
+                  histories,
+                  latestByUser,
+                  userById,
+                  staffId,
+                  from,
+                  to,
+                )}
                 onSelectWorker={onSelectWorker}
               />
             );
@@ -1175,17 +1182,14 @@ function WorkerList({
                     className="list-card border-l-primary flex w-full items-start justify-between gap-3 text-left desktop:hidden"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold">
-                        {workerName}
-                      </div>
+                      <div className="truncate text-sm font-semibold">{workerName}</div>
                       <div className="mt-0.5 text-[11px] text-muted-foreground">
                         {user.uid && (
                           <>
                             <span className="font-medium text-primary">{user.uid}</span> ·{" "}
                           </>
                         )}
-                        Mã NV: {latest?.employee_code || "" || "—"} · CCCD:{" "}
-                        {maskCccd(snapshotCccd)}
+                        Mã NV: {latest?.employee_code || "" || "—"} · CCCD: {maskCccd(snapshotCccd)}
                         {latest?.worker_tax_code_snapshot &&
                           ` · MST: ${latest.worker_tax_code_snapshot}`}
                       </div>

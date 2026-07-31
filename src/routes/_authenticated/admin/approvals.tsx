@@ -127,6 +127,7 @@ function ApprovalsPage() {
       "Ngân hàng": u.bank_name,
       "Số tài khoản": u.bank_account_number,
       "Tên chủ tài khoản": u.bank_account_name,
+      "Ghi chú STK": u.bank_account_note,
       "Tạo lúc": formatDateOnly(u.created),
     }));
     exportToExcel(

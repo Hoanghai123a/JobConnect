@@ -109,22 +109,24 @@ function AdminStaffPage() {
   );
 
   const downloadTemplate = () => {
-    exportToExcel("mau_import_staff", {
-      "Tài khoản Staff": [
-        {
-          "Tên đăng nhập": "nguyenvana",
-          "Họ tên": "Nguyễn Văn A",
-          "Số điện thoại": "0901234567",
-          "Ngày sinh": "15/05/1990",
-          "Địa chỉ": "Hà Nội",
-          "Mật khẩu": "",
-          "Nhà máy 1": "Nhà máy A",
-          "Nhà máy 2": "Nhà máy B",
-          "Nhà máy 3": "",
-        },
-      ],
-    },
-    { "Tài khoản Staff": ["Ngày sinh"] }
+    exportToExcel(
+      "mau_import_staff",
+      {
+        "Tài khoản Staff": [
+          {
+            "Tên đăng nhập": "nguyenvana",
+            "Họ tên": "Nguyễn Văn A",
+            "Số điện thoại": "0901234567",
+            "Ngày sinh": "15/05/1990",
+            "Địa chỉ": "Hà Nội",
+            "Mật khẩu": "",
+            "Nhà máy 1": "Nhà máy A",
+            "Nhà máy 2": "Nhà máy B",
+            "Nhà máy 3": "",
+          },
+        ],
+      },
+      { "Tài khoản Staff": ["Ngày sinh"] },
     );
   };
 
@@ -247,7 +249,11 @@ function AdminStaffPage() {
       setImportResult(resultText);
       toast.success(resultText);
       if (failedRows.length) {
-        exportToExcel(`staff_import_loi_${Date.now()}`, { "Dòng lỗi": failedRows }, { "Dòng lỗi": ["Ngày sinh", "date_of_birth"] });
+        exportToExcel(
+          `staff_import_loi_${Date.now()}`,
+          { "Dòng lỗi": failedRows },
+          { "Dòng lỗi": ["Ngày sinh", "date_of_birth"] },
+        );
         toast.warning("Đã xuất file các dòng lỗi");
       }
       await load();

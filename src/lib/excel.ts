@@ -63,9 +63,7 @@ function isValidCalendarDate(year: number, month: number, day: number) {
   if (month < 1 || month > 12 || day < 1 || day > 31) return false;
   const date = new Date(Date.UTC(year, month - 1, day));
   return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
   );
 }
 
@@ -106,9 +104,7 @@ function toExcelDateSerial(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   const parts = parseDateParts(value);
   if (!parts) return null;
-  return (
-    (Date.UTC(parts.year, parts.month - 1, parts.day) - EXCEL_EPOCH_UTC) / DAY_IN_MS
-  );
+  return (Date.UTC(parts.year, parts.month - 1, parts.day) - EXCEL_EPOCH_UTC) / DAY_IN_MS;
 }
 
 function applyDateColumns(ws: XLSX.WorkSheet, dateColumns: string[]) {
@@ -142,8 +138,12 @@ function applyDateColumns(ws: XLSX.WorkSheet, dateColumns: string[]) {
 function getCellDisplayLength(cell: XLSX.CellObject | undefined) {
   if (!cell || cell.v == null || cell.v === "") return 0;
 
-  const displayValue = cell.z === EXCEL_DATE_FORMAT ? EXCEL_DATE_FORMAT : cell.w ?? cell.v;
-  return Math.max(...String(displayValue).split(/\r\n?|\n/).map((line) => Array.from(line).length));
+  const displayValue = cell.z === EXCEL_DATE_FORMAT ? EXCEL_DATE_FORMAT : (cell.w ?? cell.v);
+  return Math.max(
+    ...String(displayValue)
+      .split(/\r\n?|\n/)
+      .map((line) => Array.from(line).length),
+  );
 }
 
 function applyAutoColumnWidths(ws: XLSX.WorkSheet) {

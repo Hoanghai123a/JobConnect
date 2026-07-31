@@ -1,17 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import {
-  Coins,
-  Crown,
-  Gem,
-  RotateCcw,
-  Sparkles,
-  Swords,
-  Trophy,
-  Users,
-  Star,
-} from "lucide-react";
+import { Coins, Crown, Gem, RotateCcw, Sparkles, Swords, Trophy, Users, Star } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
@@ -23,7 +13,12 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { fetchBalance, updateBalance, fetchAllBalances, type GardenBalance } from "@/lib/garden-server";
+import {
+  fetchBalance,
+  updateBalance,
+  fetchAllBalances,
+  type GardenBalance,
+} from "@/lib/garden-server";
 
 export const Route = createFileRoute("/_authenticated/gems")({
   component: GemsGamePage,
@@ -31,7 +26,16 @@ export const Route = createFileRoute("/_authenticated/gems")({
 
 // ---- Constants ----
 
-const GEM_TYPES_ALL = ["ruby", "emerald", "sapphire", "amber", "violet", "aqua", "gold", "rose"] as const;
+const GEM_TYPES_ALL = [
+  "ruby",
+  "emerald",
+  "sapphire",
+  "amber",
+  "violet",
+  "aqua",
+  "gold",
+  "rose",
+] as const;
 type GemType = (typeof GEM_TYPES_ALL)[number];
 
 const GEM_IMAGE: Record<GemType, string> = {
@@ -47,7 +51,10 @@ const GEM_IMAGE: Record<GemType, string> = {
 
 type Level = "easy" | "normal" | "hard";
 
-const LEVEL_CONFIG: Record<Level, { label: string; gemCount: number; boardSize: number; threshold: number | null }> = {
+const LEVEL_CONFIG: Record<
+  Level,
+  { label: string; gemCount: number; boardSize: number; threshold: number | null }
+> = {
   easy: { label: "Dễ", gemCount: 3, boardSize: 7, threshold: 300 },
   normal: { label: "Thường", gemCount: 6, boardSize: 8, threshold: 800 },
   hard: { label: "Khó", gemCount: 8, boardSize: 8, threshold: null },
@@ -118,7 +125,9 @@ function bestKey(userId: string) {
 function readDaily(userId: string): DailyState {
   if (typeof window === "undefined") return { date: TODAY, earned: 0, plays: 0 };
   try {
-    const parsed = JSON.parse(localStorage.getItem(dailyKey(userId)) || "null") as DailyState | null;
+    const parsed = JSON.parse(
+      localStorage.getItem(dailyKey(userId)) || "null",
+    ) as DailyState | null;
     if (parsed?.date === TODAY) return { ...parsed, plays: parsed.plays ?? 0 };
   } catch {}
   return { date: TODAY, earned: 0, plays: 0 };
@@ -132,7 +141,9 @@ function writeDaily(userId: string, state: DailyState) {
 function readProgress(userId: string): GameProgress {
   if (typeof window === "undefined") return { level: "easy", score: 0 };
   try {
-    const parsed = JSON.parse(localStorage.getItem(progressKey(userId)) || "null") as GameProgress | null;
+    const parsed = JSON.parse(
+      localStorage.getItem(progressKey(userId)) || "null",
+    ) as GameProgress | null;
     if (parsed && LEVEL_ORDER.includes(parsed.level)) return parsed;
   } catch {}
   return { level: "easy", score: 0 };
@@ -168,7 +179,13 @@ function randomType(types: GemType[]) {
   return types[Math.floor(Math.random() * types.length)];
 }
 
-function typeAvoidingMatch(row: number, col: number, cells: Cell[], boardSize: number, types: GemType[]) {
+function typeAvoidingMatch(
+  row: number,
+  col: number,
+  cells: Cell[],
+  boardSize: number,
+  types: GemType[],
+) {
   const byRC = (r: number, c: number) => cells.find((cell) => cell.row === r && cell.col === c);
   let type = randomType(types);
   let guard = 0;
@@ -222,7 +239,9 @@ function createBoard(level: Level, coins: number, dailyEarned: number): Cell[] {
 }
 
 function findMatchedIds(cells: Cell[], boardSize: number): Set<string> {
-  const byRC: (Cell | undefined)[][] = Array.from({ length: boardSize }, () => Array(boardSize).fill(undefined));
+  const byRC: (Cell | undefined)[][] = Array.from({ length: boardSize }, () =>
+    Array(boardSize).fill(undefined),
+  );
   cells.forEach((cell) => {
     if (cell.row >= 0 && cell.row < boardSize && cell.col >= 0 && cell.col < boardSize) {
       byRC[cell.row][cell.col] = cell;
@@ -273,7 +292,10 @@ function getCellByRC(cells: Cell[], row: number, col: number): Cell | undefined 
 }
 
 function isAdjacent(a: Cell, b: Cell) {
-  return (a.row === b.row && Math.abs(a.col - b.col) === 1) || (a.col === b.col && Math.abs(a.row - b.row) === 1);
+  return (
+    (a.row === b.row && Math.abs(a.col - b.col) === 1) ||
+    (a.col === b.col && Math.abs(a.row - b.row) === 1)
+  );
 }
 
 function getSwipeTargetRC(row: number, col: number, dx: number, dy: number, boardSize: number) {
@@ -312,7 +334,8 @@ function SparkleBurst() {
         aria-hidden
         className="absolute inset-0 rounded-full"
         style={{
-          background: "radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,240,180,0.6) 40%, transparent 70%)",
+          background:
+            "radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,240,180,0.6) 40%, transparent 70%)",
         }}
         initial={{ scale: 0.4, opacity: 0 }}
         animate={{ scale: 1.4, opacity: [0, 1, 0] }}
@@ -381,20 +404,24 @@ function GemsGamePage() {
   // Fetch leaderboard
   useEffect(() => {
     let alive = true;
-    fetchAllBalances().then((balances) => {
-      if (!alive) return;
-      const entries: RankEntry[] = balances
-        .filter((b) => (b.gemsBestScore ?? 0) > 0)
-        .sort((a, b) => (b.gemsBestScore ?? 0) - (a.gemsBestScore ?? 0))
-        .slice(0, LEADERBOARD_MAX)
-        .map((b) => ({
-          userId: b.user,
-          name: b.expand?.user?.full_name || b.expand?.user?.username || "---",
-          score: b.gemsBestScore ?? 0,
-        }));
-      setRankAll(entries);
-    }).catch(() => {});
-    return () => { alive = false; };
+    fetchAllBalances()
+      .then((balances) => {
+        if (!alive) return;
+        const entries: RankEntry[] = balances
+          .filter((b) => (b.gemsBestScore ?? 0) > 0)
+          .sort((a, b) => (b.gemsBestScore ?? 0) - (a.gemsBestScore ?? 0))
+          .slice(0, LEADERBOARD_MAX)
+          .map((b) => ({
+            userId: b.user,
+            name: b.expand?.user?.full_name || b.expand?.user?.username || "---",
+            score: b.gemsBestScore ?? 0,
+          }));
+        setRankAll(entries);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, [bestScore]);
 
   const myRank = useMemo(() => {
@@ -424,7 +451,8 @@ function GemsGamePage() {
         const localBest = readBest(user.id);
         const trueBest = Math.max(serverBest, localBest);
         setBestScore(trueBest);
-        if (trueBest > serverBest) updateBalance(nextBalance.id, { gemsBestScore: trueBest }).catch(() => {});
+        if (trueBest > serverBest)
+          updateBalance(nextBalance.id, { gemsBestScore: trueBest }).catch(() => {});
         if (trueBest > localBest) writeBest(user.id, trueBest);
         setCells(createBoard(progress.level, nextBalance.coins, daily.earned));
       })
@@ -456,7 +484,9 @@ function GemsGamePage() {
     if (currentIdx >= LEVEL_ORDER.length - 1) return;
 
     const nextLevel = LEVEL_ORDER[currentIdx + 1];
-    toast.success(`Chúc mừng! Qua màn "${LEVEL_CONFIG[nextLevel].label}"`, { icon: <Star className="h-4 w-4" /> });
+    toast.success(`Chúc mừng! Qua màn "${LEVEL_CONFIG[nextLevel].label}"`, {
+      icon: <Star className="h-4 w-4" />,
+    });
     setLevel(nextLevel);
     writeProgress(user.id, { level: nextLevel, score });
     setCells(createBoard(nextLevel, coinsRef.current, dailyEarnedRef.current));
@@ -508,7 +538,11 @@ function GemsGamePage() {
 
     const nextCoins = coinsRef.current + reward;
     const currentDaily = readDaily(uid);
-    const nextDaily = { date: TODAY, earned: dailyEarnedRef.current + reward, plays: currentDaily.plays };
+    const nextDaily = {
+      date: TODAY,
+      earned: dailyEarnedRef.current + reward,
+      plays: currentDaily.plays,
+    };
     const updated = await updateBalance(bal.id, { coins: nextCoins });
     setBalance(updated);
     setDailyEarned(nextDaily.earned);
@@ -552,7 +586,9 @@ function GemsGamePage() {
         const nextCells: Cell[] = [];
 
         for (let col = 0; col < boardSize; col += 1) {
-          const columnCells = surviving.filter((cell) => cell.col === col).sort((a, b) => b.row - a.row);
+          const columnCells = surviving
+            .filter((cell) => cell.col === col)
+            .sort((a, b) => b.row - a.row);
           // Bottom-most surviving cells fall to bottom of the board first
           columnCells.forEach((cell, i) => {
             nextCells.push({ ...cell, row: boardSize - 1 - i });
@@ -690,158 +726,189 @@ function GemsGamePage() {
     >
       <Tabs defaultValue="play" className="flex flex-col gap-3">
         <TabsList className="grid h-10 w-full grid-cols-3 rounded-xl">
-          <TabsTrigger value="play" className="rounded-lg text-xs">Chơi</TabsTrigger>
-          <TabsTrigger value="rank" className="rounded-lg text-xs">Xếp hạng</TabsTrigger>
-          <TabsTrigger value="solo" className="rounded-lg text-xs">Solo</TabsTrigger>
+          <TabsTrigger value="play" className="rounded-lg text-xs">
+            Chơi
+          </TabsTrigger>
+          <TabsTrigger value="rank" className="rounded-lg text-xs">
+            Xếp hạng
+          </TabsTrigger>
+          <TabsTrigger value="solo" className="rounded-lg text-xs">
+            Solo
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="play" className="mt-0 flex flex-col gap-3">
           <div className="worker-game-layout">
-          <aside className="worker-game-desktop-rail" aria-label="Chỉ số xếp kim cương">
-            <div className="worker-game-rail-title">Chỉ số</div>
-            <Card className="worker-game-stat">
-              <div className="worker-game-stat-label">Điểm</div>
-              <div className="worker-game-stat-value">{score}</div>
-            </Card>
-            <Card className="worker-game-stat">
-              <div className="worker-game-stat-label">Kỷ lục</div>
-              <div className={cn("worker-game-stat-value", score >= bestScore && bestScore > 0 && "text-amber-600")}>{bestScore}</div>
-            </Card>
-            <Card className="worker-game-stat">
-              <div className="worker-game-stat-label">Mục tiêu</div>
-              <div className="worker-game-stat-value">{config.threshold ? config.threshold : "∞"}</div>
-            </Card>
-            <Card className="worker-game-stat">
-              <div className="worker-game-stat-label">Xu hôm nay</div>
-              <div className="worker-game-stat-value">{dailyEarned}</div>
-            </Card>
-          </aside>
-          <div className="worker-game-main flex flex-col gap-3">
-          <section className="gradient-hero overflow-hidden rounded-3xl p-4 text-white shadow-soft">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-xs uppercase tracking-wide text-white/70">
-                  Màn chơi: {config.label}
+            <aside className="worker-game-desktop-rail" aria-label="Chỉ số xếp kim cương">
+              <div className="worker-game-rail-title">Chỉ số</div>
+              <Card className="worker-game-stat">
+                <div className="worker-game-stat-label">Điểm</div>
+                <div className="worker-game-stat-value">{score}</div>
+              </Card>
+              <Card className="worker-game-stat">
+                <div className="worker-game-stat-label">Kỷ lục</div>
+                <div
+                  className={cn(
+                    "worker-game-stat-value",
+                    score >= bestScore && bestScore > 0 && "text-amber-600",
+                  )}
+                >
+                  {bestScore}
                 </div>
-                <div className="mt-1 text-xl font-semibold leading-tight">Săn kim cương thưởng xu</div>
-                <div className="mt-1 text-sm text-white/80">
-                  {config.threshold
-                    ? `Đạt ${config.threshold} điểm để qua ải tiếp theo`
-                    : "Chế độ khó — điểm tích lũy không giới hạn"}
+              </Card>
+              <Card className="worker-game-stat">
+                <div className="worker-game-stat-label">Mục tiêu</div>
+                <div className="worker-game-stat-value">
+                  {config.threshold ? config.threshold : "∞"}
                 </div>
-              </div>
-              <div className="rounded-2xl bg-white/15 p-3 backdrop-blur">
-                <Gem className="h-6 w-6" />
-              </div>
-            </div>
-          </section>
-
-          <div className="worker-game-mobile-stats grid grid-cols-4 gap-2">
-            <Card className="p-3 text-center">
-              <div className="text-[11px] text-muted-foreground">Điểm</div>
-              <div className="text-lg font-semibold">{score}</div>
-            </Card>
-            <Card className="p-3 text-center">
-              <div className="text-[11px] text-muted-foreground">Kỷ lục</div>
-              <div className={cn("text-lg font-semibold", score >= bestScore && bestScore > 0 && "text-amber-600")}>{bestScore}</div>
-            </Card>
-            <Card className="p-3 text-center">
-              <div className="text-[11px] text-muted-foreground">Mục tiêu</div>
-              <div className="text-lg font-semibold">
-                {config.threshold ? `${config.threshold}` : "∞"}
-              </div>
-            </Card>
-            <Card className="p-3 text-center">
-              <div className="text-[11px] text-muted-foreground">Xu hôm nay</div>
-              <div className="text-lg font-semibold">{dailyEarned}</div>
-            </Card>
-          </div>
-
-          {config.threshold && (
-            <div className="relative h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className="absolute inset-y-0 left-0 rounded-full bg-primary transition-all duration-500"
-                style={{ width: `${Math.min(100, (score / config.threshold) * 100)}%` }}
-              />
-            </div>
-          )}
-
-          <Card className="worker-game-board-card flex flex-col gap-3 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <div className="text-sm font-semibold">Bàn kim cương</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {hiddenByThreshold
-                    ? "Bạn đã đạt ngưỡng, bàn này không còn kim cương chứa xu."
-                    : visibleCoinTiles > 0
-                      ? `Có khoảng ${visibleCoinTiles} viên chứa xu.`
-                      : "Hôm nay đã hết lượt nhận xu, vẫn có thể chơi lấy điểm."}
+              </Card>
+              <Card className="worker-game-stat">
+                <div className="worker-game-stat-label">Xu hôm nay</div>
+                <div className="worker-game-stat-value">{dailyEarned}</div>
+              </Card>
+            </aside>
+            <div className="worker-game-main flex flex-col gap-3">
+              <section className="gradient-hero overflow-hidden rounded-3xl p-4 text-white shadow-soft">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs uppercase tracking-wide text-white/70">
+                      Màn chơi: {config.label}
+                    </div>
+                    <div className="mt-1 text-xl font-semibold leading-tight">
+                      Săn kim cương thưởng xu
+                    </div>
+                    <div className="mt-1 text-sm text-white/80">
+                      {config.threshold
+                        ? `Đạt ${config.threshold} điểm để qua ải tiếp theo`
+                        : "Chế độ khó — điểm tích lũy không giới hạn"}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl bg-white/15 p-3 backdrop-blur">
+                    <Gem className="h-6 w-6" />
+                  </div>
                 </div>
-              </div>
-              <Button size="sm" variant="outline" onClick={startRound} disabled={busy || playsLeft <= 0}>
-                <RotateCcw className="h-3.5 w-3.5" /> Chơi lại ({playsLeft})
-              </Button>
-            </div>
+              </section>
 
-            <div className="worker-game-board mx-auto w-full max-w-[420px] touch-none select-none">
-              <div
-                ref={boardRef}
-                className="relative w-full overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 p-0"
-                style={{ height: boardPixelSize, aspectRatio: "1 / 1" }}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerUp}
-              >
-                {cells.map((cell) => {
-                  const left = cell.col * (cellSize + gap);
-                  const top = cell.row * (cellSize + gap);
-                  const spawnTop = -(cellSize + gap) * (cell.row + 2);
-                  const isMatched = cell.state === "matched";
-                  const initial = cell.spawn
-                    ? { left, top: spawnTop, opacity: 0, scale: 0.85 }
-                    : false;
-                  return (
-                    <motion.button
-                      key={cell.id}
-                      type="button"
-                      disabled={busy}
-                      onPointerDown={(e) => handlePointerDown(cell.row, cell.col, e)}
-                      className={cn(
-                        "absolute grid place-items-center rounded-xl border border-white/60 bg-white/95 shadow-sm",
-                      )}
-                      style={{ width: cellSize, height: cellSize, left, top }}
-                      initial={initial}
-                      animate={{
-                        left,
-                        top,
-                        scale: isMatched ? [1, 1.25, 0] : 1,
-                        opacity: isMatched ? [1, 1, 0] : 1,
-                      }}
-                      transition={{
-                        left: { type: "spring", stiffness: 420, damping: 34 },
-                        top: isMatched
-                          ? { duration: 0 }
-                          : { type: "spring", stiffness: 260, damping: 20, mass: 1.1 },
-                        scale: isMatched
-                          ? { duration: EXPLODE_MS / 1000, ease: "easeOut" }
-                          : { type: "spring", stiffness: 400, damping: 20 },
-                        opacity: { duration: EXPLODE_MS / 1000, ease: "easeOut" },
-                      }}
-                      aria-label={cell.coin ? `Kim cương có ${cell.coin} xu` : `Kim cương ${cell.type}`}
-                    >
-                      <GemPiece type={cell.type} />
-                      {cell.coin ? (
-                        <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-100 px-1 text-[9px] font-bold text-amber-700 shadow">
-                          +{cell.coin}
-                        </span>
-                      ) : null}
-                      {isMatched ? <SparkleBurst /> : null}
-                    </motion.button>
-                  );
-                })}
+              <div className="worker-game-mobile-stats grid grid-cols-4 gap-2">
+                <Card className="p-3 text-center">
+                  <div className="text-[11px] text-muted-foreground">Điểm</div>
+                  <div className="text-lg font-semibold">{score}</div>
+                </Card>
+                <Card className="p-3 text-center">
+                  <div className="text-[11px] text-muted-foreground">Kỷ lục</div>
+                  <div
+                    className={cn(
+                      "text-lg font-semibold",
+                      score >= bestScore && bestScore > 0 && "text-amber-600",
+                    )}
+                  >
+                    {bestScore}
+                  </div>
+                </Card>
+                <Card className="p-3 text-center">
+                  <div className="text-[11px] text-muted-foreground">Mục tiêu</div>
+                  <div className="text-lg font-semibold">
+                    {config.threshold ? `${config.threshold}` : "∞"}
+                  </div>
+                </Card>
+                <Card className="p-3 text-center">
+                  <div className="text-[11px] text-muted-foreground">Xu hôm nay</div>
+                  <div className="text-lg font-semibold">{dailyEarned}</div>
+                </Card>
               </div>
+
+              {config.threshold && (
+                <div className="relative h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full bg-primary transition-all duration-500"
+                    style={{ width: `${Math.min(100, (score / config.threshold) * 100)}%` }}
+                  />
+                </div>
+              )}
+
+              <Card className="worker-game-board-card flex flex-col gap-3 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold">Bàn kim cương</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {hiddenByThreshold
+                        ? "Bạn đã đạt ngưỡng, bàn này không còn kim cương chứa xu."
+                        : visibleCoinTiles > 0
+                          ? `Có khoảng ${visibleCoinTiles} viên chứa xu.`
+                          : "Hôm nay đã hết lượt nhận xu, vẫn có thể chơi lấy điểm."}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={startRound}
+                    disabled={busy || playsLeft <= 0}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Chơi lại ({playsLeft})
+                  </Button>
+                </div>
+
+                <div className="worker-game-board mx-auto w-full max-w-[420px] touch-none select-none">
+                  <div
+                    ref={boardRef}
+                    className="relative w-full overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 p-0"
+                    style={{ height: boardPixelSize, aspectRatio: "1 / 1" }}
+                    onPointerUp={handlePointerUp}
+                    onPointerLeave={handlePointerUp}
+                  >
+                    {cells.map((cell) => {
+                      const left = cell.col * (cellSize + gap);
+                      const top = cell.row * (cellSize + gap);
+                      const spawnTop = -(cellSize + gap) * (cell.row + 2);
+                      const isMatched = cell.state === "matched";
+                      const initial = cell.spawn
+                        ? { left, top: spawnTop, opacity: 0, scale: 0.85 }
+                        : false;
+                      return (
+                        <motion.button
+                          key={cell.id}
+                          type="button"
+                          disabled={busy}
+                          onPointerDown={(e) => handlePointerDown(cell.row, cell.col, e)}
+                          className={cn(
+                            "absolute grid place-items-center rounded-xl border border-white/60 bg-white/95 shadow-sm",
+                          )}
+                          style={{ width: cellSize, height: cellSize, left, top }}
+                          initial={initial}
+                          animate={{
+                            left,
+                            top,
+                            scale: isMatched ? [1, 1.25, 0] : 1,
+                            opacity: isMatched ? [1, 1, 0] : 1,
+                          }}
+                          transition={{
+                            left: { type: "spring", stiffness: 420, damping: 34 },
+                            top: isMatched
+                              ? { duration: 0 }
+                              : { type: "spring", stiffness: 260, damping: 20, mass: 1.1 },
+                            scale: isMatched
+                              ? { duration: EXPLODE_MS / 1000, ease: "easeOut" }
+                              : { type: "spring", stiffness: 400, damping: 20 },
+                            opacity: { duration: EXPLODE_MS / 1000, ease: "easeOut" },
+                          }}
+                          aria-label={
+                            cell.coin ? `Kim cương có ${cell.coin} xu` : `Kim cương ${cell.type}`
+                          }
+                        >
+                          <GemPiece type={cell.type} />
+                          {cell.coin ? (
+                            <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-100 px-1 text-[9px] font-bold text-amber-700 shadow">
+                              +{cell.coin}
+                            </span>
+                          ) : null}
+                          {isMatched ? <SparkleBurst /> : null}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </Card>
             </div>
-          </Card>
-          </div>
           </div>
         </TabsContent>
 
@@ -859,13 +926,25 @@ function GemsGamePage() {
               )}
             </div>
             {rankTop.length === 0 ? (
-              <div className="py-4 text-center text-xs text-muted-foreground">Chưa có ai ghi điểm</div>
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                Chưa có ai ghi điểm
+              </div>
             ) : (
               rankTop.map((item, index) => (
-                <div key={item.userId} className={cn("flex items-center justify-between rounded-2xl border p-3", item.userId === user?.id && "border-primary/40 bg-primary/5")}>
+                <div
+                  key={item.userId}
+                  className={cn(
+                    "flex items-center justify-between rounded-2xl border p-3",
+                    item.userId === user?.id && "border-primary/40 bg-primary/5",
+                  )}
+                >
                   <div className="flex items-center gap-3">
                     <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">
-                      {index === 0 ? <Crown className="h-4 w-4" /> : <span className="text-xs font-bold">{index + 1}</span>}
+                      {index === 0 ? (
+                        <Crown className="h-4 w-4" />
+                      ) : (
+                        <span className="text-xs font-bold">{index + 1}</span>
+                      )}
                     </div>
                     <div>
                       <div className="text-sm font-semibold">{item.name}</div>
@@ -903,7 +982,8 @@ function GemsGamePage() {
               <div className="text-sm font-semibold">Khiêu chiến solo</div>
             </div>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-              Cược xu cần escrow và transaction ở PocketBase. Màn này đã sẵn form, nhưng chưa mở cược thật để tránh mất xu sai.
+              Cược xu cần escrow và transaction ở PocketBase. Màn này đã sẵn form, nhưng chưa mở
+              cược thật để tránh mất xu sai.
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
@@ -931,8 +1011,8 @@ function GemsGamePage() {
               <Sparkles className="h-4 w-4" /> Gửi khiêu chiến
             </Button>
             <div className="text-[11px] leading-5 text-muted-foreground">
-              Luật dự kiến: người thua mất toàn bộ xu cược; người thắng nhận phần cược của người thua sau khi trừ 10% phí.
-              Ví dụ cược 20 xu thì người thắng nhận thêm 18 xu.
+              Luật dự kiến: người thua mất toàn bộ xu cược; người thắng nhận phần cược của người
+              thua sau khi trừ 10% phí. Ví dụ cược 20 xu thì người thắng nhận thêm 18 xu.
             </div>
           </Card>
         </TabsContent>
@@ -940,4 +1020,3 @@ function GemsGamePage() {
     </PageContainer>
   );
 }
-

@@ -1,7 +1,11 @@
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { WorkerPayrollView, type WorkerAttendanceCheckItem, type WorkerSalaryCheckItem } from "@/components/payroll/WorkerPayrollView";
+import {
+  WorkerPayrollView,
+  type WorkerAttendanceCheckItem,
+  type WorkerSalaryCheckItem,
+} from "@/components/payroll/WorkerPayrollView";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useAuth } from "@/lib/auth";
@@ -10,9 +14,7 @@ import { pb, type UserRecord } from "@/lib/pocketbase";
 import { fetchStaffWorkerWorkspace } from "@/lib/staff-permissions";
 import { CalendarCheck } from "lucide-react";
 
-export const Route = createFileRoute(
-  "/_authenticated/staff/workers/$workerId_/payroll",
-)({
+export const Route = createFileRoute("/_authenticated/staff/workers/$workerId_/payroll")({
   component: StaffWorkerPayrollPage,
 });
 

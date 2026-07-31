@@ -250,7 +250,10 @@ async function captureElementAsPng(element: HTMLElement) {
 
   const imageBitmap = await new Promise<HTMLImageElement>((resolve, reject) => {
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Kh\u00f4ng th\u1ec3 t\u1ea1o \u1ea3nh t\u1eeb b\u1ea3ng d\u1eef li\u1ec7u"));
+    image.onerror = () =>
+      reject(
+        new Error("Kh\u00f4ng th\u1ec3 t\u1ea1o \u1ea3nh t\u1eeb b\u1ea3ng d\u1eef li\u1ec7u"),
+      );
     image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   });
 
@@ -258,7 +261,8 @@ async function captureElementAsPng(element: HTMLElement) {
   canvas.width = Math.ceil(outputWidth * scale);
   canvas.height = Math.ceil(outputHeight * scale);
   const context = canvas.getContext("2d");
-  if (!context) throw new Error("Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 t\u1ea1o \u1ea3nh");
+  if (!context)
+    throw new Error("Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 t\u1ea1o \u1ea3nh");
 
   context.scale(scale, scale);
   context.fillStyle = backgroundColor;
@@ -273,13 +277,7 @@ async function captureElementAsPng(element: HTMLElement) {
   });
 }
 
-function CopyImageButton({
-  targetSelector,
-  label,
-}: {
-  targetSelector: string;
-  label: string;
-}) {
+function CopyImageButton({ targetSelector, label }: { targetSelector: string; label: string }) {
   const [copying, setCopying] = useState(false);
 
   const copyImage = async () => {
@@ -290,7 +288,9 @@ function CopyImageButton({
       return;
     }
     if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
-      toast.error("Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 copy \u1ea3nh tr\u1ef1c ti\u1ebfp");
+      toast.error(
+        "Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 copy \u1ea3nh tr\u1ef1c ti\u1ebfp",
+      );
       return;
     }
 
@@ -314,7 +314,11 @@ function CopyImageButton({
       className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm transition hover:bg-muted disabled:cursor-wait disabled:opacity-70"
       aria-label={`Ch\u1ee5p \u1ea3nh ${label}`}
     >
-      {copying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+      {copying ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <Camera className="h-3.5 w-3.5" />
+      )}
       {copying ? "\u0110ang t\u1ea1o \u1ea3nh" : "Ch\u1ee5p \u1ea3nh"}
     </button>
   );
@@ -331,19 +335,22 @@ export function WorkerPayrollView({
   loading: boolean;
   fallbackFactoryName?: string;
 }) {
-  const [selectedAttendance, setSelectedAttendance] = useState<WorkerAttendanceCheckItem | null>(null);
+  const [selectedAttendance, setSelectedAttendance] = useState<WorkerAttendanceCheckItem | null>(
+    null,
+  );
   const [selectedSalary, setSelectedSalary] = useState<WorkerSalaryCheckItem | null>(null);
   const [factoryCutoffDay, setFactoryCutoffDay] = useState<number | null>(null);
 
   useEffect(() => {
-    setSelectedAttendance((current) =>
-      attendanceItems.find((item) => item.id === current?.id) || attendanceItems[0] || null,
+    setSelectedAttendance(
+      (current) =>
+        attendanceItems.find((item) => item.id === current?.id) || attendanceItems[0] || null,
     );
   }, [attendanceItems]);
 
   useEffect(() => {
-    setSelectedSalary((current) =>
-      salaryItems.find((item) => item.id === current?.id) || salaryItems[0] || null,
+    setSelectedSalary(
+      (current) => salaryItems.find((item) => item.id === current?.id) || salaryItems[0] || null,
     );
   }, [salaryItems]);
 
@@ -425,29 +432,34 @@ export function WorkerPayrollView({
             {selectedAttendance && (
               <>
                 <div className="flex justify-end">
-                  <CopyImageButton targetSelector=".worker-check-attendance-layout" label={"b\u1ea3ng check c\u00f4ng"} />
+                  <CopyImageButton
+                    targetSelector=".worker-check-attendance-layout"
+                    label={"b\u1ea3ng check c\u00f4ng"}
+                  />
                 </div>
                 <div className="worker-check-attendance-layout">
-                <aside className="worker-check-attendance-summary">
-                  <Card className="worker-check-attendance-card overflow-hidden">
-                    <div className="gradient-accent p-4 text-accent-foreground">
-                      <div className="text-xs uppercase opacity-80">Bảng check công</div>
-                      <div className="mt-0.5 text-xl font-bold">
-                        {selectedAttendance.month} · {selectedAttendance.expand?.batch?.note || `Lần ${selectedAttendance.round_no}`}
+                  <aside className="worker-check-attendance-summary">
+                    <Card className="worker-check-attendance-card overflow-hidden">
+                      <div className="gradient-accent p-4 text-accent-foreground">
+                        <div className="text-xs uppercase opacity-80">Bảng check công</div>
+                        <div className="mt-0.5 text-xl font-bold">
+                          {selectedAttendance.month} ·{" "}
+                          {selectedAttendance.expand?.batch?.note ||
+                            `Lần ${selectedAttendance.round_no}`}
+                        </div>
                       </div>
-                    </div>
-                    <div className="worker-check-rate-grid grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
-                      {visibleRateCells.map((cell) => (
-                        <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
-                      ))}
-                      <RateCell label="Ngày" hours={selectedAttendance.rows.length} suffix="" />
-                    </div>
-                  </Card>
-                </aside>
+                      <div className="worker-check-rate-grid grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
+                        {visibleRateCells.map((cell) => (
+                          <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
+                        ))}
+                        <RateCell label="Ngày" hours={selectedAttendance.rows.length} suffix="" />
+                      </div>
+                    </Card>
+                  </aside>
 
-                <div className="worker-check-attendance-calendar">
-                  <CheckMonthCalendar rows={selectedAttendance.rows} period={selectedPeriod} />
-                </div>
+                  <div className="worker-check-attendance-calendar">
+                    <CheckMonthCalendar rows={selectedAttendance.rows} period={selectedPeriod} />
+                  </div>
                 </div>
               </>
             )}
@@ -502,7 +514,12 @@ function SalaryCheckPanel({
         <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Check lương
         </div>
-        {selected && <CopyImageButton targetSelector='[data-ui-card="card"].worker-salary-card' label={"b\u1ea3ng check l\u01b0\u01a1ng"} />}
+        {selected && (
+          <CopyImageButton
+            targetSelector='[data-ui-card="card"].worker-salary-card'
+            label={"b\u1ea3ng check l\u01b0\u01a1ng"}
+          />
+        )}
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {items.map((item) => (
@@ -540,10 +557,16 @@ function SalaryCheckPanel({
               <div className="worker-salary-personal-grid grid grid-cols-2 gap-2 text-sm">
                 <InfoCell label="Mã NV" value={selected.personal.employee_code || "—"} />
                 <InfoCell label="Nhà máy" value={selected.personal.company || "—"} />
-                <InfoCell label="Ngày vào làm" value={formatDisplayDate(selected.personal.start_date)} />
+                <InfoCell
+                  label="Ngày vào làm"
+                  value={formatDisplayDate(selected.personal.start_date)}
+                />
                 <InfoCell label="Ngày nghỉ" value={formatDisplayDate(selected.personal.end_date)} />
                 <InfoCell label="Lương cơ bản" value={formatVND(selected.personal.base_salary)} />
-                <InfoCell label="Số công HC" value={`${selected.personal.standard_workdays || 0}`} />
+                <InfoCell
+                  label="Số công HC"
+                  value={`${selected.personal.standard_workdays || 0}`}
+                />
               </div>
             </aside>
 
@@ -623,7 +646,9 @@ function SalaryMoneySection({
 }) {
   return (
     <div className="space-y-2">
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </div>
       <div className="space-y-2">
         {lines.length === 0 ? (
           <div className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">
@@ -753,7 +778,15 @@ function InfoCell({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RateCell({ label, hours, suffix = "h" }: { label: string; hours: number; suffix?: string }) {
+function RateCell({
+  label,
+  hours,
+  suffix = "h",
+}: {
+  label: string;
+  hours: number;
+  suffix?: string;
+}) {
   return (
     <div className="worker-payroll-rate-cell rounded-lg border border-border/80 bg-background p-2 text-center shadow-sm">
       <div className="text-[9px] uppercase text-muted-foreground">{label}</div>

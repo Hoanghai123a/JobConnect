@@ -73,7 +73,23 @@ import {
   type GardenExchangeRequest,
   type GardenVisitSave,
 } from "@/lib/garden-server";
-import { Coins, Sparkles, Drumstick, Hand, Store, Leaf, ArrowRightLeft, Settings2, Check, X, Plus, Trash2, Wallet, Pencil, DoorOpen } from "lucide-react";
+import {
+  Coins,
+  Sparkles,
+  Drumstick,
+  Hand,
+  Store,
+  Leaf,
+  ArrowRightLeft,
+  Settings2,
+  Check,
+  X,
+  Plus,
+  Trash2,
+  Wallet,
+  Pencil,
+  DoorOpen,
+} from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/garden")({
   component: GardenPage,
@@ -99,8 +115,16 @@ function GardenPage() {
   const [feedOpen, setFeedOpen] = useState(false);
   const [exchangeOpen, setExchangeOpen] = useState(false);
   const [playHearts, setPlayHearts] = useState(false);
-  const [harvestAnim, setHarvestAnim] = useState<{ emoji: string; plotIndex: number; key: number } | null>(null);
-  const [stealAnim, setStealAnim] = useState<{ emoji: string; plotIndex: number; key: number } | null>(null);
+  const [harvestAnim, setHarvestAnim] = useState<{
+    emoji: string;
+    plotIndex: number;
+    key: number;
+  } | null>(null);
+  const [stealAnim, setStealAnim] = useState<{
+    emoji: string;
+    plotIndex: number;
+    key: number;
+  } | null>(null);
   const [renamingPet, setRenamingPet] = useState(false);
   const [petNameInput, setPetNameInput] = useState("");
   const [mainTab, setMainTab] = useState<MainTab>("garden");
@@ -129,25 +153,30 @@ function GardenPage() {
       if (bal) {
         setState((prev) => {
           const local = prev ?? loadGarden(user.id);
-          const serverPlots: Plot[] = Array.isArray(bal.plots) && bal.plots.length > 0
-            ? (bal.plots as Plot[]).map((p: any) => ({
-                flowerId: p?.flowerId ?? null,
-                plantedAt: typeof p?.plantedAt === "number" ? p.plantedAt : null,
-                stolenAmount: p?.stolenAmount,
-              }))
-            : local.plots;
-          const serverPet: PetState | null = bal.pet && typeof (bal.pet as any).id === "string"
-            ? bal.pet as unknown as PetState
-            : null;
+          const serverPlots: Plot[] =
+            Array.isArray(bal.plots) && bal.plots.length > 0
+              ? (bal.plots as Plot[]).map((p: any) => ({
+                  flowerId: p?.flowerId ?? null,
+                  plantedAt: typeof p?.plantedAt === "number" ? p.plantedAt : null,
+                  stolenAmount: p?.stolenAmount,
+                }))
+              : local.plots;
+          const serverPet: PetState | null =
+            bal.pet && typeof (bal.pet as any).id === "string"
+              ? (bal.pet as unknown as PetState)
+              : null;
           const unlockedPlots = Math.max(PLOT_COUNT, serverPlots.length, local.unlockedPlots);
-          while (serverPlots.length < unlockedPlots) serverPlots.push({ flowerId: null, plantedAt: null });
+          while (serverPlots.length < unlockedPlots)
+            serverPlots.push({ flowerId: null, plantedAt: null });
 
           const merged: GardenState = {
             coins: bal.coins ?? local.coins,
             plots: serverPlots,
             unlockedPlots,
             pet: serverPet ?? local.pet,
-            ownedPets: (bal.ownedPets as string[] | undefined)?.length ? bal.ownedPets as string[] : local.ownedPets,
+            ownedPets: (bal.ownedPets as string[] | undefined)?.length
+              ? (bal.ownedPets as string[])
+              : local.ownedPets,
             roamingEnabled: bal.roamingEnabled ?? local.roamingEnabled,
             totalHarvested: bal.totalHarvested ?? local.totalHarvested,
           };
@@ -240,10 +269,14 @@ function GardenPage() {
   const mood = petMood(state.pet, now);
   const hungerPct = Math.round(hunger(state.pet, now) * 100);
   const happyPct = Math.round(happiness(state.pet, now) * 100);
-  const petFoods = foods.filter((f) => !f.petType || f.petType === "all" || f.petType === state.pet.id);
+  const petFoods = foods.filter(
+    (f) => !f.petType || f.petType === "all" || f.petType === state.pet.id,
+  );
   const gardenPlots = state.plots.slice(0, state.unlockedPlots);
   const plantedPlots = gardenPlots.filter((plot) => Boolean(plot?.flowerId)).length;
-  const readyPlots = gardenPlots.filter((plot) => Boolean(plot?.flowerId) && isReady(plot, now)).length;
+  const readyPlots = gardenPlots.filter(
+    (plot) => Boolean(plot?.flowerId) && isReady(plot, now),
+  ).length;
 
   const plantSeed = (plotIndex: number, flower: Flower) => {
     if (coins < flower.seedCost) {
@@ -270,7 +303,9 @@ function GardenPage() {
     commit({ ...state, coins: newCoins, plots, totalHarvested: state.totalHarvested + 1 });
     setHarvestAnim({ emoji: flower.emoji, plotIndex, key: Date.now() });
     setTimeout(() => setHarvestAnim(null), 1200);
-    toast.success(`Thu hoạch ${flower.name} +${actualReward} xu${stolenAmount > 0 ? ` (bị chộm ${stolenAmount})` : ""}`);
+    toast.success(
+      `Thu hoạch ${flower.name} +${actualReward} xu${stolenAmount > 0 ? ` (bị chộm ${stolenAmount})` : ""}`,
+    );
   };
 
   const feedPet = () => {
@@ -307,7 +342,10 @@ function GardenPage() {
     if (nextCount > PLOT_MAX) return;
     const cost = plotUnlockCost(state.unlockedPlots);
     if (cost === null) return;
-    if (coins < cost) { toast.error("Không đủ xu để mở ô đất"); return; }
+    if (coins < cost) {
+      toast.error("Không đủ xu để mở ô đất");
+      return;
+    }
     const newCoins = coins - cost;
     const newPlots = [...state.plots, { flowerId: null, plantedAt: null }];
     commit({ ...state, coins: newCoins, plots: newPlots, unlockedPlots: nextCount });
@@ -347,8 +385,16 @@ function GardenPage() {
     setVisiting(true);
     try {
       const garden = await fetchGardenByUsername(username.trim());
-      if (!garden) { toast.error("Không tìm thấy vườn"); setCurtainPhase("idle"); return; }
-      if (garden.user === user?.id) { toast.error("Đây là vườn của bạn!"); setCurtainPhase("idle"); return; }
+      if (!garden) {
+        toast.error("Không tìm thấy vườn");
+        setCurtainPhase("idle");
+        return;
+      }
+      if (garden.user === user?.id) {
+        toast.error("Đây là vườn của bạn!");
+        setCurtainPhase("idle");
+        return;
+      }
       setVisitedGarden(garden);
       setGardenDetailOpen(true);
       if (user?.id) {
@@ -361,8 +407,12 @@ function GardenPage() {
       }
       setCurtainPhase("open");
       setTimeout(() => setCurtainPhase("idle"), 400);
-    } catch { toast.error("Không thể tải vườn"); setCurtainPhase("idle"); }
-    finally { setVisiting(false); }
+    } catch {
+      toast.error("Không thể tải vườn");
+      setCurtainPhase("idle");
+    } finally {
+      setVisiting(false);
+    }
   };
 
   const removeVisitSave = async (saveId: string) => {
@@ -375,7 +425,12 @@ function GardenPage() {
     }
   };
 
-  const stealFrom = async (victim: VisitedGarden, plotIndex: number, flowerReward: number, flowerEmoji?: string) => {
+  const stealFrom = async (
+    victim: VisitedGarden,
+    plotIndex: number,
+    flowerReward: number,
+    flowerEmoji?: string,
+  ) => {
     if (!balance) return;
     setStealing(true);
     try {
@@ -393,7 +448,8 @@ function GardenPage() {
       }
       const refreshed = await fetchGardenByUsername(visitUsername.trim());
       if (refreshed) setVisitedGarden(refreshed);
-      const victimName = victim.expand?.user?.full_name || victim.expand?.user?.username || "người dùng này";
+      const victimName =
+        victim.expand?.user?.full_name || victim.expand?.user?.username || "người dùng này";
       toast.success(`Chộm thành công! +${stolen} xu từ vườn của ${victimName} 🌿`);
     } catch (e: unknown) {
       toast.error(errorMessage(e, "Chộm thất bại"));
@@ -423,8 +479,12 @@ function GardenPage() {
         <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as MainTab)} className="space-y-3">
           {isAdmin ? (
             <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl">
-              <TabsTrigger value="garden" className="rounded-lg text-xs">Vườn</TabsTrigger>
-              <TabsTrigger value="admin" className="rounded-lg text-xs">Quản lý</TabsTrigger>
+              <TabsTrigger value="garden" className="rounded-lg text-xs">
+                Vườn
+              </TabsTrigger>
+              <TabsTrigger value="admin" className="rounded-lg text-xs">
+                Quản lý
+              </TabsTrigger>
             </TabsList>
           ) : null}
 
@@ -438,7 +498,9 @@ function GardenPage() {
                 </Card>
                 <Card className="worker-game-stat">
                   <div className="worker-game-stat-label">Ô đất</div>
-                  <div className="worker-game-stat-value">{state.unlockedPlots}/{PLOT_MAX}</div>
+                  <div className="worker-game-stat-value">
+                    {state.unlockedPlots}/{PLOT_MAX}
+                  </div>
                 </Card>
                 <Card className="worker-game-stat">
                   <div className="worker-game-stat-label">Đang trồng</div>
@@ -458,226 +520,262 @@ function GardenPage() {
                 </Card>
               </aside>
               <div className="worker-game-main space-y-4">
-        {/* Khu thú cưng */}
-        <section className="gradient-hero relative overflow-hidden rounded-3xl p-4 text-white shadow-soft">
-          <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
-          <div className="relative flex items-center gap-4">
-            <div className={cn("relative grid h-20 w-20 shrink-0 place-items-center rounded-2xl bg-white/20 backdrop-blur", playHearts && "animate-wiggle")}>
-              {pet.sprite ? (
-                <div
-                  className={cn(
-                    "h-14 w-14",
-                    mood === "great" && "animate-bounce",
-                    mood === "sad" && "opacity-70",
-                  )}
-                  style={{
-                    backgroundImage: `url(${pet.sprite})`,
-                    backgroundSize: "400% 100%",
-                    backgroundPosition: "0 0",
-                    backgroundRepeat: "no-repeat",
-                    imageRendering: "pixelated",
-                  }}
-                />
-              ) : (
-                <span
-                  className={cn(
-                    "inline-block text-5xl",
-                    mood === "great" && "animate-bounce",
-                    mood === "sad" && "opacity-70",
-                  )}
-                >
-                  {pet.emoji}
-                </span>
-              )}
-              {playHearts && <FloatingHearts />}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                {renamingPet ? (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const trimmed = petNameInput.trim();
-                      if (trimmed) {
-                        const newPet = { ...state.pet, name: trimmed };
-                        commit({ ...state, pet: newPet });
-                        if (balance?.id) updateBalance(balance.id, { pet: newPet }).catch(() => {});
-                      }
-                      setRenamingPet(false);
-                    }}
-                    className="flex items-center gap-1"
-                  >
-                    <input
-                      autoFocus
-                      value={petNameInput}
-                      onChange={(e) => setPetNameInput(e.target.value)}
-                      maxLength={20}
-                      className="w-28 rounded-lg bg-white/30 px-2 py-0.5 text-sm font-semibold text-white placeholder-white/60 outline-none ring-2 ring-white/60"
-                      onBlur={() => {
-                        const trimmed = petNameInput.trim();
-                        if (trimmed) {
-                          const newPet = { ...state.pet, name: trimmed };
-                          commit({ ...state, pet: newPet });
-                          if (balance?.id) updateBalance(balance.id, { pet: newPet }).catch(() => {});
-                        }
-                        setRenamingPet(false);
-                      }}
-                    />
-                  </form>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => { setPetNameInput(state.pet.name); setRenamingPet(true); }}
-                    className="flex items-center gap-1 text-lg font-semibold hover:underline"
-                  >
-                    {state.pet.name}
-                    <Pencil className="h-3.5 w-3.5 opacity-60" />
-                  </button>
-                )}
-                <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] uppercase tracking-wide backdrop-blur">
-                  {pet.name}
-                </span>
-              </div>
-              <Meter label="No bụng" value={hungerPct} icon={<Drumstick className="h-3 w-3" />} />
-              <Meter label="Vui vẻ" value={happyPct} icon={<Sparkles className="h-3 w-3" />} />
-            </div>
-          </div>
-          <div className="relative mt-3 grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setFeedOpen(true)}
-              className="flex items-center justify-center gap-1.5 rounded-xl bg-white/90 py-2 text-sm font-medium text-emerald-700 transition active:scale-95"
-            >
-              <Drumstick className="h-4 w-4" /> Cho ăn
-            </button>
-            <button
-              onClick={playPet}
-              className="flex items-center justify-center gap-1.5 rounded-xl bg-white/90 py-2 text-sm font-medium text-emerald-700 transition active:scale-95"
-            >
-              <Hand className="h-4 w-4" /> Vuốt ve
-            </button>
-          </div>
-        </section>
-
-        {/* Hành động phụ */}
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => setShopOpen(true)}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-card py-3 text-sm font-medium shadow-soft transition active:scale-95"
-          >
-            <Store className="h-4 w-4 text-primary" /> Cửa hàng thú
-          </button>
-          <div className="flex items-center justify-between gap-2 rounded-2xl bg-card px-3 py-3 text-sm font-medium shadow-soft">
-            <span className="flex items-center gap-2">
-              <Leaf className="h-4 w-4 text-primary" /> Đi dạo
-            </span>
-            <Switch
-              checked={state.roamingEnabled}
-              onCheckedChange={(v) => commit({ ...state, roamingEnabled: v })}
-            />
-          </div>
-        </div>
-
-        {/* Khu vườn */}
-        <section className="rounded-3xl bg-card p-4 shadow-soft">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold tracking-tight">Luống hoa</div>
-              <div className="text-[11px] text-muted-foreground">{state.unlockedPlots} ô · Thu hoạch: {state.totalHarvested}</div>
-            </div>
-          </div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {Array.from({ length: state.unlockedPlots }).map((_, i) => {
-              const plot = state.plots[i];
-              const flower = flowerById(plot?.flowerId ?? null);
-              const ready = isReady(plot ?? { flowerId: null, plantedAt: null }, now);
-              const progress = growthProgress(plot ?? { flowerId: null, plantedAt: null }, now);
-              return (
-                <button
-                  key={i}
-                  onClick={() => {
-                    if (!flower) setSeedPickerFor(i);
-                    else if (ready) harvest(i);
-                  }}
-                  className={cn(
-                    "relative flex aspect-square flex-col items-center justify-center gap-0 rounded-lg border border-dashed text-center transition active:scale-95",
-                    flower
-                      ? ready
-                        ? "border-amber-400 bg-amber-50"
-                        : "border-emerald-200 bg-emerald-50"
-                      : "border-border bg-muted/40",
-                  )}
-                >
-                  {harvestAnim?.plotIndex === i && (
-                    <span
-                      key={harvestAnim.key}
-                      className="pointer-events-none absolute left-1/2 -top-2 -translate-x-1/2 text-xl animate-float-up"
-                    >
-                      {harvestAnim.emoji}
-                    </span>
-                  )}
-                  {!flower ? (
-                    <span className="text-lg text-muted-foreground/50">+</span>
-                  ) : (
-                    <>
-                      <span
-                        className={cn("text-base leading-none inline-block", ready && "animate-bounce")}
-                        style={{ transform: `scale(${ready ? 1 : (0.35 + progress * 0.65).toFixed(2)})`, transformOrigin: "center bottom", transition: "transform 0.4s ease" }}
-                      >
-                        {flower.emoji}
-                      </span>
-                      <span className="text-[9px] font-medium text-foreground/80 leading-tight truncate w-full text-center px-0.5">
-                        {flower.name}
-                      </span>
-                      {ready ? (
-                        <span className="text-[9px] font-semibold text-amber-600 leading-tight">
-                          Thu hoạch
-                        </span>
-                      ) : (
-                        <>
-                          <div className="h-1 w-7 overflow-hidden rounded-full bg-emerald-200">
-                            <div
-                              className="h-full bg-emerald-500 transition-all"
-                              style={{ width: `${Math.round(progress * 100)}%` }}
-                            />
-                          </div>
-                          <span className="text-[9px] text-muted-foreground leading-tight">
-                            {readyInMinutes(plot, now) >= 60
-                              ? `${Math.floor(readyInMinutes(plot, now) / 60)}h${readyInMinutes(plot, now) % 60}p`
-                              : `${readyInMinutes(plot, now)}p`}
-                          </span>
-                        </>
+                {/* Khu thú cưng */}
+                <section className="gradient-hero relative overflow-hidden rounded-3xl p-4 text-white shadow-soft">
+                  <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
+                  <div className="relative flex items-center gap-4">
+                    <div
+                      className={cn(
+                        "relative grid h-20 w-20 shrink-0 place-items-center rounded-2xl bg-white/20 backdrop-blur",
+                        playHearts && "animate-wiggle",
                       )}
-                    </>
-                  )}
-                </button>
-              );
-            })}
+                    >
+                      {pet.sprite ? (
+                        <div
+                          className={cn(
+                            "h-14 w-14",
+                            mood === "great" && "animate-bounce",
+                            mood === "sad" && "opacity-70",
+                          )}
+                          style={{
+                            backgroundImage: `url(${pet.sprite})`,
+                            backgroundSize: "400% 100%",
+                            backgroundPosition: "0 0",
+                            backgroundRepeat: "no-repeat",
+                            imageRendering: "pixelated",
+                          }}
+                        />
+                      ) : (
+                        <span
+                          className={cn(
+                            "inline-block text-5xl",
+                            mood === "great" && "animate-bounce",
+                            mood === "sad" && "opacity-70",
+                          )}
+                        >
+                          {pet.emoji}
+                        </span>
+                      )}
+                      {playHearts && <FloatingHearts />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        {renamingPet ? (
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              const trimmed = petNameInput.trim();
+                              if (trimmed) {
+                                const newPet = { ...state.pet, name: trimmed };
+                                commit({ ...state, pet: newPet });
+                                if (balance?.id)
+                                  updateBalance(balance.id, { pet: newPet }).catch(() => {});
+                              }
+                              setRenamingPet(false);
+                            }}
+                            className="flex items-center gap-1"
+                          >
+                            <input
+                              autoFocus
+                              value={petNameInput}
+                              onChange={(e) => setPetNameInput(e.target.value)}
+                              maxLength={20}
+                              className="w-28 rounded-lg bg-white/30 px-2 py-0.5 text-sm font-semibold text-white placeholder-white/60 outline-none ring-2 ring-white/60"
+                              onBlur={() => {
+                                const trimmed = petNameInput.trim();
+                                if (trimmed) {
+                                  const newPet = { ...state.pet, name: trimmed };
+                                  commit({ ...state, pet: newPet });
+                                  if (balance?.id)
+                                    updateBalance(balance.id, { pet: newPet }).catch(() => {});
+                                }
+                                setRenamingPet(false);
+                              }}
+                            />
+                          </form>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPetNameInput(state.pet.name);
+                              setRenamingPet(true);
+                            }}
+                            className="flex items-center gap-1 text-lg font-semibold hover:underline"
+                          >
+                            {state.pet.name}
+                            <Pencil className="h-3.5 w-3.5 opacity-60" />
+                          </button>
+                        )}
+                        <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] uppercase tracking-wide backdrop-blur">
+                          {pet.name}
+                        </span>
+                      </div>
+                      <Meter
+                        label="No bụng"
+                        value={hungerPct}
+                        icon={<Drumstick className="h-3 w-3" />}
+                      />
+                      <Meter
+                        label="Vui vẻ"
+                        value={happyPct}
+                        icon={<Sparkles className="h-3 w-3" />}
+                      />
+                    </div>
+                  </div>
+                  <div className="relative mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setFeedOpen(true)}
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-white/90 py-2 text-sm font-medium text-emerald-700 transition active:scale-95"
+                    >
+                      <Drumstick className="h-4 w-4" /> Cho ăn
+                    </button>
+                    <button
+                      onClick={playPet}
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-white/90 py-2 text-sm font-medium text-emerald-700 transition active:scale-95"
+                    >
+                      <Hand className="h-4 w-4" /> Vuốt ve
+                    </button>
+                  </div>
+                </section>
 
-            {/* Nút mở ô tiếp theo */}
-            {state.unlockedPlots < PLOT_MAX && (() => {
-              const cost = plotUnlockCost(state.unlockedPlots);
-              const canAfford = coins >= (cost ?? Infinity);
-              return (
-                <button
-                  onClick={unlockPlot}
-                  className={cn(
-                    "flex aspect-square flex-col items-center justify-center gap-px rounded-lg border border-dashed text-center transition active:scale-95",
-                    canAfford ? "border-primary/40 bg-primary/5 hover:bg-primary/10" : "border-border bg-muted/20 opacity-60",
-                  )}
-                >
-                  <span className="text-sm text-primary leading-none">🔒</span>
-                  <span className="text-[8px] font-semibold text-primary leading-none">Mở ô</span>
-                  <span className="flex items-center gap-0.5 text-[8px] font-medium text-amber-700 leading-none">
-                    <Coins className="h-2 w-2 shrink-0" />{cost}
-                  </span>
-                </button>
-              );
-            })()}
-          </div>
-          <p className="mt-3 text-center text-[11px] text-muted-foreground">
-            Chạm ô trống để trồng hoa · chạm hoa đã nở để thu hoạch lấy xu
-          </p>
-        </section>
+                {/* Hành động phụ */}
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setShopOpen(true)}
+                    className="flex items-center justify-center gap-2 rounded-2xl bg-card py-3 text-sm font-medium shadow-soft transition active:scale-95"
+                  >
+                    <Store className="h-4 w-4 text-primary" /> Cửa hàng thú
+                  </button>
+                  <div className="flex items-center justify-between gap-2 rounded-2xl bg-card px-3 py-3 text-sm font-medium shadow-soft">
+                    <span className="flex items-center gap-2">
+                      <Leaf className="h-4 w-4 text-primary" /> Đi dạo
+                    </span>
+                    <Switch
+                      checked={state.roamingEnabled}
+                      onCheckedChange={(v) => commit({ ...state, roamingEnabled: v })}
+                    />
+                  </div>
+                </div>
+
+                {/* Khu vườn */}
+                <section className="rounded-3xl bg-card p-4 shadow-soft">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold tracking-tight">Luống hoa</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {state.unlockedPlots} ô · Thu hoạch: {state.totalHarvested}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {Array.from({ length: state.unlockedPlots }).map((_, i) => {
+                      const plot = state.plots[i];
+                      const flower = flowerById(plot?.flowerId ?? null);
+                      const ready = isReady(plot ?? { flowerId: null, plantedAt: null }, now);
+                      const progress = growthProgress(
+                        plot ?? { flowerId: null, plantedAt: null },
+                        now,
+                      );
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            if (!flower) setSeedPickerFor(i);
+                            else if (ready) harvest(i);
+                          }}
+                          className={cn(
+                            "relative flex aspect-square flex-col items-center justify-center gap-0 rounded-lg border border-dashed text-center transition active:scale-95",
+                            flower
+                              ? ready
+                                ? "border-amber-400 bg-amber-50"
+                                : "border-emerald-200 bg-emerald-50"
+                              : "border-border bg-muted/40",
+                          )}
+                        >
+                          {harvestAnim?.plotIndex === i && (
+                            <span
+                              key={harvestAnim.key}
+                              className="pointer-events-none absolute left-1/2 -top-2 -translate-x-1/2 text-xl animate-float-up"
+                            >
+                              {harvestAnim.emoji}
+                            </span>
+                          )}
+                          {!flower ? (
+                            <span className="text-lg text-muted-foreground/50">+</span>
+                          ) : (
+                            <>
+                              <span
+                                className={cn(
+                                  "text-base leading-none inline-block",
+                                  ready && "animate-bounce",
+                                )}
+                                style={{
+                                  transform: `scale(${ready ? 1 : (0.35 + progress * 0.65).toFixed(2)})`,
+                                  transformOrigin: "center bottom",
+                                  transition: "transform 0.4s ease",
+                                }}
+                              >
+                                {flower.emoji}
+                              </span>
+                              <span className="text-[9px] font-medium text-foreground/80 leading-tight truncate w-full text-center px-0.5">
+                                {flower.name}
+                              </span>
+                              {ready ? (
+                                <span className="text-[9px] font-semibold text-amber-600 leading-tight">
+                                  Thu hoạch
+                                </span>
+                              ) : (
+                                <>
+                                  <div className="h-1 w-7 overflow-hidden rounded-full bg-emerald-200">
+                                    <div
+                                      className="h-full bg-emerald-500 transition-all"
+                                      style={{ width: `${Math.round(progress * 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[9px] text-muted-foreground leading-tight">
+                                    {readyInMinutes(plot, now) >= 60
+                                      ? `${Math.floor(readyInMinutes(plot, now) / 60)}h${readyInMinutes(plot, now) % 60}p`
+                                      : `${readyInMinutes(plot, now)}p`}
+                                  </span>
+                                </>
+                              )}
+                            </>
+                          )}
+                        </button>
+                      );
+                    })}
+
+                    {/* Nút mở ô tiếp theo */}
+                    {state.unlockedPlots < PLOT_MAX &&
+                      (() => {
+                        const cost = plotUnlockCost(state.unlockedPlots);
+                        const canAfford = coins >= (cost ?? Infinity);
+                        return (
+                          <button
+                            onClick={unlockPlot}
+                            className={cn(
+                              "flex aspect-square flex-col items-center justify-center gap-px rounded-lg border border-dashed text-center transition active:scale-95",
+                              canAfford
+                                ? "border-primary/40 bg-primary/5 hover:bg-primary/10"
+                                : "border-border bg-muted/20 opacity-60",
+                            )}
+                          >
+                            <span className="text-sm text-primary leading-none">🔒</span>
+                            <span className="text-[8px] font-semibold text-primary leading-none">
+                              Mở ô
+                            </span>
+                            <span className="flex items-center gap-0.5 text-[8px] font-medium text-amber-700 leading-none">
+                              <Coins className="h-2 w-2 shrink-0" />
+                              {cost}
+                            </span>
+                          </button>
+                        );
+                      })()}
+                  </div>
+                  <p className="mt-3 text-center text-[11px] text-muted-foreground">
+                    Chạm ô trống để trồng hoa · chạm hoa đã nở để thu hoạch lấy xu
+                  </p>
+                </section>
               </div>
             </div>
           </TabsContent>
@@ -710,7 +808,9 @@ function GardenPage() {
         <DialogContent className="rounded-3xl">
           <DialogHeader>
             <DialogTitle>Chọn hạt giống</DialogTitle>
-            <DialogDescription>Hoa sẽ nở sau một khoảng thời gian, ghé lại thu hoạch nhé.</DialogDescription>
+            <DialogDescription>
+              Hoa sẽ nở sau một khoảng thời gian, ghé lại thu hoạch nhé.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             {FLOWERS.map((f) => {
@@ -761,7 +861,10 @@ function GardenPage() {
                   <button
                     key={f.id}
                     disabled={!affordable}
-                    onClick={() => { buyFood(f); setFeedOpen(false); }}
+                    onClick={() => {
+                      buyFood(f);
+                      setFeedOpen(false);
+                    }}
                     className={cn(
                       "flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition active:scale-[0.98]",
                       affordable ? "border-border bg-card" : "border-border bg-muted/40 opacity-60",
@@ -770,9 +873,7 @@ function GardenPage() {
                     <span className="text-2xl">{f.emoji || "🍖"}</span>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold">{f.name}</div>
-                      <div className="text-[11px] text-muted-foreground">
-                        No thêm {f.fullness}%
-                      </div>
+                      <div className="text-[11px] text-muted-foreground">No thêm {f.fullness}%</div>
                     </div>
                     <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
                       <Coins className="h-3 w-3" /> {f.price}
@@ -797,7 +898,10 @@ function GardenPage() {
               user={user!}
               balance={balance}
               tiers={tiers}
-              onSuccess={() => { loadServerData(); setExchangeOpen(false); }}
+              onSuccess={() => {
+                loadServerData();
+                setExchangeOpen(false);
+              }}
             />
           </DialogContent>
         </Dialog>
@@ -866,13 +970,24 @@ function GardenPage() {
       </button>
 
       {/* Dialog ghé vườn hàng xóm */}
-      <Dialog open={visitOpen} onOpenChange={(o) => { setVisitOpen(o); if (!o) { setVisitedGarden(null); setGardenDetailOpen(false); } }}>
+      <Dialog
+        open={visitOpen}
+        onOpenChange={(o) => {
+          setVisitOpen(o);
+          if (!o) {
+            setVisitedGarden(null);
+            setGardenDetailOpen(false);
+          }
+        }}
+      >
         <DialogContent className="max-h-[80vh] overflow-y-auto rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <DoorOpen className="h-5 w-5 text-primary" /> Ghé vườn hàng xóm
             </DialogTitle>
-            <DialogDescription>Nhập username để ghé thăm vườn. Hoa đã chín mới có thể ăn chộm.</DialogDescription>
+            <DialogDescription>
+              Nhập username để ghé thăm vườn. Hoa đã chín mới có thể ăn chộm.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
@@ -884,7 +999,10 @@ function GardenPage() {
                 onKeyDown={(e) => e.key === "Enter" && visitGarden(visitUsername)}
                 className="flex-1"
               />
-              <Button onClick={() => visitGarden(visitUsername)} disabled={visiting || !visitUsername.trim()}>
+              <Button
+                onClick={() => visitGarden(visitUsername)}
+                disabled={visiting || !visitUsername.trim()}
+              >
                 {visiting ? "..." : "Vào"}
               </Button>
             </div>
@@ -907,7 +1025,8 @@ function GardenPage() {
                       item.target_username ||
                       item.expand?.target_user?.username ||
                       "Vườn đã lưu";
-                    const username = item.target_username || item.expand?.target_user?.username || "";
+                    const username =
+                      item.target_username || item.expand?.target_user?.username || "";
                     return (
                       <div
                         key={item.id}
@@ -923,7 +1042,9 @@ function GardenPage() {
                           className="min-w-0 flex-1 text-left"
                         >
                           <div className="truncate text-sm font-medium">{label}</div>
-                          <div className="truncate text-[11px] text-muted-foreground">@{username || "chưa có username"}</div>
+                          <div className="truncate text-[11px] text-muted-foreground">
+                            @{username || "chưa có username"}
+                          </div>
                         </button>
                         <button
                           type="button"
@@ -939,7 +1060,6 @@ function GardenPage() {
                 </div>
               )}
             </div>
-
           </div>
         </DialogContent>
       </Dialog>
@@ -949,7 +1069,9 @@ function GardenPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <DoorOpen className="h-5 w-5 text-primary" /> Vườn của{" "}
-              {visitedGarden?.expand?.user?.full_name || visitedGarden?.expand?.user?.username || "người dùng"}
+              {visitedGarden?.expand?.user?.full_name ||
+                visitedGarden?.expand?.user?.username ||
+                "người dùng"}
             </DialogTitle>
             <DialogDescription>Xem ô đất, tình trạng hoa và thời gian thu hoạch.</DialogDescription>
           </DialogHeader>
@@ -964,7 +1086,6 @@ function GardenPage() {
           )}
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }
@@ -980,11 +1101,18 @@ function GardenVisitPreview({
   curtainPhase: "idle" | "close" | "open";
   stealing: boolean;
   stealAnim: { emoji: string; plotIndex: number; key: number } | null;
-  onSteal: (victim: VisitedGarden, plotIndex: number, flowerReward: number, flowerEmoji?: string) => void;
+  onSteal: (
+    victim: VisitedGarden,
+    plotIndex: number,
+    flowerReward: number,
+    flowerEmoji?: string,
+  ) => void;
 }) {
   const now = Date.now();
   const victimCoins = garden.coins ?? 0;
-  const serverPlots: { flowerId: string | null; plantedAt: number | null }[] = Array.isArray(garden.plots)
+  const serverPlots: { flowerId: string | null; plantedAt: number | null }[] = Array.isArray(
+    garden.plots,
+  )
     ? (garden.plots as { flowerId: string | null; plantedAt: number | null }[])
     : [];
   const readyPlots = serverPlots
@@ -1084,7 +1212,12 @@ function GardenVisitPreview({
                   {flower.name}
                 </span>
                 {ready ? (
-                  <span className={cn("text-[9px] font-semibold leading-tight", alreadyStolen ? "text-muted-foreground" : "text-amber-600")}>
+                  <span
+                    className={cn(
+                      "text-[9px] font-semibold leading-tight",
+                      alreadyStolen ? "text-muted-foreground" : "text-amber-600",
+                    )}
+                  >
                     {alreadyStolen ? "Đã chộm" : "Chộm"}
                   </span>
                 ) : (
@@ -1144,13 +1277,31 @@ function Meter({ label, value, icon }: { label: string; value: number; icon: Rea
 
 // ---- Food Shop Tab ----
 
-function FoodShopTab({ foods, coins, petName, onBuy }: { foods: GardenFood[]; coins: number; petName: string; onBuy: (food: GardenFood) => void }) {
+function FoodShopTab({
+  foods,
+  coins,
+  petName,
+  onBuy,
+}: {
+  foods: GardenFood[];
+  coins: number;
+  petName: string;
+  onBuy: (food: GardenFood) => void;
+}) {
   if (foods.length === 0) {
-    return <EmptyState icon={Drumstick} title="Chưa có thức ăn" description="Admin chưa thêm thức ăn vào cửa hàng." />;
+    return (
+      <EmptyState
+        icon={Drumstick}
+        title="Chưa có thức ăn"
+        description="Admin chưa thêm thức ăn vào cửa hàng."
+      />
+    );
   }
   return (
     <div className="space-y-2">
-      <div className="text-xs text-muted-foreground">Mua thức ăn cho {petName}. Mỗi món cho no bụng khác nhau.</div>
+      <div className="text-xs text-muted-foreground">
+        Mua thức ăn cho {petName}. Mỗi món cho no bụng khác nhau.
+      </div>
       {foods.map((f) => {
         const canAfford = coins >= f.price;
         return (
@@ -1180,12 +1331,29 @@ function FoodShopTab({ foods, coins, petName, onBuy }: { foods: GardenFood[]; co
 
 // ---- Exchange Tab ----
 
-function ExchangeTab({ user, balance, tiers, onSuccess }: { user: { id: string; bank_name?: string; bank_account_number?: string; bank_account_name?: string }; balance: GardenBalance | null; tiers: GardenExchangeTier[]; onSuccess: () => void }) {
+function ExchangeTab({
+  user,
+  balance,
+  tiers,
+  onSuccess,
+}: {
+  user: {
+    id: string;
+    bank_name?: string;
+    bank_account_number?: string;
+    bank_account_name?: string;
+  };
+  balance: GardenBalance | null;
+  tiers: GardenExchangeTier[];
+  onSuccess: () => void;
+}) {
   const [requests, setRequests] = useState<GardenExchangeRequest[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchExchangeRequests(user.id).then(setRequests).catch(() => {});
+    fetchExchangeRequests(user.id)
+      .then(setRequests)
+      .catch(() => {});
   }, [user.id]);
 
   const coins = balance?.coins ?? 0;
@@ -1193,9 +1361,18 @@ function ExchangeTab({ user, balance, tiers, onSuccess }: { user: { id: string; 
   const hasBank = Boolean(user.bank_name && user.bank_account_number);
 
   const doExchange = async (tier: GardenExchangeTier) => {
-    if (!hasBank) { toast.error("Bạn cần cập nhật số tài khoản ngân hàng trước khi quy đổi"); return; }
-    if (coins < tier.min_coins) { toast.error(`Cần tối thiểu ${tier.min_coins} xu để gửi yêu cầu`); return; }
-    if (coins < tier.exchange_coins) { toast.error("Không đủ xu để quy đổi"); return; }
+    if (!hasBank) {
+      toast.error("Bạn cần cập nhật số tài khoản ngân hàng trước khi quy đổi");
+      return;
+    }
+    if (coins < tier.min_coins) {
+      toast.error(`Cần tối thiểu ${tier.min_coins} xu để gửi yêu cầu`);
+      return;
+    }
+    if (coins < tier.exchange_coins) {
+      toast.error("Không đủ xu để quy đổi");
+      return;
+    }
     setSubmitting(true);
     try {
       await createExchangeRequest({
@@ -1211,7 +1388,11 @@ function ExchangeTab({ user, balance, tiers, onSuccess }: { user: { id: string; 
       onSuccess();
       const updated = await fetchExchangeRequests(user.id);
       setRequests(updated);
-    } catch (e: unknown) { toast.error(errorMessage(e, "Lỗi gửi yêu cầu")); } finally { setSubmitting(false); }
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Lỗi gửi yêu cầu"));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -1225,7 +1406,9 @@ function ExchangeTab({ user, balance, tiers, onSuccess }: { user: { id: string; 
         </div>
         <div className="flex items-center justify-between">
           <div className="text-xs text-muted-foreground">Tiền thưởng dự trữ</div>
-          <div className="text-sm font-semibold text-emerald-700">{reserve.toLocaleString("vi-VN")} đ</div>
+          <div className="text-sm font-semibold text-emerald-700">
+            {reserve.toLocaleString("vi-VN")} đ
+          </div>
         </div>
         {!hasBank && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
@@ -1234,16 +1417,24 @@ function ExchangeTab({ user, balance, tiers, onSuccess }: { user: { id: string; 
         )}
       </Card>
 
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bảng quy đổi</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Bảng quy đổi
+      </div>
       {tiers.length === 0 ? (
-        <EmptyState icon={ArrowRightLeft} title="Chưa có mốc quy đổi" description="Admin chưa thiết lập bảng quy đổi." />
+        <EmptyState
+          icon={ArrowRightLeft}
+          title="Chưa có mốc quy đổi"
+          description="Admin chưa thiết lập bảng quy đổi."
+        />
       ) : (
         tiers.map((t) => {
           const canExchange = coins >= t.min_coins && coins >= t.exchange_coins && hasBank;
           return (
             <Card key={t.id} className="flex items-center justify-between gap-3 p-3">
               <div>
-                <div className="text-sm font-semibold">{t.exchange_coins} xu → {t.money_amount.toLocaleString("vi-VN")} đ</div>
+                <div className="text-sm font-semibold">
+                  {t.exchange_coins} xu → {t.money_amount.toLocaleString("vi-VN")} đ
+                </div>
                 <div className="text-[11px] text-muted-foreground">
                   Cần tối thiểu {t.min_coins} xu · {t.type === "instant" ? "Nhận ngay" : "Tích trữ"}
                 </div>
@@ -1263,19 +1454,40 @@ function ExchangeTab({ user, balance, tiers, onSuccess }: { user: { id: string; 
 
       {requests.length > 0 && (
         <>
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Lịch sử yêu cầu</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Lịch sử yêu cầu
+          </div>
           {requests.slice(0, 10).map((r) => (
             <Card key={r.id} className="p-3">
               <div className="flex items-center justify-between gap-2">
-                <div className="text-sm font-medium">{r.coins_spent} xu → {r.money_amount.toLocaleString("vi-VN")} đ</div>
-                <StatusChip tone={r.status === "approved" ? "success" : r.status === "rejected" ? "danger" : "warning"}>
-                  {r.status === "approved" ? "Đã duyệt" : r.status === "rejected" ? "Đã huỷ" : r.status === "processing" ? "Đang xử lý" : "Chờ duyệt"}
+                <div className="text-sm font-medium">
+                  {r.coins_spent} xu → {r.money_amount.toLocaleString("vi-VN")} đ
+                </div>
+                <StatusChip
+                  tone={
+                    r.status === "approved"
+                      ? "success"
+                      : r.status === "rejected"
+                        ? "danger"
+                        : "warning"
+                  }
+                >
+                  {r.status === "approved"
+                    ? "Đã duyệt"
+                    : r.status === "rejected"
+                      ? "Đã huỷ"
+                      : r.status === "processing"
+                        ? "Đang xử lý"
+                        : "Chờ duyệt"}
                 </StatusChip>
               </div>
               <div className="mt-1 text-[11px] text-muted-foreground">
-                {r.type === "instant" ? "Nhận ngay" : "Tích trữ"} · {r.created ? new Date(r.created).toLocaleDateString("vi-VN") : ""}
+                {r.type === "instant" ? "Nhận ngay" : "Tích trữ"} ·{" "}
+                {r.created ? new Date(r.created).toLocaleDateString("vi-VN") : ""}
               </div>
-              {r.admin_note && <div className="mt-1 rounded-lg bg-muted/60 p-2 text-[11px]">{r.admin_note}</div>}
+              {r.admin_note && (
+                <div className="mt-1 rounded-lg bg-muted/60 p-2 text-[11px]">{r.admin_note}</div>
+              )}
             </Card>
           ))}
         </>
@@ -1298,10 +1510,18 @@ function AdminTab({ onDataChanged }: { onDataChanged: () => void }) {
             onClick={() => setSub(k)}
             className={cn(
               "rounded-full px-3 py-1.5 text-xs font-medium transition",
-              sub === k ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground",
+              sub === k
+                ? "bg-primary text-primary-foreground"
+                : "border border-border bg-card text-muted-foreground",
             )}
           >
-            {k === "requests" ? "Duyệt yêu cầu" : k === "foods" ? "Thức ăn" : k === "tiers" ? "Bảng quy đổi" : "Xu user"}
+            {k === "requests"
+              ? "Duyệt yêu cầu"
+              : k === "foods"
+                ? "Thức ăn"
+                : k === "tiers"
+                  ? "Bảng quy đổi"
+                  : "Xu user"}
           </button>
         ))}
       </div>
@@ -1318,29 +1538,42 @@ function AdminRequests({ onDataChanged }: { onDataChanged: () => void }) {
   const [note, setNote] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  useEffect(() => { fetchExchangeRequests().then(setRequests).catch(() => {}); }, []);
+  useEffect(() => {
+    fetchExchangeRequests()
+      .then(setRequests)
+      .catch(() => {});
+  }, []);
 
   const handleApprove = async (id: string) => {
     try {
       await approveExchangeRequest(id, note);
       toast.success("Đã duyệt");
-      setActiveId(null); setNote("");
+      setActiveId(null);
+      setNote("");
       const updated = await fetchExchangeRequests();
       setRequests(updated);
       onDataChanged();
-    } catch (e: unknown) { toast.error(errorMessage(e, "Lỗi duyệt")); }
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Lỗi duyệt"));
+    }
   };
 
   const handleReject = async (id: string) => {
-    if (!note.trim()) { toast.warning("Nhập lý do huỷ"); return; }
+    if (!note.trim()) {
+      toast.warning("Nhập lý do huỷ");
+      return;
+    }
     try {
       await rejectExchangeRequest(id, note);
       toast.success("Đã huỷ");
-      setActiveId(null); setNote("");
+      setActiveId(null);
+      setNote("");
       const updated = await fetchExchangeRequests();
       setRequests(updated);
       onDataChanged();
-    } catch (e: unknown) { toast.error(errorMessage(e, "Lỗi huỷ")); }
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Lỗi huỷ"));
+    }
   };
 
   const pending = requests.filter((r) => r.status === "pending");
@@ -1350,7 +1583,11 @@ function AdminRequests({ onDataChanged }: { onDataChanged: () => void }) {
   return (
     <div className="space-y-3">
       <div className="text-xs font-semibold">Chờ duyệt ({pending.length})</div>
-      {pending.length === 0 && <div className="rounded-xl border bg-card p-3 text-xs text-muted-foreground">Không có yêu cầu nào.</div>}
+      {pending.length === 0 && (
+        <div className="rounded-xl border bg-card p-3 text-xs text-muted-foreground">
+          Không có yêu cầu nào.
+        </div>
+      )}
       {pending.map((r) => (
         <Card key={r.id} className="space-y-2 p-3">
           <div className="flex items-center justify-between">
@@ -1358,22 +1595,37 @@ function AdminRequests({ onDataChanged }: { onDataChanged: () => void }) {
             <StatusChip tone="warning">Chờ duyệt</StatusChip>
           </div>
           <div className="text-xs text-muted-foreground">
-            {r.coins_spent} xu → {r.money_amount.toLocaleString("vi-VN")} đ · {r.type === "instant" ? "Nhận ngay" : "Tích trữ"}
+            {r.coins_spent} xu → {r.money_amount.toLocaleString("vi-VN")} đ ·{" "}
+            {r.type === "instant" ? "Nhận ngay" : "Tích trữ"}
           </div>
           <div className="text-xs text-muted-foreground">
             STK: {r.bank_name} · {r.bank_account_number} · {r.bank_account_name}
           </div>
           {activeId === r.id ? (
             <div className="space-y-2">
-              <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Phản hồi (bắt buộc khi huỷ)" className="text-xs" />
+              <Textarea
+                rows={2}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Phản hồi (bắt buộc khi huỷ)"
+                className="text-xs"
+              />
               <div className="flex gap-2">
-                <Button size="sm" onClick={() => handleApprove(r.id)}><Check className="h-3 w-3" /> Duyệt</Button>
-                <Button size="sm" variant="destructive" onClick={() => handleReject(r.id)}><X className="h-3 w-3" /> Huỷ</Button>
-                <Button size="sm" variant="outline" onClick={() => setActiveId(null)}>Đóng</Button>
+                <Button size="sm" onClick={() => handleApprove(r.id)}>
+                  <Check className="h-3 w-3" /> Duyệt
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => handleReject(r.id)}>
+                  <X className="h-3 w-3" /> Huỷ
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setActiveId(null)}>
+                  Đóng
+                </Button>
               </div>
             </div>
           ) : (
-            <Button size="sm" variant="outline" onClick={() => setActiveId(r.id)}>Xử lý</Button>
+            <Button size="sm" variant="outline" onClick={() => setActiveId(r.id)}>
+              Xử lý
+            </Button>
           )}
         </Card>
       ))}
@@ -1383,10 +1635,14 @@ function AdminRequests({ onDataChanged }: { onDataChanged: () => void }) {
           {processing.map((r) => (
             <Card key={r.id} className="p-3">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-medium">{r.expand?.user?.full_name || "User"} · {r.coins_spent} xu</div>
+                <div className="text-sm font-medium">
+                  {r.expand?.user?.full_name || "User"} · {r.coins_spent} xu
+                </div>
                 <StatusChip tone="warning">Đang xử lý</StatusChip>
               </div>
-              {r.admin_note && <div className="mt-1 text-[11px] text-muted-foreground">{r.admin_note}</div>}
+              {r.admin_note && (
+                <div className="mt-1 text-[11px] text-muted-foreground">{r.admin_note}</div>
+              )}
             </Card>
           ))}
         </>
@@ -1397,12 +1653,16 @@ function AdminRequests({ onDataChanged }: { onDataChanged: () => void }) {
           {resolved.slice(0, 10).map((r) => (
             <Card key={r.id} className="p-3">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-medium">{r.expand?.user?.full_name || "User"} · {r.coins_spent} xu</div>
+                <div className="text-sm font-medium">
+                  {r.expand?.user?.full_name || "User"} · {r.coins_spent} xu
+                </div>
                 <StatusChip tone={r.status === "approved" ? "success" : "danger"}>
                   {r.status === "approved" ? "Đã duyệt" : "Đã huỷ"}
                 </StatusChip>
               </div>
-              {r.admin_note && <div className="mt-1 text-[11px] text-muted-foreground">{r.admin_note}</div>}
+              {r.admin_note && (
+                <div className="mt-1 text-[11px] text-muted-foreground">{r.admin_note}</div>
+              )}
             </Card>
           ))}
         </>
@@ -1413,14 +1673,33 @@ function AdminRequests({ onDataChanged }: { onDataChanged: () => void }) {
 
 function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
   const [foods, setFoods] = useState<GardenFood[]>([]);
-  const [form, setForm] = useState({ name: "", emoji: "🍖", price: "10", fullness: "30", petType: "all" });
+  const [form, setForm] = useState({
+    name: "",
+    emoji: "🍖",
+    price: "10",
+    fullness: "30",
+    petType: "all",
+  });
   const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", emoji: "", price: "", fullness: "", petType: "all" });
+  const [editForm, setEditForm] = useState({
+    name: "",
+    emoji: "",
+    price: "",
+    fullness: "",
+    petType: "all",
+  });
 
-  useEffect(() => { fetchFoods().then(setFoods).catch(() => {}); }, []);
+  useEffect(() => {
+    fetchFoods()
+      .then(setFoods)
+      .catch(() => {});
+  }, []);
 
   const add = async () => {
-    if (!form.name.trim()) { toast.warning("Nhập tên thức ăn"); return; }
+    if (!form.name.trim()) {
+      toast.warning("Nhập tên thức ăn");
+      return;
+    }
     await createFood({
       name: form.name,
       emoji: form.emoji,
@@ -1438,7 +1717,13 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
 
   const startEdit = (f: GardenFood) => {
     setEditId(f.id);
-    setEditForm({ name: f.name, emoji: f.emoji || "🍖", price: String(f.price), fullness: String(f.fullness), petType: f.petType || "all" });
+    setEditForm({
+      name: f.name,
+      emoji: f.emoji || "🍖",
+      price: String(f.price),
+      fullness: String(f.fullness),
+      petType: f.petType || "all",
+    });
   };
 
   const saveEdit = async () => {
@@ -1465,13 +1750,20 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
   };
 
   const petLabel = (pt?: string) =>
-    !pt || pt === "all" ? "Tất cả" : PETS.find((p) => p.id === pt)?.name ?? pt;
+    !pt || pt === "all" ? "Tất cả" : (PETS.find((p) => p.id === pt)?.name ?? pt);
 
   const PetSelect = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
-    <select value={value} onChange={(e) => onChange(e.target.value)}
-      className="col-span-2 h-8 rounded-md border border-input bg-background px-2 text-xs">
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="col-span-2 h-8 rounded-md border border-input bg-background px-2 text-xs"
+    >
       <option value="all">Tất cả loài thú</option>
-      {PETS.map((p) => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+      {PETS.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.emoji} {p.name}
+        </option>
+      ))}
     </select>
   );
 
@@ -1480,28 +1772,90 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
       <Card className="space-y-2 p-3">
         <div className="text-xs font-semibold">Thêm thức ăn mới</div>
         <div className="grid grid-cols-2 gap-2">
-          <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Tên" className="h-8 text-xs" />
-          <Input value={form.emoji} onChange={(e) => setForm((f) => ({ ...f, emoji: e.target.value }))} placeholder="Emoji" className="h-8 text-xs" />
-          <Input value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="Giá (xu)" className="h-8 text-xs" type="number" />
-          <Input value={form.fullness} onChange={(e) => setForm((f) => ({ ...f, fullness: e.target.value }))} placeholder="No bụng (%)" className="h-8 text-xs" type="number" min={1} max={100} step={1} />
-          <PetSelect value={form.petType} onChange={(v) => setForm((f) => ({ ...f, petType: v }))} />
+          <Input
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            placeholder="Tên"
+            className="h-8 text-xs"
+          />
+          <Input
+            value={form.emoji}
+            onChange={(e) => setForm((f) => ({ ...f, emoji: e.target.value }))}
+            placeholder="Emoji"
+            className="h-8 text-xs"
+          />
+          <Input
+            value={form.price}
+            onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+            placeholder="Giá (xu)"
+            className="h-8 text-xs"
+            type="number"
+          />
+          <Input
+            value={form.fullness}
+            onChange={(e) => setForm((f) => ({ ...f, fullness: e.target.value }))}
+            placeholder="No bụng (%)"
+            className="h-8 text-xs"
+            type="number"
+            min={1}
+            max={100}
+            step={1}
+          />
+          <PetSelect
+            value={form.petType}
+            onChange={(v) => setForm((f) => ({ ...f, petType: v }))}
+          />
         </div>
-        <Button size="sm" onClick={add}><Plus className="h-3 w-3" /> Thêm</Button>
+        <Button size="sm" onClick={add}>
+          <Plus className="h-3 w-3" /> Thêm
+        </Button>
       </Card>
       {foods.map((f) => (
         <div key={f.id} className="rounded-xl border bg-card px-3 py-2">
           {editId === f.id ? (
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
-                <Input value={editForm.name} onChange={(e) => setEditForm((ef) => ({ ...ef, name: e.target.value }))} placeholder="Tên" className="h-8 text-xs" />
-                <Input value={editForm.emoji} onChange={(e) => setEditForm((ef) => ({ ...ef, emoji: e.target.value }))} placeholder="Emoji" className="h-8 text-xs" />
-                <Input value={editForm.price} onChange={(e) => setEditForm((ef) => ({ ...ef, price: e.target.value }))} placeholder="Giá (xu)" className="h-8 text-xs" type="number" />
-                <Input value={editForm.fullness} onChange={(e) => setEditForm((ef) => ({ ...ef, fullness: e.target.value }))} placeholder="No bụng (%)" className="h-8 text-xs" type="number" min={1} max={100} step={1} />
-                <PetSelect value={editForm.petType} onChange={(v) => setEditForm((ef) => ({ ...ef, petType: v }))} />
+                <Input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm((ef) => ({ ...ef, name: e.target.value }))}
+                  placeholder="Tên"
+                  className="h-8 text-xs"
+                />
+                <Input
+                  value={editForm.emoji}
+                  onChange={(e) => setEditForm((ef) => ({ ...ef, emoji: e.target.value }))}
+                  placeholder="Emoji"
+                  className="h-8 text-xs"
+                />
+                <Input
+                  value={editForm.price}
+                  onChange={(e) => setEditForm((ef) => ({ ...ef, price: e.target.value }))}
+                  placeholder="Giá (xu)"
+                  className="h-8 text-xs"
+                  type="number"
+                />
+                <Input
+                  value={editForm.fullness}
+                  onChange={(e) => setEditForm((ef) => ({ ...ef, fullness: e.target.value }))}
+                  placeholder="No bụng (%)"
+                  className="h-8 text-xs"
+                  type="number"
+                  min={1}
+                  max={100}
+                  step={1}
+                />
+                <PetSelect
+                  value={editForm.petType}
+                  onChange={(v) => setEditForm((ef) => ({ ...ef, petType: v }))}
+                />
               </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={saveEdit}>Lưu</Button>
-                <Button size="sm" variant="outline" onClick={() => setEditId(null)}>Huỷ</Button>
+                <Button size="sm" onClick={saveEdit}>
+                  Lưu
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setEditId(null)}>
+                  Huỷ
+                </Button>
               </div>
             </div>
           ) : (
@@ -1511,14 +1865,28 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
                 <div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-medium">{f.name}</span>
-                    <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{petLabel(f.petType)}</span>
+                    <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                      {petLabel(f.petType)}
+                    </span>
                   </div>
-                  <div className="text-[11px] text-muted-foreground">{f.price} xu · no {f.fullness}%</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {f.price} xu · no {f.fullness}%
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => startEdit(f)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-blue-50 hover:text-blue-600"><Pencil className="h-4 w-4" /></button>
-                <button onClick={() => remove(f.id)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                <button
+                  onClick={() => startEdit(f)}
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-blue-50 hover:text-blue-600"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => remove(f.id)}
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             </div>
           )}
@@ -1530,11 +1898,25 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
 
 function AdminTiers({ onDataChanged }: { onDataChanged: () => void }) {
   const [tiers, setTiers] = useState<GardenExchangeTier[]>([]);
-  const [form, setForm] = useState({ min_coins: "500", exchange_coins: "500", money_amount: "50000", type: "instant" as "instant" | "reserve" });
+  const [form, setForm] = useState({
+    min_coins: "500",
+    exchange_coins: "500",
+    money_amount: "50000",
+    type: "instant" as "instant" | "reserve",
+  });
   const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ min_coins: "", exchange_coins: "", money_amount: "", type: "instant" as "instant" | "reserve" });
+  const [editForm, setEditForm] = useState({
+    min_coins: "",
+    exchange_coins: "",
+    money_amount: "",
+    type: "instant" as "instant" | "reserve",
+  });
 
-  useEffect(() => { fetchExchangeTiers().then(setTiers).catch(() => {}); }, []);
+  useEffect(() => {
+    fetchExchangeTiers()
+      .then(setTiers)
+      .catch(() => {});
+  }, []);
 
   const add = async () => {
     await createExchangeTier({
@@ -1553,12 +1935,22 @@ function AdminTiers({ onDataChanged }: { onDataChanged: () => void }) {
 
   const startEdit = (t: GardenExchangeTier) => {
     setEditId(t.id);
-    setEditForm({ min_coins: String(t.min_coins), exchange_coins: String(t.exchange_coins), money_amount: String(t.money_amount), type: t.type });
+    setEditForm({
+      min_coins: String(t.min_coins),
+      exchange_coins: String(t.exchange_coins),
+      money_amount: String(t.money_amount),
+      type: t.type,
+    });
   };
 
   const saveEdit = async () => {
     if (!editId) return;
-    await updateExchangeTier(editId, { min_coins: Number(editForm.min_coins) || 500, exchange_coins: Number(editForm.exchange_coins) || 500, money_amount: Number(editForm.money_amount) || 50000, type: editForm.type });
+    await updateExchangeTier(editId, {
+      min_coins: Number(editForm.min_coins) || 500,
+      exchange_coins: Number(editForm.exchange_coins) || 500,
+      money_amount: Number(editForm.money_amount) || 50000,
+      type: editForm.type,
+    });
     setEditId(null);
     const updated = await fetchExchangeTiers();
     setTiers(updated);
@@ -1578,31 +1970,73 @@ function AdminTiers({ onDataChanged }: { onDataChanged: () => void }) {
       <Card className="space-y-2 p-3">
         <div className="text-xs font-semibold">Thêm mốc quy đổi</div>
         <div className="grid grid-cols-2 gap-2">
-          <Input value={form.min_coins} onChange={(e) => setForm((f) => ({ ...f, min_coins: e.target.value }))} placeholder="Xu tối thiểu" className="h-8 text-xs" type="number" />
-          <Input value={form.exchange_coins} onChange={(e) => setForm((f) => ({ ...f, exchange_coins: e.target.value }))} placeholder="Xu tiêu" className="h-8 text-xs" type="number" />
-          <Input value={form.money_amount} onChange={(e) => setForm((f) => ({ ...f, money_amount: e.target.value }))} placeholder="Tiền (VND)" className="h-8 text-xs" type="number" />
+          <Input
+            value={form.min_coins}
+            onChange={(e) => setForm((f) => ({ ...f, min_coins: e.target.value }))}
+            placeholder="Xu tối thiểu"
+            className="h-8 text-xs"
+            type="number"
+          />
+          <Input
+            value={form.exchange_coins}
+            onChange={(e) => setForm((f) => ({ ...f, exchange_coins: e.target.value }))}
+            placeholder="Xu tiêu"
+            className="h-8 text-xs"
+            type="number"
+          />
+          <Input
+            value={form.money_amount}
+            onChange={(e) => setForm((f) => ({ ...f, money_amount: e.target.value }))}
+            placeholder="Tiền (VND)"
+            className="h-8 text-xs"
+            type="number"
+          />
           <select
             value={form.type}
-            onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as "instant" | "reserve" }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, type: e.target.value as "instant" | "reserve" }))
+            }
             className="h-8 rounded-md border border-input bg-background px-2 text-xs"
           >
             <option value="instant">Nhận ngay</option>
             <option value="reserve">Tích trữ</option>
           </select>
         </div>
-        <Button size="sm" onClick={add}><Plus className="h-3 w-3" /> Thêm mốc</Button>
+        <Button size="sm" onClick={add}>
+          <Plus className="h-3 w-3" /> Thêm mốc
+        </Button>
       </Card>
       {tiers.map((t) => (
         <div key={t.id} className="rounded-xl border bg-card px-3 py-2">
           {editId === t.id ? (
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
-                <Input value={editForm.min_coins} onChange={(e) => setEditForm((ef) => ({ ...ef, min_coins: e.target.value }))} placeholder="Xu tối thiểu" className="h-8 text-xs" type="number" />
-                <Input value={editForm.exchange_coins} onChange={(e) => setEditForm((ef) => ({ ...ef, exchange_coins: e.target.value }))} placeholder="Xu tiêu" className="h-8 text-xs" type="number" />
-                <Input value={editForm.money_amount} onChange={(e) => setEditForm((ef) => ({ ...ef, money_amount: e.target.value }))} placeholder="Tiền (VND)" className="h-8 text-xs" type="number" />
+                <Input
+                  value={editForm.min_coins}
+                  onChange={(e) => setEditForm((ef) => ({ ...ef, min_coins: e.target.value }))}
+                  placeholder="Xu tối thiểu"
+                  className="h-8 text-xs"
+                  type="number"
+                />
+                <Input
+                  value={editForm.exchange_coins}
+                  onChange={(e) => setEditForm((ef) => ({ ...ef, exchange_coins: e.target.value }))}
+                  placeholder="Xu tiêu"
+                  className="h-8 text-xs"
+                  type="number"
+                />
+                <Input
+                  value={editForm.money_amount}
+                  onChange={(e) => setEditForm((ef) => ({ ...ef, money_amount: e.target.value }))}
+                  placeholder="Tiền (VND)"
+                  className="h-8 text-xs"
+                  type="number"
+                />
                 <select
                   value={editForm.type}
-                  onChange={(e) => setEditForm((ef) => ({ ...ef, type: e.target.value as "instant" | "reserve" }))}
+                  onChange={(e) =>
+                    setEditForm((ef) => ({ ...ef, type: e.target.value as "instant" | "reserve" }))
+                  }
                   className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                 >
                   <option value="instant">Nhận ngay</option>
@@ -1610,19 +2044,37 @@ function AdminTiers({ onDataChanged }: { onDataChanged: () => void }) {
                 </select>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={saveEdit}>Lưu</Button>
-                <Button size="sm" variant="outline" onClick={() => setEditId(null)}>Huỷ</Button>
+                <Button size="sm" onClick={saveEdit}>
+                  Lưu
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setEditId(null)}>
+                  Huỷ
+                </Button>
               </div>
             </div>
           ) : (
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium">{t.exchange_coins} xu → {t.money_amount.toLocaleString("vi-VN")} đ</div>
-                <div className="text-[11px] text-muted-foreground">Tối thiểu {t.min_coins} xu · {t.type === "instant" ? "Nhận ngay" : "Tích trữ"}</div>
+                <div className="text-sm font-medium">
+                  {t.exchange_coins} xu → {t.money_amount.toLocaleString("vi-VN")} đ
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  Tối thiểu {t.min_coins} xu · {t.type === "instant" ? "Nhận ngay" : "Tích trữ"}
+                </div>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => startEdit(t)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-blue-50 hover:text-blue-600"><Pencil className="h-4 w-4" /></button>
-                <button onClick={() => remove(t.id)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                <button
+                  onClick={() => startEdit(t)}
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-blue-50 hover:text-blue-600"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => remove(t.id)}
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             </div>
           )}
@@ -1633,12 +2085,20 @@ function AdminTiers({ onDataChanged }: { onDataChanged: () => void }) {
 }
 
 function AdminBalances() {
-  const [balances, setBalances] = useState<(GardenBalance & { expand?: { user?: { full_name?: string; username?: string; uid?: string } } })[]>([]);
+  const [balances, setBalances] = useState<
+    (GardenBalance & {
+      expand?: { user?: { full_name?: string; username?: string; uid?: string } };
+    })[]
+  >([]);
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ coins: "", reserve_balance: "" });
   const [search, setSearch] = useState("");
 
-  useEffect(() => { fetchAllBalances().then(setBalances).catch(() => {}); }, []);
+  useEffect(() => {
+    fetchAllBalances()
+      .then(setBalances)
+      .catch(() => {});
+  }, []);
 
   const filtered = balances.filter((b) => {
     if (!search.trim()) return true;
@@ -1656,7 +2116,10 @@ function AdminBalances() {
 
   const saveEdit = async () => {
     if (!editId) return;
-    await updateBalance(editId, { coins: Number(editForm.coins) || 0, reserve_balance: Number(editForm.reserve_balance) || 0 });
+    await updateBalance(editId, {
+      coins: Number(editForm.coins) || 0,
+      reserve_balance: Number(editForm.reserve_balance) || 0,
+    });
     setEditId(null);
     const updated = await fetchAllBalances();
     setBalances(updated);
@@ -1670,7 +2133,7 @@ function AdminBalances() {
     setBalances(updated);
   };
 
-  const getUserLabel = (b: typeof balances[number]) => {
+  const getUserLabel = (b: (typeof balances)[number]) => {
     const user = b.expand?.user;
     const uid = user?.uid;
     const name = user?.full_name || "User";
@@ -1686,48 +2149,88 @@ function AdminBalances() {
         placeholder="Tìm theo tên, tài khoản hoặc mã UID..."
         className="h-9 text-xs"
       />
-      {filtered.length === 0 && <div className="rounded-xl border bg-card p-3 text-xs text-muted-foreground">Không tìm thấy.</div>}
+      {filtered.length === 0 && (
+        <div className="rounded-xl border bg-card p-3 text-xs text-muted-foreground">
+          Không tìm thấy.
+        </div>
+      )}
       {filtered.map((b) => {
         const { name, sub } = getUserLabel(b);
         return (
-        <div key={b.id} className="rounded-xl border bg-card px-3 py-2">
-          {editId === b.id ? (
-            <div className="space-y-2">
-              <div className="text-sm font-medium">{name} {sub && <span className="text-[10px] font-normal text-muted-foreground">({sub})</span>}</div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <div className="text-[10px] text-muted-foreground mb-0.5">Xu</div>
-                  <Input value={editForm.coins} onChange={(e) => setEditForm((ef) => ({ ...ef, coins: e.target.value }))} className="h-8 text-xs" type="number" />
+          <div key={b.id} className="rounded-xl border bg-card px-3 py-2">
+            {editId === b.id ? (
+              <div className="space-y-2">
+                <div className="text-sm font-medium">
+                  {name}{" "}
+                  {sub && (
+                    <span className="text-[10px] font-normal text-muted-foreground">({sub})</span>
+                  )}
                 </div>
-                <div>
-                  <div className="text-[10px] text-muted-foreground mb-0.5">Dự trữ (đ)</div>
-                  <Input value={editForm.reserve_balance} onChange={(e) => setEditForm((ef) => ({ ...ef, reserve_balance: e.target.value }))} className="h-8 text-xs" type="number" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="text-[10px] text-muted-foreground mb-0.5">Xu</div>
+                    <Input
+                      value={editForm.coins}
+                      onChange={(e) => setEditForm((ef) => ({ ...ef, coins: e.target.value }))}
+                      className="h-8 text-xs"
+                      type="number"
+                    />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-muted-foreground mb-0.5">Dự trữ (đ)</div>
+                    <Input
+                      value={editForm.reserve_balance}
+                      onChange={(e) =>
+                        setEditForm((ef) => ({ ...ef, reserve_balance: e.target.value }))
+                      }
+                      className="h-8 text-xs"
+                      type="number"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={saveEdit}>Lưu</Button>
-                <Button size="sm" variant="outline" onClick={() => setEditId(null)}>Huỷ</Button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-medium">{name} {sub && <span className="text-[10px] font-normal text-muted-foreground">({sub})</span>}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {b.coins} xu · Dự trữ: {b.reserve_balance.toLocaleString("vi-VN")} đ
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <button onClick={() => startEdit(b)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-blue-50 hover:text-blue-600"><Pencil className="h-4 w-4" /></button>
-                {b.reserve_balance > 0 && (
-                  <Button size="sm" variant="outline" onClick={() => doReset(b)} className="h-7 text-xs">
-                    <Wallet className="h-3 w-3" /> Reset
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={saveEdit}>
+                    Lưu
                   </Button>
-                )}
+                  <Button size="sm" variant="outline" onClick={() => setEditId(null)}>
+                    Huỷ
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium">
+                    {name}{" "}
+                    {sub && (
+                      <span className="text-[10px] font-normal text-muted-foreground">({sub})</span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {b.coins} xu · Dự trữ: {b.reserve_balance.toLocaleString("vi-VN")} đ
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => startEdit(b)}
+                    className="rounded-lg p-1.5 text-muted-foreground hover:bg-blue-50 hover:text-blue-600"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  {b.reserve_balance > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => doReset(b)}
+                      className="h-7 text-xs"
+                    >
+                      <Wallet className="h-3 w-3" /> Reset
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         );
       })}
     </div>
@@ -1739,9 +2242,7 @@ function FloatingHearts() {
   const [emoji] = useState(() => emojis[Math.floor(Math.random() * emojis.length)]);
   return (
     <div className="pointer-events-none absolute inset-0 overflow-visible">
-      <span className="absolute left-1/2 -translate-x-1/2 animate-float-up text-2xl">
-        {emoji}
-      </span>
+      <span className="absolute left-1/2 -translate-x-1/2 animate-float-up text-2xl">{emoji}</span>
     </div>
   );
 }

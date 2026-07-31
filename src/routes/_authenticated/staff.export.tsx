@@ -134,6 +134,7 @@ function buildFullRows(
       "Ngân hàng": user?.bank_name || "",
       "Số tài khoản": user?.bank_account_number || "",
       "Tên chủ tài khoản": user?.bank_account_name || "",
+      "Ghi chú STK": user?.bank_account_note || "",
       "Tên đăng nhập": user?.username || "",
       "Vai trò": user?.role || "",
       "Trạng thái tài khoản": user?.status || "",
@@ -318,8 +319,8 @@ function StaffExportPage() {
           </Button>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Bản đầy đủ gồm thông tin nhân sự, lịch sử làm việc, tài khoản ngân hàng
-          và trạng thái tài khoản.
+          Bản đầy đủ gồm thông tin nhân sự, lịch sử làm việc, tài khoản ngân hàng và trạng thái tài
+          khoản.
         </p>
       </div>
 

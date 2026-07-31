@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { VN_BANKS } from "@/lib/vn-banks";
 
-export function BankNameInput({ value, onChange }: {
+export function BankNameInput({
+  value,
+  onChange,
+}: {
   value: string;
   onChange: (value: string) => void;
 }) {

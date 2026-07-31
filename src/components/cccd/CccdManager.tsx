@@ -3,12 +3,7 @@ import { Download, IdCard, ImagePlus, Trash, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { dataUrlToFile, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import { createStaffActionLog, type StaffActionType } from "@/lib/staff-log";
 import { compressImage } from "@/lib/image-compress";
@@ -29,52 +24,53 @@ export function CccdManager({ targetUser, actor, onUpdated, readOnly }: CccdMana
   const frontUrl = targetUser.cccd_front ? fileUrl(targetUser, targetUser.cccd_front) : "";
   const backUrl = targetUser.cccd_back ? fileUrl(targetUser, targetUser.cccd_back) : "";
 
-  const uploadCccd = (side: "cccd_front" | "cccd_back") => async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Vui lòng chọn file ảnh");
-      return;
-    }
-    setUploading(true);
-    try {
-      const compressed = await compressImage(file);
-
-      const fd = new FormData();
-      fd.append(side, compressed);
-
-      const versionField = side === "cccd_front" ? "front_image" : "back_image";
-      const [, currentVersion] = await Promise.all([
-        updateUserAndCache(targetUser.id, fd),
-        getCurrentCccdVersion(targetUser.id),
-      ]);
-      if (currentVersion) {
-        await updateCccdVersionImages(
-          currentVersion.id,
-          versionField === "front_image" ? compressed : undefined,
-          versionField === "back_image" ? compressed : undefined,
-        );
+  const uploadCccd =
+    (side: "cccd_front" | "cccd_back") => async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        toast.error("Vui lòng chọn file ảnh");
+        return;
       }
+      setUploading(true);
+      try {
+        const compressed = await compressImage(file);
 
-      const action: StaffActionType = targetUser[side] ? "update" : "create";
-      await createStaffActionLog({
-        actor,
-        targetUserId: targetUser.id,
-        targetCollection: "users",
-        targetRecord: targetUser.id,
-        action,
-        after: { [side]: compressed.name },
-        note: `${actor?.role === "admin" ? "Admin" : "Staff"} ${action === "create" ? "thêm" : "cập nhật"} ảnh ${side === "cccd_front" ? "CCCD mặt trước" : "CCCD mặt sau"}`,
-      });
-      toast.success("Đã cập nhật ảnh CCCD");
-      onUpdated();
-    } catch (err: any) {
-      toast.error(err?.message || "Lỗi upload ảnh");
-    } finally {
-      setUploading(false);
-      e.target.value = "";
-    }
-  };
+        const fd = new FormData();
+        fd.append(side, compressed);
+
+        const versionField = side === "cccd_front" ? "front_image" : "back_image";
+        const [, currentVersion] = await Promise.all([
+          updateUserAndCache(targetUser.id, fd),
+          getCurrentCccdVersion(targetUser.id),
+        ]);
+        if (currentVersion) {
+          await updateCccdVersionImages(
+            currentVersion.id,
+            versionField === "front_image" ? compressed : undefined,
+            versionField === "back_image" ? compressed : undefined,
+          );
+        }
+
+        const action: StaffActionType = targetUser[side] ? "update" : "create";
+        await createStaffActionLog({
+          actor,
+          targetUserId: targetUser.id,
+          targetCollection: "users",
+          targetRecord: targetUser.id,
+          action,
+          after: { [side]: compressed.name },
+          note: `${actor?.role === "admin" ? "Admin" : "Staff"} ${action === "create" ? "thêm" : "cập nhật"} ảnh ${side === "cccd_front" ? "CCCD mặt trước" : "CCCD mặt sau"}`,
+        });
+        toast.success("Đã cập nhật ảnh CCCD");
+        onUpdated();
+      } catch (err: any) {
+        toast.error(err?.message || "Lỗi upload ảnh");
+      } finally {
+        setUploading(false);
+        e.target.value = "";
+      }
+    };
 
   const deleteCccd = async (side: "cccd_front" | "cccd_back") => {
     if (!confirm(`Xoá ảnh ${side === "cccd_front" ? "mặt trước" : "mặt sau"}?`)) return;
@@ -216,19 +212,17 @@ function CccdSlot({
               )}
             </div>
           </>
+        ) : !readOnly ? (
+          <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1 text-muted-foreground">
+            <input type="file" accept="image/*" hidden onChange={onPick} disabled={uploading} />
+            <IdCard className="h-6 w-6" />
+            <span className="text-[11px] font-medium">Bấm để chọn ảnh</span>
+          </label>
         ) : (
-          !readOnly ? (
-            <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1 text-muted-foreground">
-              <input type="file" accept="image/*" hidden onChange={onPick} disabled={uploading} />
-              <IdCard className="h-6 w-6" />
-              <span className="text-[11px] font-medium">Bấm để chọn ảnh</span>
-            </label>
-          ) : (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
-              <IdCard className="h-6 w-6" />
-              <span className="text-[11px]">Chưa có ảnh</span>
-            </div>
-          )
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
+            <IdCard className="h-6 w-6" />
+            <span className="text-[11px]">Chưa có ảnh</span>
+          </div>
         )}
       </div>
       {url && !readOnly && (

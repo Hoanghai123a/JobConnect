@@ -403,11 +403,7 @@ function GuidesPage() {
           className="flex w-full items-center gap-2 text-left"
         >
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
-            {isIos ? (
-              <Smartphone className="h-4.5 w-4.5" />
-            ) : (
-              <Download className="h-4.5 w-4.5" />
-            )}
+            {isIos ? <Smartphone className="h-4.5 w-4.5" /> : <Download className="h-4.5 w-4.5" />}
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold text-foreground">Cài ứng dụng</div>
@@ -521,8 +517,8 @@ function GuidesPage() {
                 <span className="font-medium">Nhấn vào biểu tượng cài đặt trên thanh địa chỉ</span>
               </div>
               <p className="ml-8 text-xs text-muted-foreground">
-                Biểu tượng hình màn hình có mũi tên (⊞) nằm ở góc phải thanh địa chỉ.
-                Hoặc bấm dấu 3 chấm (⋮) → "Cài đặt ứng dụng..." / "Install app..."
+                Biểu tượng hình màn hình có mũi tên (⊞) nằm ở góc phải thanh địa chỉ. Hoặc bấm dấu 3
+                chấm (⋮) → "Cài đặt ứng dụng..." / "Install app..."
               </p>
               <div className="flex items-center gap-2">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
@@ -532,7 +528,8 @@ function GuidesPage() {
               </div>
             </div>
             <div className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
-              Sau khi cài, app sẽ mở như một ứng dụng riêng trên máy tính — không cần mở trình duyệt.
+              Sau khi cài, app sẽ mở như một ứng dụng riêng trên máy tính — không cần mở trình
+              duyệt.
             </div>
           </div>
         </DialogContent>

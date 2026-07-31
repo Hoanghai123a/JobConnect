@@ -540,7 +540,9 @@ function FactoriesTab() {
         });
       }
       queryClient.invalidateQueries({ queryKey: ["app_settings"] });
-      toast.success(checked ? "Đã cho phép báo ứng khi NLĐ đã nghỉ" : "Đã tắt báo ứng khi NLĐ đã nghỉ");
+      toast.success(
+        checked ? "Đã cho phép báo ứng khi NLĐ đã nghỉ" : "Đã tắt báo ứng khi NLĐ đã nghỉ",
+      );
     } catch (e: any) {
       setAllowAfterLeaveSaving(!checked);
       toast.error(e?.message || "Không thể lưu cài đặt báo ứng sau nghỉ");
@@ -624,7 +626,9 @@ function FactoriesTab() {
         })),
       );
       setBulkConfirmOpen(false);
-      toast.success(`Đã áp dụng ${advanceLimit.toLocaleString("vi-VN")} đ cho ${items.length} nhà máy`);
+      toast.success(
+        `Đã áp dụng ${advanceLimit.toLocaleString("vi-VN")} đ cho ${items.length} nhà máy`,
+      );
     } catch (e: any) {
       toast.error(e?.message || "Không thể áp dụng hạn mức cho toàn bộ nhà máy");
       loadFactories();
@@ -794,7 +798,8 @@ function FactoriesTab() {
           <div>
             <div className="text-sm font-semibold">Cài đặt ứng tiền theo nhà máy</div>
             <div className="text-[11px] text-muted-foreground">
-              Hạn mức được lấy theo lịch sử đi làm gần nhất của NLĐ. 0 đ nghĩa là không cho phép báo ứng.
+              Hạn mức được lấy theo lịch sử đi làm gần nhất của NLĐ. 0 đ nghĩa là không cho phép báo
+              ứng.
             </div>
           </div>
         </div>
@@ -843,8 +848,9 @@ function FactoriesTab() {
             <DialogTitle>Áp dụng hạn mức cho toàn bộ nhà máy?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Tất cả {items.length} nhà máy sẽ được đặt hạn mức {parseMoneyInput(bulkAdvanceLimit).toLocaleString("vi-VN")} đ.
-            Thao tác này ghi đè hạn mức riêng hiện tại.
+            Tất cả {items.length} nhà máy sẽ được đặt hạn mức{" "}
+            {parseMoneyInput(bulkAdvanceLimit).toLocaleString("vi-VN")} đ. Thao tác này ghi đè hạn
+            mức riêng hiện tại.
           </p>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setBulkConfirmOpen(false)}>

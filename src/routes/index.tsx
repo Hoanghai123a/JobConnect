@@ -102,7 +102,9 @@ function DashboardPage() {
   const [workforceLoading, setWorkforceLoading] = useState(true);
   const [workforceError, setWorkforceError] = useState("");
   const [workforceReloadToken, setWorkforceReloadToken] = useState(0);
-  const [approvalStats, setApprovalStats] = useState<ApprovalDashboardStats>(createEmptyApprovalDashboardStats);
+  const [approvalStats, setApprovalStats] = useState<ApprovalDashboardStats>(
+    createEmptyApprovalDashboardStats,
+  );
   const [currentEmployment, setCurrentEmployment] = useState<EmploymentHistoryRecord | null>(null);
   const nav = useNavigate();
   const { hash } = useLocation();
@@ -497,10 +499,7 @@ function DashboardPage() {
               </div>
             </MobileSection>
 
-            <MobileSection
-              title="Quản trị"
-              description="Kiểm tra dữ liệu và cấu hình hệ thống"
-            >
+            <MobileSection title="Quản trị" description="Kiểm tra dữ liệu và cấu hình hệ thống">
               <div className="grid grid-cols-2 gap-3">
                 <FeatureTile
                   to="/check-attendance"

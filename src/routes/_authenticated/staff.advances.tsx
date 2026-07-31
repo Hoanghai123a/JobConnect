@@ -367,7 +367,9 @@ function WorkerAdvancesView() {
         (worker) =>
           worker.canReportAdvance &&
           (Boolean(settings.allow_advance_after_leave) ||
-            worker.histories.some((history) => history.status === "working" && !history.leave_date)),
+            worker.histories.some(
+              (history) => history.status === "working" && !history.leave_date,
+            )),
       ),
     [settings.allow_advance_after_leave, workers],
   );
@@ -650,8 +652,7 @@ function WorkerAdvancesView() {
         bank_name: workerPayoutMethod === "cash" ? "" : bankSource.bank_name || "",
         bank_account_number:
           workerPayoutMethod === "cash" ? "" : bankSource.bank_account_number || "",
-        bank_account_name:
-          workerPayoutMethod === "cash" ? "" : bankSource.bank_account_name || "",
+        bank_account_name: workerPayoutMethod === "cash" ? "" : bankSource.bank_account_name || "",
         payout_method: workerPayoutMethod,
         amount,
         reason: workerReason.trim(),
@@ -1733,10 +1734,7 @@ function StaffAdvanceFormDialog({
               className="min-h-16 rounded-xl"
             />
           </div>
-          <AdvancePayoutMethodPicker
-            value={payoutMethod}
-            onChange={setPayoutMethod}
-          />
+          <AdvancePayoutMethodPicker value={payoutMethod} onChange={setPayoutMethod} />
           {payoutMethod === "bank_transfer" && (
             <>
               <div className="space-y-1.5">
@@ -1770,7 +1768,9 @@ function StaffAdvanceFormDialog({
                   <Label>Chủ tài khoản</Label>
                   <Input
                     value={bankForm.bank_account_name}
-                    onChange={(e) => setBankForm({ ...bankForm, bank_account_name: e.target.value })}
+                    onChange={(e) =>
+                      setBankForm({ ...bankForm, bank_account_name: e.target.value })
+                    }
                     placeholder="Tên chủ TK"
                     className="rounded-xl"
                   />
@@ -2063,50 +2063,47 @@ function WorkerAdvanceCreateDialog({
                 />
               </div>
 
-              <AdvancePayoutMethodPicker
-                value={payoutMethod}
-                onChange={setPayoutMethod}
-              />
+              <AdvancePayoutMethodPicker value={payoutMethod} onChange={setPayoutMethod} />
 
               {payoutMethod === "bank_transfer" && (
                 <div className="space-y-2">
                   <Label>Tài khoản nhận tiền *</Label>
                   <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setBankChoice("worker")}
-                    className={cn(
-                      "rounded-xl border p-2.5 text-left",
-                      bankChoice === "worker"
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-card",
-                    )}
-                  >
-                    <div className="text-xs font-semibold">Tài khoản NLĐ</div>
-                    <div className="mt-1 truncate text-[11px] text-muted-foreground">
-                      {selectedWorker.user.bank_account_number
-                        ? `${selectedWorker.user.bank_name || "NH"} · ${selectedWorker.user.bank_account_number}`
-                        : "Chưa có tài khoản"}
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBankChoice("staff")}
-                    className={cn(
-                      "rounded-xl border p-2.5 text-left",
-                      bankChoice === "staff"
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-card",
-                    )}
-                  >
-                    <div className="flex items-center gap-1 text-xs font-semibold">
-                      <Landmark className="h-3.5 w-3.5" />
-                      Tài khoản staff
-                    </div>
-                    <div className="mt-1 text-[11px] text-muted-foreground">
-                      Dùng tài khoản ngân hàng của bạn
-                    </div>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setBankChoice("worker")}
+                      className={cn(
+                        "rounded-xl border p-2.5 text-left",
+                        bankChoice === "worker"
+                          ? "border-primary bg-primary/5"
+                          : "border-border bg-card",
+                      )}
+                    >
+                      <div className="text-xs font-semibold">Tài khoản NLĐ</div>
+                      <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                        {selectedWorker.user.bank_account_number
+                          ? `${selectedWorker.user.bank_name || "NH"} · ${selectedWorker.user.bank_account_number}`
+                          : "Chưa có tài khoản"}
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBankChoice("staff")}
+                      className={cn(
+                        "rounded-xl border p-2.5 text-left",
+                        bankChoice === "staff"
+                          ? "border-primary bg-primary/5"
+                          : "border-border bg-card",
+                      )}
+                    >
+                      <div className="flex items-center gap-1 text-xs font-semibold">
+                        <Landmark className="h-3.5 w-3.5" />
+                        Tài khoản staff
+                      </div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        Dùng tài khoản ngân hàng của bạn
+                      </div>
+                    </button>
                   </div>
                 </div>
               )}

@@ -20,6 +20,7 @@ const STORAGE_KEY = "jobconnect:workforce-dashboard-date-range";
 const RECRUITMENT_SCOPE_STORAGE_KEY = "jobconnect:workforce-dashboard-recruitment-scope";
 
 type DateRange = { from: string; to: string };
+type StoredDateRange = DateRange & { savedOn?: string };
 
 function defaultRange(): DateRange {
   const to = localIsoDate();
@@ -96,8 +97,13 @@ export function WorkforceDashboard({
 
   useEffect(() => {
     try {
-      const savedRange = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "null");
-      if (validRange(savedRange)) setRange(savedRange);
+      const savedRange = JSON.parse(
+        window.localStorage.getItem(STORAGE_KEY) || "null",
+      ) as StoredDateRange | null;
+      if (validRange(savedRange)) {
+        const nextRange = savedRange.savedOn === today ? savedRange : { ...savedRange, to: today };
+        if (validRange(nextRange)) setRange(nextRange);
+      }
 
       const savedScope = JSON.parse(
         window.localStorage.getItem(RECRUITMENT_SCOPE_STORAGE_KEY) || "null",
@@ -108,17 +114,17 @@ export function WorkforceDashboard({
     } finally {
       setStorageReady(true);
     }
-  }, []);
+  }, [today]);
 
   useEffect(() => {
     if (!storageReady) return;
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(range));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...range, savedOn: today }));
       window.localStorage.setItem(RECRUITMENT_SCOPE_STORAGE_KEY, JSON.stringify(recruitmentScope));
     } catch {
       // The dashboard remains usable when local storage is unavailable.
     }
-  }, [range, recruitmentScope, storageReady]);
+  }, [range, recruitmentScope, storageReady, today]);
 
   const filteredHistories = useMemo(
     () => filterWorkforceHistoriesByRecruitmentScope(histories, users, recruitmentScope),

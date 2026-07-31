@@ -155,6 +155,7 @@ export function WorkerQuickDrawer({
     bank_name: "",
     bank_account_number: "",
     bank_account_name: "",
+    bank_account_note: "",
   });
   const [employeeCodeForm, setEmployeeCodeForm] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -186,6 +187,7 @@ export function WorkerQuickDrawer({
       bank_name: worker.user.bank_name || "",
       bank_account_number: worker.user.bank_account_number || "",
       bank_account_name: worker.user.bank_account_name || "",
+      bank_account_note: worker.user.bank_account_note || "",
     });
     setEmployeeCodeForm(latest?.employee_code || "");
   }, [worker, viewer?.id]);
@@ -256,9 +258,7 @@ export function WorkerQuickDrawer({
     }
     const missingSnapshotFields = getMissingEmploymentSnapshotFields(joinForm);
     if (missingSnapshotFields.length) {
-      toast.warning(
-        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
-      );
+      toast.warning(`Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`);
       return;
     }
     if (!canReportJoin(viewer, worker.histories, managedFactoryIds, joinForm.factory)) {
@@ -533,9 +533,7 @@ export function WorkerQuickDrawer({
                     onClick={() => setView("bank")}
                   />
                 )}
-                {(worker.canReportLeave ||
-                  worker.canReportJoin ||
-                  canOpenAdvance) && (
+                {(worker.canReportLeave || worker.canReportJoin || canOpenAdvance) && (
                   <ActionButton
                     icon={Hash}
                     label="Cập nhật mã NV"
@@ -572,10 +570,7 @@ export function WorkerQuickDrawer({
                     value={maskCccd(latest?.worker_cccd_snapshot || worker.user.cccd)}
                   />
                   <InfoCell label="Mã số thuế" value={latest?.worker_tax_code_snapshot || "—"} />
-                  <InfoCell
-                    label="Mã NV"
-                    value={latest?.employee_code || "?"}
-                  />
+                  <InfoCell label="Mã NV" value={latest?.employee_code || "?"} />
                   <InfoCell label="SĐT" value={worker.user.phone || "—"} />
                   <InfoCell label="Nhà máy" value={latest?.expand?.factory?.name || "—"} />
                   <InfoCell label="Nhà chính" value={latest?.expand?.main_house?.name || "—"} />
@@ -847,6 +842,17 @@ export function WorkerQuickDrawer({
                   />
                 </div>
               </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Ghi chú STK</Label>
+                <Textarea
+                  value={bankForm.bank_account_note}
+                  onChange={(e) =>
+                    setBankForm((f) => ({ ...f, bank_account_note: e.target.value }))
+                  }
+                  placeholder="Ghi chú thêm về tài khoản"
+                  rows={2}
+                />
+              </div>
               <div className="flex gap-2">
                 <Button
                   type="button"
@@ -998,7 +1004,9 @@ function AdvanceForm({
       .catch((error: unknown) => {
         if (!active) return;
         setPolicy(null);
-        setPolicyError(error instanceof Error ? error.message : "Không thể kiểm tra hạn mức ứng tiền");
+        setPolicyError(
+          error instanceof Error ? error.message : "Không thể kiểm tra hạn mức ứng tiền",
+        );
       })
       .finally(() => active && setPolicyLoading(false));
     return () => {
@@ -1028,7 +1036,7 @@ function AdvanceForm({
 
       {policyLoading && (
         <div className="rounded-xl border bg-muted/30 p-2.5 text-xs text-muted-foreground">
-            Đang kiểm tra nhà máy và hạn mức ứng tiền...
+          Đang kiểm tra nhà máy và hạn mức ứng tiền...
         </div>
       )}
       {policyError && (
@@ -1041,7 +1049,8 @@ function AdvanceForm({
           <span className="text-muted-foreground">Nhà máy áp dụng: </span>
           <span className="font-semibold">{policy.factoryName}</span>
           <div className="mt-1 text-muted-foreground">
-            Đã ứng {policy.outstanding.toLocaleString("vi-VN")} đ · Còn lại {policy.available.toLocaleString("vi-VN")} đ
+            Đã ứng {policy.outstanding.toLocaleString("vi-VN")} đ · Còn lại{" "}
+            {policy.available.toLocaleString("vi-VN")} đ
           </div>
         </div>
       )}
@@ -1068,50 +1077,47 @@ function AdvanceForm({
         )}
       </div>
 
-      <AdvancePayoutMethodPicker
-        value={payoutMethod}
-        onChange={setPayoutMethod}
-      />
+      <AdvancePayoutMethodPicker value={payoutMethod} onChange={setPayoutMethod} />
 
       {payoutMethod === "bank_transfer" && (
         <div className="space-y-1">
           <Label className="text-xs">Tài khoản nhận tiền</Label>
           <div className="space-y-1.5">
-          {workerBank && (
-            <button
-              type="button"
-              onClick={() => setBankChoice("worker")}
-              className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${bankChoice === "worker" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
-            >
-              <div
-                className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${bankChoice === "worker" ? "border-primary bg-primary" : "border-muted-foreground"}`}
-              />
-              <div>
-                <div className="font-medium">STK của NLĐ</div>
-                <div className="text-muted-foreground">{workerBank}</div>
+            {workerBank && (
+              <button
+                type="button"
+                onClick={() => setBankChoice("worker")}
+                className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${bankChoice === "worker" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+              >
+                <div
+                  className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${bankChoice === "worker" ? "border-primary bg-primary" : "border-muted-foreground"}`}
+                />
+                <div>
+                  <div className="font-medium">STK của NLĐ</div>
+                  <div className="text-muted-foreground">{workerBank}</div>
+                </div>
+              </button>
+            )}
+            {viewerBank && (
+              <button
+                type="button"
+                onClick={() => setBankChoice("viewer")}
+                className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${bankChoice === "viewer" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+              >
+                <div
+                  className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${bankChoice === "viewer" ? "border-primary bg-primary" : "border-muted-foreground"}`}
+                />
+                <div>
+                  <div className="font-medium">STK của tôi ({viewerBankRoleLabel})</div>
+                  <div className="text-muted-foreground">{viewerBank}</div>
+                </div>
+              </button>
+            )}
+            {!workerBank && !viewerBank && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+                Chưa có STK nào. Cập nhật ngân hàng trước khi báo ứng.
               </div>
-            </button>
-          )}
-          {viewerBank && (
-            <button
-              type="button"
-              onClick={() => setBankChoice("viewer")}
-              className={`flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-xs transition ${bankChoice === "viewer" ? "border-primary bg-primary/5" : "border-border bg-card"}`}
-            >
-              <div
-                className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${bankChoice === "viewer" ? "border-primary bg-primary" : "border-muted-foreground"}`}
-              />
-              <div>
-                <div className="font-medium">STK của tôi ({viewerBankRoleLabel})</div>
-                <div className="text-muted-foreground">{viewerBank}</div>
-              </div>
-            </button>
-          )}
-          {!workerBank && !viewerBank && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
-              Chưa có STK nào. Cập nhật ngân hàng trước khi báo ứng.
-            </div>
-          )}
+            )}
           </div>
         </div>
       )}

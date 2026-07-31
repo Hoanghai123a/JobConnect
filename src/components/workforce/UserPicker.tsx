@@ -98,9 +98,7 @@ export function UserPicker({
                         {u.full_name || u.username || "—"}
                       </span>
                       <span className="truncate text-[11px] text-muted-foreground">
-                        {[u.username, u.phone, u.uid, u.cccd]
-                          .filter(Boolean)
-                          .join(" · ")}
+                        {[u.username, u.phone, u.uid, u.cccd].filter(Boolean).join(" · ")}
                       </span>
                     </div>
                   </CommandItem>

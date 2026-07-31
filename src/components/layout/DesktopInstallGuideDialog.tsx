@@ -44,8 +44,8 @@ export function DesktopInstallGuideDialog({ open, onOpenChange }: DesktopInstall
                   Nhấn vào biểu tượng cài đặt trên thanh địa chỉ
                 </span>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Biểu tượng hình màn hình có mũi tên (⊞) nằm ở góc phải thanh địa chỉ.
-                  Hoặc bấm dấu 3 chấm (⋮) → "Cài đặt ứng dụng..." / "Install app..."
+                  Biểu tượng hình màn hình có mũi tên (⊞) nằm ở góc phải thanh địa chỉ. Hoặc bấm dấu
+                  3 chấm (⋮) → "Cài đặt ứng dụng..." / "Install app..."
                 </p>
               </div>
             </div>
@@ -53,14 +53,11 @@ export function DesktopInstallGuideDialog({ open, onOpenChange }: DesktopInstall
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                 3
               </span>
-              <span className="font-medium leading-6">
-                Bấm "Cài đặt" trong hộp thoại xuất hiện
-              </span>
+              <span className="font-medium leading-6">Bấm "Cài đặt" trong hộp thoại xuất hiện</span>
             </div>
           </div>
           <div className="rounded-xl bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
-            Sau khi cài, app sẽ mở như một ứng dụng riêng trên máy tính — không cần mở trình
-            duyệt.
+            Sau khi cài, app sẽ mở như một ứng dụng riêng trên máy tính — không cần mở trình duyệt.
           </div>
         </div>
       </DialogContent>

@@ -24,8 +24,8 @@ function PendingPage() {
 
       <h1 className="text-xl font-semibold">Đang chờ duyệt</h1>
       <p className="max-w-xs text-sm text-muted-foreground">
-        Tài khoản <strong>{user?.full_name || user?.phone}</strong> đã được gửi tới admin. Bạn sẽ vào
-        được hệ thống ngay khi được duyệt.
+        Tài khoản <strong>{user?.full_name || user?.phone}</strong> đã được gửi tới admin. Bạn sẽ
+        vào được hệ thống ngay khi được duyệt.
       </p>
 
       <div className="flex gap-2">

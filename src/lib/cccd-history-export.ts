@@ -70,7 +70,10 @@ function toTimestamp(value?: string) {
 function safePathSegment(value: string, fallback: string) {
   const cleaned = value
     .normalize("NFC")
-    .replace(new RegExp(`[<>:"/\\|?*${String.fromCharCode(0)}-${String.fromCharCode(31)}]`, "g"), "_")
+    .replace(
+      new RegExp(`[<>:"/\\|?*${String.fromCharCode(0)}-${String.fromCharCode(31)}]`, "g"),
+      "_",
+    )
     .replace(/[. ]+$/g, "")
     .trim();
   return (cleaned || fallback).slice(0, 120);

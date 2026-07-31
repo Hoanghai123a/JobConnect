@@ -4,7 +4,6 @@ import { PB_URL } from "./pocketbase-config";
 export const pb = new PocketBase(PB_URL);
 pb.autoCancellation(false);
 
-
 export type Role = "admin" | "user" | "staff";
 
 export interface UserRecord {
@@ -30,6 +29,7 @@ export interface UserRecord {
   bank_name?: string;
   bank_account_number?: string;
   bank_account_name?: string;
+  bank_account_note?: string;
   collectionId?: string;
   collectionName?: string;
   avatar?: string;

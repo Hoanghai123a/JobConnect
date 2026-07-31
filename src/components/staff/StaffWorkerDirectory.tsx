@@ -269,12 +269,9 @@ export function StaffWorkerDirectory({
                 >
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0 flex-1 overflow-hidden">
-                      <div className="truncate text-sm font-semibold">
-                        {workerName}
-                      </div>
+                      <div className="truncate text-sm font-semibold">{workerName}</div>
                       <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                        Mã NV: {latest?.employee_code || "Chưa có"} · CCCD:{" "}
-                        {maskCccd(snapshotCccd)}
+                        Mã NV: {latest?.employee_code || "Chưa có"} · CCCD: {maskCccd(snapshotCccd)}
                         {latest?.worker_tax_code_snapshot &&
                           ` · MST: ${latest.worker_tax_code_snapshot}`}
                       </div>
@@ -293,7 +290,6 @@ export function StaffWorkerDirectory({
                       {isWorking ? "Đang làm" : "Đã nghỉ"}
                     </StatusChip>
                   </div>
-
                 </button>
               </Fragment>
             );

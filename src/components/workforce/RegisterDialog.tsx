@@ -205,9 +205,7 @@ export function RegisterDialog({
     };
     const missingSnapshotFields = getMissingEmploymentSnapshotFields(personalSnapshot);
     if (missingSnapshotFields.length) {
-      return toast.error(
-        `Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`,
-      );
+      return toast.error(`Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`);
     }
 
     const workerCccdDigits = workerCccd.replace(/\D/g, "");

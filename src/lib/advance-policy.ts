@@ -50,8 +50,7 @@ export async function resolveAdvancePolicy(
     throw new Error("Người lao động chưa có lịch sử đi làm, không thể báo ứng");
   }
 
-  const allowAfterLeave =
-    options.allowAfterLeave ?? Boolean(settings?.allow_advance_after_leave);
+  const allowAfterLeave = options.allowAfterLeave ?? Boolean(settings?.allow_advance_after_leave);
   const isWorking = isCurrentlyWorking(employment);
   if (!isWorking && !allowAfterLeave) {
     throw new Error("Người lao động đã nghỉ, hệ thống hiện không cho phép báo ứng");

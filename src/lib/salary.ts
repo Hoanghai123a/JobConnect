@@ -20,7 +20,13 @@ export interface RateBuckets {
 }
 
 export const EMPTY_BUCKETS = (): RateBuckets => ({
-  r100: 0, r130: 0, r150: 0, r200: 0, r270: 0, r300: 0, r390: 0,
+  r100: 0,
+  r130: 0,
+  r150: 0,
+  r200: 0,
+  r270: 0,
+  r300: 0,
+  r390: 0,
 });
 
 function add(b: RateBuckets, key: keyof RateBuckets, h: number) {
@@ -145,7 +151,7 @@ export function calcSalary(b: RateBuckets, inputs: SalaryInputs) {
   let allowance: number;
   if (inputs.rows && inputs.periodStart) {
     const chuyenCan = hasFullWeekdayAttendance(inputs.rows, inputs.periodStart)
-      ? (inputs.chuyen_can || 0)
+      ? inputs.chuyen_can || 0
       : 0;
     const doiSong = ((inputs.doi_song || 0) / 26) * countEligibleDoiSongDays(inputs.rows);
     const thamNien = inputs.tham_nien || 0;

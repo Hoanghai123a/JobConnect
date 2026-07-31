@@ -34,8 +34,8 @@ export interface GardenBalance {
   ownedPets?: string[];
   roamingEnabled?: boolean;
   totalHarvested?: number;
-  lastStolenAt?: number;   // epoch ms — lần cuối bị chộm
-  stolenCount?: number;    // số lần bị chộm trong chu kỳ hiện tại (max 2)
+  lastStolenAt?: number; // epoch ms — lần cuối bị chộm
+  stolenCount?: number; // số lần bị chộm trong chu kỳ hiện tại (max 2)
   gemsBestScore?: number;
   minesweeperBestTime?: number;
   minesweeperBestDifficulty?: string;
@@ -204,7 +204,8 @@ export async function createExchangeRequest(data: {
       item.type === data.type,
   );
   if (!tier) throw new Error("Mốc quy đổi không còn hiệu lực");
-  if (balance.coins < tier.min_coins) throw new Error(`Cần tối thiểu ${tier.min_coins} xu để gửi yêu cầu`);
+  if (balance.coins < tier.min_coins)
+    throw new Error(`Cần tối thiểu ${tier.min_coins} xu để gửi yêu cầu`);
   if (balance.coins < tier.exchange_coins) throw new Error("Không đủ xu để quy đổi");
 
   return (await pb.collection("garden_exchange_requests").create({
@@ -257,9 +258,7 @@ export async function approveExchangeRequest(requestId: string, adminNote?: stri
     if (balanceUpdated) {
       await updateBalance(balance.id, {
         coins: balance.coins,
-        ...(request.type === "reserve"
-          ? { reserve_balance: balance.reserve_balance }
-          : {}),
+        ...(request.type === "reserve" ? { reserve_balance: balance.reserve_balance } : {}),
       });
     }
     await pb.collection("garden_exchange_requests").update(requestId, {
@@ -329,7 +328,7 @@ export async function deleteGardenVisitSave(id: string) {
 // ---- Steal (ăn chộm) ----
 
 const STEAL_PROTECT_MS = 30 * 60 * 1000; // 30 phút bảo vệ sau mỗi lần bị chộm
-const STEAL_MAX_COUNT = 2;                // tối đa 2 lần bị chộm / chu kỳ
+const STEAL_MAX_COUNT = 2; // tối đa 2 lần bị chộm / chu kỳ
 
 export function isGardenProtected(balance: GardenBalance, now = Date.now()): boolean {
   if (!balance.lastStolenAt) return false;
@@ -352,7 +351,8 @@ export async function fetchGardenByUsername(
       filter: `user.username = "${safeUsername}"`,
       expand: "user",
     });
-    if (res.items[0]) return res.items[0] as unknown as GardenBalance & { expand?: { user?: UserRecord } };
+    if (res.items[0])
+      return res.items[0] as unknown as GardenBalance & { expand?: { user?: UserRecord } };
   } catch {
     // Không tìm được user hoặc không có quyền đọc user thì xem như không có vườn để ghé.
   }
@@ -392,15 +392,21 @@ export async function stealCoins(params: {
   flowerReward: number;
 }): Promise<{ newAttackerCoins: number; stolen: number }> {
   if (!params.victimBalanceId) throw new Error("Vườn này chưa có dữ liệu để chộm");
-  if (params.attackerBalanceId === params.victimBalanceId) throw new Error("Không thể chộm vườn của chính mình");
+  if (params.attackerBalanceId === params.victimBalanceId)
+    throw new Error("Không thể chộm vườn của chính mình");
 
   const victim = (await pb
     .collection("garden_balances")
     .getOne(params.victimBalanceId)) as unknown as GardenBalance;
 
-  const plots: { flowerId: string | null; plantedAt: number | null; stolenAmount?: number }[] = Array.isArray(victim.plots)
-    ? (victim.plots as { flowerId: string | null; plantedAt: number | null; stolenAmount?: number }[])
-    : [];
+  const plots: { flowerId: string | null; plantedAt: number | null; stolenAmount?: number }[] =
+    Array.isArray(victim.plots)
+      ? (victim.plots as {
+          flowerId: string | null;
+          plantedAt: number | null;
+          stolenAmount?: number;
+        }[])
+      : [];
 
   const plot = plots[params.plotIndex];
   if (!plot || !plot.flowerId) throw new Error("Ô này không có hoa để chộm");

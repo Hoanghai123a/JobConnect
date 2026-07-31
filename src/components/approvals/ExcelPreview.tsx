@@ -20,7 +20,9 @@ export function ExcelPreview({ url, filename }: { url: string; filename: string 
       .finally(() => {
         if (alive) setLoading(false);
       });
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [url]);
 
   if (loading) {
@@ -48,7 +50,10 @@ export function ExcelPreview({ url, filename }: { url: string; filename: string 
             {rows[0] && (
               <tr>
                 {rows[0].map((cell, i) => (
-                  <th key={i} className="whitespace-nowrap border-b px-2 py-1.5 text-left font-medium">
+                  <th
+                    key={i}
+                    className="whitespace-nowrap border-b px-2 py-1.5 text-left font-medium"
+                  >
                     {cell}
                   </th>
                 ))}
