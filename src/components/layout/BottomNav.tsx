@@ -115,7 +115,7 @@ export function AppHeader({
 
   return (
     <header
-      className="mobile-app-header sticky top-0 z-30 flex min-h-14 items-center gap-2 border-b border-border/60 bg-card/92 px-3 backdrop-blur-xl desktop:static desktop:z-auto desktop:mx-6 desktop:mt-3 desktop:rounded-2xl desktop:border desktop:px-5 desktop:shadow-soft"
+      className="mobile-app-header sticky top-0 z-30 flex min-h-14 shrink-0 items-center gap-2 border-b border-border/60 bg-card/92 px-3 backdrop-blur-xl desktop:static desktop:z-auto desktop:mx-6 desktop:mt-3 desktop:rounded-2xl desktop:border desktop:px-5 desktop:shadow-soft"
       style={{ paddingTop: "max(env(safe-area-inset-top), 0.25rem)", paddingBottom: "0.25rem" }}
     >
       {showBack && (

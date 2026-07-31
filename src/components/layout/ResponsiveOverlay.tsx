@@ -2,6 +2,7 @@ import { type ComponentProps, type ReactNode } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogBody,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -36,17 +37,13 @@ export function ResponsiveOverlay({
         {...contentProps}
         data-responsive-overlay="true"
         data-presentation={presentation}
-        className={cn(
-          "flex flex-col overflow-hidden",
-          presentation === "full" && "mobile:h-[96dvh]",
-          className,
-        )}
+        className={cn(presentation === "full" && "mobile:h-[96dvh]", className)}
       >
         <DialogHeader className="shrink-0 text-left">
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+        <DialogBody>{children}</DialogBody>
         {footer && <DialogFooter className="shrink-0">{footer}</DialogFooter>}
       </DialogContent>
     </Dialog>

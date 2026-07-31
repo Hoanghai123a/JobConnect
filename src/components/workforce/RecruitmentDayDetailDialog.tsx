@@ -203,7 +203,10 @@ export function RecruitmentDayDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92dvh] w-[calc(100%-1rem)] max-w-none overflow-hidden p-0 sm:w-[calc(100%-2rem)] desktop:max-w-6xl">
+      <DialogContent
+        layout="raw"
+        className="max-h-[92dvh] w-[calc(100%-1rem)] max-w-none overflow-hidden p-0 sm:w-[calc(100%-2rem)] desktop:max-w-6xl"
+      >
         <DialogHeader className="border-b px-4 pb-4 pt-5 pr-14 sm:px-5">
           <DialogTitle className="pr-2 text-left text-base leading-snug sm:text-lg">
             Người lao động vào làm ngày {selectedDayLabel} ({details.workers.length} người)

@@ -48,7 +48,10 @@ export function IosInstallGuideDialog({ open, onOpenChange }: IosInstallGuideDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bottom-0 top-auto grid max-h-[92dvh] w-full max-w-[30rem] translate-y-0 grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-b-none rounded-t-3xl border-x-0 border-b-0 bg-background p-0 shadow-[0_-18px_50px_-24px_rgba(15,23,42,0.48)] sm:rounded-t-3xl [&>button]:hidden">
+      <DialogContent
+        layout="raw"
+        className="bottom-0 top-auto grid max-h-[92dvh] w-full max-w-[30rem] translate-y-0 grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-b-none rounded-t-3xl border-x-0 border-b-0 bg-background p-0 shadow-[0_-18px_50px_-24px_rgba(15,23,42,0.48)] sm:rounded-t-3xl [&>button]:hidden"
+      >
         <DialogHeader className="flex-row items-center justify-between space-y-0 border-b border-border/60 px-4 py-3 text-left">
           <DialogTitle className="text-[15px] font-semibold leading-6">
             Cài {appName} ra màn hình chính

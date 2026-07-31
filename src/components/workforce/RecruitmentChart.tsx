@@ -468,7 +468,10 @@ export function RecruitmentChart({
           if (!open) setSelectedFactoryId(null);
         }}
       >
-        <DialogContent className="hidden max-h-[82dvh] overflow-hidden p-0 desktop:grid desktop:max-w-2xl">
+        <DialogContent
+          layout="raw"
+          className="hidden max-h-[82dvh] overflow-hidden p-0 desktop:grid desktop:max-w-2xl"
+        >
           {selectedFactory &&
             (() => {
               const internal = selectedFactory.recruiters.filter((item) => !item.isVendor);

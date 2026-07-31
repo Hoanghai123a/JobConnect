@@ -214,7 +214,7 @@ function DetailDialog({
 
   return (
     <Dialog open={detail !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88dvh] max-w-3xl overflow-hidden p-0">
+      <DialogContent layout="raw" className="max-h-[88dvh] max-w-3xl overflow-hidden p-0">
         {meta && (
           <>
             <DialogHeader className="border-b px-5 pb-4 pt-5 pr-14">

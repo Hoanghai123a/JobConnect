@@ -51,6 +51,7 @@ import {
   fetchEmploymentHistories,
   findActiveEmploymentByUser,
   getLatestEmploymentHistory,
+  getMissingEmploymentEditFields,
   getMissingEmploymentSnapshotFields,
   getEmploymentPersonalSnapshot,
   isCurrentlyWorking,
@@ -635,6 +636,27 @@ export function WorkerEmploymentDrawer({
   }, [selectedHistory, user?.id]);
 
   const latestHistory = useMemo(() => getLatestEmploymentHistory(histories), [histories]);
+  const joinCccdVersion = useMemo(() => {
+    const cccdNumber = normalizeCccdNumber(joinForm.worker_cccd_snapshot);
+    if (!cccdNumber) return undefined;
+    return histories.find(
+      (history) =>
+        normalizeCccdNumber(history.worker_cccd_snapshot) === cccdNumber &&
+        history.expand?.cccd_version,
+    )?.expand?.cccd_version;
+  }, [histories, joinForm.worker_cccd_snapshot]);
+  const joinCccdFrontUrl = joinCccdVersion?.front_image
+    ? versionedCccdUrl(joinCccdVersion, joinCccdVersion.front_image)
+    : normalizeCccdNumber(joinForm.worker_cccd_snapshot) === normalizeCccdNumber(user?.cccd) &&
+        user?.cccd_front
+      ? fileUrl(user, user.cccd_front)
+      : "";
+  const joinCccdBackUrl = joinCccdVersion?.back_image
+    ? versionedCccdUrl(joinCccdVersion, joinCccdVersion.back_image)
+    : normalizeCccdNumber(joinForm.worker_cccd_snapshot) === normalizeCccdNumber(user?.cccd) &&
+        user?.cccd_back
+      ? fileUrl(user, user.cccd_back)
+      : "";
   const editingHistory = useMemo(
     () => histories.find((history) => history.id === editingId),
     [editingId, histories],
@@ -754,8 +776,19 @@ export function WorkerEmploymentDrawer({
         );
         cccdVersionId = version.id;
       } else {
-        const currentVersion = await getCurrentCccdVersion(user.id);
-        cccdVersionId = currentVersion?.id;
+        const reusableVersion =
+          joinCccdVersion ||
+          (cccdNumber ? await getCccdVersionByNumber(user.id, cccdNumber) : null);
+        cccdVersionId = reusableVersion?.id;
+        if (!cccdVersionId) {
+          const currentVersion = await getCurrentCccdVersion(user.id);
+          if (
+            currentVersion &&
+            normalizeCccdNumber(currentVersion.cccd_number) === normalizeCccdNumber(cccdNumber)
+          ) {
+            cccdVersionId = currentVersion.id;
+          }
+        }
       }
       const created = await createEmploymentHistory({
         user: user.id,
@@ -954,9 +987,9 @@ export function WorkerEmploymentDrawer({
       toast.warning("Chọn nhà máy");
       return;
     }
-    const missingSnapshotFields = getMissingEmploymentSnapshotFields(form);
-    if (missingSnapshotFields.length) {
-      toast.warning(`Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`);
+    const missingEditFields = getMissingEmploymentEditFields(form);
+    if (missingEditFields.length) {
+      toast.warning(`Thiếu thông tin bắt buộc: ${missingEditFields.join(", ")}`);
       return;
     }
     setSaving(true);
@@ -1243,7 +1276,10 @@ export function WorkerEmploymentDrawer({
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-        <DialogContent className="flex max-h-[90dvh] min-w-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-lg desktop:max-w-7xl">
+        <DialogContent
+          layout="raw"
+          className="flex max-h-[90dvh] min-w-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-lg desktop:max-w-7xl"
+        >
           <DialogHeader className="min-w-0 shrink-0 border-b px-5 py-4 pr-14">
             <DialogTitle className="break-words [overflow-wrap:anywhere]">
               {user.full_name || user.username || "Người lao động"}
@@ -2681,6 +2717,8 @@ export function WorkerEmploymentDrawer({
                 onChange={(changes) => setJoinForm((current) => ({ ...current, ...changes }))}
                 frontFile={joinCccdFront}
                 backFile={joinCccdBack}
+                frontImageUrl={joinCccdFrontUrl}
+                backImageUrl={joinCccdBackUrl}
                 onFrontFileChange={setJoinCccdFront}
                 onBackFileChange={setJoinCccdBack}
               />

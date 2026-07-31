@@ -150,6 +150,17 @@ export function getMissingEmploymentSnapshotFields(snapshot: Partial<EmploymentP
     .map((field) => SNAPSHOT_FIELD_LABELS[field]);
 }
 
+const EDIT_REQUIRED_SNAPSHOT_FIELDS = [
+  "worker_name_snapshot",
+  "worker_cccd_snapshot",
+] as const satisfies ReadonlyArray<keyof EmploymentPersonalSnapshot>;
+
+export function getMissingEmploymentEditFields(snapshot: Partial<EmploymentPersonalSnapshot>) {
+  return EDIT_REQUIRED_SNAPSHOT_FIELDS.filter((field) => !cleanSnapshotText(snapshot[field])).map(
+    (field) => SNAPSHOT_FIELD_LABELS[field],
+  );
+}
+
 function normalizeEmploymentPayload<T extends Partial<EmploymentDraft>>(payload: T): T {
   const normalized = { ...payload } as T & Partial<EmploymentDraft>;
 

@@ -32,11 +32,12 @@ export function MobilePageScaffold({
   }[desktopWidth];
 
   return (
-    <div className={cn("pb-nav", bottomAction && "pb-form-action desktop:pb-8")}>
+    <div className={cn(bottomAction ? "page-action-shell" : "pb-nav")}>
       <AppHeader title={title} subtitle={subtitle} right={right} back={back} />
       <main
         className={cn(
           "mobile-page space-y-4 px-4 pt-4 desktop:mx-auto desktop:w-full desktop:px-8 desktop:pt-6",
+          bottomAction && "page-action-main",
           desktopWidthClass,
           className,
         )}

@@ -540,6 +540,25 @@
   .pb-form-action {
     padding-bottom: calc(var(--mobile-nav-h) + 5.25rem + env(safe-area-inset-bottom));
   }
+  .page-action-shell {
+    display: flex;
+    min-height: 100dvh;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .page-action-main {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: calc(var(--mobile-nav-h) + 6.5rem + env(safe-area-inset-bottom));
+  }
+  html[data-ui-device="desktop"] .page-action-shell {
+    min-height: calc(100dvh - 5rem);
+  }
+  html[data-ui-device="desktop"] .page-action-main {
+    padding-bottom: 6rem;
+  }
   .mobile-page {
     min-height: calc(100dvh - var(--header-h));
   }
@@ -551,6 +570,7 @@
     inset-inline: 0;
     bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom));
     z-index: 35;
+    box-sizing: border-box;
     margin-inline: auto;
     width: min(100%, 30rem);
     border-top: 1px solid var(--color-border);
@@ -558,6 +578,14 @@
     padding: 0.75rem 1rem;
     padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
     backdrop-filter: blur(16px);
+  }
+  html[data-ui-device="desktop"] .sticky-form-actions {
+    right: 0;
+    bottom: 0;
+    left: var(--desktop-sidebar-width, 0rem);
+    width: auto;
+    max-width: none;
+    padding: 0.75rem 2rem;
   }
   .mobile-bottom-nav a,
   .mobile-bottom-nav button {

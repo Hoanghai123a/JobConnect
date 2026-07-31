@@ -61,6 +61,7 @@ import {
   findActiveEmploymentByUser,
   getLatestEmploymentHistory,
   getEmploymentPersonalSnapshot,
+  getMissingEmploymentEditFields,
   getMissingEmploymentSnapshotFields,
   maskCccd,
   updateEmploymentHistory,
@@ -81,6 +82,7 @@ import { BankNameInput } from "@/components/staff/BankNameInput";
 import { SalaryHoldCreateDialog } from "@/components/staff/SalaryHoldCreateDialog";
 import { canCreateSalaryHold } from "@/lib/salary-holds";
 import {
+  getCccdVersionByNumber,
   getCurrentCccdVersion,
   updateCccdVersionAndCache,
   updateCccdVersionImages,
@@ -126,6 +128,10 @@ type AdvanceItem = {
 function recordTime(value?: string) {
   const time = new Date(value || 0).getTime();
   return Number.isNaN(time) ? 0 : time;
+}
+
+function normalizeCccdNumber(value?: string) {
+  return String(value || "").replace(/\D/g, "");
 }
 
 function getLatestHistoryByJoinDate(histories: EmploymentHistoryRecord[]) {
@@ -344,6 +350,27 @@ function StaffWorkerDetailPage() {
     () => getLatestHistoryByJoinDate(allWorkerHistories),
     [allWorkerHistories],
   );
+  const joinCccdVersion = useMemo(() => {
+    const cccdNumber = normalizeCccdNumber(joinForm.worker_cccd_snapshot);
+    if (!cccdNumber) return undefined;
+    return allWorkerHistories.find(
+      (history) =>
+        normalizeCccdNumber(history.worker_cccd_snapshot) === cccdNumber &&
+        history.expand?.cccd_version,
+    )?.expand?.cccd_version;
+  }, [allWorkerHistories, joinForm.worker_cccd_snapshot]);
+  const joinCccdFrontUrl = joinCccdVersion?.front_image
+    ? versionedCccdUrl(joinCccdVersion, joinCccdVersion.front_image)
+    : normalizeCccdNumber(joinForm.worker_cccd_snapshot) ===
+          normalizeCccdNumber(workerUser?.cccd) && workerUser?.cccd_front
+      ? fileUrl(workerUser, workerUser.cccd_front)
+      : "";
+  const joinCccdBackUrl = joinCccdVersion?.back_image
+    ? versionedCccdUrl(joinCccdVersion, joinCccdVersion.back_image)
+    : normalizeCccdNumber(joinForm.worker_cccd_snapshot) ===
+          normalizeCccdNumber(workerUser?.cccd) && workerUser?.cccd_back
+      ? fileUrl(workerUser, workerUser.cccd_back)
+      : "";
   const canEditHistory = (history: EmploymentHistoryRecord) =>
     viewer?.role === "admin" ||
     (viewer?.role === "staff" &&
@@ -626,8 +653,19 @@ function StaffWorkerDetailPage() {
       }
       cccdVersionId = version.id;
     } else {
-      const currentCccdVersion = await getCurrentCccdVersion(workerUser.id);
-      cccdVersionId = currentCccdVersion?.id;
+      const reusableVersion =
+        joinCccdVersion ||
+        (cccdNumber ? await getCccdVersionByNumber(workerUser.id, cccdNumber) : null);
+      cccdVersionId = reusableVersion?.id;
+      if (!cccdVersionId) {
+        const currentCccdVersion = await getCurrentCccdVersion(workerUser.id);
+        if (
+          currentCccdVersion &&
+          normalizeCccdNumber(currentCccdVersion.cccd_number) === normalizeCccdNumber(cccdNumber)
+        ) {
+          cccdVersionId = currentCccdVersion.id;
+        }
+      }
     }
 
     const created = await createEmploymentHistory({
@@ -853,9 +891,9 @@ function StaffWorkerDetailPage() {
       setEditingHistory(null);
       return;
     }
-    const missingSnapshotFields = getMissingEmploymentSnapshotFields(historyForm);
-    if (missingSnapshotFields.length) {
-      toast.warning(`Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`);
+    const missingEditFields = getMissingEmploymentEditFields(historyForm);
+    if (missingEditFields.length) {
+      toast.warning(`Thiếu thông tin bắt buộc: ${missingEditFields.join(", ")}`);
       return;
     }
     const before = { ...editingHistory };
@@ -1392,6 +1430,8 @@ function StaffWorkerDetailPage() {
                 onChange={(changes) => setJoinForm((current) => ({ ...current, ...changes }))}
                 frontFile={joinCccdFront}
                 backFile={joinCccdBack}
+                frontImageUrl={joinCccdFrontUrl}
+                backImageUrl={joinCccdBackUrl}
                 onFrontFileChange={setJoinCccdFront}
                 onBackFileChange={setJoinCccdBack}
               />

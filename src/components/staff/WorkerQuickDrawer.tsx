@@ -48,8 +48,10 @@ import {
 } from "@/lib/employment";
 import {
   findOrCreateCccdVersion,
+  getCccdVersionByNumber,
   getCurrentCccdVersion,
   updateCccdVersionImages,
+  type CccdVersionRecord,
 } from "@/lib/cccd-versions";
 import { compressImage } from "@/lib/image-compress";
 import type { FactoryRecord } from "@/lib/factories";
@@ -61,7 +63,7 @@ import {
   type AdvancePolicy,
 } from "@/lib/advance-policy";
 import { useAppSettings } from "@/lib/app-settings";
-import { pb, type UserRecord } from "@/lib/pocketbase";
+import { fileUrl, pb, type UserRecord } from "@/lib/pocketbase";
 import { resolveBankName } from "@/lib/vn-banks";
 import { BankNameInput } from "@/components/staff/BankNameInput";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
@@ -77,6 +79,17 @@ function formatMoneyDisplay(value: string): string {
   const digits = value.replace(/\D/g, "");
   if (!digits) return "";
   return Number(digits).toLocaleString("vi-VN");
+}
+
+function normalizeCccdNumber(value?: string) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function versionedCccdUrl(version: CccdVersionRecord | undefined, filename?: string) {
+  const url = fileUrl(version, filename);
+  if (!url || !version) return "";
+  const cacheKey = version.updated || version.id;
+  return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(cacheKey)}`;
 }
 
 export function ScopeChip({
@@ -199,6 +212,27 @@ export function WorkerQuickDrawer({
   }, [factories, managedFactoryIds, viewer, worker]);
 
   const latest = worker?.latestHistory ?? null;
+  const joinCccdVersion = useMemo(() => {
+    const cccdNumber = normalizeCccdNumber(joinForm.worker_cccd_snapshot);
+    if (!cccdNumber || !worker) return undefined;
+    return worker.histories.find(
+      (history) =>
+        normalizeCccdNumber(history.worker_cccd_snapshot) === cccdNumber &&
+        history.expand?.cccd_version,
+    )?.expand?.cccd_version;
+  }, [joinForm.worker_cccd_snapshot, worker]);
+  const joinCccdFrontUrl = joinCccdVersion?.front_image
+    ? versionedCccdUrl(joinCccdVersion, joinCccdVersion.front_image)
+    : normalizeCccdNumber(joinForm.worker_cccd_snapshot) ===
+          normalizeCccdNumber(worker?.user.cccd) && worker?.user.cccd_front
+      ? fileUrl(worker.user, worker.user.cccd_front)
+      : "";
+  const joinCccdBackUrl = joinCccdVersion?.back_image
+    ? versionedCccdUrl(joinCccdVersion, joinCccdVersion.back_image)
+    : normalizeCccdNumber(joinForm.worker_cccd_snapshot) ===
+          normalizeCccdNumber(worker?.user.cccd) && worker?.user.cccd_back
+      ? fileUrl(worker.user, worker.user.cccd_back)
+      : "";
   const isWorking = latest?.status === "working" && !latest.leave_date;
   const activeHistory =
     worker?.histories.find((h) => h.status === "working" && !h.leave_date) || null;
@@ -303,8 +337,19 @@ export function WorkerQuickDrawer({
         }
         cccdVersionId = version.id;
       } else {
-        const currentCccdVersion = await getCurrentCccdVersion(worker.user.id);
-        cccdVersionId = currentCccdVersion?.id;
+        const reusableVersion =
+          joinCccdVersion ||
+          (cccdNumber ? await getCccdVersionByNumber(worker.user.id, cccdNumber) : null);
+        cccdVersionId = reusableVersion?.id;
+        if (!cccdVersionId) {
+          const currentCccdVersion = await getCurrentCccdVersion(worker.user.id);
+          if (
+            currentCccdVersion &&
+            normalizeCccdNumber(currentCccdVersion.cccd_number) === normalizeCccdNumber(cccdNumber)
+          ) {
+            cccdVersionId = currentCccdVersion.id;
+          }
+        }
       }
 
       const created = await createEmploymentHistory({
@@ -705,6 +750,8 @@ export function WorkerQuickDrawer({
                   onChange={(changes) => setJoinForm((current) => ({ ...current, ...changes }))}
                   frontFile={joinCccdFront}
                   backFile={joinCccdBack}
+                  frontImageUrl={joinCccdFrontUrl}
+                  backImageUrl={joinCccdBackUrl}
                   onFrontFileChange={setJoinCccdFront}
                   onBackFileChange={setJoinCccdBack}
                 />

@@ -2137,7 +2137,7 @@ function AdvanceRulesCard({ rules }: { rules?: string }) {
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[80dvh] overflow-hidden rounded-2xl">
+        <DialogContent layout="raw" className="max-h-[80dvh] overflow-hidden rounded-2xl">
           <DialogHeader>
             <DialogTitle>Nội quy Ứng lương</DialogTitle>
             <DialogDescription>Quy định do admin thiết lập.</DialogDescription>

@@ -1001,7 +1001,10 @@ function OutstandingWorkersDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+      <DialogContent
+        layout="raw"
+        className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+      >
         <DialogHeader className="shrink-0 border-b border-border/60 p-5 pr-14 text-left">
           <DialogTitle>Thống kê báo ứng</DialogTitle>
           <DialogDescription>Thông tin báo ứng của NLĐ do bạn phụ trách.</DialogDescription>
@@ -1281,7 +1284,10 @@ function AdvanceDateDetailDialog({
 }) {
   return (
     <Dialog open={!!day} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+      <DialogContent
+        layout="raw"
+        className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+      >
         <DialogHeader className="shrink-0 border-b border-border/60 p-5 pr-14 text-left">
           <DialogTitle>Danh sách ứng – {day?.label || ""}</DialogTitle>
           <DialogDescription>
@@ -1323,7 +1329,10 @@ function OutstandingWorkerDetailDialog({
 }) {
   return (
     <Dialog open={!!worker} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+      <DialogContent
+        layout="raw"
+        className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+      >
         <DialogHeader className="shrink-0 border-b border-border/60 p-5 pr-14 text-left">
           <DialogTitle>Chi tiết tồn ứng – {worker?.fullName || "NLĐ"}</DialogTitle>
           <DialogDescription>

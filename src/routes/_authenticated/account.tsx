@@ -1921,7 +1921,10 @@ function AdminUsersPanel() {
 
       {/* User detail dialog */}
       <Dialog open={!!detailUser} onOpenChange={(open) => !open && closeDetailUser()}>
-        <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border-border/70 bg-card p-0 shadow-xl desktop:max-w-5xl">
+        <DialogContent
+          layout="raw"
+          className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border-border/70 bg-card p-0 shadow-xl desktop:max-w-5xl"
+        >
           {detailUser && (
             <>
               <DialogHeader className="border-b border-border/70 bg-card px-5 pb-4 pt-5 text-left sm:px-6">
