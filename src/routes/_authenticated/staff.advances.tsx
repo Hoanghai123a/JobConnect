@@ -46,6 +46,8 @@ import {
 import { createStaffActionLog } from "@/lib/staff-log";
 import { parseMoneyInput, formatMoneyInput } from "@/lib/money";
 import {
+  assertAdvanceInteractionAllowed,
+  isAdvanceInteractionAllowed,
   resolveAdvancePolicy,
   validateAdvanceAmount,
   type AdvancePolicy,
@@ -54,6 +56,7 @@ import { VN_BANKS, resolveBankName } from "@/lib/vn-banks";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
+import { AdvanceReadOnlyNotice } from "@/components/advances/AdvanceReadOnlyNotice";
 import {
   BarChart3,
   Check,
@@ -285,10 +288,14 @@ function getOutstandingRequesterName(row: OutstandingAdvance) {
 // PLACEHOLDER_CONTINUE
 
 function StaffAdvancesPage() {
+  const { user } = useAuth();
+  const { data: settings } = useAppSettings();
   const [segment, setSegment] = useState<"workers" | "mine">("workers");
+  const interactionAllowed = isAdvanceInteractionAllowed(settings, user?.role);
 
   return (
     <PageContainer title="Ứng lương">
+      {!interactionAllowed && <AdvanceReadOnlyNotice />}
       <div className="flex gap-1 rounded-lg bg-muted p-1">
         <button
           type="button"
@@ -316,14 +323,18 @@ function StaffAdvancesPage() {
         </button>
       </div>
 
-      {segment === "workers" ? <WorkerAdvancesView /> : <MyAdvancesView />}
+      {segment === "workers" ? (
+        <WorkerAdvancesView interactionAllowed={interactionAllowed} />
+      ) : (
+        <MyAdvancesView interactionAllowed={interactionAllowed} />
+      )}
     </PageContainer>
   );
 }
 
 // PLACEHOLDER_WORKERS_VIEW
 
-function WorkerAdvancesView() {
+function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolean }) {
   const { user, isAdmin, isStaff } = useAuth();
   const { data: settings } = useAppSettings();
   const [items, setItems] = useState<AdvanceRecord[]>([]);
@@ -537,6 +548,7 @@ function WorkerAdvancesView() {
   }, [selectedWorkerId, settings.allow_advance_after_leave]);
 
   const updateRow = async (id: string, payload: Partial<AdvanceRecord>) => {
+    await assertAdvanceInteractionAllowed(user?.role);
     await pb.collection("advances").update(id, payload);
   };
 
@@ -620,6 +632,7 @@ function WorkerAdvancesView() {
 
     setCreatingAdvance(true);
     try {
+      await assertAdvanceInteractionAllowed(user.role);
       const workspace = await fetchStaffWorkspace(user as UserRecord);
       const currentWorker = workspace.workers.find((worker) => worker.user.id === selectedWorkerId);
       if (!currentWorker?.canReportAdvance) {
@@ -831,7 +844,7 @@ function WorkerAdvancesView() {
                   <StatusChip tone={payoutMethod === "cash" ? "warning" : "neutral"}>
                     {PAYOUT_METHOD_META[payoutMethod].label}
                   </StatusChip>
-                  {status === "pending" && (
+                  {status === "pending" && interactionAllowed && (
                     <div className="flex gap-1">
                       <Button
                         size="icon"
@@ -858,20 +871,22 @@ function WorkerAdvancesView() {
                       </Button>
                     </div>
                   )}
-                  {status === "recruiter_approved" && row.recruiter_id === user?.id && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 gap-1 px-2 text-amber-700"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setWithdrawTarget(row);
-                      }}
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      Thu hồi
-                    </Button>
-                  )}
+                  {interactionAllowed &&
+                    status === "recruiter_approved" &&
+                    row.recruiter_id === user?.id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1 px-2 text-amber-700"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setWithdrawTarget(row);
+                        }}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Thu hồi
+                      </Button>
+                    )}
                 </div>
               </div>
               <p className="mt-1 truncate text-[12px] text-muted-foreground">{row.reason}</p>
@@ -913,7 +928,9 @@ function WorkerAdvancesView() {
         detail={advanceDetail}
         onClose={() => setAdvanceDetail(null)}
         canWithdraw={
-          advanceDetail?.status === "recruiter_approved" && advanceDetail.recruiter_id === user?.id
+          interactionAllowed &&
+          advanceDetail?.status === "recruiter_approved" &&
+          advanceDetail.recruiter_id === user?.id
         }
         onWithdraw={(advance) => {
           setAdvanceDetail(null);
@@ -923,11 +940,13 @@ function WorkerAdvancesView() {
       <WithdrawAdvanceDialog
         advance={withdrawTarget}
         withdrawing={withdrawing}
+        interactionAllowed={interactionAllowed}
         onClose={() => !withdrawing && setWithdrawTarget(null)}
         onConfirm={withdrawAdvance}
       />
       <Button
         className="fixed bottom-20 right-4 z-30 h-12 w-12 rounded-full shadow-lg"
+        disabled={!interactionAllowed}
         onClick={() => setShowCreateForm(true)}
         aria-label="Tạo ứng lương cho NLĐ"
         title="Tạo ứng lương cho NLĐ"
@@ -966,6 +985,7 @@ function WorkerAdvancesView() {
         policyError={workerPolicyError}
         loadingOutstanding={loadingWorkerPolicy}
         submitting={creatingAdvance}
+        interactionAllowed={interactionAllowed}
         onSubmit={createWorkerAdvance}
       />
     </>
@@ -1402,7 +1422,7 @@ function OutstandingWorkerDetailDialog({
 
 // PLACEHOLDER_MY_ADVANCES
 
-function MyAdvancesView() {
+function MyAdvancesView({ interactionAllowed }: { interactionAllowed: boolean }) {
   const { user } = useAuth();
   const [items, setItems] = useState<AdvanceRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1478,6 +1498,7 @@ function MyAdvancesView() {
 
     setSending(true);
     try {
+      await assertAdvanceInteractionAllowed(user?.role);
       await pb.collection("advances").create({
         user: user!.id,
         requested_by: user!.id,
@@ -1621,17 +1642,19 @@ function MyAdvancesView() {
                   <StatusChip tone={payoutMethod === "cash" ? "warning" : "neutral"}>
                     {PAYOUT_METHOD_META[payoutMethod].label}
                   </StatusChip>
-                  {status === "recruiter_approved" && row.requested_by === user?.id && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 gap-1 px-2 text-amber-700"
-                      onClick={() => setWithdrawTarget(row)}
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      Thu hồi
-                    </Button>
-                  )}
+                  {interactionAllowed &&
+                    status === "recruiter_approved" &&
+                    row.requested_by === user?.id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1 px-2 text-amber-700"
+                        onClick={() => setWithdrawTarget(row)}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Thu hồi
+                      </Button>
+                    )}
                 </div>
               </div>
               <p className="mt-1 truncate text-[12px] text-muted-foreground">{row.reason}</p>
@@ -1642,6 +1665,8 @@ function MyAdvancesView() {
 
       <Button
         className="fixed bottom-20 right-4 z-30 h-12 w-12 rounded-full shadow-lg"
+        disabled={!interactionAllowed}
+        title={interactionAllowed ? "Tạo yêu cầu ứng lương" : "Đang ở chế độ chỉ xem"}
         onClick={() => {
           setPayoutMethod("bank_transfer");
           setShowForm(true);
@@ -1665,11 +1690,13 @@ function MyAdvancesView() {
         selectedAdmins={selectedAdmins}
         setSelectedAdmins={setSelectedAdmins}
         sending={sending}
+        interactionAllowed={interactionAllowed}
         onSubmit={submit}
       />
       <WithdrawAdvanceDialog
         advance={withdrawTarget}
         withdrawing={withdrawing}
+        interactionAllowed={interactionAllowed}
         onClose={() => !withdrawing && setWithdrawTarget(null)}
         onConfirm={withdrawAdvance}
       />
@@ -1694,6 +1721,7 @@ function StaffAdvanceFormDialog({
   selectedAdmins,
   setSelectedAdmins,
   sending,
+  interactionAllowed,
   onSubmit,
 }: {
   open: boolean;
@@ -1714,6 +1742,7 @@ function StaffAdvanceFormDialog({
   selectedAdmins: string[];
   setSelectedAdmins: (v: string[]) => void;
   sending: boolean;
+  interactionAllowed: boolean;
   onSubmit: (e: React.FormEvent) => void;
 }) {
   return (
@@ -1724,6 +1753,7 @@ function StaffAdvanceFormDialog({
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="space-y-4">
+          {!interactionAllowed && <AdvanceReadOnlyNotice />}
           <div className="space-y-1.5">
             <Label>Số tiền *</Label>
             <Input
@@ -1815,7 +1845,11 @@ function StaffAdvanceFormDialog({
               )}
             </div>
           </div>
-          <Button type="submit" disabled={sending} className="w-full gap-2 rounded-xl">
+          <Button
+            type="submit"
+            disabled={sending || !interactionAllowed}
+            className="w-full gap-2 rounded-xl"
+          >
             <Send className="h-4 w-4" />
             {sending ? "Đang gửi…" : "Gửi yêu cầu"}
           </Button>
@@ -1928,6 +1962,7 @@ function WorkerAdvanceCreateDialog({
   policyError,
   loadingOutstanding,
   submitting,
+  interactionAllowed,
   onSubmit,
 }: {
   open: boolean;
@@ -1953,6 +1988,7 @@ function WorkerAdvanceCreateDialog({
   policyError: string;
   loadingOutstanding: boolean;
   submitting: boolean;
+  interactionAllowed: boolean;
   onSubmit: (event: React.FormEvent) => void;
 }) {
   const activeHistory = selectedWorker ? getAdvanceHistory(selectedWorker, true) : null;
@@ -1968,6 +2004,7 @@ function WorkerAdvanceCreateDialog({
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="space-y-3">
+          {!interactionAllowed && <AdvanceReadOnlyNotice />}
           <div className="space-y-2">
             <Label>Người lao động *</Label>
             {selectedWorker ? (
@@ -2141,7 +2178,13 @@ function WorkerAdvanceCreateDialog({
               <Button
                 type="submit"
                 className="w-full rounded-xl"
-                disabled={submitting || loadingOutstanding || Boolean(policyError) || !factoryName}
+                disabled={
+                  submitting ||
+                  loadingOutstanding ||
+                  Boolean(policyError) ||
+                  !factoryName ||
+                  !interactionAllowed
+                }
               >
                 <Send className="h-4 w-4" />
                 {submitting ? "Đang gửi..." : "Gửi yêu cầu tới admin"}
@@ -2173,6 +2216,7 @@ function removeVietnameseTone(value: string) {
 }
 
 async function withdrawStaffAdvance(user: UserRecord, advance: AdvanceRecord) {
+  await assertAdvanceInteractionAllowed(user.role);
   const current = (await pb.collection("advances").getOne(advance.id)) as unknown as AdvanceRecord;
   const ownedByStaff = current.requested_by === user.id || current.recruiter_id === user.id;
 
@@ -2206,11 +2250,13 @@ function getWithdrawErrorMessage(error: unknown) {
 function WithdrawAdvanceDialog({
   advance,
   withdrawing,
+  interactionAllowed,
   onClose,
   onConfirm,
 }: {
   advance: AdvanceRecord | null;
   withdrawing: boolean;
+  interactionAllowed: boolean;
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -2224,6 +2270,7 @@ function WithdrawAdvanceDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {!interactionAllowed && <AdvanceReadOnlyNotice />}
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950">
           <div className="text-sm font-semibold">{advance?.full_name || "Staff"}</div>
           <div className="mt-1 text-xl font-bold">{formatMoney(Number(advance?.amount || 0))}đ</div>
@@ -2236,7 +2283,12 @@ function WithdrawAdvanceDialog({
           <Button type="button" variant="outline" disabled={withdrawing} onClick={onClose}>
             Giữ yêu cầu
           </Button>
-          <Button type="button" variant="destructive" disabled={withdrawing} onClick={onConfirm}>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={withdrawing || !interactionAllowed}
+            onClick={onConfirm}
+          >
             <RotateCcw className="h-4 w-4" />
             {withdrawing ? "Đang thu hồi…" : "Xác nhận thu hồi"}
           </Button>

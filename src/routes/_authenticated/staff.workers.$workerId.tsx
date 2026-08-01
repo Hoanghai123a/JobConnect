@@ -73,6 +73,8 @@ import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { JoinCccdSection } from "@/components/employment/JoinCccdSection";
 import {
+  assertAdvanceInteractionAllowed,
+  isAdvanceInteractionAllowed,
   resolveAdvancePolicy,
   validateAdvanceAmount,
   type AdvancePolicy,
@@ -105,6 +107,7 @@ import {
 import { pb, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import { resolveBankName } from "@/lib/vn-banks";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
+import { AdvanceReadOnlyNotice } from "@/components/advances/AdvanceReadOnlyNotice";
 import {
   PAYOUT_METHOD_META,
   normalizeAdvancePayoutMethod,
@@ -383,8 +386,11 @@ function StaffWorkerDetailPage() {
   const recentRecruiter = isRecentRecruiter(viewer, histories);
   const canReportAdvanceForWorker = canReportAdvance(viewer, histories);
   const allowAdvanceAfterLeave = Boolean(settings.allow_advance_after_leave);
+  const advanceInteractionAllowed = isAdvanceInteractionAllowed(settings, viewer?.role);
   const canOpenAdvanceForWorker =
-    canReportAdvanceForWorker && (Boolean(activeHistory) || allowAdvanceAfterLeave);
+    canReportAdvanceForWorker &&
+    (Boolean(activeHistory) || allowAdvanceAfterLeave) &&
+    advanceInteractionAllowed;
   const canViewPayrollForWorker = canViewPayroll(viewer, histories, managedFactoryIds);
   const canReportLeaveForWorker = canReportLeave(
     viewer,
@@ -505,6 +511,7 @@ function StaffWorkerDetailPage() {
     }
 
     try {
+      await assertAdvanceInteractionAllowed(viewer.role);
       const policy = await resolveAdvancePolicy(workerUser.id, {
         allowAfterLeave: allowAdvanceAfterLeave,
       });
@@ -993,6 +1000,7 @@ function StaffWorkerDetailPage() {
         </button>
       }
     >
+      {!advanceInteractionAllowed && viewer?.role !== "admin" && <AdvanceReadOnlyNotice />}
       <div className="grid grid-cols-3 gap-2">
         <ActionButton
           icon={Wallet}
@@ -1243,6 +1251,7 @@ function StaffWorkerDetailPage() {
               void submitAdvance();
             }}
           >
+            {!advanceInteractionAllowed && <AdvanceReadOnlyNotice />}
             {advancePolicyLoading && (
               <div className="rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
                 Đang kiểm tra nhà máy và hạn mức ứng tiền...
@@ -1299,7 +1308,12 @@ function StaffWorkerDetailPage() {
               <Button
                 type="submit"
                 className="rounded-xl"
-                disabled={advancePolicyLoading || !advancePolicy || Boolean(advancePolicyError)}
+                disabled={
+                  advancePolicyLoading ||
+                  !advancePolicy ||
+                  Boolean(advancePolicyError) ||
+                  !advanceInteractionAllowed
+                }
               >
                 Gửi yêu cầu
               </Button>

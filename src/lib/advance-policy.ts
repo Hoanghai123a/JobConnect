@@ -1,6 +1,6 @@
 import { pb } from "./pocketbase";
 import { escapePb } from "./delegations";
-import { fetchAppSettings } from "./app-settings";
+import { fetchAppSettings, fetchAppSettingsStrict, type AppSettings } from "./app-settings";
 import {
   fetchEmploymentHistories,
   getLatestEmploymentHistory,
@@ -8,6 +8,25 @@ import {
   type EmploymentHistoryRecord,
 } from "./employment";
 import type { FactoryRecord } from "./factories";
+import type { Role } from "./pocketbase";
+
+export const ADVANCE_INTERACTION_DISABLED_MESSAGE =
+  "Chức năng báo ứng đang tạm khóa. User và Staff hiện chỉ có thể xem dữ liệu.";
+
+export function isAdvanceInteractionAllowed(
+  settings: Pick<AppSettings, "advance_reporting_enabled"> | null | undefined,
+  role?: Role,
+) {
+  return role === "admin" || settings?.advance_reporting_enabled !== false;
+}
+
+export async function assertAdvanceInteractionAllowed(role?: Role) {
+  if (role === "admin") return;
+  const settings = await fetchAppSettingsStrict();
+  if (!isAdvanceInteractionAllowed(settings, role)) {
+    throw new Error(ADVANCE_INTERACTION_DISABLED_MESSAGE);
+  }
+}
 
 export type AdvancePolicy = {
   employment: EmploymentHistoryRecord;

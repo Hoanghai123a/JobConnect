@@ -1,8 +1,9 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
-import { useAppSettings } from "@/lib/app-settings";
+import { useAppSettings, type AppSettings } from "@/lib/app-settings";
 import {
   type AdvanceRecord,
   type AdvanceStatus,
@@ -31,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -62,6 +64,8 @@ import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import {
+  assertAdvanceInteractionAllowed,
+  isAdvanceInteractionAllowed,
   resolveAdvancePolicy,
   validateAdvanceAmount,
   type AdvancePolicy,
@@ -87,6 +91,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
+import { AdvanceReadOnlyNotice } from "@/components/advances/AdvanceReadOnlyNotice";
 
 export const Route = createFileRoute("/_authenticated/advances")({
   component: AdvancesPage,
@@ -194,6 +199,7 @@ async function loadAdvanceSummary(filter: string): Promise<AdvanceSummary> {
 
 export function AdvancesPage() {
   const { user, isAdmin, isStaff } = useAuth();
+  const queryClient = useQueryClient();
   const { data: settings } = useAppSettings();
   const [storedFilters] = useState(readStoredAdvanceFilters);
 
@@ -237,7 +243,12 @@ export function AdvancesPage() {
   const [showFilters, setShowFilters] = useState(Boolean(storedFilters.showFilters));
   const [undoRequest, setUndoRequest] = useState<AdvanceUndoRequest | null>(null);
   const [undoing, setUndoing] = useState(false);
+  const [advanceSettingOpen, setAdvanceSettingOpen] = useState(false);
+  const [disableConfirmationOpen, setDisableConfirmationOpen] = useState(false);
+  const [advanceSettingSaving, setAdvanceSettingSaving] = useState(false);
 
+  const advanceReportingEnabled = settings.advance_reporting_enabled !== false;
+  const interactionAllowed = isAdvanceInteractionAllowed(settings, user?.role);
   const selectedAdvanceUser = user as UserRecord | null;
   const selectedFactoryName = useMemo(
     () => factories.find((factory) => factory.id === factoryFilter)?.name || "",
@@ -511,6 +522,36 @@ export function AdvancesPage() {
   ).length;
   const selectedActionableCount = selectedPendingCount + selectedRecoverableCount;
 
+  const saveAdvanceReportingEnabled = async (enabled: boolean) => {
+    setAdvanceSettingSaving(true);
+    try {
+      const saved = settings.id
+        ? await pb.collection("app_settings").update<AppSettings>(settings.id, {
+            advance_reporting_enabled: enabled,
+          })
+        : await pb.collection("app_settings").create<AppSettings>({
+            advance_reporting_enabled: enabled,
+          });
+      queryClient.setQueryData<AppSettings>(["app_settings"], (current) => ({
+        ...current,
+        ...saved,
+        advance_reporting_enabled: enabled,
+      }));
+      toast.success(
+        enabled
+          ? "Đã cho phép User và Staff thao tác báo ứng"
+          : "Đã chuyển User và Staff sang chế độ chỉ xem",
+      );
+      if (!enabled) setDisableConfirmationOpen(false);
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error ? error.message : "Không thể lưu trạng thái chức năng báo ứng",
+      );
+    } finally {
+      setAdvanceSettingSaving(false);
+    }
+  };
+
   const submit = async (e: React.FormEvent): Promise<boolean> => {
     e.preventDefault();
     const amount = parseMoneyInput(amountText);
@@ -528,6 +569,7 @@ export function AdvancesPage() {
     }
     setSending(true);
     try {
+      await assertAdvanceInteractionAllowed(user?.role);
       const policy = await resolveAdvancePolicy(selectedAdvanceUser.id, {
         allowAfterLeave: Boolean(settings.allow_advance_after_leave),
       });
@@ -873,9 +915,11 @@ export function AdvancesPage() {
     return (
       <PageContainer title="Ứng lương" subtitle="Xin ứng lương & xem lịch sử">
         <AdvanceRulesCard rules={settings.advance_rules} />
+        {!interactionAllowed && <AdvanceReadOnlyNotice />}
 
         <Button
           className="w-full"
+          disabled={!interactionAllowed}
           onClick={() => {
             setPayoutMethod("bank_transfer");
             setShowProfile(true);
@@ -900,6 +944,7 @@ export function AdvancesPage() {
           >
             <div className="min-w-0 space-y-3">
               <UserProfileCollapsible user={selectedAdvanceUser} policy={advancePolicy} />
+              {!interactionAllowed && <AdvanceReadOnlyNotice />}
 
               {advancePolicyLoading && (
                 <div className="rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
@@ -1008,7 +1053,7 @@ export function AdvancesPage() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={sending || advancePolicyLoading || !advancePolicy}
+                disabled={sending || advancePolicyLoading || !advancePolicy || !interactionAllowed}
               >
                 <Send className="h-4 w-4" /> {sending ? "Đang gửi…" : "Gửi Ứng lương"}
               </Button>
@@ -1111,7 +1156,6 @@ export function AdvancesPage() {
         </button>
       }
     >
-      <AdvanceRulesCard rules={settings.advance_rules} />
       <div className="flex gap-1 rounded-lg bg-muted p-1">
         <button
           type="button"
@@ -1198,22 +1242,38 @@ export function AdvancesPage() {
               />
             </div>
           </div>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-soft transition",
-                showFilters
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-primary",
-              )}
-              onClick={() => setShowFilters((value) => !value)}
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Bộ lọc
-            </button>
-          </div>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <AdvanceRulesCard rules={settings.advance_rules} compact />
+        <button
+          type="button"
+          onClick={() => setAdvanceSettingOpen(true)}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-soft transition active:scale-[0.98]",
+            advanceReportingEnabled
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-amber-300 bg-amber-50 text-amber-800",
+          )}
+        >
+          <ShieldCheck className="h-3.5 w-3.5" />
+          {advanceReportingEnabled ? "Thao tác: Đang bật" : "Thao tác: Chỉ xem"}
+        </button>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-soft transition",
+            showFilters
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border bg-card text-primary",
+          )}
+          onClick={() => setShowFilters((value) => !value)}
+          aria-expanded={showFilters}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          Bộ lọc
+        </button>
       </div>
 
       <FilterBar
@@ -1609,6 +1669,91 @@ export function AdvancesPage() {
         requestAdvanceUndo={requestAdvanceUndo}
         load={load}
       />
+
+      <Dialog
+        open={advanceSettingOpen}
+        onOpenChange={(open) => {
+          if (!advanceSettingSaving) setAdvanceSettingOpen(open);
+        }}
+      >
+        <DialogContent layout="raw" className="w-[calc(100%-2rem)] max-w-md rounded-2xl">
+          <DialogHeader>
+            <div
+              className={cn(
+                "flex h-11 w-11 items-center justify-center rounded-full",
+                advanceReportingEnabled
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-amber-100 text-amber-700",
+              )}
+            >
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <DialogTitle>Cho phép User/Staff thao tác báo ứng</DialogTitle>
+            <DialogDescription>
+              Bật hoặc chuyển toàn bộ chức năng báo ứng của User và Staff sang chế độ chỉ xem.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold">
+                {advanceReportingEnabled ? "Đang cho phép thao tác" : "Đang ở chế độ chỉ xem"}
+              </div>
+              <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                {advanceReportingEnabled
+                  ? "User và Staff có thể tạo, duyệt hoặc thu hồi yêu cầu theo quyền."
+                  : "User và Staff chỉ có thể xem, tìm kiếm và lọc dữ liệu báo ứng."}
+              </div>
+            </div>
+            <Switch
+              checked={advanceReportingEnabled}
+              disabled={advanceSettingSaving}
+              onCheckedChange={(checked) => {
+                if (checked) void saveAdvanceReportingEnabled(true);
+                else setDisableConfirmationOpen(true);
+              }}
+              aria-label="Cho phép User và Staff thao tác báo ứng"
+            />
+          </div>
+
+          <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+            Admin luôn có đầy đủ quyền tạo, duyệt, chỉnh sửa, giải ngân và thu hồi báo ứng.
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={disableConfirmationOpen}
+        onOpenChange={(open) => {
+          if (!advanceSettingSaving) setDisableConfirmationOpen(open);
+        }}
+      >
+        <AlertDialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl">
+          <AlertDialogHeader>
+            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 text-amber-700 sm:mx-0">
+              <TriangleAlert className="h-5 w-5" />
+            </div>
+            <AlertDialogTitle>Chuyển User và Staff sang chế độ chỉ xem?</AlertDialogTitle>
+            <AlertDialogDescription className="leading-relaxed">
+              User và Staff sẽ không thể tạo, duyệt, từ chối hoặc thu hồi yêu cầu báo ứng. Dữ liệu
+              hiện có vẫn được giữ nguyên và Admin vẫn có toàn quyền xử lý.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={advanceSettingSaving}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 text-white hover:bg-amber-700"
+              disabled={advanceSettingSaving}
+              onClick={(event) => {
+                event.preventDefault();
+                void saveAdvanceReportingEnabled(false);
+              }}
+            >
+              {advanceSettingSaving ? "Đang lưu…" : "Xác nhận tắt thao tác"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={!!undoRequest}
@@ -2114,7 +2259,7 @@ function getAdvanceRequesterField(
   return field === "phone" ? row.expand?.requested_by?.phone || "" : "";
 }
 
-function AdvanceRulesCard({ rules }: { rules?: string }) {
+function AdvanceRulesCard({ rules, compact = false }: { rules?: string; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const content = rules?.trim();
   return (
@@ -2122,18 +2267,32 @@ function AdvanceRulesCard({ rules }: { rules?: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full items-center gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 text-left text-amber-900 shadow-soft transition active:scale-[0.99]"
+        className={cn(
+          "border border-amber-300 bg-amber-50 text-amber-900 shadow-soft transition active:scale-[0.98]",
+          compact
+            ? "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
+            : "flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left",
+        )}
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-200 text-amber-800">
-          <TriangleAlert className="h-4 w-4" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold leading-tight">Nội quy Ứng lương</span>
-          <span className="block truncate text-[11px] leading-tight text-amber-800/80">
-            Bấm để xem quy định từ admin
-          </span>
-        </span>
-        <ChevronRight className="h-4 w-4 shrink-0" />
+        {compact ? (
+          <>
+            <TriangleAlert className="h-3.5 w-3.5" />
+            Nội quy ứng lương
+          </>
+        ) : (
+          <>
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-200 text-amber-800">
+              <TriangleAlert className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold leading-tight">Nội quy Ứng lương</span>
+              <span className="block truncate text-[11px] leading-tight text-amber-800/80">
+                Bấm để xem quy định từ admin
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0" />
+          </>
+        )}
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>

@@ -41,6 +41,8 @@ import { fileUrl, pb, type UserRecord } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import {
+  assertAdvanceInteractionAllowed,
+  isAdvanceInteractionAllowed,
   resolveAdvancePolicy,
   validateAdvanceAmount,
   type AdvancePolicy,
@@ -88,6 +90,7 @@ import {
 } from "@/lib/cccd-versions";
 import { compressImage } from "@/lib/image-compress";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
+import { AdvanceReadOnlyNotice } from "@/components/advances/AdvanceReadOnlyNotice";
 import type { AdvancePayoutMethod } from "@/lib/advances";
 
 type RestoreRequest = {
@@ -314,19 +317,22 @@ function ActionButton({
   icon: Icon,
   label,
   tone = "info",
+  disabled = false,
   onClick,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   tone?: ActionButtonTone;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   const colors = actionButtonToneClasses[tone];
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
-      className={`flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border px-2 py-2 text-center shadow-soft transition-colors active:scale-[0.98] desktop:min-h-9 desktop:w-full desktop:flex-row desktop:justify-start desktop:gap-1.5 desktop:rounded-lg desktop:px-2.5 desktop:py-1.5 desktop:text-left ${colors.button}`}
+      className={`flex min-h-[64px] min-w-0 disabled:cursor-not-allowed disabled:opacity-50 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border px-2 py-2 text-center shadow-soft transition-colors active:scale-[0.98] desktop:min-h-9 desktop:w-full desktop:flex-row desktop:justify-start desktop:gap-1.5 desktop:rounded-lg desktop:px-2.5 desktop:py-1.5 desktop:text-left ${colors.button}`}
     >
       <div
         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg desktop:h-6 desktop:w-6 desktop:rounded-md ${colors.icon}`}
@@ -1170,6 +1176,7 @@ export function WorkerEmploymentDrawer({
 
     setSubmittingAdvance(true);
     try {
+      await assertAdvanceInteractionAllowed(actor.role);
       const policy = await resolveAdvancePolicy(user.id, {
         allowAfterLeave: Boolean(settings?.allow_advance_after_leave),
       });
@@ -1253,7 +1260,10 @@ export function WorkerEmploymentDrawer({
   const activeHistory = histories.find((item) => isCurrentlyWorking(item));
   const isWorking = Boolean(activeHistory);
   const allowAdvanceAfterLeave = Boolean(settings?.allow_advance_after_leave);
-  const canOpenAdvance = permissions.canReportAdvance && (isWorking || allowAdvanceAfterLeave);
+  const advanceInteractionAllowed = isAdvanceInteractionAllowed(settings, actor?.role);
+  const canReportAdvanceByScope =
+    permissions.canReportAdvance && (isWorking || allowAdvanceAfterLeave);
+  const canOpenAdvance = canReportAdvanceByScope && advanceInteractionAllowed;
   const advanceLimit = advancePolicy?.limit || 0;
   const advanceOutstanding = advancePolicy?.outstanding || 0;
   const workerBank = user.bank_account_number
@@ -1321,7 +1331,7 @@ export function WorkerEmploymentDrawer({
             <div className="desktop:grid desktop:grid-cols-[10.5rem_minmax(0,1fr)] desktop:items-stretch desktop:gap-3">
               {((isWorking && permissions.canReportLeave) ||
                 permissions.canReportJoin ||
-                canOpenAdvance ||
+                canReportAdvanceByScope ||
                 permissions.canViewPayroll ||
                 permissions.canUpdateBank ||
                 permissions.canAddOldHistory ||
@@ -1355,10 +1365,11 @@ export function WorkerEmploymentDrawer({
                         onClick={openJoinDialog}
                       />
                     )}
-                    {canOpenAdvance && (
+                    {canReportAdvanceByScope && (
                       <ActionButton
                         icon={Wallet}
                         label="Báo ứng lương"
+                        disabled={!canOpenAdvance}
                         tone="warning"
                         onClick={openAdvanceDialog}
                       />
@@ -2477,6 +2488,7 @@ export function WorkerEmploymentDrawer({
               void submitAdvance();
             }}
           >
+            {!advanceInteractionAllowed && <AdvanceReadOnlyNotice />}
             <div className="rounded-xl border bg-muted/30 p-3 text-sm">
               <div className="font-semibold">
                 {user.full_name || user.username || "Người lao động"}
@@ -2598,7 +2610,8 @@ export function WorkerEmploymentDrawer({
                   advanceOutstandingLoading ||
                   !advancePolicy ||
                   Boolean(advancePolicyError) ||
-                  (advancePayoutMethod === "bank_transfer" && !workerBank && !actorBank)
+                  (advancePayoutMethod === "bank_transfer" && !workerBank && !actorBank) ||
+                  !advanceInteractionAllowed
                 }
               >
                 {submittingAdvance ? "Đang gửi..." : "Gửi yêu cầu"}

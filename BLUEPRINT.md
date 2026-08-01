@@ -269,7 +269,7 @@ erDiagram
 - **`transport_contacts`** — `user, edited_by, carrier_name, title, run_time, phone`.
 - **`guides`** — `icon, title, content, font_size, order, target_type (all|factories|users), target_factories[], target_users[]`.
 - **Chat**: `chat_rooms` (`name, description, is_default, created_by`), `chat_room_members` (`room, user`), `chat_join_requests` (`room, user, status, handled_by, handled_at`), `group_chat_messages` (`user, room, content`).
-- **`app_settings`** — singleton (getList(1,1)). Field: `company_name, slogan, address, hotline, email, about, logo (file), requireApproval, account_code_prefix, advance_limit, advance_rules, install_guide_images[]`, + branding icons.
+- **`app_settings`** — singleton (getList(1,1)). Field: `company_name, slogan, address, hotline, email, about, logo (file), requireApproval, account_code_prefix, advance_limit, advance_rules, allow_advance_after_leave, advance_reporting_enabled, install_guide_images[]`, + branding icons.
 - **Game garden/gems**: `garden_foods, garden_exchange_tiers, garden_balances, garden_exchange_requests, garden_visit_saves, garden_game_sessions, garden_gem_rewards`.
 
 ---

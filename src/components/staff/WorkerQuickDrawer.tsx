@@ -58,6 +58,8 @@ import type { FactoryRecord } from "@/lib/factories";
 import type { MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import {
+  assertAdvanceInteractionAllowed,
+  isAdvanceInteractionAllowed,
   resolveAdvancePolicy,
   validateAdvanceAmount,
   type AdvancePolicy,
@@ -67,6 +69,7 @@ import { fileUrl, pb, type UserRecord } from "@/lib/pocketbase";
 import { resolveBankName } from "@/lib/vn-banks";
 import { BankNameInput } from "@/components/staff/BankNameInput";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
+import { AdvanceReadOnlyNotice } from "@/components/advances/AdvanceReadOnlyNotice";
 import type { AdvancePayoutMethod } from "@/lib/advances";
 import { JoinCccdSection } from "@/components/employment/JoinCccdSection";
 
@@ -237,7 +240,11 @@ export function WorkerQuickDrawer({
   const activeHistory =
     worker?.histories.find((h) => h.status === "working" && !h.leave_date) || null;
   const allowAdvanceAfterLeave = Boolean(settings.allow_advance_after_leave);
-  const canOpenAdvance = Boolean(worker?.canReportAdvance && (isWorking || allowAdvanceAfterLeave));
+  const advanceInteractionAllowed = isAdvanceInteractionAllowed(settings, viewer?.role);
+  const canReportAdvanceByScope = Boolean(
+    worker?.canReportAdvance && (isWorking || allowAdvanceAfterLeave),
+  );
+  const canOpenAdvance = canReportAdvanceByScope && advanceInteractionAllowed;
 
   const submitLeave = async () => {
     if (!worker || !activeHistory || !viewer?.id) return;
@@ -412,6 +419,7 @@ export function WorkerQuickDrawer({
     }
     setSubmitting(true);
     try {
+      await assertAdvanceInteractionAllowed(viewer.role);
       const policy = await resolveAdvancePolicy(worker.user.id, {
         allowAfterLeave: allowAdvanceAfterLeave,
       });
@@ -543,10 +551,11 @@ export function WorkerQuickDrawer({
                     onClick={() => setView("join")}
                   />
                 )}
-                {canOpenAdvance && (
+                {canReportAdvanceByScope && (
                   <ActionButton
                     icon={Wallet}
                     label="Báo ứng lương"
+                    disabled={!canOpenAdvance}
                     onClick={() => {
                       setPayoutMethod("bank_transfer");
                       setView("advance");
@@ -578,7 +587,7 @@ export function WorkerQuickDrawer({
                     onClick={() => setView("bank")}
                   />
                 )}
-                {(worker.canReportLeave || worker.canReportJoin || canOpenAdvance) && (
+                {(worker.canReportLeave || worker.canReportJoin || canReportAdvanceByScope) && (
                   <ActionButton
                     icon={Hash}
                     label="Cập nhật mã NV"
@@ -843,6 +852,7 @@ export function WorkerQuickDrawer({
               bankChoice={bankChoice}
               setBankChoice={setBankChoice}
               submitting={submitting}
+              interactionAllowed={advanceInteractionAllowed}
               allowAfterLeave={allowAdvanceAfterLeave}
               onSubmit={submitAdvance}
               onBack={() => setView("summary")}
@@ -971,17 +981,20 @@ type DrawerView = "summary" | "leave" | "join" | "advance" | "bank" | "employee_
 function ActionButton({
   icon: Icon,
   label,
+  disabled = false,
   onClick,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
-      className="flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-border/60 bg-card px-2 py-2 text-center shadow-soft active:scale-[0.98]"
+      className="flex min-h-[64px] min-w-0 disabled:cursor-not-allowed disabled:opacity-50 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-border/60 bg-card px-2 py-2 text-center shadow-soft active:scale-[0.98]"
     >
       <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
         <Icon className="h-4 w-4" />
@@ -1016,6 +1029,7 @@ function AdvanceForm({
   bankChoice,
   setBankChoice,
   submitting,
+  interactionAllowed,
   allowAfterLeave,
   onSubmit,
   onBack,
@@ -1031,6 +1045,7 @@ function AdvanceForm({
   bankChoice: "worker" | "viewer";
   setBankChoice: (v: "worker" | "viewer") => void;
   submitting: boolean;
+  interactionAllowed: boolean;
   allowAfterLeave: boolean;
   onSubmit: () => void;
   onBack: () => void;
@@ -1080,6 +1095,7 @@ function AdvanceForm({
       }}
     >
       <div className="text-sm font-semibold">Báo ứng lương</div>
+      {!interactionAllowed && <AdvanceReadOnlyNotice />}
 
       {policyLoading && (
         <div className="rounded-xl border bg-muted/30 p-2.5 text-xs text-muted-foreground">
@@ -1190,7 +1206,8 @@ function AdvanceForm({
             policyLoading ||
             !policy ||
             Boolean(policyError) ||
-            (payoutMethod === "bank_transfer" && !workerBank && !viewerBank)
+            (payoutMethod === "bank_transfer" && !workerBank && !viewerBank) ||
+            !interactionAllowed
           }
           className="flex-1"
         >
