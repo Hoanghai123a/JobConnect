@@ -10,23 +10,27 @@ import { normalizeDate } from "./date-utils";
 export type EmploymentStatus = "working" | "left";
 
 export function deriveEmploymentStatus(
-  history: { leave_date?: string | null },
+  history: { leave_date?: string | null; status?: EmploymentStatus | null },
   referenceDate: Date = new Date(),
 ): EmploymentStatus {
-  if (!history.leave_date) return "working";
-  const leave = new Date(history.leave_date);
-  if (Number.isNaN(leave.getTime())) return "working";
-  const leaveDay = new Date(leave.getFullYear(), leave.getMonth(), leave.getDate());
-  const today = new Date(
-    referenceDate.getFullYear(),
-    referenceDate.getMonth(),
-    referenceDate.getDate(),
-  );
-  return leaveDay <= today ? "left" : "working";
+  if (history.leave_date) {
+    const leave = new Date(history.leave_date);
+    if (!Number.isNaN(leave.getTime())) {
+      const leaveDay = new Date(leave.getFullYear(), leave.getMonth(), leave.getDate());
+      const today = new Date(
+        referenceDate.getFullYear(),
+        referenceDate.getMonth(),
+        referenceDate.getDate(),
+      );
+      return leaveDay <= today ? "left" : "working";
+    }
+  }
+
+  return history.status === "left" ? "left" : "working";
 }
 
 export function isCurrentlyWorking(
-  history: { leave_date?: string | null },
+  history: { leave_date?: string | null; status?: EmploymentStatus | null },
   referenceDate: Date = new Date(),
 ): boolean {
   return deriveEmploymentStatus(history, referenceDate) === "working";

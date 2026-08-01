@@ -139,7 +139,7 @@ function normalizeCccdNumber(value?: string) {
 }
 
 function hasWorkingEmploymentStatus(history: EmploymentHistoryRecord) {
-  return history.status ? history.status === "working" : isCurrentlyWorking(history);
+  return isCurrentlyWorking(history);
 }
 
 function HistoryCccdImageSlot({
