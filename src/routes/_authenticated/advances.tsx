@@ -1258,7 +1258,7 @@ export function AdvancesPage() {
           )}
         >
           <ShieldCheck className="h-3.5 w-3.5" />
-          {advanceReportingEnabled ? "Thao tác: Đang bật" : "Thao tác: Chỉ xem"}
+          {advanceReportingEnabled ? "Cho ứng: Đang bật" : "Cho ứng: Chỉ xem"}
         </button>
         <button
           type="button"
