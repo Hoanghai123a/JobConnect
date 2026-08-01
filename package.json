@@ -16,7 +16,8 @@
     "start": "node .output/server/index.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "pb:backfill-employment-snapshots": "node scripts/backfill-employment-snapshots.mjs"
+    "pb:backfill-employment-snapshots": "node scripts/backfill-employment-snapshots.mjs",
+    "pb:repair-employment-histories": "node scripts/repair-employment-histories.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

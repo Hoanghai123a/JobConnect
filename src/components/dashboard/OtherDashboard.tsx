@@ -350,7 +350,7 @@ function CompletionDayDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl rounded-3xl">
+      <DialogContent className="max-w-6xl rounded-3xl desktop:max-w-6xl">
         <DialogHeader>
           <DialogTitle>Ảnh CCCD ngày {formatDate(day?.date)}</DialogTitle>
           <DialogDescription>

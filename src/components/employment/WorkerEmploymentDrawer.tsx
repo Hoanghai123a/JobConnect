@@ -49,8 +49,10 @@ import {
   createEmploymentHistory,
   deriveEmploymentStatus,
   fetchEmploymentHistories,
-  findActiveEmploymentByUser,
+  getCurrentEmploymentHistory,
   getLatestEmploymentHistory,
+  getStaleWorkingEmploymentHistories,
+  isEmploymentUserUniqueError,
   getMissingEmploymentEditFields,
   getMissingEmploymentSnapshotFields,
   getEmploymentPersonalSnapshot,
@@ -134,6 +136,10 @@ function versionedCccdUrl(version: CccdVersionRecord | undefined, filename?: str
 
 function normalizeCccdNumber(value?: string) {
   return String(value || "").replace(/\D/g, "");
+}
+
+function hasWorkingEmploymentStatus(history: EmploymentHistoryRecord) {
+  return history.status ? history.status === "working" : isCurrentlyWorking(history);
 }
 
 function HistoryCccdImageSlot({
@@ -264,6 +270,7 @@ function getPocketBaseFieldErrors(error: unknown) {
       : undefined;
   if (!data) return "";
   const fieldLabels: Record<string, string> = {
+    user: "Người lao động",
     front_image: "Ảnh CCCD mặt trước",
     back_image: "Ảnh CCCD mặt sau",
   };
@@ -752,11 +759,28 @@ export function WorkerEmploymentDrawer({
     }
     setJoinSaving(true);
     try {
-      const active = await findActiveEmploymentByUser(user.id);
+      const latestHistories = await fetchEmploymentHistories([user.id]);
+      const active = getCurrentEmploymentHistory(latestHistories);
       if (active) {
         toast.error("Cần báo nghỉ nhà máy cũ trước");
         return;
       }
+
+      const staleWorkingHistories = getStaleWorkingEmploymentHistories(latestHistories);
+      for (const history of staleWorkingHistories) {
+        const updated = await updateEmploymentHistory(history.id, { status: "left" });
+        await createStaffActionLog({
+          actor,
+          targetUserId: user.id,
+          targetCollection: "employment_histories",
+          targetRecord: history.id,
+          action: "update",
+          before: history,
+          after: updated,
+          note: "Báo đi làm mới: đồng bộ lịch sử đã có ngày nghỉ",
+        });
+      }
+
       let cccdVersionId: string | undefined;
       const cccdNumber = joinForm.worker_cccd_snapshot.trim() || user.cccd || "";
       if (joinCccdFront || joinCccdBack) {
@@ -823,7 +847,11 @@ export function WorkerEmploymentDrawer({
       await notifyDataChanged();
     } catch (error: unknown) {
       const fieldErrors = getPocketBaseFieldErrors(error);
-      toast.error(fieldErrors || getErrorMessage(error, "Lỗi báo đi làm"));
+      toast.error(
+        isEmploymentUserUniqueError(error)
+          ? "Người lao động này đã có một lịch sử đi làm đang hoạt động. Hãy kiểm tra ngày nghỉ hoặc tải lại dữ liệu trước khi tạo mới."
+          : fieldErrors || getErrorMessage(error, "Lỗi báo đi làm"),
+      );
     } finally {
       setJoinSaving(false);
     }
@@ -1754,40 +1782,43 @@ export function WorkerEmploymentDrawer({
                       return (
                         <Card
                           key={h.id}
-                          className="min-w-0 space-y-2 overflow-hidden rounded-2xl p-3 transition-colors desktop:grid desktop:grid-cols-[minmax(13rem,1.35fr)_minmax(10rem,1fr)_minmax(8rem,.8fr)_minmax(9rem,.9fr)_minmax(11rem,1.1fr)_auto] desktop:items-center desktop:gap-3 desktop:space-y-0 desktop:rounded-xl desktop:px-3 desktop:py-2 cursor-pointer hover:bg-muted/30"
+                          className="min-w-0 space-y-2 overflow-hidden rounded-2xl p-3 transition-colors desktop:grid desktop:grid-cols-[minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,.8fr)_minmax(0,1fr)_auto] desktop:items-center desktop:gap-4 desktop:space-y-0 desktop:rounded-xl desktop:px-4 desktop:py-3 cursor-pointer hover:bg-muted/30"
                           onClick={() => setSelectedHistory(h)}
                         >
                           <div className="flex items-start justify-between gap-2 desktop:contents">
                             <div className="min-w-0 flex-1 desktop:col-start-1 desktop:row-start-1">
                               <div
-                                title={`${factoryName} · Mã NV: ${h.employee_code || "—"}`}
-                                className="break-words text-sm font-semibold [overflow-wrap:anywhere] desktop:truncate"
+                                title={`${factoryName} · ${h.employee_code || "—"}`}
+                                className="break-words text-sm font-semibold [overflow-wrap:anywhere] desktop:truncate desktop:text-base"
                               >
                                 {factoryName}
-                                <span className="ml-1 text-[11px] font-normal text-muted-foreground">
-                                  · Mã: {h.employee_code || "—"}
+                                <span className="ml-1 text-xs font-medium text-muted-foreground desktop:text-sm">
+                                  · {h.employee_code || "—"}
                                 </span>
                               </div>
                               <div
                                 title={h.worker_name_snapshot || "—"}
-                                className="break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere] desktop:truncate"
+                                className="break-words text-xs text-muted-foreground [overflow-wrap:anywhere] desktop:truncate desktop:text-sm"
                               >
                                 {h.worker_name_snapshot || "—"}
                               </div>
                             </div>
-                            <div className="flex shrink-0 items-center gap-1.5 desktop:col-start-6 desktop:row-start-1 desktop:justify-self-end">
-                              <StatusChip tone={isCurrentlyWorking(h) ? "success" : "neutral"}>
-                                {isCurrentlyWorking(h) ? "Đang làm" : "Đã nghỉ"}
+                            <div className="flex shrink-0 items-center gap-2 desktop:col-start-5 desktop:row-start-1 desktop:justify-self-end">
+                              <StatusChip
+                                className="desktop:text-sm"
+                                tone={hasWorkingEmploymentStatus(h) ? "success" : "neutral"}
+                              >
+                                {hasWorkingEmploymentStatus(h) ? "Đang làm" : "Đã nghỉ"}
                               </StatusChip>
                               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                             </div>
                           </div>
-                          <div className="min-w-0 space-y-1 text-[11px] text-muted-foreground desktop:contents">
+                          <div className="min-w-0 space-y-1 text-xs text-muted-foreground desktop:contents desktop:text-sm">
                             <div
                               title={employmentPeriod}
                               className="min-w-0 break-words [overflow-wrap:anywhere] desktop:col-start-2 desktop:row-start-1 desktop:truncate"
                             >
-                              <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground desktop:block">
+                              <span className="hidden text-xs font-medium uppercase tracking-wide text-muted-foreground desktop:block">
                                 Thời gian
                               </span>
                               {employmentPeriod}
@@ -1796,7 +1827,7 @@ export function WorkerEmploymentDrawer({
                               title={mainHouseName}
                               className="hidden min-w-0 desktop:col-start-3 desktop:row-start-1 desktop:block desktop:truncate"
                             >
-                              <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
                                 Nhà chính
                               </span>
                               {mainHouseName}
@@ -1805,7 +1836,7 @@ export function WorkerEmploymentDrawer({
                               title={recruiterName}
                               className="min-w-0 break-words [overflow-wrap:anywhere] desktop:col-start-4 desktop:row-start-1 desktop:truncate"
                             >
-                              <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground desktop:block">
+                              <span className="hidden text-xs font-medium uppercase tracking-wide text-muted-foreground desktop:block">
                                 Người tuyển
                               </span>
                               <span className="desktop:hidden">Người tuyển: </span>
@@ -1814,11 +1845,8 @@ export function WorkerEmploymentDrawer({
                             {h.note && (
                               <div
                                 title={h.note}
-                                className="min-w-0 break-words [overflow-wrap:anywhere] desktop:col-start-5 desktop:row-start-1 desktop:truncate"
+                                className="min-w-0 break-words [overflow-wrap:anywhere] desktop:hidden"
                               >
-                                <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground desktop:block">
-                                  Ghi chú
-                                </span>
                                 {h.note}
                               </div>
                             )}
@@ -1859,7 +1887,7 @@ export function WorkerEmploymentDrawer({
           }
         }}
       >
-        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl sm:max-w-md">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Thông tin cá nhân tại thời điểm đi làm</DialogTitle>
             <DialogDescription>
@@ -1869,41 +1897,43 @@ export function WorkerEmploymentDrawer({
 
           {selectedHistory && (
             <div className="space-y-3">
-              <div className="rounded-xl border bg-muted/30 p-3">
-                <div className="text-sm font-semibold">
-                  {selectedHistory.expand?.factory?.name || "Nhà máy"}
+              <div className="grid grid-cols-2 overflow-hidden rounded-xl border bg-white text-sm shadow-sm sm:grid-cols-[minmax(0,1.4fr)_minmax(0,.8fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                <div className="col-span-2 min-w-0 border-b p-3 sm:col-span-1 sm:border-b-0 sm:border-r">
+                  <div className="text-[11px] text-muted-foreground">Nhà máy</div>
+                  <div className="mt-1 truncate font-semibold">
+                    {selectedHistory.expand?.factory?.name || "Chưa có"}
+                  </div>
+                  <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                    Mã NV: {selectedHistory.employee_code || "Chưa có"}
+                  </div>
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  Mã NV: {selectedHistory.employee_code || "Chưa có"}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="rounded-xl bg-muted/35 p-3">
+                <div className="border-b border-r p-3 sm:border-b-0">
                   <div className="text-[11px] text-muted-foreground">Trạng thái</div>
                   <div className="mt-1">
-                    <StatusChip tone={isCurrentlyWorking(selectedHistory) ? "success" : "neutral"}>
-                      {isCurrentlyWorking(selectedHistory) ? "Đang làm" : "Đã nghỉ"}
+                    <StatusChip
+                      tone={hasWorkingEmploymentStatus(selectedHistory) ? "success" : "neutral"}
+                    >
+                      {hasWorkingEmploymentStatus(selectedHistory) ? "Đang làm" : "Đã nghỉ"}
                     </StatusChip>
                   </div>
                 </div>
-                <div className="rounded-xl bg-muted/35 p-3">
+                <div className="min-w-0 border-b p-3 sm:border-b-0 sm:border-r">
                   <div className="text-[11px] text-muted-foreground">Nhà chính</div>
-                  <div className="mt-1 font-medium">
+                  <div className="mt-1 truncate font-medium">
                     {selectedHistory.expand?.main_house?.name || "Chưa gán"}
                   </div>
                 </div>
-                <div className="rounded-xl bg-muted/35 p-3">
+                <div className="border-r p-3">
                   <div className="text-[11px] text-muted-foreground">Ngày vào làm</div>
                   <div className="mt-1 font-medium">{formatDate(selectedHistory.join_date)}</div>
                 </div>
-                <div className="rounded-xl bg-muted/35 p-3">
+                <div className="p-3">
                   <div className="text-[11px] text-muted-foreground">Ngày nghỉ</div>
                   <div className="mt-1 font-medium">{formatDate(selectedHistory.leave_date)}</div>
                 </div>
               </div>
 
-              <div className="space-y-2 rounded-xl border p-3 text-sm">
+              <div className="space-y-2 rounded-xl border bg-white p-3 text-sm">
                 <div>
                   <span className="text-muted-foreground">Họ tên tại nhà máy: </span>
                   <span className="font-medium">
@@ -2263,7 +2293,7 @@ export function WorkerEmploymentDrawer({
       </Dialog>
 
       <Dialog open={!!editingId} onOpenChange={(v) => !v && setEditingId(null)}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Sửa lịch sử đi làm</DialogTitle>
             <DialogDescription>
@@ -2271,7 +2301,7 @@ export function WorkerEmploymentDrawer({
             </DialogDescription>
           </DialogHeader>
           <form
-            className="space-y-4"
+            className="space-y-4 [&_[role=combobox]]:bg-white [&_input]:bg-white [&_textarea]:bg-white"
             onSubmit={(e) => {
               e.preventDefault();
               void saveEdit();
@@ -2279,25 +2309,27 @@ export function WorkerEmploymentDrawer({
           >
             <div className="space-y-3">
               <div className="text-sm font-semibold">Thông tin đi làm</div>
-              <div className="space-y-1">
-                <Label className="text-xs">Nhà máy *</Label>
-                <Select
-                  value={form.factory}
-                  onValueChange={(value) => setForm((current) => ({ ...current, factory: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn nhà máy" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {factories.map((factory) => (
-                      <SelectItem key={factory.id} value={factory.id}>
-                        {factory.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Nhà máy *</Label>
+                  <Select
+                    value={form.factory}
+                    onValueChange={(value) =>
+                      setForm((current) => ({ ...current, factory: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn nhà máy" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {factories.map((factory) => (
+                        <SelectItem key={factory.id} value={factory.id}>
+                          {factory.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Nhà chính</Label>
                   <Select

@@ -29,9 +29,12 @@ import {
   createEmploymentHistory,
   fetchEmploymentHistories,
   fetchRegisterableUsers,
+  getCurrentEmploymentHistory,
   getEmploymentPersonalSnapshot,
   getLatestEmploymentHistory,
   getMissingEmploymentSnapshotFields,
+  getStaleWorkingEmploymentHistories,
+  isEmploymentUserUniqueError,
   maskCccd,
   updateEmploymentHistory,
 } from "@/lib/employment";
@@ -216,10 +219,15 @@ export function RegisterDialog({
     setSubmitting(true);
     try {
       const latestHistories = await fetchEmploymentHistories([userId]);
-      const staleWorkingHistories = latestHistories.filter(
-        (history) => history.status === "working" && Boolean(history.leave_date),
-      );
+      const activeHistory = getCurrentEmploymentHistory(latestHistories);
+      if (activeHistory) {
+        toast.error(
+          "Người lao động này đang có một lịch sử đi làm chưa kết thúc. Hãy cập nhật ngày nghỉ trước khi đăng ký mới.",
+        );
+        return;
+      }
 
+      const staleWorkingHistories = getStaleWorkingEmploymentHistories(latestHistories);
       for (const history of staleWorkingHistories) {
         const updated = await updateEmploymentHistory(history.id, { status: "left" });
         await createStaffActionLog({
@@ -232,16 +240,6 @@ export function RegisterDialog({
           after: updated,
           note: `${roleLabel} đăng ký đi làm mới: đồng bộ lịch sử đã có ngày nghỉ`,
         });
-      }
-
-      const activeHistory = latestHistories.find(
-        (history) => history.status === "working" && !history.leave_date,
-      );
-      if (activeHistory) {
-        toast.error(
-          "Người lao động này đang có một lịch sử đi làm chưa kết thúc. Hãy cập nhật ngày nghỉ trước khi đăng ký mới.",
-        );
-        return;
       }
 
       let cccdVersionId: string | undefined;
@@ -299,7 +297,11 @@ export function RegisterDialog({
     } catch (error: unknown) {
       const fieldErrors = getPocketBaseFieldErrors(error);
       const message = getErrorMessage(error, "Lỗi đăng ký đi làm");
-      if (fieldErrors) {
+      if (isEmploymentUserUniqueError(error)) {
+        toast.error(
+          "Người lao động này đã có một lịch sử đi làm đang hoạt động. Hãy kiểm tra ngày nghỉ hoặc tải lại dữ liệu trước khi đăng ký mới.",
+        );
+      } else if (fieldErrors) {
         toast.error(fieldErrors);
       } else if (message.includes("UNIQUE")) {
         toast.error(

@@ -32,6 +32,40 @@ export function isCurrentlyWorking(
   return deriveEmploymentStatus(history, referenceDate) === "working";
 }
 
+/**
+ * Returns records whose stored status is still working even though their leave
+ * date has already arrived. These records can violate the PocketBase partial
+ * unique index until their status is synchronized to left.
+ */
+export function getStaleWorkingEmploymentHistories(
+  histories: EmploymentHistoryRecord[],
+  referenceDate: Date = new Date(),
+) {
+  return histories.filter(
+    (history) =>
+      history.status === "working" &&
+      Boolean(history.leave_date) &&
+      !isCurrentlyWorking(history, referenceDate),
+  );
+}
+
+/** Detects PocketBase's field-level unique error for an employment user relation. */
+export function isEmploymentUserUniqueError(error: unknown) {
+  const data =
+    typeof error === "object" && error !== null && "data" in error
+      ? (error.data as { data?: Record<string, unknown> }).data
+      : undefined;
+  const userError = data?.user;
+  const userMessage =
+    typeof userError === "object" && userError !== null && "message" in userError
+      ? String(userError.message)
+      : String(userError || "");
+  if (/unique/i.test(userMessage)) return true;
+
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /unique/i.test(message) && /user|employment/i.test(message);
+}
+
 function startOfDay(referenceDate: Date) {
   return new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
 }
