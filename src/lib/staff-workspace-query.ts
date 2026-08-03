@@ -72,7 +72,7 @@ export function useStaffDirectoryAuxQuery(viewer: UserRecord | null) {
       const [factoriesResult, mainHousesResult, staffUsersResult] = await Promise.allSettled([
         fetchFactories(),
         fetchMainHouses(),
-        pb.collection("users").getList<UserRecord>(1, 200, {
+        pb.collection("users").getFullList<UserRecord>({
           filter: `role="staff" || role="admin"`,
           sort: "full_name,username",
         }),
@@ -94,7 +94,7 @@ export function useStaffDirectoryAuxQuery(viewer: UserRecord | null) {
             : cached?.mainHouses || [],
         staffUsers:
           staffUsersResult.status === "fulfilled"
-            ? staffUsersResult.value.items
+            ? staffUsersResult.value
             : cached?.staffUsers || [],
       };
 

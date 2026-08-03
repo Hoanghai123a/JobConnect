@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -10,12 +11,14 @@ import {
   FileDown,
   Landmark,
   Plus,
+  RefreshCw,
   Search,
   ShieldCheck,
   Wallet,
   UserRoundCheck,
   UserRoundMinus,
   Users,
+  WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -69,13 +72,16 @@ import {
   updateUserAndCache,
   type EmploymentHistoryRecord,
 } from "@/lib/employment";
-import { fetchFactories, type FactoryRecord } from "@/lib/factories";
-import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
+import type { FactoryRecord } from "@/lib/factories";
+import type { MainHouseRecord } from "@/lib/main-houses";
+import { fetchCachedStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
+import { readCachedAuxData } from "@/lib/staff-cache";
 import {
-  fetchCachedStaffWorkspace,
-  fetchFreshStaffWorkspace,
-  type StaffWorkerRecord,
-} from "@/lib/staff-permissions";
+  staffDirectoryAuxQueryKey,
+  staffWorkspaceQueryKey,
+  useStaffDirectoryAuxQuery,
+  useStaffWorkspaceQuery,
+} from "@/lib/staff-workspace-query";
 import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { cn } from "@/lib/utils";
 import { createStaffActionLog } from "@/lib/staff-log";
@@ -96,6 +102,7 @@ export const Route = createFileRoute("/_authenticated/admin/workforce")({
     const currentUser = pb.authStore.record as UserRecord | null;
     if (!currentUser || currentUser.role !== "admin") throw redirect({ to: "/" });
   },
+  pendingMs: Infinity,
   component: WorkforcePage,
 });
 
@@ -104,6 +111,10 @@ type RecruitSubTab = "factory" | "recruiter";
 type ListScope = "all" | "working" | "left";
 
 const WORKER_LIST_PAGE_SIZE = 100;
+const EMPTY_WORKSPACE_WORKERS: StaffWorkerRecord[] = [];
+const EMPTY_USERS: UserRecord[] = [];
+const EMPTY_FACTORIES: FactoryRecord[] = [];
+const EMPTY_MAIN_HOUSES: MainHouseRecord[] = [];
 
 function todayIso() {
   const now = new Date();
@@ -194,15 +205,12 @@ function getPocketBaseFieldErrors(error: unknown) {
 
 function WorkforcePage() {
   const currentUser = pb.authStore.record as UserRecord | null;
+  const queryClient = useQueryClient();
+  const workspaceQuery = useStaffWorkspaceQuery(currentUser);
+  const auxQuery = useStaffDirectoryAuxQuery(currentUser);
   const [tab, setTab] = useState<ActiveTab>("list");
   const [from, setFrom] = useState(daysAgoIso(30));
   const [to, setTo] = useState(todayIso());
-  const [loading, setLoading] = useState(true);
-  const [histories, setHistories] = useState<EmploymentHistoryRecord[]>([]);
-  const [workspaceWorkers, setWorkspaceWorkers] = useState<StaffWorkerRecord[]>([]);
-  const [users, setUsers] = useState<UserRecord[]>([]);
-  const [factories, setFactories] = useState<FactoryRecord[]>([]);
-  const [mainHouses, setMainHouses] = useState<MainHouseRecord[]>([]);
   const [openRegister, setOpenRegister] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -211,52 +219,52 @@ function WorkforcePage() {
   const [selectedFactoryIds, setSelectedFactoryIds] = useState<string[]>([]);
   const [selectedRecruiterIds, setSelectedRecruiterIds] = useState<string[]>([]);
 
-  const load = async () => {
-    if (!currentUser) return;
-    setLoading(true);
-    try {
-      const [workspace, staffAdminUsers, factoryList, mainHouseList] = await Promise.all([
-        fetchFreshStaffWorkspace(currentUser, { hydrateCache: true }),
-        pb.collection("users").getFullList<UserRecord>({
-          filter: `role="staff" || role="admin"`,
-          sort: "full_name,username",
-        }),
-        fetchFactories(),
-        fetchMainHouses().catch(() => [] as MainHouseRecord[]),
-      ]);
-      const workerUsers = workspace.workers.map((w) => w.user);
-      const workerIds = new Set(workerUsers.map((u) => u.id));
-      const mergedUsers = [...workerUsers, ...staffAdminUsers.filter((u) => !workerIds.has(u.id))];
-      setWorkspaceWorkers(workspace.workers);
-      setHistories(workspace.workers.flatMap((w) => w.histories));
-      setUsers(mergedUsers);
-      setFactories(factoryList);
-      setMainHouses(mainHouseList);
-    } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "Không tải được dữ liệu"));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const workspace = workspaceQuery.data;
+  const workspaceWorkers = workspace?.workers ?? EMPTY_WORKSPACE_WORKERS;
+  const staffAdminUsers = auxQuery.data?.staffUsers ?? EMPTY_USERS;
+  const factories = auxQuery.data?.factories ?? EMPTY_FACTORIES;
+  const mainHouses = auxQuery.data?.mainHouses ?? EMPTY_MAIN_HOUSES;
+  const histories = useMemo(
+    () => workspaceWorkers.flatMap((worker) => worker.histories),
+    [workspaceWorkers],
+  );
+  const users = useMemo(() => {
+    const workerUsers = workspaceWorkers.map((worker) => worker.user);
+    const workerIds = new Set(workerUsers.map((user) => user.id));
+    return [...workerUsers, ...staffAdminUsers.filter((user) => !workerIds.has(user.id))];
+  }, [staffAdminUsers, workspaceWorkers]);
 
-  useEffect(() => {
-    load();
-  }, []);
+  const refreshWorkforce = async () => {
+    await Promise.all([workspaceQuery.refetch(), auxQuery.refetch()]);
+  };
 
   const cacheSignal = useStaffCacheSignal();
   useEffect(() => {
     if (!currentUser?.id || cacheSignal === 0) return;
-    const timer = setTimeout(async () => {
-      const ws = await fetchCachedStaffWorkspace(currentUser);
-      if (!ws) return;
-      const workerUsers = ws.workers.map((w) => w.user);
-      const workerIds = new Set(workerUsers.map((u) => u.id));
-      setWorkspaceWorkers(ws.workers);
-      setHistories(ws.workers.flatMap((w) => w.histories));
-      setUsers((prev) => [...workerUsers, ...prev.filter((u) => !workerIds.has(u.id))]);
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void Promise.all([fetchCachedStaffWorkspace(currentUser), readCachedAuxData()])
+        .then(([cachedWorkspace, cachedAux]) => {
+          if (cancelled) return;
+          if (cachedWorkspace) {
+            queryClient.setQueryData(staffWorkspaceQueryKey(currentUser), cachedWorkspace);
+          }
+          if (cachedAux) {
+            queryClient.setQueryData(staffDirectoryAuxQueryKey(currentUser), cachedAux);
+          }
+        })
+        .catch((error) => console.warn("[admin-workforce] cache signal refresh failed", error));
     }, 150);
-    return () => clearTimeout(timer);
-  }, [cacheSignal, currentUser?.id]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [cacheSignal, currentUser, queryClient]);
+
+  const loading = !workspace && workspaceQuery.isPending;
+  const initialError = !workspace && workspaceQuery.isError;
+  const refreshing = Boolean(workspace && (workspaceQuery.isFetching || auxQuery.isFetching));
+  const showingCachedError = Boolean(workspace && (workspaceQuery.isError || auxQuery.isError));
 
   const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const factoryById = useMemo(() => new Map(factories.map((f) => [f.id, f])), [factories]);
@@ -393,169 +401,207 @@ function WorkforcePage() {
         </div>
       }
     >
-      <Tabs value={tab} onValueChange={(v) => setTab(v as ActiveTab)} className="space-y-3">
-        <TabsList className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 grid h-10 w-full grid-cols-3 rounded-xl bg-muted shadow-sm">
-          <TabsTrigger value="list" className="rounded-lg text-xs">
-            Danh sách
-          </TabsTrigger>
-          <TabsTrigger value="stats" className="rounded-lg text-xs">
-            Thống kê
-          </TabsTrigger>
-          <TabsTrigger value="my-recruited" className="rounded-lg text-xs">
-            Tôi tuyển
-          </TabsTrigger>
-        </TabsList>
+      {refreshing && (
+        <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-card/70 px-3 py-2 text-xs text-muted-foreground">
+          <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
+          Đang đồng bộ dữ liệu lao động...
+        </div>
+      )}
 
-        <TabsContent value="list" className="mt-0">
-          <WorkerList
-            histories={histories}
-            userById={userById}
-            factoryById={factoryById}
-            latestByUser={latestByUser}
-            loading={loading}
-            onSelectWorker={setSelectedUserId}
-            headerSlot={
-              <div className="flex">
-                <Link
-                  to="/staff/export"
-                  className="flex w-full items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground desktop:hidden"
-                >
-                  <FileDown className="h-4 w-4" />
-                  Xuất Excel
-                </Link>
+      {showingCachedError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
+          <span className="min-w-0">
+            Đang hiển thị dữ liệu đã lưu. Chưa thể đồng bộ dữ liệu mới.
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 shrink-0 rounded-full"
+            onClick={() => void refreshWorkforce()}
+          >
+            Thử lại
+          </Button>
+        </div>
+      )}
+
+      {initialError ? (
+        <EmptyState
+          icon={WifiOff}
+          title="Không tải được dữ liệu lao động"
+          description="Thiết bị chưa có dữ liệu đã lưu và hiện không thể kết nối PocketBase."
+          action={
+            <Button type="button" className="rounded-full" onClick={() => void refreshWorkforce()}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Thử lại
+            </Button>
+          }
+        />
+      ) : (
+        <Tabs value={tab} onValueChange={(v) => setTab(v as ActiveTab)} className="space-y-3">
+          <TabsList className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 grid h-10 w-full grid-cols-3 rounded-xl bg-muted shadow-sm">
+            <TabsTrigger value="list" className="rounded-lg text-xs">
+              Danh sách
+            </TabsTrigger>
+            <TabsTrigger value="stats" className="rounded-lg text-xs">
+              Thống kê
+            </TabsTrigger>
+            <TabsTrigger value="my-recruited" className="rounded-lg text-xs">
+              Tôi tuyển
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="list" className="mt-0">
+            <WorkerList
+              histories={histories}
+              userById={userById}
+              factoryById={factoryById}
+              latestByUser={latestByUser}
+              loading={loading}
+              onSelectWorker={setSelectedUserId}
+              headerSlot={
+                <div className="flex">
+                  <Link
+                    to="/staff/export"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground desktop:hidden"
+                  >
+                    <FileDown className="h-4 w-4" />
+                    Xuất Excel
+                  </Link>
+                </div>
+              }
+            />
+          </TabsContent>
+
+          <TabsContent value="stats" className="mt-0 space-y-3">
+            <Card className="space-y-2 p-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Từ ngày</Label>
+                  <DateInput value={from} max={to} onChange={(v) => setFrom(v)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Đến ngày</Label>
+                  <DateInput value={to} min={from} max={todayIso()} onChange={(v) => setTo(v)} />
+                </div>
               </div>
-            }
-          />
-        </TabsContent>
+              <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFrom(todayIso());
+                      setTo(todayIso());
+                    }}
+                    className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                  >
+                    1 ngày
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFrom(daysAgoIso(2));
+                      setTo(todayIso());
+                    }}
+                    className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                  >
+                    2 ngày
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFrom(daysAgoIso(7));
+                      setTo(todayIso());
+                    }}
+                    className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                  >
+                    7 ngày
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFrom(daysAgoIso(30));
+                      setTo(todayIso());
+                    }}
+                    className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                  >
+                    30 ngày
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFrom(daysAgoIso(90));
+                      setTo(todayIso());
+                    }}
+                    className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                  >
+                    90 ngày
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setChartOpen(true)}
+                  className="ml-auto flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground shadow-sm active:scale-[0.96]"
+                  aria-label="Biểu đồ tuyển dụng"
+                >
+                  <BarChart3 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </Card>
 
-        <TabsContent value="stats" className="mt-0 space-y-3">
-          <Card className="space-y-2 p-3">
             <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs">Từ ngày</Label>
-                <DateInput value={from} max={to} onChange={(v) => setFrom(v)} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Đến ngày</Label>
-                <DateInput value={to} min={from} max={todayIso()} onChange={(v) => setTo(v)} />
-              </div>
+              <MultiSelectFactoryPicker
+                factories={factories}
+                selected={selectedFactoryIds}
+                onChange={setSelectedFactoryIds}
+              />
+              <MultiSelectRecruiterPicker
+                users={users.filter((u) => u.role === "staff" || u.role === "admin")}
+                selected={selectedRecruiterIds}
+                onChange={setSelectedRecruiterIds}
+              />
             </div>
-            <div className="flex items-center gap-1.5">
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFrom(todayIso());
-                    setTo(todayIso());
-                  }}
-                  className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-                >
-                  1 ngày
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFrom(daysAgoIso(2));
-                    setTo(todayIso());
-                  }}
-                  className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-                >
-                  2 ngày
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFrom(daysAgoIso(7));
-                    setTo(todayIso());
-                  }}
-                  className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-                >
-                  7 ngày
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFrom(daysAgoIso(30));
-                    setTo(todayIso());
-                  }}
-                  className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-                >
-                  30 ngày
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFrom(daysAgoIso(90));
-                    setTo(todayIso());
-                  }}
-                  className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-                >
-                  90 ngày
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => setChartOpen(true)}
-                className="ml-auto flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground shadow-sm active:scale-[0.96]"
-                aria-label="Biểu đồ tuyển dụng"
-              >
-                <BarChart3 className="h-3.5 w-3.5" />
-              </button>
+
+            <div className="grid grid-cols-3 gap-2">
+              <StatCard
+                label="Còn đi làm"
+                value={filteredStats.working}
+                icon={UserRoundCheck}
+                tone="success"
+              />
+              <StatCard label="Tuyển mới" value={filteredStats.joined} icon={Plus} tone="primary" />
+              <StatCard
+                label="Đã nghỉ"
+                value={filteredStats.left}
+                icon={UserRoundMinus}
+                tone="warning"
+              />
             </div>
-          </Card>
 
-          <div className="grid grid-cols-2 gap-2">
-            <MultiSelectFactoryPicker
-              factories={factories}
-              selected={selectedFactoryIds}
-              onChange={setSelectedFactoryIds}
+            <RecruitGroups
+              histories={filteredHistoriesForStats}
+              factories={filteredFactoriesForStats}
+              users={users}
+              from={from}
+              to={to}
+              latestByUser={latestByUserForStats}
+              loading={loading}
+              onSelectWorker={setSelectedUserId}
             />
-            <MultiSelectRecruiterPicker
-              users={users.filter((u) => u.role === "staff" || u.role === "admin")}
-              selected={selectedRecruiterIds}
-              onChange={setSelectedRecruiterIds}
-            />
-          </div>
+          </TabsContent>
 
-          <div className="grid grid-cols-3 gap-2">
-            <StatCard
-              label="Còn đi làm"
-              value={filteredStats.working}
-              icon={UserRoundCheck}
-              tone="success"
+          <TabsContent value="my-recruited" className="mt-0 space-y-3">
+            <StaffWorkerDirectory
+              workers={workspaceWorkers}
+              viewer={currentUser}
+              loading={loading}
+              mode="recruited"
+              embedded
+              onSelectWorker={(worker) => setSelectedUserId(worker.user.id)}
             />
-            <StatCard label="Tuyển mới" value={filteredStats.joined} icon={Plus} tone="primary" />
-            <StatCard
-              label="Đã nghỉ"
-              value={filteredStats.left}
-              icon={UserRoundMinus}
-              tone="warning"
-            />
-          </div>
-
-          <RecruitGroups
-            histories={filteredHistoriesForStats}
-            factories={filteredFactoriesForStats}
-            users={users}
-            from={from}
-            to={to}
-            latestByUser={latestByUserForStats}
-            loading={loading}
-            onSelectWorker={setSelectedUserId}
-          />
-        </TabsContent>
-
-        <TabsContent value="my-recruited" className="mt-0 space-y-3">
-          <StaffWorkerDirectory
-            workers={workspaceWorkers}
-            viewer={currentUser}
-            loading={loading}
-            mode="recruited"
-            embedded
-            onSelectWorker={(worker) => setSelectedUserId(worker.user.id)}
-          />
-        </TabsContent>
-      </Tabs>
+          </TabsContent>
+        </Tabs>
+      )}
 
       <RegisterDialog
         open={openRegister}
@@ -564,7 +610,7 @@ function WorkforcePage() {
         users={users}
         factories={factories}
         mainHouses={mainHouses}
-        onCreated={load}
+        onCreated={refreshWorkforce}
       />
 
       <QuickWorkerAccountDialog
@@ -575,7 +621,7 @@ function WorkforcePage() {
         mainHouses={mainHouses}
         staffUsers={users.filter((item) => item.role === "staff" || item.role === "admin")}
         onCreated={async (userId) => {
-          await load();
+          await refreshWorkforce();
           setSelectedUserId(userId);
         }}
       />
@@ -598,7 +644,7 @@ function WorkforcePage() {
         }}
         open={!!selectedUserId}
         onClose={() => setSelectedUserId(null)}
-        onDataChanged={load}
+        onDataChanged={refreshWorkforce}
       />
 
       <CccdExportDialog

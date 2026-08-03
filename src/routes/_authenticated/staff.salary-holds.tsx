@@ -132,12 +132,18 @@ function SalaryHoldsPage() {
   const receivedRows = filtered.filter((row) => row.status === "received");
 
   const updateStatus = async (row: SalaryHoldRecord, status: SalaryHoldStatus) => {
-    if (status === "cancelled" && (row.status !== "received" || row.staff !== viewer.id))
-      return toast.error("Không thể hủy yêu cầu này");
-    if (["approved", "rejected"].includes(status) && (!isAdmin || row.status !== "received"))
-      return toast.error("Yêu cầu không còn ở trạng thái tiếp nhận");
-    if (status === "disbursed" && (!isAdmin || row.status !== "approved"))
-      return toast.error("Chỉ giải ngân yêu cầu đã duyệt");
+    if (status === "cancelled" && (row.status !== "received" || row.staff !== viewer.id)) {
+      toast.error("Không thể hủy yêu cầu này");
+      return;
+    }
+    if (["approved", "rejected"].includes(status) && (!isAdmin || row.status !== "received")) {
+      toast.error("Yêu cầu không còn ở trạng thái tiếp nhận");
+      return;
+    }
+    if (status === "disbursed" && (!isAdmin || row.status !== "approved")) {
+      toast.error("Chỉ giải ngân yêu cầu đã duyệt");
+      return;
+    }
     const now = new Date().toISOString();
     const payload: Partial<SalaryHoldRecord> = { status };
     if (status === "approved") Object.assign(payload, { approved_by: viewer.id, approved_at: now });
@@ -309,7 +315,7 @@ function SalaryHoldsPage() {
         </div>
       )}
       <div className="space-y-2">
-        {loading && items.length === 0 ? (
+        {loading && rows.length === 0 ? (
           <DataLoadingState variant="list" label="Đang tải danh sách giữ lương..." rows={3} />
         ) : (
           <>
