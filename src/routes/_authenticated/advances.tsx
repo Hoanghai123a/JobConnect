@@ -576,7 +576,7 @@ export function AdvancesPage() {
       });
       validateAdvanceAmount(policy, amount);
       const employment = policy.employment;
-      await pb.collection("advances").create({
+      const created = await pb.collection("advances").create({
         user: selectedAdvanceUser.id,
         requested_by: user?.id || selectedAdvanceUser.id,
         recruiter_id: employment.recruiter_staff || "",
@@ -593,6 +593,16 @@ export function AdvancesPage() {
         reason: reason.trim(),
         status: "pending",
         recovery_status: "none",
+      });
+      await createStaffActionLog({
+        actor: user,
+        targetUserId: selectedAdvanceUser.id,
+        targetCollection: "advances",
+        targetRecord: created.id,
+        action: "report_advance",
+        after: created,
+        note:
+          user?.id === selectedAdvanceUser.id ? "NLĐ tự báo ứng" : "Tạo yêu cầu ứng lương cho NLĐ",
       });
       toast.success("Đã gửi Ứng lương");
       setAmountText("");

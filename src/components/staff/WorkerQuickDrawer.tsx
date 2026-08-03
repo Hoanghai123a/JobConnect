@@ -426,7 +426,7 @@ export function WorkerQuickDrawer({
       validateAdvanceAmount(policy, amount);
       const employment = policy.employment;
 
-      await pb.collection("advances").create({
+      const created = await pb.collection("advances").create({
         user: worker.user.id,
         requested_by: viewer.id,
         recruiter_id: employment.recruiter_staff || "",
@@ -448,7 +448,9 @@ export function WorkerQuickDrawer({
         actor: viewer,
         targetUserId: worker.user.id,
         targetCollection: "advances",
+        targetRecord: created.id,
         action: "report_advance",
+        after: created,
         note: "Báo ứng từ danh sách",
       });
       toast.success("Đã gửi yêu cầu ứng lương");

@@ -74,8 +74,8 @@ import {
 } from "@/lib/staff-permissions";
 import {
   createStaffActionLog,
-  fetchStaffActionLogsForUser,
-  type StaffActionLogRecord,
+  fetchWorkerActionHistory,
+  type WorkerActionHistoryRecord,
 } from "@/lib/staff-log";
 import { StaffActionHistoryPanel } from "@/components/employment/StaffActionHistoryPanel";
 import { CccdManager } from "@/components/cccd/CccdManager";
@@ -470,7 +470,7 @@ export function WorkerEmploymentDrawer({
   const [submittingAdvance, setSubmittingAdvance] = useState(false);
   const [bankEditing, setBankEditing] = useState(false);
   const [cccdViewerOpen, setCccdViewerOpen] = useState(false);
-  const [actionLogs, setActionLogs] = useState<StaffActionLogRecord[]>([]);
+  const [actionLogs, setActionLogs] = useState<WorkerActionHistoryRecord[]>([]);
   const [actionLogsLoading, setActionLogsLoading] = useState(false);
   const [actionLogsError, setActionLogsError] = useState("");
   const [actionLogsRefreshKey, setActionLogsRefreshKey] = useState(0);
@@ -539,7 +539,7 @@ export function WorkerEmploymentDrawer({
 
     setActionLogsLoading(true);
     setActionLogsError("");
-    fetchStaffActionLogsForUser(user.id)
+    fetchWorkerActionHistory(user.id)
       .then((logs) => {
         if (active) setActionLogs(logs);
       })

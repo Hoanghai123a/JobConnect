@@ -1,4 +1,5 @@
 import { pb, type UserRecord } from "./pocketbase";
+import type { AdvanceRecord } from "./advances";
 
 export type StaffActionType =
   | "create"
@@ -41,6 +42,19 @@ export interface StaffActionLogRecord {
     target_user?: UserRecord;
   };
 }
+
+export type WorkerActionHistoryRecord = StaffActionLogRecord & {
+  source?: "staff_log" | "advance_snapshot";
+};
+
+export type WorkerActionKind =
+  | "advance_report"
+  | "advance_withdraw"
+  | "advance_approved"
+  | "advance_rejected"
+  | "advance_amount"
+  | "advance_disbursement"
+  | "default";
 
 export type StaffActionLogChange = {
   field: string;
@@ -101,13 +115,67 @@ const FIELD_LABELS: Record<string, string> = {
   status: "Trạng thái",
   note: "Ghi chú",
   amount: "Số tiền",
+  original_amount: "Số tiền ban đầu",
   reason: "Lý do",
   payout_method: "Phương thức chi",
   recovery_status: "Trạng thái thu hồi",
+  requested_by: "Người gửi yêu cầu",
+  recruiter_id: "Người tuyển",
+  company: "Nhà máy",
+  resolved_at: "Thời gian xử lý",
+  recovered_at: "Thời gian thu hồi",
+  disbursed: "Đã giải ngân",
+  disbursed_at: "Thời gian giải ngân",
+  admin_note: "Ghi chú admin",
+  recruiter_note: "Ghi chú người tuyển",
+  recovery_note: "Ghi chú thu hồi",
 };
 
 const HIDDEN_FIELDS = new Set(["id", "created", "updated", "expand", "collectionId"]);
 const SENSITIVE_FIELD_PATTERN = /(password|token|secret|cccd|bank_account_number|account_number)/i;
+const MONEY_FIELDS = new Set(["amount", "original_amount"]);
+const DATE_ONLY_FIELDS = new Set([
+  "join_date",
+  "leave_date",
+  "worker_date_of_birth_snapshot",
+  "cccd_issue_date",
+]);
+const DATE_TIME_FIELDS = new Set(["resolved_at", "recovered_at", "disbursed_at"]);
+const ADMIN_ADVANCE_WORKFLOW_FIELDS = new Set([
+  "status",
+  "resolved_at",
+  "recovery_status",
+  "recovered_at",
+  "admin_note",
+  "recovery_note",
+]);
+const ADVANCE_MATCH_WINDOW_MS = 2 * 60 * 1000;
+const LOG_PAGE_SIZE = 50;
+const MAX_LOG_PAGES = 5;
+
+const STATUS_VALUE_LABELS: Record<string, string> = {
+  pending: "Chờ người tuyển duyệt",
+  recruiter_approved: "Chờ admin duyệt",
+  accepted: "Đã tiếp nhận",
+  rejected: "Đã từ chối",
+  working: "Đang làm",
+  left: "Đã nghỉ",
+  received: "Đã tiếp nhận",
+  approved: "Đã duyệt",
+  disbursed: "Đã giải ngân",
+  cancelled: "Đã hủy",
+};
+
+const RECOVERY_VALUE_LABELS: Record<string, string> = {
+  none: "Chờ thu hồi",
+  recovered: "Đã thu hồi",
+  unrecoverable: "Không thể thu hồi",
+};
+
+const PAYOUT_METHOD_LABELS: Record<string, string> = {
+  bank_transfer: "Chuyển khoản",
+  cash: "Tiền mặt",
+};
 
 function toRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -121,6 +189,32 @@ function comparableValue(value: unknown) {
   } catch {
     return String(value);
   }
+}
+
+function changedFieldNames(log: Pick<StaffActionLogRecord, "before" | "after">) {
+  const before = toRecord(log.before);
+  const after = toRecord(log.after);
+  if (!before && !after) return [] as string[];
+
+  const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+  return [...keys]
+    .filter((field) => !HIDDEN_FIELDS.has(field))
+    .filter((field) => comparableValue(before?.[field]) !== comparableValue(after?.[field]));
+}
+
+function formatDateValue(value: string, includeTime: boolean) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return includeTime ? date.toLocaleString("vi-VN") : date.toLocaleDateString("vi-VN");
+}
+
+function numericValue(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function textValue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function maskDigits(value: string, prefix: string) {
@@ -148,8 +242,18 @@ export function formatStaffActionValue(field: string, value: unknown) {
     return maskDigits(String(value), /cccd/i.test(field) ? "********" : "•••• ");
   }
   if (typeof value === "boolean") return value ? "Có" : "Không";
+  if (MONEY_FIELDS.has(field)) {
+    return `${new Intl.NumberFormat("vi-VN").format(numericValue(value))} đ`;
+  }
   if (typeof value === "number") return new Intl.NumberFormat("vi-VN").format(value);
-  if (typeof value === "string") return value;
+  if (typeof value === "string") {
+    if (field === "status") return STATUS_VALUE_LABELS[value] || value;
+    if (field === "recovery_status") return RECOVERY_VALUE_LABELS[value] || value;
+    if (field === "payout_method") return PAYOUT_METHOD_LABELS[value] || value;
+    if (DATE_ONLY_FIELDS.has(field)) return formatDateValue(value, false);
+    if (DATE_TIME_FIELDS.has(field)) return formatDateValue(value, true);
+    return value;
+  }
   return "Đã cập nhật";
 }
 
@@ -158,16 +262,12 @@ export function getStaffActionLogChanges(log: Pick<StaffActionLogRecord, "before
   const after = toRecord(log.after);
   if (!before && !after) return [] as StaffActionLogChange[];
 
-  const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
-  return [...keys]
-    .filter((field) => !HIDDEN_FIELDS.has(field))
-    .filter((field) => comparableValue(before?.[field]) !== comparableValue(after?.[field]))
-    .map((field) => ({
-      field,
-      label: getStaffActionFieldLabel(field),
-      before: formatStaffActionValue(field, before?.[field]),
-      after: formatStaffActionValue(field, after?.[field]),
-    }));
+  return changedFieldNames(log).map((field) => ({
+    field,
+    label: getStaffActionFieldLabel(field),
+    before: formatStaffActionValue(field, before?.[field]),
+    after: formatStaffActionValue(field, after?.[field]),
+  }));
 }
 
 export function formatStaffActionDateTime(value?: string) {
@@ -180,14 +280,175 @@ export function formatStaffActionDateTime(value?: string) {
   }).format(date);
 }
 
+export function shouldDisplayWorkerActionLog(log: StaffActionLogRecord) {
+  if (
+    log.target_collection !== "advances" ||
+    log.actor_role_snapshot !== "admin" ||
+    log.action !== "update"
+  ) {
+    return true;
+  }
+
+  const changedFields = changedFieldNames(log);
+  if (changedFields.length > 0) {
+    return changedFields.some((field) => !ADMIN_ADVANCE_WORKFLOW_FIELDS.has(field));
+  }
+
+  return /số tiền|giải ngân|phương thức|ngân hàng/i.test(log.note || "");
+}
+
+export function getWorkerActionKind(log: StaffActionLogRecord): WorkerActionKind {
+  if (log.target_collection !== "advances") return "default";
+  if (log.action === "report_advance") return "advance_report";
+  if (log.action === "delete") return "advance_withdraw";
+
+  const after = toRecord(log.after);
+  const changedFields = new Set(changedFieldNames(log));
+  if (changedFields.has("amount") || changedFields.has("original_amount")) {
+    return "advance_amount";
+  }
+  if (changedFields.has("disbursed") || changedFields.has("disbursed_at")) {
+    return "advance_disbursement";
+  }
+  if (after?.status === "recruiter_approved") return "advance_approved";
+  if (after?.status === "rejected") return "advance_rejected";
+  return "default";
+}
+
+export function getWorkerActionLabel(log: StaffActionLogRecord) {
+  const labels: Record<WorkerActionKind, string> = {
+    advance_report: "Báo ứng lương",
+    advance_withdraw: "Thu hồi báo ứng",
+    advance_approved: "Chấp nhận báo ứng",
+    advance_rejected: "Từ chối báo ứng",
+    advance_amount: "Điều chỉnh số tiền ứng",
+    advance_disbursement: "Cập nhật giải ngân",
+    default: getStaffActionLabel(log.action),
+  };
+  return labels[getWorkerActionKind(log)];
+}
+
+export function getWorkerActionSummary(log: StaffActionLogRecord) {
+  const kind = getWorkerActionKind(log);
+  if (kind !== "advance_report" && kind !== "advance_withdraw") {
+    return log.note || getStaffActionCollectionLabel(log.target_collection);
+  }
+
+  const snapshot = toRecord(kind === "advance_withdraw" ? log.before : log.after);
+  const amount = numericValue(snapshot?.amount);
+  const reason = textValue(snapshot?.reason);
+  const payoutMethod = textValue(snapshot?.payout_method);
+  const parts: string[] = [];
+  if (amount > 0) parts.push(`${new Intl.NumberFormat("vi-VN").format(amount)} đ`);
+  if (payoutMethod) parts.push(PAYOUT_METHOD_LABELS[payoutMethod] || payoutMethod);
+  if (reason) parts.push(`Lý do: ${reason}`);
+  return parts.join(" · ") || log.note || getStaffActionCollectionLabel(log.target_collection);
+}
+
+function timestamp(value?: string) {
+  const time = new Date(value || 0).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function advanceReportAmount(advance: AdvanceRecord) {
+  return numericValue(advance.original_amount || advance.amount);
+}
+
+function logMatchesAdvance(log: StaffActionLogRecord, advance: AdvanceRecord) {
+  if (log.action !== "report_advance" || log.target_collection !== "advances") return false;
+  if (log.target_record && log.target_record === advance.id) return true;
+  if (log.actor && advance.requested_by && log.actor !== advance.requested_by) return false;
+  if (Math.abs(timestamp(log.created) - timestamp(advance.created)) > ADVANCE_MATCH_WINDOW_MS) {
+    return false;
+  }
+
+  const after = toRecord(log.after);
+  if (!after) return true;
+  const loggedAmount = numericValue(after.amount);
+  if (loggedAmount > 0 && loggedAmount !== advanceReportAmount(advance)) return false;
+  const loggedReason = textValue(after.reason);
+  if (loggedReason && loggedReason !== textValue(advance.reason)) return false;
+  return true;
+}
+
+function syntheticAdvanceLog(advance: AdvanceRecord): WorkerActionHistoryRecord {
+  const requestedBy = advance.requested_by || advance.user || "";
+  const requester = advance.expand?.requested_by;
+  const isSelfReport = Boolean(advance.user && requestedBy === advance.user);
+  return {
+    id: `advance:${advance.id}`,
+    actor: requestedBy,
+    actor_role_snapshot: requester?.role || (isSelfReport ? "user" : "staff"),
+    target_user: advance.user,
+    target_collection: "advances",
+    target_record: advance.id,
+    action: "report_advance",
+    after: {
+      employee_code: advance.employee_code || "",
+      company: advance.company || "",
+      join_date: advance.join_date || "",
+      amount: advanceReportAmount(advance),
+      reason: advance.reason || "",
+      payout_method: advance.payout_method || "bank_transfer",
+    },
+    note: isSelfReport ? "NLĐ tự báo ứng" : "Báo ứng cho NLĐ",
+    created: advance.created,
+    expand: requester ? { actor: requester } : undefined,
+    source: "advance_snapshot",
+  };
+}
+
+async function fetchVisibleStaffActionLogs(userId: string, limit: number) {
+  const visible: StaffActionLogRecord[] = [];
+  for (let page = 1; page <= MAX_LOG_PAGES && visible.length < limit; page += 1) {
+    const result = await pb
+      .collection("staff_action_logs")
+      .getList<StaffActionLogRecord>(page, LOG_PAGE_SIZE, {
+        filter: `target_user="${userId}"`,
+        sort: "-created",
+        expand: "actor",
+      });
+    visible.push(...result.items.filter(shouldDisplayWorkerActionLog));
+    if (page >= result.totalPages) break;
+  }
+  return visible.slice(0, limit);
+}
+
 export async function fetchStaffActionLogsForUser(userId: string, limit = 50) {
   if (!userId) return [] as StaffActionLogRecord[];
-  const result = await pb.collection("staff_action_logs").getList<StaffActionLogRecord>(1, limit, {
-    filter: `target_user="${userId}"`,
-    sort: "-created",
-    expand: "actor",
+  return fetchVisibleStaffActionLogs(userId, limit);
+}
+
+export async function fetchWorkerActionHistory(userId: string, limit = 50) {
+  if (!userId) return [] as WorkerActionHistoryRecord[];
+  const logs = await fetchVisibleStaffActionLogs(userId, limit);
+  let advances: AdvanceRecord[] = [];
+  try {
+    const result = await pb.collection("advances").getList<AdvanceRecord>(1, limit, {
+      filter: `user="${userId}"`,
+      sort: "-created",
+      expand: "requested_by",
+    });
+    advances = result.items;
+  } catch (error) {
+    console.warn("[staff-log] Không tải được báo ứng cũ, tiếp tục dùng nhật ký thao tác", error);
+  }
+
+  const matchedLogIds = new Set<string>();
+  const syntheticLogs = advances.flatMap((advance) => {
+    const matchingLog = logs.find(
+      (log) => !matchedLogIds.has(log.id) && logMatchesAdvance(log, advance),
+    );
+    if (matchingLog) {
+      matchedLogIds.add(matchingLog.id);
+      return [];
+    }
+    return [syntheticAdvanceLog(advance)];
   });
-  return result.items;
+
+  return [...logs, ...syntheticLogs]
+    .sort((a, b) => timestamp(b.created) - timestamp(a.created))
+    .slice(0, limit);
 }
 
 export async function createStaffActionLog(input: StaffActionLogInput) {

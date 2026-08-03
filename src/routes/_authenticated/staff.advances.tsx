@@ -1499,7 +1499,7 @@ function MyAdvancesView({ interactionAllowed }: { interactionAllowed: boolean })
     setSending(true);
     try {
       await assertAdvanceInteractionAllowed(user?.role);
-      await pb.collection("advances").create({
+      const created = await pb.collection("advances").create({
         user: user!.id,
         requested_by: user!.id,
         recruiter_id: "",
@@ -1516,6 +1516,15 @@ function MyAdvancesView({ interactionAllowed }: { interactionAllowed: boolean })
         status: "recruiter_approved",
         recovery_status: "none",
         target_admins: selectedAdmins,
+      });
+      await createStaffActionLog({
+        actor: user,
+        targetUserId: user!.id,
+        targetCollection: "advances",
+        targetRecord: created.id,
+        action: "report_advance",
+        after: created,
+        note: "Staff tự báo ứng",
       });
       toast.success("Đã gửi yêu cầu ứng lương");
       setAmountText("");

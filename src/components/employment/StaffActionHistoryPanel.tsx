@@ -1,11 +1,24 @@
-import { useEffect, useState } from "react";
-import { ChevronRight, History, UserRound } from "lucide-react";
+import { useEffect, useState, type ComponentType } from "react";
+import {
+  Banknote,
+  ChevronRight,
+  CircleDollarSign,
+  History,
+  Landmark,
+  RotateCcw,
+  ShieldCheck,
+  UserRound,
+  XCircle,
+} from "lucide-react";
 import {
   formatStaffActionDateTime,
   getStaffActionCollectionLabel,
-  getStaffActionLabel,
   getStaffActionLogChanges,
-  type StaffActionLogRecord,
+  getWorkerActionKind,
+  getWorkerActionLabel,
+  getWorkerActionSummary,
+  type WorkerActionHistoryRecord,
+  type WorkerActionKind,
 } from "@/lib/staff-log";
 import {
   Dialog,
@@ -16,15 +29,62 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-function actorName(log: StaffActionLogRecord) {
-  return log.expand?.actor?.full_name || log.expand?.actor?.username || "Không xác định";
+function actorName(log: WorkerActionHistoryRecord) {
+  return (
+    log.expand?.actor?.full_name ||
+    log.expand?.actor?.username ||
+    (log.actor_role_snapshot === "user" ? "Người lao động" : "Không xác định")
+  );
 }
 
+type ActionVisualMeta = {
+  icon: ComponentType<{ className?: string }>;
+  iconClassName: string;
+  cardClassName: string;
+};
+
+const ACTION_VISUAL_META: Record<WorkerActionKind, ActionVisualMeta> = {
+  advance_report: {
+    icon: CircleDollarSign,
+    iconClassName: "bg-warning/15 text-warning-foreground",
+    cardClassName: "border-warning/25 bg-warning/5",
+  },
+  advance_withdraw: {
+    icon: RotateCcw,
+    iconClassName: "bg-destructive/10 text-destructive",
+    cardClassName: "border-destructive/25 bg-destructive/5",
+  },
+  advance_approved: {
+    icon: ShieldCheck,
+    iconClassName: "bg-success/15 text-success",
+    cardClassName: "border-success/25 bg-success/5",
+  },
+  advance_rejected: {
+    icon: XCircle,
+    iconClassName: "bg-destructive/10 text-destructive",
+    cardClassName: "border-destructive/25 bg-destructive/5",
+  },
+  advance_amount: {
+    icon: Banknote,
+    iconClassName: "bg-primary/10 text-primary",
+    cardClassName: "border-primary/20 bg-primary/5",
+  },
+  advance_disbursement: {
+    icon: Landmark,
+    iconClassName: "bg-success/15 text-success",
+    cardClassName: "border-success/25 bg-success/5",
+  },
+  default: {
+    icon: UserRound,
+    iconClassName: "bg-primary/10 text-primary",
+    cardClassName: "border-border/60",
+  },
+};
 function StaffActionLogDetailDialog({
   log,
   onOpenChange,
 }: {
-  log: StaffActionLogRecord | null;
+  log: WorkerActionHistoryRecord | null;
   onOpenChange: (open: boolean) => void;
 }) {
   const changes = log ? getStaffActionLogChanges(log) : [];
@@ -33,7 +93,7 @@ function StaffActionLogDetailDialog({
     <Dialog open={Boolean(log)} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{log ? getStaffActionLabel(log.action) : "Chi tiết chỉnh sửa"}</DialogTitle>
+          <DialogTitle>{log ? getWorkerActionLabel(log) : "Chi tiết chỉnh sửa"}</DialogTitle>
           <DialogDescription>
             {log ? `${formatStaffActionDateTime(log.created)} · ${actorName(log)}` : ""}
           </DialogDescription>
@@ -106,12 +166,12 @@ export function StaffActionHistoryPanel({
   className,
 }: {
   workerId: string;
-  logs: StaffActionLogRecord[];
+  logs: WorkerActionHistoryRecord[];
   loading: boolean;
   error: string;
   className?: string;
 }) {
-  const [selectedLog, setSelectedLog] = useState<StaffActionLogRecord | null>(null);
+  const [selectedLog, setSelectedLog] = useState<WorkerActionHistoryRecord | null>(null);
 
   useEffect(() => {
     setSelectedLog(null);
@@ -150,31 +210,45 @@ export function StaffActionHistoryPanel({
               Chưa có lịch sử chỉnh sửa.
             </div>
           ) : (
-            logs.map((log) => (
-              <button
-                key={log.id}
-                type="button"
-                onClick={() => setSelectedLog(log)}
-                className="flex w-full min-w-0 items-start gap-2 rounded-xl border border-border/60 p-2.5 text-left transition-colors hover:bg-muted/40 active:scale-[0.99]"
-                aria-label={`Xem chi tiết ${getStaffActionLabel(log.action)}`}
-              >
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <UserRound className="h-3.5 w-3.5" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-semibold text-foreground">
-                    {getStaffActionLabel(log.action)}
+            logs.map((log) => {
+              const kind = getWorkerActionKind(log);
+              const visual = ACTION_VISUAL_META[kind];
+              const Icon = visual.icon;
+              const label = getWorkerActionLabel(log);
+              return (
+                <button
+                  key={log.id}
+                  type="button"
+                  onClick={() => setSelectedLog(log)}
+                  className={cn(
+                    "flex w-full min-w-0 items-start gap-2 rounded-xl border p-2.5 text-left transition-colors hover:bg-muted/40 active:scale-[0.99]",
+                    visual.cardClassName,
+                  )}
+                  aria-label={`Xem chi tiết ${label}`}
+                >
+                  <span
+                    className={cn(
+                      "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+                      visual.iconClassName,
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
                   </span>
-                  <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                    {actorName(log)} · {formatStaffActionDateTime(log.created)}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-semibold text-foreground">
+                      {label}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                      {actorName(log)} · {formatStaffActionDateTime(log.created)}
+                    </span>
+                    <span className="mt-1 block line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                      {getWorkerActionSummary(log)}
+                    </span>
                   </span>
-                  <span className="mt-1 block line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
-                    {log.note || getStaffActionCollectionLabel(log.target_collection)}
-                  </span>
-                </span>
-                <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
-              </button>
-            ))
+                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                </button>
+              );
+            })
           )}
         </div>
       </section>

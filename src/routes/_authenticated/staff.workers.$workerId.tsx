@@ -538,13 +538,14 @@ function StaffWorkerDetailPage() {
         recovery_status: "none",
       };
 
-      await pb.collection("advances").create(payload);
+      const created = await pb.collection("advances").create(payload);
       await createStaffActionLog({
         actor: viewer,
         targetUserId: workerUser.id,
         targetCollection: "advances",
+        targetRecord: created.id,
         action: "report_advance",
-        after: payload,
+        after: created,
         note: policy.isWorking
           ? "Staff tạo yêu cầu ứng lương thay người lao động"
           : "Staff tạo ứng cho NLĐ đã nghỉ theo cấu hình Admin",
