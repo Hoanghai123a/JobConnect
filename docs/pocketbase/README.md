@@ -75,3 +75,15 @@ staff_action_logs
 - Rule của `push_subscriptions`: user chỉ xem/sửa/xóa thiết bị của chính mình; API server dùng quyền admin để đọc danh sách thiết bị khi cần gửi Web Push.
 - Cần cấu hình biến môi trường trên server app: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
 - API gửi thông báo cần quyền đọc `push_subscriptions` phía server qua `PB_ADMIN_TOKEN` hoặc `PB_ADMIN_EMAIL` + `PB_ADMIN_PASSWORD`.
+
+## Batch API cho import NLĐ và lịch sử
+
+Chức năng **Nhập dữ liệu -> Tạo hàng loạt NLĐ và lịch sử đi làm** dùng PocketBase Batch API để tạo một tài khoản cùng toàn bộ lịch sử của NLĐ trong một giao dịch. Không cần thêm collection hoặc field mới.
+
+Trong PocketBase Admin UI, vào **Settings -> Application -> Batch requests** và cấu hình:
+
+- Bật Batch API.
+- Đặt `Max requests` tối thiểu là `40`.
+- Giữ quyền tạo hiện tại cho admin đối với `users`, `employment_histories` và `staff_action_logs`.
+
+Nếu Batch API chưa bật hoặc giới hạn request thấp hơn cấu hình của app, luồng import sẽ báo lỗi và không chuyển sang cách tạo tuần tự.

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { BulkWorkerHistoryImportCard } from "@/components/imports/BulkWorkerHistoryImportDialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
@@ -916,10 +917,12 @@ function AdminImportsPage() {
 
   return (
     <PageContainer
-      title="Trung tâm dữ liệu"
-      subtitle="Nhập và cập nhật dữ liệu Excel tập trung cho quản trị viên"
+      title="Nhập dữ liệu"
+      subtitle="Tạo mới, nhập và cập nhật dữ liệu Excel tập trung cho quản trị viên"
     >
       <div className="space-y-4 desktop:grid desktop:grid-cols-2 desktop:items-start desktop:gap-5 desktop:space-y-0">
+        <BulkWorkerHistoryImportCard actor={currentUser} />
+
         <Card className="space-y-3 rounded-2xl p-4 shadow-soft">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <FileSpreadsheet className="h-4 w-4 text-primary" /> Import lịch sử đi làm đầy đủ

@@ -46,7 +46,7 @@ function AdminManagePage() {
         <div className="grid grid-cols-2 gap-3">
           <FeatureTile
             to="/admin/imports"
-            label="Nhập liệu"
+            label="Nhập dữ liệu"
             description="Nhập Excel và đồng bộ"
             icon={Upload}
           />
