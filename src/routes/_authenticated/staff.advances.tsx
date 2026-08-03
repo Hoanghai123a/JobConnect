@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { type ChipTone, StatusChip, toneBorder } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -340,7 +341,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
   const [items, setItems] = useState<AdvanceRecord[]>([]);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<AdminTab>("pending");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [advanceDetail, setAdvanceDetail] = useState<AdvanceRecord | null>(null);
   const [withdrawTarget, setWithdrawTarget] = useState<AdvanceRecord | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -767,7 +768,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
               value={
                 <span className="block text-[15px] leading-tight sm:text-base">
                   {loadingOutstandingStats
-                    ? "?ang t?i..."
+                    ? "Đang tải..."
                     : `${outstandingWorkers.length} NLĐ - ${formatMoney(outstandingTotal)}đ`}
                 </span>
               }
@@ -799,7 +800,12 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
         onChipChange={(v) => setTab(v as AdminTab)}
       />
 
-      {items.length === 0 ? (
+      {loading && items.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật danh sách ứng lương..." />
+      )}
+      {loading && items.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải danh sách ứng lương..." rows={3} />
+      ) : items.length === 0 ? (
         <EmptyState
           icon={Wallet}
           title="Không có đơn ứng lương"
@@ -1073,9 +1079,7 @@ function OutstandingWorkersDialog({
             className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 pb-5"
           >
             {loading ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                Đang tải thống kê...
-              </div>
+              <DataLoadingState variant="list" label="Đang tải thống kê ứng lương..." rows={3} />
             ) : workers.length === 0 ? (
               <EmptyState
                 icon={CircleDollarSign}
@@ -1122,9 +1126,7 @@ function OutstandingWorkersDialog({
           </TabsContent>
           <TabsContent value="history" className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
             {loading ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                Đang tải lịch sử ứng...
-              </div>
+              <DataLoadingState variant="list" label="Đang tải lịch sử ứng lương..." rows={3} />
             ) : history.length === 0 ? (
               <EmptyState
                 icon={Wallet}
@@ -1141,9 +1143,7 @@ function OutstandingWorkersDialog({
           </TabsContent>
           <TabsContent value="chart" className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
             {loading ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                Đang tải biểu đồ...
-              </div>
+              <DataLoadingState variant="grid" label="Đang tải biểu đồ ứng lương..." rows={2} />
             ) : (
               <AdvanceSevenDayChart days={days} onSelectDay={onSelectDay} />
             )}
@@ -2043,8 +2043,8 @@ function WorkerAdvanceCreateDialog({
                 </div>
                 <div className="max-h-52 space-y-1 overflow-y-auto rounded-xl border p-1.5">
                   {loadingWorkers ? (
-                    <div className="py-6 text-center text-xs text-muted-foreground">
-                      Đang tải danh sách NLĐ...
+                    <div className="p-3">
+                      <DataLoadingState variant="inline" label="Đang tải danh sách NLĐ..." />
                     </div>
                   ) : workers.length === 0 ? (
                     <div className="py-6 text-center text-xs text-muted-foreground">

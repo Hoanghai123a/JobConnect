@@ -21,6 +21,7 @@ import {
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { StatusChip } from "@/components/ui/status-chip";
 import { FeatureTile } from "@/components/dashboard/FeatureTile";
 import {
@@ -229,9 +230,7 @@ function StaffDashboardPage() {
       </Dialog>
 
       {loading ? (
-        <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">
-          Đang tải dữ liệu staff...
-        </div>
+        <DataLoadingState variant="grid" label="Đang tải dữ liệu staff..." rows={4} />
       ) : activeAssignments.length === 0 && user?.role !== "admin" ? (
         <EmptyState
           icon={Building2}

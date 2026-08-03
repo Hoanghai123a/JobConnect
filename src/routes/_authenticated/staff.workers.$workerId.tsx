@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card } from "@/components/ui/card";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -965,9 +966,11 @@ function StaffWorkerDetailPage() {
   if (loading) {
     return (
       <PageContainer title="Chi tiết lao động" subtitle="Đang tải hồ sơ..." className="space-y-3">
-        <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">
-          Đang tải lịch sử đi làm và quyền thao tác...
-        </div>
+        <DataLoadingState
+          variant="list"
+          label="Đang tải lịch sử đi làm và quyền thao tác..."
+          rows={4}
+        />
       </PageContainer>
     );
   }
@@ -1987,7 +1990,7 @@ function StaffWorkerDetailPage() {
               <div className="space-y-2">
                 <div className="text-sm font-semibold">Ảnh CCCD</div>
                 {detailLoading ? (
-                  <div className="text-center text-xs text-muted-foreground py-4">Đang tải...</div>
+                  <DataLoadingState variant="inline" label="Đang tải ảnh CCCD..." />
                 ) : detailCccdVersion ? (
                   <HistoryCccdImages
                     version={detailCccdVersion}

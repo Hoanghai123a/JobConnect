@@ -7,6 +7,7 @@ import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusChip, toneBorder } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { DateInput } from "@/components/ui/date-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -60,7 +61,7 @@ function ApprovalsPage() {
   const [items, setItems] = useState<ApprovalRequestRecord[]>([]);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<Tab>("pending");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [stats, setStats] = useState<Record<Tab, number>>({
     pending: 0,
@@ -220,9 +221,11 @@ function ApprovalsPage() {
           </div>
         )}
 
-        {loading && !items.length && (
-          <div className="py-8 text-center text-sm text-muted-foreground">Đang tải...</div>
-        )}
+        {loading && !items.length ? (
+          <DataLoadingState variant="list" label="Đang tải danh sách yêu cầu..." rows={3} />
+        ) : loading ? (
+          <DataLoadingState variant="inline" label="Đang cập nhật danh sách yêu cầu..." />
+        ) : null}
 
         {!loading && !items.length && (
           <EmptyState

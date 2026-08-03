@@ -16,6 +16,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
@@ -264,7 +265,7 @@ function AccountStaffFactoriesPage() {
       </div>
 
       {loading ? (
-        <Card className="rounded-2xl p-4 text-sm text-muted-foreground">Đang tải phân công...</Card>
+        <DataLoadingState variant="list" label="Đang tải phân công nhà máy..." rows={4} />
       ) : staffUsers.length === 0 ? (
         <EmptyState
           icon={Building2}

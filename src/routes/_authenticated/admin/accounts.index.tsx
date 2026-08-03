@@ -6,6 +6,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -213,9 +214,7 @@ function AdminAccountsPage() {
         </div>
 
         {loading ? (
-          <Card className="rounded-2xl p-4 text-sm text-muted-foreground">
-            Đang tải tài khoản...
-          </Card>
+          <DataLoadingState variant="list" label="Đang tải danh sách tài khoản..." rows={4} />
         ) : filteredUsers.length === 0 ? (
           <EmptyState
             icon={ShieldCheck}

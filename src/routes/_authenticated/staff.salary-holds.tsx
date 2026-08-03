@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,7 +59,7 @@ function SalaryHoldsPage() {
   const [detail, setDetail] = useState<SalaryHoldRecord | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedWorkerId, setSelectedWorkerId] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [qrTemplate, setQrTemplate] = useState(DEFAULT_QR_TEMPLATE);
 
   const load = useCallback(async () => {
@@ -308,46 +309,51 @@ function SalaryHoldsPage() {
         </div>
       )}
       <div className="space-y-2">
-        {loading ? (
-          <div className="p-4 text-center text-sm text-muted-foreground">Đang tải...</div>
+        {loading && items.length === 0 ? (
+          <DataLoadingState variant="list" label="Đang tải danh sách giữ lương..." rows={3} />
         ) : (
-          filtered.map((row) => (
-            <Card
-              key={row.id}
-              onClick={() => setDetail(row)}
-              className="cursor-pointer p-3 shadow-soft"
-            >
-              <div className="flex items-start gap-3">
-                {isAdmin && row.status === "received" && (
-                  <Checkbox
-                    checked={selectedIds.has(row.id)}
-                    onClick={(e) => e.stopPropagation()}
-                    onCheckedChange={(checked) =>
-                      setSelectedIds((old) => {
-                        const next = new Set(old);
-                        if (checked) next.add(row.id);
-                        else next.delete(row.id);
-                        return next;
-                      })
-                    }
-                  />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex justify-between gap-2">
-                    <div className="font-semibold">{row.worker_name}</div>
-                    <StatusChip tone={SALARY_HOLD_STATUS[row.status].tone}>
-                      {SALARY_HOLD_STATUS[row.status].label}
-                    </StatusChip>
+          <>
+            {loading && (
+              <DataLoadingState variant="inline" label="Đang cập nhật danh sách giữ lương..." />
+            )}
+            {filtered.map((row) => (
+              <Card
+                key={row.id}
+                onClick={() => setDetail(row)}
+                className="cursor-pointer p-3 shadow-soft"
+              >
+                <div className="flex items-start gap-3">
+                  {isAdmin && row.status === "received" && (
+                    <Checkbox
+                      checked={selectedIds.has(row.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onCheckedChange={(checked) =>
+                        setSelectedIds((old) => {
+                          const next = new Set(old);
+                          if (checked) next.add(row.id);
+                          else next.delete(row.id);
+                          return next;
+                        })
+                      }
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex justify-between gap-2">
+                      <div className="font-semibold">{row.worker_name}</div>
+                      <StatusChip tone={SALARY_HOLD_STATUS[row.status].tone}>
+                        {SALARY_HOLD_STATUS[row.status].label}
+                      </StatusChip>
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">{row.company_name}</div>
+                    <div className="mt-2 text-lg font-bold text-primary">
+                      {Number(row.amount).toLocaleString("vi-VN")} đ
+                    </div>
+                    <div className="line-clamp-2 text-xs text-muted-foreground">{row.content}</div>
                   </div>
-                  <div className="mt-1 text-sm text-muted-foreground">{row.company_name}</div>
-                  <div className="mt-2 text-lg font-bold text-primary">
-                    {Number(row.amount).toLocaleString("vi-VN")} đ
-                  </div>
-                  <div className="line-clamp-2 text-xs text-muted-foreground">{row.content}</div>
                 </div>
-              </div>
-            </Card>
-          ))
+              </Card>
+            ))}
+          </>
         )}
       </div>
 

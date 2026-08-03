@@ -26,6 +26,7 @@ import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusChip, toneBorder } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -226,7 +227,7 @@ export function AdvancesPage() {
     storedFilters.disbursementFilter || "all",
   );
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [advanceDetail, setAdvanceDetail] = useState<AdvanceRecord | null>(null);
   const [adminNoteDraft, setAdminNoteDraft] = useState("");
   const [recoveryNoteDraft, setRecoveryNoteDraft] = useState("");
@@ -1065,7 +1066,12 @@ export function AdvancesPage() {
           <History className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-semibold">Lịch sử của bạn ({items.length})</span>
         </div>
-        {items.length === 0 ? (
+        {loading && items.length > 0 && (
+          <DataLoadingState variant="inline" label="Đang cập nhật lịch sử ứng lương..." />
+        )}
+        {loading && items.length === 0 ? (
+          <DataLoadingState variant="list" label="Đang tải lịch sử ứng lương..." rows={2} />
+        ) : items.length === 0 ? (
           <EmptyState
             icon={Wallet}
             title="Chưa có Ứng lương"
@@ -1145,10 +1151,11 @@ export function AdvancesPage() {
   return (
     <PageContainer
       title="Ứng lương"
-      subtitle={`${items.length} mục`}
+      subtitle={loading && items.length === 0 ? "Đang tải dữ liệu..." : `${items.length} mục`}
       right={
         <button
           onClick={exportCurrent}
+          disabled={loading}
           className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:bg-muted"
           aria-label="Xuất Excel"
         >
@@ -1413,7 +1420,12 @@ export function AdvancesPage() {
         </label>
       )}
 
-      {filtered.length === 0 ? (
+      {loading && items.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật danh sách ứng lương..." />
+      )}
+      {loading && items.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải danh sách ứng lương..." rows={3} />
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={Wallet}
           title="Không có Ứng lương"

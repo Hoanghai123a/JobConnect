@@ -8,6 +8,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusChip, toneBorder } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
@@ -25,9 +26,11 @@ export const Route = createFileRoute("/_authenticated/admin/approvals")({
 
 function ApprovalsPage() {
   const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const load = async () => {
+    setLoading(true);
     try {
       const res = await pb.collection("users").getList(1, 300, {
         filter: `approvalStatus = "pending" || approved = "false"`,
@@ -36,6 +39,8 @@ function ApprovalsPage() {
       setUsers(res.items);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải");
+    } finally {
+      setLoading(false);
     }
   };
   useEffect(() => {
@@ -140,10 +145,11 @@ function ApprovalsPage() {
   return (
     <PageContainer
       title="Quản lý duyệt"
-      subtitle={`${users.length} chờ duyệt`}
+      subtitle={loading && users.length === 0 ? "Đang tải dữ liệu..." : `${users.length} chờ duyệt`}
       right={
         <button
           onClick={exportUsers}
+          disabled={loading}
           className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-muted-foreground border border-border hover:bg-muted"
           aria-label="Xuất Excel"
         >
@@ -180,7 +186,12 @@ function ApprovalsPage() {
         </label>
       )}
 
-      {users.length === 0 ? (
+      {loading && users.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật tài khoản chờ duyệt..." />
+      )}
+      {loading && users.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải tài khoản chờ duyệt..." rows={3} />
+      ) : users.length === 0 ? (
         <EmptyState
           icon={Users}
           title="Không có yêu cầu"

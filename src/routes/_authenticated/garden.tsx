@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { StatusChip } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import {
   FLOWERS,
   PETS,
@@ -258,11 +259,7 @@ function GardenPage() {
   }
 
   if (!state) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center text-sm text-muted-foreground">
-        Đang tải vườn...
-      </div>
-    );
+    return <DataLoadingState variant="page" label="Đang tải khu vườn..." rows={4} />;
   }
 
   const pet = petById(state.pet.id);

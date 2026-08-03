@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Label } from "@/components/ui/label";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
@@ -208,9 +209,7 @@ export function FactoryManagersDialog({
               Đang phụ trách ({assignments.length})
             </div>
             {loading ? (
-              <div className="rounded-2xl border border-border/60 p-3 text-sm text-muted-foreground">
-                Đang tải...
-              </div>
+              <DataLoadingState variant="list" label="Đang tải staff quản lý nhà máy..." rows={2} />
             ) : assignments.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-center text-sm text-muted-foreground">
                 Chưa có staff nào quản lý nhà máy này.

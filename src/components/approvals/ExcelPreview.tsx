@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { parseExcelToRowsFromUrl } from "@/lib/excel";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 
 export function ExcelPreview({ url, filename }: { url: string; filename: string }) {
   const [rows, setRows] = useState<string[][] | null>(null);
@@ -27,8 +28,8 @@ export function ExcelPreview({ url, filename }: { url: string; filename: string 
 
   if (loading) {
     return (
-      <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-        Đang tải {filename}...
+      <div className="rounded-lg border bg-muted/30 p-3">
+        <DataLoadingState variant="inline" label={`Đang tải ${filename}...`} />
       </div>
     );
   }

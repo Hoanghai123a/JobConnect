@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import {
   Dialog,
   DialogContent,
@@ -173,7 +174,7 @@ export function UserWorkHistoryPanel() {
         </div>
 
         {loading ? (
-          <Card className="p-4 text-sm text-muted-foreground">Đang tải lịch sử...</Card>
+          <DataLoadingState variant="list" label="Đang tải lịch sử đi làm..." rows={3} />
         ) : histories.length === 0 ? (
           <EmptyState
             icon={NotebookPen}

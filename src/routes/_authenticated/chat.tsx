@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
   Dialog,
@@ -473,11 +474,7 @@ function GroupChatPage() {
         )}
 
         {roomsLoading ? (
-          <EmptyState
-            icon={MessageSquareText}
-            title="Đang tải phòng chat"
-            description="Danh sách phòng sẽ xuất hiện tại đây."
-          />
+          <DataLoadingState variant="list" label="Đang tải danh sách phòng chat..." rows={3} />
         ) : visibleRooms.length === 0 ? (
           <EmptyState
             icon={MessageSquareText}
@@ -1024,11 +1021,7 @@ function RoomChatView({
             )}
 
             {loading && messages.length === 0 ? (
-              <EmptyState
-                icon={MessageSquareText}
-                title="Đang tải hội thoại"
-                description="Tin nhắn sẽ xuất hiện tại đây."
-              />
+              <DataLoadingState variant="list" label="Đang tải hội thoại..." rows={4} />
             ) : messages.length === 0 ? (
               <EmptyState
                 icon={MessageSquareText}

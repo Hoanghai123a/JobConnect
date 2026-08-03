@@ -6,6 +6,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,7 +52,7 @@ function TransportPage() {
   const [title, setTitle] = useState("");
   const [runTime, setRunTime] = useState("");
   const [phone, setPhone] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<TransportRecord | null>(null);
@@ -249,8 +250,11 @@ function TransportPage() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="py-8 text-center text-sm text-muted-foreground">Đang tải...</div>
+      {loading && items.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật danh sách nhà xe..." />
+      )}
+      {loading && items.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải danh sách nhà xe..." rows={3} />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={BusFront}

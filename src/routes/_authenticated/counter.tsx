@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -489,9 +490,7 @@ function CounterPage() {
   if (!state)
     return (
       <PageContainer title="Bộ đếm" subtitle="Đang tải dữ liệu...">
-        <div className="rounded-2xl border bg-card p-6 text-center text-sm text-muted-foreground">
-          Đang tải bộ đếm...
-        </div>
+        <DataLoadingState variant="list" label="Đang tải bộ đếm..." rows={3} />
       </PageContainer>
     );
   return (

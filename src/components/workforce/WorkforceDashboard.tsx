@@ -2,6 +2,7 @@
 import { CalendarCheck, ClipboardCheck, UserRoundMinus } from "lucide-react";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import type { EmploymentHistoryRecord } from "@/lib/employment";
 import type { FactoryRecord } from "@/lib/factories";
 import type { UserRecord } from "@/lib/pocketbase";
@@ -248,9 +249,7 @@ export function WorkforceDashboard({
         </div>
 
         {loading ? (
-          <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-            Đang tải dữ liệu nhân lực...
-          </div>
+          <DataLoadingState variant="grid" label="Đang tải dữ liệu nhân lực..." rows={4} />
         ) : error ? (
           <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-destructive/40 bg-destructive/5 text-center">
             <p className="text-sm text-destructive">{error}</p>

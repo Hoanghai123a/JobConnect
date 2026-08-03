@@ -17,6 +17,7 @@ import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -523,7 +524,7 @@ function ChangePasswordSection() {
 function AdminUsersPanel() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [guideOpen, setGuideOpen] = useState(false);
@@ -1601,8 +1602,11 @@ function AdminUsersPanel() {
         </label>
       )}
 
-      {loading ? (
-        <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
+      {loading && users.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật danh sách tài khoản..." />
+      )}
+      {loading && users.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải danh sách tài khoản..." rows={4} />
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
           Không có tài khoản.
@@ -2660,8 +2664,11 @@ function StaffPanel() {
         />
       </div>
 
-      {loading ? (
-        <div className="rounded-2xl p-4 text-sm text-muted-foreground">Đang tải...</div>
+      {loading && staffUsers.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật danh sách staff..." />
+      )}
+      {loading && staffUsers.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải danh sách staff..." rows={3} />
       ) : staffUsers.length === 0 ? (
         <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
           <Users className="mx-auto mb-2 h-8 w-8 opacity-40" />
@@ -3044,8 +3051,11 @@ function FactoryAssignmentsPanel() {
         />
       </div>
 
-      {loading ? (
-        <div className="py-6 text-center text-sm text-muted-foreground">Đang tải phân công...</div>
+      {loading && staffUsers.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật phân công nhà máy..." />
+      )}
+      {loading && staffUsers.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải phân công nhà máy..." rows={3} />
       ) : staffUsers.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-center text-sm text-muted-foreground">
           Chưa có staff. Hãy chuyển quyền một tài khoản sang Staff trước.

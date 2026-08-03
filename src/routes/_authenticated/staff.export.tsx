@@ -4,6 +4,7 @@ import { Download, FileDown, ImageDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CccdHistoryExportDialog } from "@/components/cccd/CccdHistoryExportDialog";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -356,9 +357,7 @@ function StaffExportPage() {
       />
 
       {loading ? (
-        <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">
-          Đang tải dữ liệu để xuất...
-        </div>
+        <DataLoadingState variant="list" label="Đang tải dữ liệu để xuất..." rows={3} />
       ) : basicRows.length === 0 ? (
         <EmptyState
           icon={Download}

@@ -9,6 +9,7 @@ import { AppHeader } from "@/components/layout/BottomNav";
 import { PushNotificationSettingsCard } from "@/components/layout/PushNotificationSettingsCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -382,9 +383,9 @@ function FactoriesTab() {
   const [editing, setEditing] = useState<Partial<Factory> | null>(null);
   const [editingArea, setEditingArea] = useState<Partial<RecruitmentArea> | null>(null);
   const [editingMainHouse, setEditingMainHouse] = useState<Partial<MainHouse> | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [areasLoading, setAreasLoading] = useState(false);
-  const [mainHousesLoading, setMainHousesLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [areasLoading, setAreasLoading] = useState(true);
+  const [mainHousesLoading, setMainHousesLoading] = useState(true);
   const [factoriesOpen, setFactoriesOpen] = useState(true);
   const [areasOpen, setAreasOpen] = useState(true);
   const [mainHousesOpen, setMainHousesOpen] = useState(true);
@@ -901,9 +902,11 @@ function FactoriesTab() {
                 />
               </div>
             )}
-            {loading && (
-              <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
-            )}
+            {loading && items.length === 0 ? (
+              <DataLoadingState variant="list" label="Đang tải danh sách nhà máy..." rows={3} />
+            ) : loading ? (
+              <DataLoadingState variant="inline" label="Đang cập nhật danh sách nhà máy..." />
+            ) : null}
             {!loading && items.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
                 Chưa có nhà máy. Bấm nút + để thêm.
@@ -1125,11 +1128,11 @@ function FactoriesTab() {
                 />
               </div>
             )}
-            {areasLoading && (
-              <div className="py-6 text-center text-sm text-muted-foreground">
-                Đang tải khu vực...
-              </div>
-            )}
+            {areasLoading && areas.length === 0 ? (
+              <DataLoadingState variant="list" label="Đang tải khu vực tuyển dụng..." rows={3} />
+            ) : areasLoading ? (
+              <DataLoadingState variant="inline" label="Đang cập nhật khu vực tuyển dụng..." />
+            ) : null}
             {!areasLoading && areas.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
                 Chưa có khu vực. Bấm nút + để thêm.
@@ -1246,11 +1249,11 @@ function FactoriesTab() {
                 />
               </div>
             )}
-            {mainHousesLoading && (
-              <div className="py-6 text-center text-sm text-muted-foreground">
-                Đang tải nhà chính...
-              </div>
-            )}
+            {mainHousesLoading && mainHouses.length === 0 ? (
+              <DataLoadingState variant="list" label="Đang tải danh sách nhà chính..." rows={3} />
+            ) : mainHousesLoading ? (
+              <DataLoadingState variant="inline" label="Đang cập nhật danh sách nhà chính..." />
+            ) : null}
             {!mainHousesLoading && mainHouses.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
                 Chưa có nhà chính. Bấm nút + để thêm.

@@ -9,6 +9,7 @@ import { ScopeChip } from "@/components/staff/WorkerQuickDrawer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/ui/status-chip";
 import { RegisterDialog } from "@/components/workforce/RegisterDialog";
@@ -213,9 +214,7 @@ export function StaffWorkerDirectory({
       </div>
 
       {loading ? (
-        <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">
-          Đang tải danh sách lao động...
-        </div>
+        <DataLoadingState variant="list" label="Đang tải danh sách lao động..." rows={4} />
       ) : filteredWorkers.length === 0 ? (
         <EmptyState
           icon={UserRoundSearch}

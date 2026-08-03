@@ -7,6 +7,7 @@ import { FilterBar } from "@/components/ui/filter-bar";
 import { StatusChip, toneBorder, ChipTone } from "@/components/ui/status-chip";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -91,6 +92,7 @@ async function countComplaints(filter: string) {
 function ComplaintsPage() {
   const { user, isAdmin } = useAuth();
   const [items, setItems] = useState<Complaint[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<ComplaintTab>("pending");
   const [stats, setStats] = useState<Record<Status, number>>({
@@ -111,6 +113,7 @@ function ComplaintsPage() {
   const [expandedComplaintId, setExpandedComplaintId] = useState<string | null>(null);
 
   const load = async () => {
+    setLoading(true);
     try {
       const filter = buildComplaintFilter({ isAdmin, phone: user?.phone, tab, search });
       const res = await pb.collection("complaints").getList(1, 200, {
@@ -120,6 +123,8 @@ function ComplaintsPage() {
       setItems(res.items as any);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải khiếu nại");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -259,7 +264,12 @@ function ComplaintsPage() {
           <History className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-semibold">Lịch sử của bạn ({items.length})</span>
         </div>
-        {items.length === 0 ? (
+        {loading && items.length > 0 && (
+          <DataLoadingState variant="inline" label="Đang cập nhật lịch sử khiếu nại..." />
+        )}
+        {loading && items.length === 0 ? (
+          <DataLoadingState variant="list" label="Đang tải lịch sử khiếu nại..." rows={2} />
+        ) : items.length === 0 ? (
           <EmptyState
             icon={MessageSquareWarning}
             title="Chưa có khiếu nại"
@@ -313,10 +323,11 @@ function ComplaintsPage() {
   return (
     <PageContainer
       title="Khiếu nại"
-      subtitle={`${items.length} mục`}
+      subtitle={loading && items.length === 0 ? "Đang tải dữ liệu..." : `${items.length} mục`}
       right={
         <button
           onClick={exportAll}
+          disabled={loading}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-muted-foreground border border-border hover:bg-muted"
           aria-label="Xuất Excel"
         >
@@ -344,7 +355,12 @@ function ComplaintsPage() {
         onChipChange={(v) => setTab(v as any)}
       />
 
-      {filtered.length === 0 ? (
+      {loading && items.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật khiếu nại..." />
+      )}
+      {loading && items.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải danh sách khiếu nại..." rows={3} />
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={MessageSquareWarning}
           title="Không có khiếu nại"

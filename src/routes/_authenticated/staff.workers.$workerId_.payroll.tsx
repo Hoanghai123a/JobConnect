@@ -8,6 +8,7 @@ import {
 } from "@/components/payroll/WorkerPayrollView";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { useAuth } from "@/lib/auth";
 import { escapePb } from "@/lib/delegations";
 import { pb, type UserRecord } from "@/lib/pocketbase";
@@ -111,7 +112,11 @@ function StaffWorkerPayrollPage() {
     <div>
       <AppHeader title="Check công/lương" subtitle={workerName} back />
       <div className="space-y-4 p-4">
-        {loading && <div className="p-4 text-sm text-muted-foreground">Đang tải...</div>}
+        {loading && attendanceItems.length === 0 && salaryItems.length === 0 ? (
+          <DataLoadingState variant="list" label="Đang tải dữ liệu công và lương..." rows={3} />
+        ) : loading ? (
+          <DataLoadingState variant="inline" label="Đang cập nhật dữ liệu công và lương..." />
+        ) : null}
         <WorkerPayrollView
           attendanceItems={attendanceItems}
           salaryItems={salaryItems}

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { WorkerPayrollView } from "@/components/payroll/WorkerPayrollView";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1175,7 +1176,7 @@ function UserCheckAttendance() {
   const { user } = useAuth();
   const [items, setItems] = useState<CheckItemRecord[]>([]);
   const [salaryItems, setSalaryItems] = useState<SalaryItemRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -1229,8 +1230,23 @@ function UserCheckAttendance() {
     <div>
       <AppHeader title="Check công/lương" subtitle="Bảng check công admin gửi" back />
       <div className="space-y-4 p-4">
-        {loading && <div className="p-4 text-sm text-muted-foreground">Đang tải...</div>}
-        <WorkerPayrollView attendanceItems={items} salaryItems={salaryItems} loading={loading} />
+        {loading && items.length === 0 && salaryItems.length === 0 ? (
+          <DataLoadingState variant="list" label="Đang tải bảng check công và lương..." rows={3} />
+        ) : (
+          <>
+            {loading && (
+              <DataLoadingState
+                variant="inline"
+                label="Đang cập nhật bảng check công và lương..."
+              />
+            )}
+            <WorkerPayrollView
+              attendanceItems={items}
+              salaryItems={salaryItems}
+              loading={loading}
+            />
+          </>
+        )}
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { isUserApproved } from "@/lib/user-approval";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { StaffRealtimeSyncGate } from "@/components/staff/StaffRealtimeSyncGate";
 import { DesktopAppShell } from "@/components/layout/DesktopAppShell";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: ({ location }) => {
@@ -36,27 +37,15 @@ function AuthLayout() {
   }, [loading, nav, user]);
 
   if (loading || !user) {
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center px-4 text-sm text-muted-foreground">
-        Đang tải...
-      </div>
-    );
+    return <DataLoadingState variant="page" label="Đang xác thực tài khoản..." rows={4} />;
   }
 
   return (
     <div className="pb-nav">
-      {loading ? (
-        <div className="flex min-h-[100dvh] items-center justify-center px-4 text-sm text-muted-foreground">
-          Đang tải...
-        </div>
-      ) : (
-        <>
-          <StaffRealtimeSyncGate />
-          <DesktopAppShell>
-            <Outlet />
-          </DesktopAppShell>
-        </>
-      )}
+      <StaffRealtimeSyncGate />
+      <DesktopAppShell>
+        <Outlet />
+      </DesktopAppShell>
       <BottomNav />
     </div>
   );

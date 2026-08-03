@@ -9,6 +9,7 @@ import { ResponsiveOverlay } from "@/components/layout/ResponsiveOverlay";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { toneBorder, ChipTone } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -233,7 +234,7 @@ const findFactoryByCompany = (factories: FactoryOption[], company?: string) => {
 
 function useFactoryOptions() {
   const [factories, setFactories] = useState<FactoryOption[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -260,7 +261,7 @@ function useFactoryOptions() {
 
 function useRecruitmentAreaOptions() {
   const [areas, setAreas] = useState<RecruitmentAreaOption[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -296,6 +297,7 @@ function NewsPage() {
   const { areas: configuredAreas, loading: areasLoading } = useRecruitmentAreaOptions();
   const { factories, loading: factoriesLoading } = useFactoryOptions();
   const [items, setItems] = useState<Recruitment[]>([]);
+  const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<Recruitment | null>(null);
   const [editing, setEditing] = useState<Recruitment | null>(null);
   const [search, setSearch] = useState("");
@@ -308,6 +310,7 @@ function NewsPage() {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const load = async () => {
+    setLoading(true);
     try {
       const res = await pb.collection("recruitments").getList(1, 200, {
         filter: buildRecruitmentFilter({
@@ -331,6 +334,8 @@ function NewsPage() {
       markSeen("news", user?.id, latest || Date.now());
     } catch (e: unknown) {
       toast.error(errorMessage(e, "Lỗi tải bảng tin"));
+    } finally {
+      setLoading(false);
     }
   };
   useEffect(() => {
@@ -384,7 +389,11 @@ function NewsPage() {
   return (
     <PageContainer
       title="Bảng tin tuyển dụng"
-      subtitle={`${visibleItems.length} tin đang đăng`}
+      subtitle={
+        loading && items.length === 0
+          ? "Đang tải dữ liệu..."
+          : `${visibleItems.length} tin đang đăng`
+      }
       right={
         isAdmin && (
           <button
@@ -473,7 +482,13 @@ function NewsPage() {
         />
       </ResponsiveOverlay>
 
-      {filtered.length === 0 ? (
+      {loading && items.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật bảng tin..." />
+      )}
+
+      {loading && items.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải bảng tin tuyển dụng..." rows={3} />
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={Building2}
           title="Chưa có tin tuyển dụng"

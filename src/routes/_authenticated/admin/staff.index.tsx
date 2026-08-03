@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DateInput } from "@/components/ui/date-input";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatCard } from "@/components/ui/stat-card";
@@ -344,8 +345,11 @@ function AdminStaffPage() {
         />
       </div>
 
-      {loading ? (
-        <Card className="rounded-2xl p-4 text-sm text-muted-foreground">Đang tải...</Card>
+      {loading && staffUsers.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật danh sách staff..." />
+      )}
+      {loading && staffUsers.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải danh sách staff..." rows={4} />
       ) : staffUsers.length === 0 ? (
         <EmptyState
           icon={Users}

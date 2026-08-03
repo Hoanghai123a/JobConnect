@@ -7,6 +7,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { IosInstallGuideDialog } from "@/components/layout/IosInstallGuideDialog";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -203,6 +204,7 @@ function MultiSelectDropdown({
 function GuidesPage() {
   const { user, isAdmin } = useAuth();
   const [items, setItems] = useState<Guide[]>([]);
+  const [loading, setLoading] = useState(true);
   const [factories, setFactories] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [currentFactoryName, setCurrentFactoryName] = useState("");
@@ -214,11 +216,14 @@ function GuidesPage() {
   const { installPrompt, installApp: installPwaApp, isAndroid, isIos } = usePwaInstallPrompt();
 
   const load = async () => {
+    setLoading(true);
     try {
       const res = await pb.collection("guides").getList(1, 200, { sort: "order,created" });
       setItems(res.items as any);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải hướng dẫn");
+    } finally {
+      setLoading(false);
     }
   };
   const loadAdminRefs = async () => {
@@ -383,7 +388,7 @@ function GuidesPage() {
   return (
     <PageContainer
       title="Hướng dẫn"
-      subtitle={`${filtered.length} mục`}
+      subtitle={loading && items.length === 0 ? "Đang tải dữ liệu..." : `${filtered.length} mục`}
       right={
         isAdmin && (
           <button
@@ -421,7 +426,13 @@ function GuidesPage() {
 
       <FilterBar search={search} onSearchChange={setSearch} placeholder="Tìm hướng dẫn…" />
 
-      {filtered.length === 0 ? (
+      {loading && items.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật hướng dẫn..." />
+      )}
+
+      {loading && items.length === 0 ? (
+        <DataLoadingState variant="grid" label="Đang tải hướng dẫn..." rows={4} />
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={BookOpen}
           title="Chưa có hướng dẫn"

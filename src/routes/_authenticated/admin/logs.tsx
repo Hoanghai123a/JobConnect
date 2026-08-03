@@ -4,6 +4,7 @@ import { ArrowLeft, Search } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -181,9 +182,7 @@ function SystemActionLogsPage() {
       </Select>
 
       {initialLoading ? (
-        <div className="rounded-2xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">
-          Đang tải nhật ký...
-        </div>
+        <DataLoadingState variant="list" label="Đang tải nhật ký thao tác..." rows={4} />
       ) : logs.length === 0 ? (
         <EmptyState
           icon={Search}

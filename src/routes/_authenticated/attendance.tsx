@@ -22,6 +22,7 @@ import {
 import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { aggregate, calcSalary, formatVND, type AttendanceRow, type Shift } from "@/lib/salary";
 import {
   addDaysToDateKey,
@@ -94,7 +95,7 @@ function AdminAttendance() {
   });
   const [rows, setRows] = useState<RowWithUser[]>([]);
   const [employmentHistories, setEmploymentHistories] = useState<EmploymentHistoryRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [detailUser, setDetailUser] = useState<any | null>(null);
 
@@ -261,7 +262,11 @@ function AdminAttendance() {
         placeholder="Tìm theo tên, SĐT, nhà máy…"
       />
 
-      {loading && <div className="py-6 text-center text-sm text-muted-foreground">Đang tải…</div>}
+      {loading && rows.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải dữ liệu chấm công..." rows={3} />
+      ) : loading ? (
+        <DataLoadingState variant="inline" label="Đang cập nhật chấm công..." />
+      ) : null}
       {!loading && filtered.length === 0 && (
         <EmptyState
           icon={Clock}
@@ -394,7 +399,7 @@ function UserAttendance() {
     return d;
   });
   const [rows, setRows] = useState<(AttendanceRow & { id: string })[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [currentEmployment, setCurrentEmployment] = useState<EmploymentHistoryRecord | null>(null);
 
@@ -592,7 +597,11 @@ function UserAttendance() {
           </aside>
 
           <div className="worker-attendance-calendar space-y-3">
-            {loading && <div className="p-4 text-sm text-muted-foreground">Đang tải…</div>}
+            {loading && rows.length === 0 ? (
+              <DataLoadingState variant="grid" label="Đang tải lịch chấm công..." rows={2} />
+            ) : loading ? (
+              <DataLoadingState variant="inline" label="Đang cập nhật lịch chấm công..." />
+            ) : null}
             <div className="flex items-center justify-center rounded-2xl shadow-soft">
               <MonthSwitcher value={monthDate} onChange={setMonthDate} neutral />
             </div>

@@ -12,6 +12,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
@@ -467,8 +468,11 @@ function NotebookPage() {
       </div>
 
       {/* Entry list */}
-      {loading ? (
-        <div className="py-8 text-center text-sm text-muted-foreground">Đang tải...</div>
+      {loading && entries.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật sổ tay..." />
+      )}
+      {loading && entries.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải sổ tay..." rows={4} />
       ) : entries.length === 0 ? (
         <EmptyState
           icon={BookOpenText}
