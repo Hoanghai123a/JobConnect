@@ -1,6 +1,15 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { BriefcaseBusiness, FileDown, Plus, Search, UserRoundSearch } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  FileDown,
+  Plus,
+  RefreshCw,
+  Search,
+  UserRoundSearch,
+  WifiOff,
+} from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { WorkerEmploymentDrawer } from "@/components/employment/WorkerEmploymentDrawer";
 import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
@@ -15,27 +24,95 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { RegisterDialog } from "@/components/workforce/RegisterDialog";
 import { useAuth } from "@/lib/auth";
 import { isCurrentlyWorking, maskCccd } from "@/lib/employment";
-import {
-  fetchFactories,
-  fetchFactoryManagers,
-  isFactoryAssignmentActive,
-  type FactoryRecord,
-} from "@/lib/factories";
-import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
-import { pb, type UserRecord } from "@/lib/pocketbase";
-import { readCachedAuxData, writeCachedAuxData } from "@/lib/staff-cache";
+import type { UserRecord } from "@/lib/pocketbase";
+import { readCachedAuxData } from "@/lib/staff-cache";
 import {
   fetchCachedStaffWorkspace,
-  fetchStaffWorkspace,
   hasActiveOrRecentlyLeftEmployment,
   type StaffWorkerRecord,
 } from "@/lib/staff-permissions";
+import {
+  STAFF_DIRECTORY_STATE_PREFIX,
+  staffDirectoryAuxQueryKey,
+  staffWorkspaceQueryKey,
+  useStaffDirectoryAuxQuery,
+  useStaffWorkspaceQuery,
+} from "@/lib/staff-workspace-query";
 import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 
 export type StaffWorkerDirectoryMode = "all" | "recruited";
 type WorkerScope = "all" | "qlnm" | "nvtd" | "working" | "left";
 
-const RECRUITED_PAGE_SIZE = 20;
+const DIRECTORY_PAGE_SIZE = 30;
+const EMPTY_WORKERS: StaffWorkerRecord[] = [];
+const EMPTY_MANAGED_FACTORY_IDS = new Set<string>();
+
+interface DirectorySessionState {
+  search: string;
+  scope: WorkerScope;
+  visibleCount: number;
+}
+
+const VALID_SCOPES = new Set<WorkerScope>(["all", "qlnm", "nvtd", "working", "left"]);
+
+function directoryStateKey(viewerId: string, mode: StaffWorkerDirectoryMode) {
+  return `${STAFF_DIRECTORY_STATE_PREFIX}:${viewerId}:${mode}`;
+}
+
+function readDirectoryState(
+  viewerId: string | undefined,
+  mode: StaffWorkerDirectoryMode,
+  embedded: boolean,
+): DirectorySessionState {
+  const fallback: DirectorySessionState = {
+    search: "",
+    scope: "all",
+    visibleCount: DIRECTORY_PAGE_SIZE,
+  };
+  if (embedded || !viewerId || typeof window === "undefined") return fallback;
+
+  try {
+    const raw = window.sessionStorage.getItem(directoryStateKey(viewerId, mode));
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<DirectorySessionState>;
+    const scope = VALID_SCOPES.has(parsed.scope as WorkerScope)
+      ? (parsed.scope as WorkerScope)
+      : "all";
+    const visibleCount = Number.isFinite(parsed.visibleCount)
+      ? Math.max(DIRECTORY_PAGE_SIZE, Math.trunc(parsed.visibleCount as number))
+      : DIRECTORY_PAGE_SIZE;
+    return {
+      search: typeof parsed.search === "string" ? parsed.search : "",
+      scope,
+      visibleCount,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function buildWorkerSearchText(worker: StaffWorkerRecord) {
+  return [
+    worker.user.full_name,
+    worker.user.username,
+    worker.user.phone,
+    worker.user.uid,
+    ...worker.histories.flatMap((history) => [
+      history.uid,
+      history.employee_code,
+      history.worker_name_snapshot,
+      history.worker_cccd_snapshot,
+      history.worker_tax_code_snapshot,
+      history.expand?.factory?.name,
+      history.expand?.main_house?.name,
+      history.expand?.recruiter_staff?.full_name,
+      history.expand?.recruiter_staff?.username,
+    ]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase("vi-VN");
+}
 
 function formatDate(value?: string) {
   if (!value) return "—";
@@ -73,25 +150,47 @@ export function StaffWorkerDirectory({
   onSelectWorker: (worker: StaffWorkerRecord) => void;
   embedded?: boolean;
 }) {
-  const [search, setSearch] = useState("");
-  const [scope, setScope] = useState<WorkerScope>("all");
-  const [visibleCount, setVisibleCount] = useState(RECRUITED_PAGE_SIZE);
+  const restoredState = useMemo(
+    () => readDirectoryState(viewer?.id, mode, embedded),
+    [embedded, mode, viewer?.id],
+  );
+  const [search, setSearch] = useState(restoredState.search);
+  const [scope, setScope] = useState<WorkerScope>(restoredState.scope);
+  const [visibleCount, setVisibleCount] = useState(restoredState.visibleCount);
+  const [autoLoadSupported, setAutoLoadSupported] = useState(true);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const deferredSearch = useDeferredValue(search);
+
+  useEffect(() => {
+    if (embedded || !viewer?.id || typeof window === "undefined") return;
+    const state: DirectorySessionState = { search, scope, visibleCount };
+    try {
+      window.sessionStorage.setItem(directoryStateKey(viewer.id, mode), JSON.stringify(state));
+    } catch {
+      // Keep the directory usable when session storage is unavailable.
+    }
+  }, [embedded, mode, scope, search, viewer?.id, visibleCount]);
 
   const updateSearch = (value: string) => {
     setSearch(value);
-    setVisibleCount(RECRUITED_PAGE_SIZE);
+    setVisibleCount(DIRECTORY_PAGE_SIZE);
   };
 
   const updateScope = (value: WorkerScope) => {
     setScope(value);
-    setVisibleCount(RECRUITED_PAGE_SIZE);
+    setVisibleCount(DIRECTORY_PAGE_SIZE);
   };
 
-  const filteredWorkers = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase("vi-VN");
+  const indexedWorkers = useMemo(
+    () => workers.map((worker) => ({ worker, searchText: buildWorkerSearchText(worker) })),
+    [workers],
+  );
 
-    return workers
-      .filter((worker) => {
+  const filteredWorkers = useMemo(() => {
+    const query = deferredSearch.trim().toLocaleLowerCase("vi-VN");
+
+    return indexedWorkers
+      .filter(({ worker, searchText }) => {
         const recruitedByViewer = isRecruitedByViewer(worker, viewer?.id);
         const needsRecruiterScope = mode === "recruited" || scope === "nvtd";
         if (needsRecruiterScope) {
@@ -105,33 +204,11 @@ export function StaffWorkerDirectory({
         const isWorking = latest ? isCurrentlyWorking(latest) : false;
         if (scope === "working" && !isWorking) return false;
         if (scope === "left" && isWorking) return false;
-
-        if (query) {
-          const haystack = [
-            worker.user.full_name,
-            worker.user.username,
-            worker.user.phone,
-            worker.user.uid,
-            ...worker.histories.flatMap((history) => [
-              history.uid,
-              history.employee_code,
-              history.worker_name_snapshot,
-              history.worker_cccd_snapshot,
-              history.worker_tax_code_snapshot,
-              history.expand?.factory?.name,
-              history.expand?.main_house?.name,
-              history.expand?.recruiter_staff?.full_name,
-              history.expand?.recruiter_staff?.username,
-            ]),
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLocaleLowerCase("vi-VN");
-          if (!haystack.includes(query)) return false;
-        }
+        if (query && !searchText.includes(query)) return false;
 
         return true;
       })
+      .map(({ worker }) => worker)
       .sort((a, b) => {
         const aTime = latestJoinTime(a);
         const bTime = latestJoinTime(b);
@@ -144,10 +221,29 @@ export function StaffWorkerDirectory({
         const nameOrder = aName.localeCompare(bName, "vi", { sensitivity: "base" });
         return nameOrder || a.user.id.localeCompare(b.user.id);
       });
-  }, [mode, scope, search, viewer?.id, workers]);
+  }, [deferredSearch, indexedWorkers, mode, scope, viewer?.id]);
 
-  const visibleWorkers =
-    mode === "recruited" ? filteredWorkers.slice(0, visibleCount) : filteredWorkers;
+  const visibleWorkers = filteredWorkers.slice(0, visibleCount);
+  const canLoadMore = visibleCount < filteredWorkers.length;
+
+  useEffect(() => {
+    if (!canLoadMore || !loadMoreRef.current || typeof window === "undefined") return;
+    if (!("IntersectionObserver" in window)) {
+      setAutoLoadSupported(false);
+      return;
+    }
+
+    setAutoLoadSupported(true);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        setVisibleCount((count) => Math.min(count + DIRECTORY_PAGE_SIZE, filteredWorkers.length));
+      },
+      { rootMargin: "600px 0px" },
+    );
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [canLoadMore, filteredWorkers.length, visibleCount]);
 
   return (
     <div className="space-y-3">
@@ -294,12 +390,13 @@ export function StaffWorkerDirectory({
             );
           })}
 
-          {mode === "recruited" && visibleCount < filteredWorkers.length && (
+          {canLoadMore && <div ref={loadMoreRef} className="h-px" aria-hidden="true" />}
+          {canLoadMore && !autoLoadSupported && (
             <Button
               type="button"
               variant="outline"
               className="w-full rounded-full"
-              onClick={() => setVisibleCount((count) => count + RECRUITED_PAGE_SIZE)}
+              onClick={() => setVisibleCount((count) => count + DIRECTORY_PAGE_SIZE)}
             >
               Tải thêm người lao động
             </Button>
@@ -312,96 +409,89 @@ export function StaffWorkerDirectory({
 
 export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryMode }) {
   const { user } = useAuth();
+  const viewer = (user as UserRecord | null) ?? null;
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [workers, setWorkers] = useState<StaffWorkerRecord[]>([]);
-  const [factories, setFactories] = useState<FactoryRecord[]>([]);
-  const [mainHouses, setMainHouses] = useState<MainHouseRecord[]>([]);
-  const [managedFactoryIds, setManagedFactoryIds] = useState<Set<string>>(new Set());
-  const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
-  const [selected, setSelected] = useState<StaffWorkerRecord | null>(null);
+  const queryClient = useQueryClient();
+  const workspaceQuery = useStaffWorkspaceQuery(viewer);
+  const auxQuery = useStaffDirectoryAuxQuery(viewer);
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
+  const closeTimerRef = useRef<number | null>(null);
+
+  const workspace = workspaceQuery.data;
+  const auxData = auxQuery.data;
+  const workers = workspace?.workers ?? EMPTY_WORKERS;
+  const factories = auxData?.factories || [];
+  const mainHouses = auxData?.mainHouses || [];
+  const managedFactoryIds = workspace?.managedFactoryIds ?? EMPTY_MANAGED_FACTORY_IDS;
+  const staffUsers = auxData?.staffUsers || [];
+  const selected = useMemo(
+    () => workers.find((worker) => worker.user.id === selectedWorkerId) || null,
+    [selectedWorkerId, workers],
+  );
 
   const openWorker = (worker: StaffWorkerRecord) => {
-    setSelected(worker);
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    setSelectedWorkerId(worker.user.id);
     setDrawerOpen(true);
   };
 
   const closeDrawer = () => {
     setDrawerOpen(false);
-    setTimeout(() => setSelected(null), 300);
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = window.setTimeout(() => {
+      setSelectedWorkerId(null);
+      closeTimerRef.current = null;
+    }, 300);
   };
 
-  const loadWorkers = useCallback(async () => {
-    if (!user?.id) return;
-    setLoading(true);
-    try {
-      const auxCached = await readCachedAuxData();
-      if (auxCached) {
-        setFactories(auxCached.factories);
-        setMainHouses(auxCached.mainHouses);
-        setStaffUsers(auxCached.staffUsers);
-      }
-
-      const [workspace, factoryList, staffList, managerRows, mainHouseList] = await Promise.all([
-        fetchStaffWorkspace(user as UserRecord, {
-          onCacheReady: (cachedResult) => {
-            setWorkers(cachedResult.workers);
-            setManagedFactoryIds(cachedResult.managedFactoryIds);
-            setLoading(false);
-          },
-        }),
-        fetchFactories(),
-        pb
-          .collection("users")
-          .getList<UserRecord>(1, 200, {
-            filter: `role="staff" || role="admin"`,
-            sort: "full_name,username",
-          })
-          .then((result) => result.items)
-          .catch(() => [] as UserRecord[]),
-        fetchFactoryManagers(user.id),
-        fetchMainHouses().catch(() => [] as MainHouseRecord[]),
-      ]);
-
-      setWorkers(workspace.workers);
-      setFactories(factoryList);
-      setStaffUsers(staffList);
-      setMainHouses(mainHouseList);
-      setManagedFactoryIds(
-        new Set(
-          managerRows.filter((item) => isFactoryAssignmentActive(item)).map((item) => item.factory),
-        ),
-      );
-
-      writeCachedAuxData({
-        factories: factoryList,
-        mainHouses: mainHouseList,
-        staffUsers: staffList,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
-    loadWorkers();
-  }, [loadWorkers]);
+    if (!selectedWorkerId || !workspace || selected) return;
+    setDrawerOpen(false);
+    setSelectedWorkerId(null);
+  }, [selected, selectedWorkerId, workspace]);
+
+  const refreshDirectory = async () => {
+    await Promise.all([workspaceQuery.refetch(), auxQuery.refetch()]);
+  };
 
   const cacheSignal = useStaffCacheSignal();
   useEffect(() => {
-    if (!user?.id || cacheSignal === 0) return;
-    const timer = setTimeout(async () => {
-      const workspace = await fetchCachedStaffWorkspace(user as UserRecord);
-      if (workspace) {
-        setWorkers(workspace.workers);
-        setManagedFactoryIds(workspace.managedFactoryIds);
-      }
+    if (!viewer?.id || cacheSignal === 0) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void Promise.all([fetchCachedStaffWorkspace(viewer), readCachedAuxData()])
+        .then(([cachedWorkspace, cachedAux]) => {
+          if (cancelled) return;
+          if (cachedWorkspace) {
+            queryClient.setQueryData(staffWorkspaceQueryKey(viewer), cachedWorkspace);
+          }
+          if (cachedAux) {
+            queryClient.setQueryData(staffDirectoryAuxQueryKey(viewer), cachedAux);
+          }
+        })
+        .catch((error) => console.warn("[staff-directory] cache signal refresh failed", error));
     }, 150);
-    return () => clearTimeout(timer);
-  }, [cacheSignal, user]);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [cacheSignal, queryClient, viewer]);
+
+  const loading = !workspace && workspaceQuery.isPending;
+  const initialError = !workspace && workspaceQuery.isError;
+  const refreshing = Boolean(workspace && (workspaceQuery.isFetching || auxQuery.isFetching));
+  const showingCachedError = Boolean(workspace && (workspaceQuery.isError || auxQuery.isError));
 
   const isAllMode = mode === "all";
 
@@ -469,17 +559,55 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
         </button>
       )}
 
-      <StaffWorkerDirectory
-        workers={workers}
-        viewer={(user as UserRecord | null) ?? null}
-        loading={loading}
-        mode={mode}
-        onSelectWorker={openWorker}
-      />
+      {refreshing && (
+        <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-card/70 px-3 py-2 text-xs text-muted-foreground">
+          <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
+          Đang đồng bộ danh sách lao động...
+        </div>
+      )}
+
+      {showingCachedError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
+          <span className="min-w-0">
+            Đang hiển thị dữ liệu đã lưu. Chưa thể đồng bộ dữ liệu mới.
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 shrink-0 rounded-full"
+            onClick={() => void refreshDirectory()}
+          >
+            Thử lại
+          </Button>
+        </div>
+      )}
+
+      {initialError ? (
+        <EmptyState
+          icon={WifiOff}
+          title="Không tải được danh sách lao động"
+          description="Thiết bị chưa có dữ liệu đã lưu và hiện không thể kết nối PocketBase."
+          action={
+            <Button type="button" className="rounded-full" onClick={() => void refreshDirectory()}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Thử lại
+            </Button>
+          }
+        />
+      ) : (
+        <StaffWorkerDirectory
+          workers={workers}
+          viewer={viewer}
+          loading={loading}
+          mode={mode}
+          onSelectWorker={openWorker}
+        />
+      )}
 
       <WorkerEmploymentDrawer
         user={selected?.user ?? null}
-        actor={(user as UserRecord | null) ?? null}
+        actor={viewer}
         histories={selected?.histories ?? []}
         factories={factories}
         mainHouses={mainHouses}
@@ -487,7 +615,7 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
         managedFactoryIds={managedFactoryIds}
         permissions={{
           canEditHistory: selected?.canEditHistory ?? false,
-          canAddOldHistory: user?.role === "admin",
+          canAddOldHistory: viewer?.role === "admin",
           canReportAdvance: selected?.canReportAdvance ?? false,
           canUpdateBank: selected?.canUpdateBank ?? false,
           canReportLeave: selected?.canReportLeave ?? false,
@@ -496,7 +624,7 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
         }}
         open={drawerOpen}
         onClose={closeDrawer}
-        onDataChanged={loadWorkers}
+        onDataChanged={refreshDirectory}
       />
 
       {isAllMode && (
@@ -504,25 +632,25 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
           <QuickWorkerAccountDialog
             open={quickCreateOpen}
             onOpenChange={setQuickCreateOpen}
-            actor={(user as UserRecord | null) ?? null}
+            actor={viewer}
             factories={factories}
             mainHouses={mainHouses}
             staffUsers={staffUsers}
             onCreated={async (userId) => {
-              await loadWorkers();
+              await refreshDirectory();
               navigate({ to: "/staff/workers/$workerId", params: { workerId: userId } });
             }}
           />
 
           <RegisterDialog
             open={registerOpen}
-            actor={(user as UserRecord | null) ?? null}
+            actor={viewer}
             onClose={() => setRegisterOpen(false)}
             users={staffUsers}
             factories={factories}
             mainHouses={mainHouses}
-            onCreated={loadWorkers}
-            defaultRecruiterId={user?.id || ""}
+            onCreated={refreshDirectory}
+            defaultRecruiterId={viewer?.id || ""}
             actorRoleLabel="Nhân sự"
           />
         </>

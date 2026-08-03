@@ -1,8 +1,14 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { pb, type UserRecord } from "./pocketbase";
 import { getPBUpstream } from "./pocketbase-config";
 import { clearStaffCache } from "./staff-cache";
 import { stopStaffRealtimeSync } from "./realtime-sync";
+import {
+  STAFF_DIRECTORY_AUX_QUERY_ROOT,
+  STAFF_DIRECTORY_STATE_PREFIX,
+  STAFF_WORKSPACE_QUERY_ROOT,
+} from "./staff-workspace-query";
 
 interface AuthCtx {
   user: UserRecord | null;
@@ -47,6 +53,7 @@ function refreshAuthOnce() {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<UserRecord | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -101,10 +108,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     pb.authStore.clear();
+    queryClient.removeQueries({ queryKey: STAFF_WORKSPACE_QUERY_ROOT });
+    queryClient.removeQueries({ queryKey: STAFF_DIRECTORY_AUX_QUERY_ROOT });
+    if (typeof window !== "undefined") {
+      for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+        const key = window.sessionStorage.key(index);
+        if (key?.startsWith(STAFF_DIRECTORY_STATE_PREFIX)) {
+          window.sessionStorage.removeItem(key);
+        }
+      }
+    }
     stopStaffRealtimeSync()
       .catch((error) => console.warn("[auth] stopRealtime failed", error))
       .finally(() => clearStaffCache());
-  }, []);
+  }, [queryClient]);
 
   const refresh = useCallback(async () => {
     if (pb.authStore.isValid) {
