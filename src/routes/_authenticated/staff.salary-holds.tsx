@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/lib/auth";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import {
   fetchCachedStaffWorkspace,
@@ -55,6 +56,8 @@ function SalaryHoldsPage() {
   const [search, setSearch] = useState("");
   const [factoryIds, setFactoryIds] = useState<Set<string>>(new Set());
   const [factorySearch, setFactorySearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
+  const debouncedFactorySearch = useDebouncedSearch(factorySearch);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detail, setDetail] = useState<SalaryHoldRecord | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -119,14 +122,16 @@ function SalaryHoldsPage() {
       rows.filter((row) => {
         if (tab !== "all" && row.status !== tab) return false;
         if (
-          search.trim() &&
-          !row.worker_name.toLocaleLowerCase("vi").includes(search.trim().toLocaleLowerCase("vi"))
+          debouncedSearch.trim() &&
+          !row.worker_name
+            .toLocaleLowerCase("vi")
+            .includes(debouncedSearch.trim().toLocaleLowerCase("vi"))
         )
           return false;
         if (factoryIds.size && !factoryIds.has(row.factory)) return false;
         return true;
       }),
-    [factoryIds, rows, search, tab],
+    [debouncedSearch, factoryIds, rows, tab],
   );
   const selectedWorker = workers.find((worker) => worker.user.id === selectedWorkerId) || null;
   const receivedRows = filtered.filter((row) => row.status === "received");
@@ -261,10 +266,10 @@ function SalaryHoldsPage() {
                   {factories
                     .filter(
                       (f) =>
-                        !factorySearch.trim() ||
+                        !debouncedFactorySearch.trim() ||
                         f.name
                           .toLocaleLowerCase("vi")
-                          .includes(factorySearch.trim().toLocaleLowerCase("vi")),
+                          .includes(debouncedFactorySearch.trim().toLocaleLowerCase("vi")),
                     )
                     .map((factory) => (
                       <label key={factory.id} className="flex items-center gap-2 text-sm">

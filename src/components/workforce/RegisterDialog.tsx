@@ -277,7 +277,6 @@ export function RegisterDialog({
         recruiter_staff: recruiterId,
         cccd_version: cccdVersionId,
         join_date: joinDate,
-        status: "working",
         note: note.trim() || undefined,
       });
       await createStaffActionLog({

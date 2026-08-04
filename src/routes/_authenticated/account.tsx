@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { pb, type Role, type UserRecord, dataUrlToFile, fileUrl } from "@/lib/pocketbase";
 import { generateUid } from "@/lib/uid";
 import {
@@ -526,6 +527,7 @@ function AdminUsersPanel() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [guideOpen, setGuideOpen] = useState(false);
   const [guide, setGuide] = useState({ title: "", content: "" });
@@ -574,7 +576,7 @@ function AdminUsersPanel() {
     setLoading(true);
     try {
       const res = await pb.collection("users").getList(1, 500, {
-        filter: buildUserSearchFilter(search, me?.id ? `id!="${escapePb(me.id)}"` : ""),
+        filter: buildUserSearchFilter(debouncedSearch, me?.id ? `id!="${escapePb(me.id)}"` : ""),
         sort: "-created",
       });
       setUsers(res.items);
@@ -597,7 +599,7 @@ function AdminUsersPanel() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, me?.id]);
+  }, [debouncedSearch, me?.id]);
 
   const filtered = users;
 
@@ -2342,6 +2344,7 @@ function StaffPanel() {
   const { user: currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [assignmentCounts, setAssignmentCounts] = useState<Record<string, number>>({});
@@ -2356,7 +2359,7 @@ function StaffPanel() {
         pb
           .collection("users")
           .getList<UserRecord>(1, 500, {
-            filter: staffSearchFilter(search),
+            filter: staffSearchFilter(debouncedSearch),
             sort: "full_name,username",
           })
           .then((res) => res.items),
@@ -2381,7 +2384,8 @@ function StaffPanel() {
 
   useEffect(() => {
     load();
-  }, [search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch]);
 
   const summary = useMemo(
     () => ({
@@ -2874,6 +2878,7 @@ function FactoryAssignmentsPanel() {
   const { user: currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [assignments, setAssignments] = useState<FactoryManagerRecord[]>([]);
@@ -2888,7 +2893,7 @@ function FactoryAssignmentsPanel() {
         pb
           .collection("users")
           .getList<UserRecord>(1, 200, {
-            filter: buildUserSearchFilter(search, `role="staff"`),
+            filter: buildUserSearchFilter(debouncedSearch, `role="staff"`),
             sort: "full_name,username",
           })
           .then((res) => res.items),
@@ -2908,7 +2913,7 @@ function FactoryAssignmentsPanel() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [debouncedSearch]);
 
   const assignmentsByStaff = useMemo(() => {
     const map = new Map<string, FactoryManagerRecord[]>();

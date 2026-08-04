@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { pb, fileUrl } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { escapePb } from "@/lib/delegations";
 import { markSeen } from "@/lib/seen";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -301,6 +302,7 @@ function NewsPage() {
   const [detail, setDetail] = useState<Recruitment | null>(null);
   const [editing, setEditing] = useState<Recruitment | null>(null);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [filter, setFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
   const [employmentTypeFilter, setEmploymentTypeFilter] = useState("all");
@@ -315,7 +317,7 @@ function NewsPage() {
       const res = await pb.collection("recruitments").getList(1, 200, {
         filter: buildRecruitmentFilter({
           isAdmin,
-          search,
+          search: debouncedSearch,
           gender: filter,
           area: areaFilter,
           employmentType: employmentTypeFilter,
@@ -342,7 +344,7 @@ function NewsPage() {
     load();
   }, [
     isAdmin,
-    search,
+    debouncedSearch,
     filter,
     areaFilter,
     employmentTypeFilter,

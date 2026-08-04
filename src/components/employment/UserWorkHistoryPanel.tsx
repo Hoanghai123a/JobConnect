@@ -17,7 +17,12 @@ import {
 import { useAuth } from "@/lib/auth";
 import { fileUrl } from "@/lib/pocketbase";
 import type { CccdVersionRecord } from "@/lib/cccd-versions";
-import { fetchEmploymentHistories, maskCccd, type EmploymentHistoryRecord } from "@/lib/employment";
+import {
+  fetchEmploymentHistories,
+  isCurrentlyWorking,
+  maskCccd,
+  type EmploymentHistoryRecord,
+} from "@/lib/employment";
 
 function SnapshotRow({ label, value }: { label: string; value?: string }) {
   return (
@@ -146,7 +151,7 @@ export function UserWorkHistoryPanel() {
   }, [user?.id]);
 
   const activeHistory = useMemo(
-    () => histories.find((item) => item.status === "working" && !item.leave_date) || null,
+    () => histories.find((item) => isCurrentlyWorking(item)) || null,
     [histories],
   );
 
@@ -203,8 +208,8 @@ export function UserWorkHistoryPanel() {
                     Nhà chính: {history.expand?.main_house?.name || "Chưa gán"}
                   </div>
                 </div>
-                <StatusChip tone={history.status === "working" ? "success" : "neutral"}>
-                  {history.status === "working" ? "Đang làm" : "Đã nghỉ"}
+                <StatusChip tone={isCurrentlyWorking(history) ? "success" : "neutral"}>
+                  {isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ"}
                 </StatusChip>
               </div>
               <div className="grid grid-cols-2 gap-2 text-sm">

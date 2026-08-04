@@ -1,0 +1,14 @@
+﻿import sharp from "sharp";
+import jsQR from "jsqr";
+import { build } from "esbuild";
+import { rmSync } from "node:fs";
+const file="C:/Users/admin/Pictures/CCCD HL/5.jpg";
+const out="./.qr-parse-check.mjs";
+await build({entryPoints:["src/lib/cccd-qr.ts"],bundle:true,format:"esm",platform:"neutral",mainFields:["module","main"],outfile:out,logLevel:"silent"});
+const mod=await import("./.qr-parse-check.mjs?v="+Date.now());
+const {data,info}=await sharp(file).extract({left:859,top:39,width:216,height:203}).resize(900,846,{kernel:"lanczos3"}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+const result=jsQR(new Uint8ClampedArray(data),info.width,info.height,{inversionAttempts:"attemptBoth"});
+console.log("jsQR_detected=",Boolean(result?.data));
+console.log("cccd_parser_ok=",Boolean(result?.data && mod.parseCccdQrText(result.data)));
+console.log("field_count_valid=",Boolean(result?.data && result.data.split("|").length>=6));
+rmSync(out,{force:true});

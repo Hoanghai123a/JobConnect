@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import {
   fetchCachedStaffWorkspace,
   fetchStaffWorkspace,
@@ -104,6 +105,7 @@ function NotebookPage() {
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [catFilter, setCatFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -165,8 +167,8 @@ function NotebookPage() {
       if (dateTo) {
         parts.push(`date<="${dateTo} 23:59:59"`);
       }
-      if (search.trim()) {
-        const q = escapePb(search.trim());
+      if (debouncedSearch.trim()) {
+        const q = escapePb(debouncedSearch.trim());
         parts.push(`(other_person~"${q}" || worker.full_name~"${q}" || note~"${q}")`);
       }
 
@@ -182,7 +184,7 @@ function NotebookPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, statusTab, catFilter, dateFrom, dateTo, search]);
+  }, [user?.id, statusTab, catFilter, dateFrom, dateTo, debouncedSearch]);
 
   const loadWorkers = useCallback(async () => {
     if (!isStaffOrAdmin || !user) return;

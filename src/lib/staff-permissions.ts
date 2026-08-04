@@ -1,6 +1,7 @@
 import { pb, type UserRecord } from "./pocketbase";
 import {
   getLatestEmploymentHistory,
+  isCurrentlyWorking,
   isHistoryWithinLast90Days,
   type EmploymentHistoryRecord,
 } from "./employment";
@@ -80,7 +81,7 @@ export function buildScopedHistoryFilter(viewer: UserRecord, managedFactoryIds: 
   tomorrow.setDate(tomorrow.getDate() + 1);
   const scopeFilter = [
     `join_date < "${toDateOnly(tomorrow)}"`,
-    `(status="working" || leave_date >= "${toDateOnly(windowStart)}")`,
+    `(leave_date="" || leave_date >= "${toDateOnly(windowStart)}")`,
   ].join(" && ");
 
   if (viewer.role === "admin") return scopeFilter;
@@ -114,7 +115,7 @@ export function hasActiveOrRecentlyLeftEmployment(
   histories: EmploymentHistoryRecord[],
   referenceDate = new Date(),
 ) {
-  if (histories.some((history) => history.status === "working" && !history.leave_date)) {
+  if (histories.some((history) => isCurrentlyWorking(history, referenceDate))) {
     return true;
   }
 
@@ -241,7 +242,7 @@ function hasRecentEmployment(userHistories: EmploymentHistoryRecord[]): boolean 
   sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180);
 
   for (const h of userHistories) {
-    if (h.status === "working" && !h.leave_date) return true;
+    if (isCurrentlyWorking(h)) return true;
     if (h.leave_date) {
       const leaveDate = new Date(h.leave_date);
       if (!Number.isNaN(leaveDate.getTime()) && leaveDate >= sixMonthsAgo) return true;
@@ -273,7 +274,7 @@ function isWorkerInStaffScope(
   const latestManaged = managedHistories[0];
   if (!latestManaged) return false;
 
-  if (!latestManaged.leave_date) return true;
+  if (isCurrentlyWorking(latestManaged)) return true;
 
   const leaveDate = new Date(latestManaged.leave_date);
   return !Number.isNaN(leaveDate.getTime()) && leaveDate >= sixMonthsAgo;
@@ -318,8 +319,7 @@ function buildWorkspace(
       const visibleHistories = userHistories;
 
       const latestHistory = getLatestEmploymentHistory(visibleHistories);
-      const activeHistory =
-        visibleHistories.find((item) => item.status === "working" && !item.leave_date) || null;
+      const activeHistory = visibleHistories.find((item) => isCurrentlyWorking(item)) || null;
       const recentRecruiter = isRecentRecruiter(viewer, visibleHistories);
       const reasons = new Set<StaffVisibilityReason>();
       for (const history of visibleHistories) {

@@ -10,7 +10,7 @@ import { normalizeDate } from "./date-utils";
 export type EmploymentStatus = "working" | "left";
 
 export function deriveEmploymentStatus(
-  history: { leave_date?: string | null; status?: EmploymentStatus | null },
+  history: { leave_date?: string | null },
   referenceDate: Date = new Date(),
 ): EmploymentStatus {
   if (history.leave_date) {
@@ -26,11 +26,11 @@ export function deriveEmploymentStatus(
     }
   }
 
-  return history.status === "left" ? "left" : "working";
+  return "working";
 }
 
 export function isCurrentlyWorking(
-  history: { leave_date?: string | null; status?: EmploymentStatus | null },
+  history: { leave_date?: string | null },
   referenceDate: Date = new Date(),
 ): boolean {
   return deriveEmploymentStatus(history, referenceDate) === "working";
@@ -128,7 +128,7 @@ export interface EmploymentDraft {
   cccd_version?: string;
   join_date: string;
   leave_date?: string;
-  status: EmploymentStatus;
+  status?: EmploymentStatus;
   note?: string;
 }
 
@@ -344,8 +344,7 @@ export function getEmploymentHistoryAtDate(
       .filter((history) => {
         const joinDay = historyDate(history.join_date);
         if (!joinDay || joinDay > referenceDay) return false;
-        const leaveDay = historyDate(history.leave_date);
-        return !leaveDay || leaveDay > referenceDay;
+        return isCurrentlyWorking(history, referenceDay);
       })
       .sort((a, b) => {
         const joinDiff =
@@ -389,6 +388,7 @@ export async function findActiveEmploymentByUser(userId: string) {
 
 export async function createEmploymentHistory(draft: EmploymentDraft, opts?: { uid?: string }) {
   const normalizedDraft = normalizeEmploymentPayload(draft);
+  normalizedDraft.status = deriveEmploymentStatus(normalizedDraft);
   const missingFields = getMissingEmploymentSnapshotFields(normalizedDraft);
   if (missingFields.length) {
     throw new Error(`Thiếu thông tin cá nhân của lịch sử đi làm: ${missingFields.join(", ")}.`);
@@ -407,6 +407,10 @@ export async function createEmploymentHistory(draft: EmploymentDraft, opts?: { u
 
 export async function updateEmploymentHistory(id: string, payload: Partial<EmploymentDraft>) {
   const normalizedPayload = normalizeEmploymentPayload(payload);
+  if (Object.prototype.hasOwnProperty.call(payload, "leave_date")) {
+    normalizedPayload.leave_date = normalizedPayload.leave_date || "";
+    normalizedPayload.status = deriveEmploymentStatus(normalizedPayload);
+  }
   const record = (await pb.collection("employment_histories").update(id, normalizedPayload, {
     expand: "user,factory,recruiter_staff,cccd_version",
   })) as unknown as EmploymentHistoryRecord;
@@ -420,7 +424,6 @@ export async function restoreEmploymentHistoryToWorking(
   return updateEmploymentHistory(id, {
     ...payload,
     leave_date: "",
-    status: "working",
   });
 }
 
@@ -439,7 +442,6 @@ export function maskCccd(cccd?: string | null) {
 
 export interface RegisterableUserHistory {
   user: string;
-  status?: string;
   leave_date?: string;
 }
 
@@ -450,7 +452,7 @@ export async function fetchRegisterableUsers(opts: { includeLongLeft?: boolean }
       sort: "full_name,username",
     }),
     pb.collection("employment_histories").getFullList<RegisterableUserHistory>({
-      fields: "user,status,leave_date",
+      fields: "user,leave_date",
     }),
   ]);
 

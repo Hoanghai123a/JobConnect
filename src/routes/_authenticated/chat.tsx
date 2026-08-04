@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { markSeen, getSeen } from "@/lib/seen";
 import { Card } from "@/components/ui/card";
@@ -118,6 +119,7 @@ function GroupChatPage() {
   const [meFresh, setMeFresh] = useState<ChatUser | null>(null);
   const [roomsLoading, setRoomsLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [pendingRequests, setPendingRequests] = useState<JoinRequest[]>([]);
   const [myRequests, setMyRequests] = useState<JoinRequest[]>([]);
   const [showRequestsDialog, setShowRequestsDialog] = useState(false);
@@ -237,14 +239,14 @@ function GroupChatPage() {
   }, [rooms, myMemberRoomIds, isAdmin]);
 
   const searchResults = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     if (!q) return [];
     return rooms.filter(
       (r) =>
         !myMemberRoomIds.has(r.id) &&
         (r.name.toLowerCase().includes(q) || (r.description || "").toLowerCase().includes(q)),
     );
-  }, [search, rooms, myMemberRoomIds]);
+  }, [debouncedSearch, rooms, myMemberRoomIds]);
 
   const openRoom = (room: ChatRoom) => {
     setActiveRoomId(room.id);

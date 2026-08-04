@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { usePwaInstallPrompt } from "@/lib/pwa-install";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
+import { normalizeUserPickerSearch } from "@/components/workforce/UserPicker";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { IosInstallGuideDialog } from "@/components/layout/IosInstallGuideDialog";
 import { FilterBar } from "@/components/ui/filter-bar";
@@ -116,6 +118,8 @@ function MultiSelectDropdown({
   emptyText: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedSearch(query);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const selectedOptions = options.filter((option) => selectedSet.has(option.value));
   const summary =
@@ -132,8 +136,22 @@ function MultiSelectDropdown({
     onChange(Array.from(next));
   };
 
+  const filteredOptions = useMemo(() => {
+    const keyword = normalizeUserPickerSearch(debouncedQuery);
+    if (!keyword) return options;
+    return options.filter((option) =>
+      normalizeUserPickerSearch(`${option.label} ${option.description || ""}`).includes(keyword),
+    );
+  }, [debouncedQuery, options]);
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setQuery("");
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -147,11 +165,11 @@ function MultiSelectDropdown({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[min(calc(100vw-3rem),24rem)] p-0">
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+        <Command shouldFilter={false}>
+          <CommandInput placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
           <CommandList className="max-h-64">
             <CommandEmpty>{emptyText}</CommandEmpty>
-            {options.map((option) => {
+            {filteredOptions.map((option) => {
               const checked = selectedSet.has(option.value);
               return (
                 <CommandItem
@@ -211,6 +229,7 @@ function GuidesPage() {
   const [editing, setEditing] = useState<Guide | null>(null);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [reading, setReading] = useState<Guide | null>(null);
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
   const { installPrompt, installApp: installPwaApp, isAndroid, isIos } = usePwaInstallPrompt();
@@ -380,9 +399,11 @@ function GuidesPage() {
   const filtered = useMemo(
     () =>
       visible.filter(
-        (g) => !search || (g.title + " " + g.content).toLowerCase().includes(search.toLowerCase()),
+        (g) =>
+          !debouncedSearch ||
+          (g.title + " " + g.content).toLowerCase().includes(debouncedSearch.toLowerCase()),
       ),
-    [visible, search],
+    [visible, debouncedSearch],
   );
 
   return (

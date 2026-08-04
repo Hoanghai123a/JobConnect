@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import {
   fetchCachedStaffWorkspace,
   fetchStaffWorkspace,
   type StaffWorkerRecord,
 } from "@/lib/staff-permissions";
 import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
+import { isCurrentlyWorking } from "@/lib/employment";
 import { escapePb } from "@/lib/delegations";
 import {
   type AdvanceRecord,
@@ -340,6 +342,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
   const { data: settings } = useAppSettings();
   const [items, setItems] = useState<AdvanceRecord[]>([]);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [tab, setTab] = useState<AdminTab>("pending");
   const [loading, setLoading] = useState(true);
   const [advanceDetail, setAdvanceDetail] = useState<AdvanceRecord | null>(null);
@@ -350,6 +353,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
   const [loadingWorkers, setLoadingWorkers] = useState(false);
   const [selectedWorkerId, setSelectedWorkerId] = useState("");
   const [workerSearch, setWorkerSearch] = useState("");
+  const debouncedWorkerSearch = useDebouncedSearch(workerSearch);
   const [workerAmountText, setWorkerAmountText] = useState("");
   const [workerReason, setWorkerReason] = useState("");
   const [workerPayoutMethod, setWorkerPayoutMethod] =
@@ -379,9 +383,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
         (worker) =>
           worker.canReportAdvance &&
           (Boolean(settings.allow_advance_after_leave) ||
-            worker.histories.some(
-              (history) => history.status === "working" && !history.leave_date,
-            )),
+            worker.histories.some((history) => isCurrentlyWorking(history))),
       ),
     [settings.allow_advance_after_leave, workers],
   );
@@ -392,7 +394,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
   const workerAvailable = workerPolicy?.available || 0;
 
   const filteredWorkers = useMemo(() => {
-    const keyword = removeVietnameseTone(workerSearch.trim().toLowerCase());
+    const keyword = removeVietnameseTone(debouncedWorkerSearch.trim().toLowerCase());
     if (!keyword) return eligibleWorkers;
     return eligibleWorkers.filter((worker) => {
       const active = getAdvanceHistory(worker, Boolean(settings.allow_advance_after_leave));
@@ -410,7 +412,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
       );
       return haystack.includes(keyword);
     });
-  }, [eligibleWorkers, workerSearch]);
+  }, [debouncedWorkerSearch, eligibleWorkers]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -420,6 +422,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
         isStaff,
         userId: user?.id,
         tab,
+        search: debouncedSearch,
       });
       const res = await pb.collection("advances").getList(1, 300, {
         filter,
@@ -432,7 +435,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
     } finally {
       setLoading(false);
     }
-  }, [isAdmin, isStaff, tab, user?.id]);
+  }, [debouncedSearch, isAdmin, isStaff, tab, user?.id]);
 
   const loadOutstandingStats = useCallback(async () => {
     if (isAdmin || !isStaff || !user?.id) {
@@ -459,6 +462,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
       isAdmin,
       isStaff,
       userId: user?.id,
+      search: debouncedSearch,
     });
     const withBase = (f: string) => joinPbFilters([base, f]);
     const [pending, recruiter_approved, accepted, rejected, all] = await Promise.all([
@@ -469,7 +473,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
       loadAdvanceSummary(base),
     ]);
     setStats((s) => ({ ...s, pending, recruiter_approved, accepted, rejected, all }));
-  }, [isAdmin, isStaff, user?.id]);
+  }, [debouncedSearch, isAdmin, isStaff, user?.id]);
 
   useEffect(() => {
     load();
@@ -2207,9 +2211,7 @@ function WorkerAdvanceCreateDialog({
 }
 
 function getActiveWorkerHistory(worker: StaffWorkerRecord) {
-  return (
-    worker.histories.find((history) => history.status === "working" && !history.leave_date) || null
-  );
+  return worker.histories.find((history) => isCurrentlyWorking(history)) || null;
 }
 
 function getAdvanceHistory(worker: StaffWorkerRecord, allowAfterLeave: boolean) {

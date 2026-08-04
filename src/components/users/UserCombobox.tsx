@@ -3,6 +3,8 @@ import { Check, ChevronDown } from "lucide-react";
 import { userDisplayName } from "@/lib/delegations";
 import type { UserRecord } from "@/lib/pocketbase";
 import { cn } from "@/lib/utils";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
+import { normalizeUserPickerSearch } from "@/components/workforce/UserPicker";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -29,10 +31,28 @@ export function UserCombobox({
   searchPlaceholder?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedSearch(query);
   const selected = useMemo(() => users.find((item) => item.id === value), [users, value]);
 
+  const filteredUsers = useMemo(() => {
+    const keyword = normalizeUserPickerSearch(debouncedQuery);
+    if (!keyword) return users;
+    return users.filter((item) =>
+      normalizeUserPickerSearch(
+        `${item.full_name || ""} ${item.username || ""} ${item.phone || ""}`,
+      ).includes(keyword),
+    );
+  }, [debouncedQuery, users]);
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setQuery("");
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -50,11 +70,11 @@ export function UserCombobox({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[min(calc(100vw-3rem),24rem)] p-0">
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+        <Command shouldFilter={false}>
+          <CommandInput placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
           <CommandList className="max-h-72">
             <CommandEmpty>Không tìm thấy user.</CommandEmpty>
-            {users.map((item) => (
+            {filteredUsers.map((item) => (
               <CommandItem
                 key={item.id}
                 value={`${item.full_name || ""} ${item.username || ""} ${item.phone || ""}`}

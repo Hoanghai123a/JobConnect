@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { useAppSettings, type AppSettings } from "@/lib/app-settings";
 import {
   type AdvanceRecord,
@@ -206,6 +207,7 @@ export function AdvancesPage() {
 
   const [items, setItems] = useState<AdvanceRecord[]>([]);
   const [search, setSearch] = useState(storedFilters.search || "");
+  const debouncedSearch = useDebouncedSearch(search);
   const [tab, setTab] = useState<AdminTab>(storedFilters.tab || "pending");
   const [showProfile, setShowProfile] = useState(false);
   const [sending, setSending] = useState(false);
@@ -355,7 +357,7 @@ export function AdvancesPage() {
         tab: isAdmin || isStaff ? tab : undefined,
         dateFrom,
         dateTo,
-        search,
+        search: debouncedSearch,
         factoryName: isAdmin ? selectedFactoryName : "",
         disbursed: isAdmin ? disbursementFilter : "all",
       });
@@ -396,7 +398,7 @@ export function AdvancesPage() {
     handleAdvancesFilterError,
     isAdmin,
     isStaff,
-    search,
+    debouncedSearch,
     selectedFactoryName,
     tab,
     user?.id,
@@ -409,7 +411,7 @@ export function AdvancesPage() {
       userId: user?.id,
       dateFrom,
       dateTo,
-      search,
+      search: debouncedSearch,
       factoryName: isAdmin ? selectedFactoryName : "",
       disbursed: isAdmin ? disbursementFilter : "all",
     });
@@ -447,7 +449,7 @@ export function AdvancesPage() {
     handleAdvancesFilterError,
     isAdmin,
     isStaff,
-    search,
+    debouncedSearch,
     selectedFactoryName,
     user?.id,
   ]);
@@ -488,7 +490,7 @@ export function AdvancesPage() {
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [dateFrom, dateTo, disbursementFilter, factoryFilter, search, tab]);
+  }, [dateFrom, dateTo, disbursementFilter, factoryFilter, debouncedSearch, tab]);
 
   const limit = advancePolicy?.limit || 0;
   const outstanding = advancePolicy?.outstanding || 0;

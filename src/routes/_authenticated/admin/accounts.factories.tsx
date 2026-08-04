@@ -1,5 +1,6 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import {
   ArrowLeft,
   Building2,
@@ -78,6 +79,7 @@ function AccountStaffFactoriesPage() {
   const currentUser = pb.authStore.record as UserRecord;
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [assignments, setAssignments] = useState<FactoryManagerRecord[]>([]);
@@ -92,7 +94,7 @@ function AccountStaffFactoriesPage() {
         pb
           .collection("users")
           .getList<UserRecord>(1, 200, {
-            filter: staffSearchFilter(search),
+            filter: staffSearchFilter(debouncedSearch),
             sort: "full_name,username",
           })
           .then((res) => res.items),
@@ -112,7 +114,7 @@ function AccountStaffFactoriesPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [debouncedSearch]);
 
   const assignmentsByStaff = useMemo(() => {
     const map = new Map<string, FactoryManagerRecord[]>();

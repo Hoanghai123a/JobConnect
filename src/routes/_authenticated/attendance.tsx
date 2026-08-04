@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { ResponsiveOverlay } from "@/components/layout/ResponsiveOverlay";
@@ -97,6 +98,7 @@ function AdminAttendance() {
   const [employmentHistories, setEmploymentHistories] = useState<EmploymentHistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [detailUser, setDetailUser] = useState<any | null>(null);
 
   const fetchMonth = async () => {
@@ -160,8 +162,8 @@ function AdminAttendance() {
     )?.expand?.factory?.name || "";
 
   const filtered = useMemo(() => {
-    if (!search) return grouped;
-    const q = search.toLowerCase();
+    if (!debouncedSearch) return grouped;
+    const q = debouncedSearch.toLowerCase();
     return grouped.filter(({ user, rows: userRows }) =>
       [
         user.full_name,
@@ -172,7 +174,7 @@ function AdminAttendance() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q)),
     );
-  }, [grouped, search, employmentHistories]);
+  }, [grouped, debouncedSearch, employmentHistories]);
 
   const totals = useMemo(() => {
     let hc = 0,

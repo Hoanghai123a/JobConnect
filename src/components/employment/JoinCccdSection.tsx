@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { IdCard, LoaderCircle, RefreshCw, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Camera, IdCard, LoaderCircle, RefreshCw, ScanLine, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DateInput } from "@/components/ui/date-input";
@@ -14,7 +14,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { displayDateToPocketBase, scanCccdQrFromFile, type CccdQrData } from "@/lib/cccd-qr";
+import { CccdQrScanFeedbackDialog } from "@/components/cccd/CccdQrScanFeedbackDialog";
+import {
+  displayDateToPocketBase,
+  scanCccdQrFromFileDetailed,
+  type CccdQrData,
+  type CccdQrScanFailureReason,
+} from "@/lib/cccd-qr";
 
 export type JoinCccdFields = {
   worker_name_snapshot: string;
@@ -40,6 +46,14 @@ type QrConfirmDraft = {
   address: string;
 };
 
+type ScanSide = "front" | "back";
+
+type FailureState = {
+  reason: Exclude<CccdQrScanFailureReason, "cancelled">;
+  side: ScanSide;
+  file: File;
+};
+
 export function JoinCccdSection({
   value,
   onChange,
@@ -62,6 +76,8 @@ export function JoinCccdSection({
   locationField?: LocationField;
 }) {
   const [scanning, setScanning] = useState(false);
+  const [progressText, setProgressText] = useState("");
+  const [failure, setFailure] = useState<FailureState | null>(null);
   const locationLabel = locationField?.label || "Địa chỉ thường trú";
   const locationValue =
     locationField?.value ?? value.worker_address_snapshot ?? value.hometown_snapshot ?? "";
@@ -78,8 +94,64 @@ export function JoinCccdSection({
   };
   const [confirmDraft, setConfirmDraft] = useState<QrConfirmDraft | null>(null);
   const scanSequence = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const frontCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const frontLibraryInputRef = useRef<HTMLInputElement | null>(null);
+  const backCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const backLibraryInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleImagePick = async (file: File | null, side: "front" | "back") => {
+  const cancelActiveScan = useCallback(() => {
+    scanSequence.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setScanning(false);
+    setProgressText("");
+  }, []);
+
+  useEffect(() => cancelActiveScan, [cancelActiveScan]);
+
+  const runScan = useCallback(
+    async (file: File, side: ScanSide, mode: "auto" | "full") => {
+      cancelActiveScan();
+      const sequence = ++scanSequence.current;
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setScanning(true);
+      setProgressText("Đang chuẩn bị ảnh CCCD…");
+
+      try {
+        const result = await scanCccdQrFromFileDetailed(file, {
+          mode,
+          signal: controller.signal,
+          onProgress: (stage) => {
+            if (sequence === scanSequence.current) setProgressText(stage.message);
+          },
+        });
+        if (sequence !== scanSequence.current) return;
+
+        if (result.status === "success") {
+          setFailure(null);
+          setConfirmDraft(toQrConfirmDraft(result.data));
+          return;
+        }
+        if (result.reason === "cancelled") return;
+        setFailure({ reason: result.reason, side, file });
+      } catch {
+        if (sequence === scanSequence.current) {
+          setFailure({ reason: "not_found", side, file });
+        }
+      } finally {
+        if (sequence === scanSequence.current) {
+          abortRef.current = null;
+          setScanning(false);
+          setProgressText("");
+        }
+      }
+    },
+    [cancelActiveScan],
+  );
+
+  const handleImagePick = async (file: File | null, side: ScanSide) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       toast.error(`Vui lòng chọn ảnh CCCD ${side === "front" ? "mặt trước" : "mặt sau"}`);
@@ -89,23 +161,8 @@ export function JoinCccdSection({
     if (side === "front") onFrontFileChange(file);
     else onBackFileChange(file);
 
-    const sequence = ++scanSequence.current;
-    setScanning(true);
-    try {
-      const data = await scanCccdQrFromFile(file);
-      if (sequence !== scanSequence.current) return;
-      if (!data) {
-        toast.warning("Không đọc được mã QR, vui lòng nhập tay thông tin CCCD");
-        return;
-      }
-      setConfirmDraft(toQrConfirmDraft(data));
-    } catch {
-      if (sequence === scanSequence.current) {
-        toast.warning("Không đọc được mã QR, vui lòng nhập tay thông tin CCCD");
-      }
-    } finally {
-      if (sequence === scanSequence.current) setScanning(false);
-    }
+    setFailure(null);
+    await runScan(file, side, "auto");
   };
 
   const handleFrontPick = (file: File | null) => handleImagePick(file, "front");
@@ -173,7 +230,8 @@ export function JoinCccdSection({
             <Label className="text-xs font-semibold">Ảnh CCCD (tùy chọn)</Label>
             {scanning && (
               <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> Đang đọc mã QR…
+                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                {progressText || "Đang đọc mã QR…"}
               </span>
             )}
           </div>
@@ -182,10 +240,14 @@ export function JoinCccdSection({
               label="Mặt trước"
               file={frontFile}
               existingUrl={frontImageUrl}
+              scanning={scanning}
+              cameraInputRef={frontCameraInputRef}
+              libraryInputRef={frontLibraryInputRef}
               onPick={handleFrontPick}
+              onRescan={() => frontFile && runScan(frontFile, "front", "full")}
               onClear={() => {
-                scanSequence.current += 1;
-                setScanning(false);
+                cancelActiveScan();
+                setFailure(null);
                 onFrontFileChange(null);
               }}
             />
@@ -193,20 +255,50 @@ export function JoinCccdSection({
               label="Mặt sau"
               file={backFile}
               existingUrl={backImageUrl}
+              scanning={scanning}
+              cameraInputRef={backCameraInputRef}
+              libraryInputRef={backLibraryInputRef}
               onPick={handleBackPick}
+              onRescan={() => backFile && runScan(backFile, "back", "full")}
               onClear={() => {
-                scanSequence.current += 1;
-                setScanning(false);
+                cancelActiveScan();
+                setFailure(null);
                 onBackFileChange(null);
               }}
             />
           </div>
           <p className="text-[11px] leading-4 text-muted-foreground">
-            Chọn ảnh có mã QR ở mặt trước hoặc mặt sau để tự đọc thông tin. Dữ liệu chỉ được điền
-            sau khi bạn xác nhận.
+            Chụp hoặc chọn ảnh có mã QR ở mặt trước hoặc mặt sau để tự đọc thông tin. Dữ liệu chỉ
+            được điền sau khi bạn xác nhận.
           </p>
         </div>
       </div>
+
+      {failure && (
+        <CccdQrScanFeedbackDialog
+          open
+          reason={failure.reason}
+          scanning={scanning}
+          progressText={progressText}
+          onRetry={() => void runScan(failure.file, failure.side, "full")}
+          onCapture={() => {
+            const input =
+              failure.side === "front" ? frontCameraInputRef.current : backCameraInputRef.current;
+            setFailure(null);
+            input?.click();
+          }}
+          onChooseImage={() => {
+            const input =
+              failure.side === "front" ? frontLibraryInputRef.current : backLibraryInputRef.current;
+            setFailure(null);
+            input?.click();
+          }}
+          onDismiss={() => {
+            cancelActiveScan();
+            setFailure(null);
+          }}
+        />
+      )}
 
       <Dialog
         open={Boolean(confirmDraft)}
@@ -315,13 +407,21 @@ function CccdFileSlot({
   label,
   file,
   existingUrl,
+  scanning,
+  cameraInputRef,
+  libraryInputRef,
   onPick,
+  onRescan,
   onClear,
 }: {
   label: string;
   file: File | null;
   existingUrl?: string;
+  scanning: boolean;
+  cameraInputRef: React.RefObject<HTMLInputElement | null>;
+  libraryInputRef: React.RefObject<HTMLInputElement | null>;
   onPick: (file: File | null) => void | Promise<void>;
+  onRescan: () => void;
   onClear: () => void;
 }) {
   const filePreview = useFilePreview(file);
@@ -348,35 +448,92 @@ function CccdFileSlot({
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             )}
-            <label className="absolute inset-x-0 bottom-0 flex cursor-pointer items-center justify-center gap-1 bg-gradient-to-t from-black/70 to-transparent px-2 pb-2 pt-6 text-[11px] font-medium text-white">
-              <input
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={(event) => {
-                  void onPick(event.target.files?.[0] || null);
-                  event.target.value = "";
-                }}
-              />
+            <button
+              type="button"
+              onClick={() => libraryInputRef.current?.click()}
+              disabled={scanning}
+              className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-gradient-to-t from-black/70 to-transparent px-2 pb-2 pt-6 text-[11px] font-medium text-white"
+            >
               <RefreshCw className="h-3 w-3" /> Đổi ảnh
-            </label>
+            </button>
           </>
         ) : (
-          <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1 text-muted-foreground">
-            <input
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={(event) => {
-                void onPick(event.target.files?.[0] || null);
-                event.target.value = "";
-              }}
-            />
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-2 text-muted-foreground">
             <IdCard className="h-6 w-6" />
-            <span className="text-[11px] font-medium">Chọn ảnh</span>
-          </label>
+            <div className="grid w-full grid-cols-2 gap-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-8 px-2 text-xs"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={scanning}
+              >
+                <Camera className="h-4 w-4" />
+                Chụp
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-8 px-2 text-xs"
+                onClick={() => libraryInputRef.current?.click()}
+                disabled={scanning}
+              >
+                Thư viện
+              </Button>
+            </div>
+          </div>
         )}
       </div>
+      {file && (
+        <div className="grid grid-cols-2 gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 px-2 text-xs"
+            onClick={onRescan}
+            disabled={scanning}
+            aria-busy={scanning}
+          >
+            <ScanLine className="h-4 w-4" />
+            Quét kỹ lại
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 px-2 text-xs"
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={scanning}
+          >
+            <Camera className="h-4 w-4" />
+            Chụp lại
+          </Button>
+        </div>
+      )}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        hidden
+        onChange={(event) => {
+          void onPick(event.target.files?.[0] || null);
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={libraryInputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(event) => {
+          void onPick(event.target.files?.[0] || null);
+          event.target.value = "";
+        }}
+      />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -48,6 +49,7 @@ function TransportPage() {
   const { user, isAdmin } = useAuth();
   const [items, setItems] = useState<TransportRecord[]>([]);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [carrierName, setCarrierName] = useState("");
   const [title, setTitle] = useState("");
   const [runTime, setRunTime] = useState("");
@@ -60,7 +62,7 @@ function TransportPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const q = escapePb(search.trim());
+      const q = escapePb(debouncedSearch.trim());
       const res = await pb.collection("transport_contacts").getList(1, 200, {
         filter: q
           ? `(${["carrier_name", "title", "run_time", "phone"]
@@ -76,7 +78,7 @@ function TransportPage() {
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     load();

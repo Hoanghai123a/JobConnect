@@ -21,6 +21,8 @@ import {
   WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
+import { normalizeUserPickerSearch } from "@/components/workforce/UserPicker";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -62,8 +64,6 @@ import { useAppSettings } from "@/lib/app-settings";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import type { CccdVersionRecord } from "@/lib/cccd-versions";
 import {
-  createEmploymentHistory,
-  deriveEmploymentStatus,
   fetchEmploymentHistories,
   getLatestEmploymentHistory,
   isCurrentlyWorking,
@@ -136,9 +136,13 @@ function inDateRange(value: string | undefined, from: string, to: string) {
   return t >= fromT && t <= toT;
 }
 
+function endOfDayDate(value: string) {
+  const date = new Date(`${value}T23:59:59.999`);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
 function endOfDayTime(value: string) {
-  const t = new Date(`${value}T23:59:59.999`).getTime();
-  return Number.isNaN(t) ? Date.now() : t;
+  return endOfDayDate(value).getTime();
 }
 
 function historySortTime(history: EmploymentHistoryRecord) {
@@ -164,12 +168,16 @@ function getLatestHistoryAtEndDate(histories: EmploymentHistoryRecord[], to: str
 }
 
 function isWorkingAtEndDate(history: EmploymentHistoryRecord, to: string) {
-  const toT = endOfDayTime(to);
+  const referenceDate = endOfDayDate(to);
   const joinT = new Date(history.join_date).getTime();
-  if (Number.isNaN(joinT) || joinT > toT) return false;
-  if (!history.leave_date) return true;
-  const leaveT = new Date(history.leave_date).getTime();
-  return !Number.isNaN(leaveT) && leaveT > toT;
+  if (Number.isNaN(joinT) || joinT > referenceDate.getTime()) return false;
+  return isCurrentlyWorking(history, referenceDate);
+}
+
+function hasLeftInDateRange(history: EmploymentHistoryRecord, from: string, to: string) {
+  return (
+    !isCurrentlyWorking(history, endOfDayDate(to)) && inDateRange(history.leave_date, from, to)
+  );
 }
 
 function formatDate(value?: string) {
@@ -298,16 +306,14 @@ function WorkforcePage() {
     }
     for (const h of histories) {
       if (inDateRange(h.join_date, from, to)) joined++;
-      if (h.status === "left" && inDateRange(h.leave_date, from, to)) left++;
+      if (hasLeftInDateRange(h, from, to)) left++;
     }
     return { working, joined, left };
   }, [historiesByUser, histories, from, to]);
 
   const filteredHistoriesByDate = useMemo(() => {
     return histories.filter(
-      (h) =>
-        inDateRange(h.join_date, from, to) ||
-        (h.status === "left" && inDateRange(h.leave_date, from, to)),
+      (h) => inDateRange(h.join_date, from, to) || hasLeftInDateRange(h, from, to),
     );
   }, [histories, from, to]);
 
@@ -355,7 +361,7 @@ function WorkforcePage() {
     }
     for (const h of filteredHistoriesForStats) {
       if (inDateRange(h.join_date, from, to)) joined++;
-      if (h.status === "left" && inDateRange(h.leave_date, from, to)) left++;
+      if (hasLeftInDateRange(h, from, to)) left++;
     }
     return { working, joined, left };
   }, [latestByUserForStats, filteredHistoriesForStats, from, to]);
@@ -707,7 +713,7 @@ function RecruitGroups({
         s.joined++;
         map.set(h.factory, s);
       }
-      if (h.status === "left" && inDateRange(h.leave_date, from, to)) {
+      if (hasLeftInDateRange(h, from, to)) {
         const s = map.get(h.factory) || { working: 0, joined: 0, left: 0 };
         s.left++;
         map.set(h.factory, s);
@@ -737,7 +743,7 @@ function RecruitGroups({
         s.joined++;
         map.set(recruiterId, s);
       }
-      if (h.status === "left" && inDateRange(h.leave_date, from, to)) {
+      if (hasLeftInDateRange(h, from, to)) {
         const s = map.get(recruiterId) || { working: 0, joined: 0, left: 0 };
         s.left++;
         map.set(recruiterId, s);
@@ -861,7 +867,7 @@ function collectWorkersForFactory(
         date: h.join_date,
       });
     }
-    if (h.status === "left" && inDateRange(h.leave_date, from, to)) {
+    if (hasLeftInDateRange(h, from, to)) {
       seen.set(`${h.user}:left:${h.id}`, {
         userId: h.user,
         fullName: getWorkerDisplayName(userById.get(h.user)),
@@ -906,7 +912,7 @@ function collectWorkersForRecruiter(
         date: h.join_date,
       });
     }
-    if (h.status === "left" && inDateRange(h.leave_date, from, to)) {
+    if (hasLeftInDateRange(h, from, to)) {
       seen.set(`${h.user}:left:${h.id}`, {
         userId: h.user,
         fullName: getWorkerDisplayName(userById.get(h.user)),
@@ -1059,6 +1065,7 @@ function WorkerList({
   headerSlot?: ReactNode;
 }) {
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [scope, setScope] = useState<ListScope>("all");
   const [page, setPage] = useState(1);
   const listTopRef = useRef<HTMLDivElement>(null);
@@ -1083,7 +1090,7 @@ function WorkerList({
   }, [histories, userById, latestByUser]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     return rows
       .filter(({ user, latest }) => {
         if (!user) return false;
@@ -1119,7 +1126,7 @@ function WorkerList({
         const nameOrder = aName.localeCompare(bName, "vi", { sensitivity: "base" });
         return nameOrder || (a.user?.id || "").localeCompare(b.user?.id || "");
       });
-  }, [rows, search, scope, factoryById]);
+  }, [debouncedSearch, rows, scope, factoryById]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / WORKER_LIST_PAGE_SIZE));
   const pageStart = (page - 1) * WORKER_LIST_PAGE_SIZE;
@@ -1341,6 +1348,8 @@ function MultiSelectFactoryPicker({
   onChange: (ids: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedSearch(query);
   const selectedSet = new Set(selected);
 
   const toggle = (id: string) => {
@@ -1350,6 +1359,14 @@ function MultiSelectFactoryPicker({
       onChange([...selected, id]);
     }
   };
+
+  const filteredItems = useMemo(() => {
+    const keyword = normalizeUserPickerSearch(debouncedQuery);
+    if (!keyword) return factories;
+    return factories.filter((item) =>
+      normalizeUserPickerSearch(`${item.name} ${item.code || ""}`).includes(keyword),
+    );
+  }, [debouncedQuery, factories]);
 
   const label =
     selected.length === 0
@@ -1361,7 +1378,13 @@ function MultiSelectFactoryPicker({
   return (
     <div className="space-y-1">
       <Label className="text-xs">Nhà máy</Label>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setQuery("");
+        }}
+      >
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -1374,12 +1397,12 @@ function MultiSelectFactoryPicker({
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-          <Command>
-            <CommandInput placeholder="Tìm nhà máy..." />
+          <Command shouldFilter={false}>
+            <CommandInput placeholder="Tìm nhà máy..." value={query} onValueChange={setQuery} />
             <CommandList>
               <CommandEmpty>Không tìm thấy.</CommandEmpty>
               <CommandGroup>
-                {factories.map((f) => (
+                {filteredItems.map((f) => (
                   <CommandItem
                     key={f.id}
                     value={`${f.name} ${f.code || ""}`}
@@ -1425,6 +1448,8 @@ function MultiSelectRecruiterPicker({
   onChange: (ids: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedSearch(query);
   const selectedSet = new Set(selected);
 
   const toggle = (id: string) => {
@@ -1434,6 +1459,16 @@ function MultiSelectRecruiterPicker({
       onChange([...selected, id]);
     }
   };
+
+  const filteredItems = useMemo(() => {
+    const keyword = normalizeUserPickerSearch(debouncedQuery);
+    if (!keyword) return users;
+    return users.filter((item) =>
+      normalizeUserPickerSearch(
+        `${item.full_name || ""} ${item.username || ""} ${item.phone || ""}`,
+      ).includes(keyword),
+    );
+  }, [debouncedQuery, users]);
 
   const label =
     selected.length === 0
@@ -1445,7 +1480,13 @@ function MultiSelectRecruiterPicker({
   return (
     <div className="space-y-1">
       <Label className="text-xs">Người tuyển</Label>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setQuery("");
+        }}
+      >
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -1458,12 +1499,12 @@ function MultiSelectRecruiterPicker({
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-          <Command>
-            <CommandInput placeholder="Tìm người tuyển..." />
+          <Command shouldFilter={false}>
+            <CommandInput placeholder="Tìm người tuyển..." value={query} onValueChange={setQuery} />
             <CommandList>
               <CommandEmpty>Không tìm thấy.</CommandEmpty>
               <CommandGroup>
-                {users.map((u) => (
+                {filteredItems.map((u) => (
                   <CommandItem
                     key={u.id}
                     value={`${u.full_name || ""} ${u.username || ""} ${u.phone || ""}`}

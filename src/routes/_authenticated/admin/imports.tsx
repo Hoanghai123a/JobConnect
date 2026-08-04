@@ -24,6 +24,8 @@ import {
   getLatestEmploymentHistory,
   getEmploymentPersonalSnapshot,
   getMissingEmploymentSnapshotFields,
+  getStaleWorkingEmploymentHistories,
+  isCurrentlyWorking,
   updateEmploymentHistory,
   updateUserAndCache,
   buildHistoryUid,
@@ -86,7 +88,6 @@ function AdminImportsPage() {
             "Mã nhà máy mới": "",
             "Ngày vào mới": "",
             "Ngày nghỉ": "",
-            "Trạng thái": "",
             "Họ tên tại thời điểm đi làm": "",
             "CCCD tại thời điểm đi làm": "",
             "Ngày sinh": "",
@@ -327,7 +328,6 @@ function AdminImportsPage() {
         const leaveRaw = row["leave_date"] ?? row["Ngày nghỉ"] ?? "";
         const joinDate = normalizeExcelDate(joinRaw);
         const leaveDate = normalizeExcelDate(leaveRaw);
-        const status = pickValue(row, ["status", "Trạng thái"]);
         const recruiterUsername = pickValue(row, ["recruiter_username", "Người tuyển"]);
         const note = pickValue(row, ["note", "Ghi chú"]);
         const workerName = pickValue(row, [
@@ -393,11 +393,6 @@ function AdminImportsPage() {
         }
         if (joinDate) historyPayload.join_date = joinDate;
         if (leaveDate) historyPayload.leave_date = leaveDate;
-        if (status)
-          historyPayload.status = pickHistoryStatus(
-            status,
-            String(historyPayload.leave_date ?? target.leave_date ?? ""),
-          );
         if (recruiterUsername) {
           const recruiter = staffByUsername.get(accountIdentityKey(recruiterUsername));
           if (!recruiter) {
@@ -414,13 +409,12 @@ function AdminImportsPage() {
           addFailedRow(row, rowNumber, "Ngày nghỉ không thể trước ngày vào");
           continue;
         }
-        const finalStatus = String(historyPayload.status ?? pickHistoryStatus("", finalLeaveDate));
-        if (finalStatus === "working") {
+        if (isCurrentlyWorking({ leave_date: finalLeaveDate || undefined })) {
           const anotherWorkingHistory = allHistories.find(
             (history) =>
               history.user === target!.user &&
               history.id !== target!.id &&
-              pickHistoryStatus(history.status || "", history.leave_date || "") === "working",
+              isCurrentlyWorking(history),
           );
           if (anotherWorkingHistory) {
             addFailedRow(
@@ -506,7 +500,6 @@ function AdminImportsPage() {
             "Người tuyển": "staff01",
             "Ngày vào làm": "01/05/2026",
             "Ngày nghỉ": "",
-            "Trạng thái": "Đang làm",
             "Ghi chú": "Nhập mẫu",
           },
         ],
@@ -538,6 +531,10 @@ function AdminImportsPage() {
         staffUsers.map((item) => [accountIdentityKey(item.username), item]),
       );
       const existingHistories = await fetchEmploymentHistories();
+      for (const history of getStaleWorkingEmploymentHistories(existingHistories)) {
+        const updatedHistory = await updateEmploymentHistory(history.id, { status: "left" });
+        Object.assign(history, updatedHistory);
+      }
       const appSettings = await fetchAppSettings();
       const historyUidPrefix = (appSettings.account_code_prefix || "").trim();
       const importNow = new Date();
@@ -619,7 +616,7 @@ function AdminImportsPage() {
           row["Ngày vào làm"] ?? row["join_date"] ?? row["Ngày vào"],
         );
         const leaveDate = normalizeExcelDate(row["leave_date"] ?? row["Ngày nghỉ"]);
-        const status = pickHistoryStatus(pickValue(row, ["status", "Trạng thái"]), leaveDate);
+        const isWorking = isCurrentlyWorking({ leave_date: leaveDate || undefined });
         const note = pickValue(row, ["note", "Ghi chú"]);
 
         const user =
@@ -671,10 +668,10 @@ function AdminImportsPage() {
         );
         const activeHistory = existingHistories.find(
           (item) =>
-            item.user === user.id && item.status === "working" && item.id !== sameHistory?.id,
+            item.user === user.id && isCurrentlyWorking(item) && item.id !== sameHistory?.id,
         );
 
-        if (status === "working" && activeHistory) {
+        if (isWorking && activeHistory) {
           addFailedRow(
             row,
             rowNumber,
@@ -698,7 +695,6 @@ function AdminImportsPage() {
           recruiter_staff: recruiter?.id || "",
           join_date: joinDate,
           leave_date: leaveDate || undefined,
-          status,
           note,
         };
 
@@ -1045,12 +1041,6 @@ function pickValue(row: Record<string, unknown>, keys: string[]) {
     if (text) return text;
   }
   return "";
-}
-
-function pickHistoryStatus(value: string, leaveDate: string): "working" | "left" {
-  if (value.toLowerCase() === "left" || value.toLowerCase() === "đã nghỉ") return "left";
-  if (leaveDate) return "left";
-  return "working";
 }
 
 function normalizeExcelDate(value: unknown) {

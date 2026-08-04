@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ClipboardList, Landmark, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ export const Route = createFileRoute("/_authenticated/admin/accounts/")({
 function AdminAccountsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [detailUser, setDetailUser] = useState<UserRecord | null>(null);
   const [bankForm, setBankForm] = useState({
@@ -71,7 +73,7 @@ function AdminAccountsPage() {
       const userRows = await pb
         .collection("users")
         .getList<UserRecord>(1, 500, {
-          filter: userSearchFilter(search),
+          filter: userSearchFilter(debouncedSearch),
           sort: "full_name,username",
         })
         .then((res) => res.items);
@@ -86,7 +88,7 @@ function AdminAccountsPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [debouncedSearch]);
 
   const filteredUsers = users;
 

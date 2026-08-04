@@ -1,4 +1,4 @@
-import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/ui/status-chip";
 import { RegisterDialog } from "@/components/workforce/RegisterDialog";
 import { useAuth } from "@/lib/auth";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { isCurrentlyWorking, maskCccd } from "@/lib/employment";
 import type { UserRecord } from "@/lib/pocketbase";
 import { readCachedAuxData } from "@/lib/staff-cache";
@@ -46,6 +47,7 @@ type WorkerScope = "all" | "qlnm" | "nvtd" | "working" | "left";
 const DIRECTORY_PAGE_SIZE = 30;
 const EMPTY_WORKERS: StaffWorkerRecord[] = [];
 const EMPTY_MANAGED_FACTORY_IDS = new Set<string>();
+const EMPTY_FACTORY_NAMES: string[] = [];
 
 interface DirectorySessionState {
   search: string;
@@ -142,6 +144,7 @@ export function StaffWorkerDirectory({
   mode,
   onSelectWorker,
   embedded = false,
+  managedFactoryNames = EMPTY_FACTORY_NAMES,
 }: {
   workers: StaffWorkerRecord[];
   viewer: UserRecord | null;
@@ -149,6 +152,7 @@ export function StaffWorkerDirectory({
   mode: StaffWorkerDirectoryMode;
   onSelectWorker: (worker: StaffWorkerRecord) => void;
   embedded?: boolean;
+  managedFactoryNames?: string[];
 }) {
   const restoredState = useMemo(
     () => readDirectoryState(viewer?.id, mode, embedded),
@@ -159,7 +163,7 @@ export function StaffWorkerDirectory({
   const [visibleCount, setVisibleCount] = useState(restoredState.visibleCount);
   const [autoLoadSupported, setAutoLoadSupported] = useState(true);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  const deferredSearch = useDeferredValue(search);
+  const debouncedSearch = useDebouncedSearch(search);
 
   useEffect(() => {
     if (embedded || !viewer?.id || typeof window === "undefined") return;
@@ -187,7 +191,7 @@ export function StaffWorkerDirectory({
   );
 
   const filteredWorkers = useMemo(() => {
-    const query = deferredSearch.trim().toLocaleLowerCase("vi-VN");
+    const query = debouncedSearch.trim().toLocaleLowerCase("vi-VN");
 
     return indexedWorkers
       .filter(({ worker, searchText }) => {
@@ -221,10 +225,12 @@ export function StaffWorkerDirectory({
         const nameOrder = aName.localeCompare(bName, "vi", { sensitivity: "base" });
         return nameOrder || a.user.id.localeCompare(b.user.id);
       });
-  }, [deferredSearch, indexedWorkers, mode, scope, viewer?.id]);
+  }, [debouncedSearch, indexedWorkers, mode, scope, viewer?.id]);
 
   const visibleWorkers = filteredWorkers.slice(0, visibleCount);
   const canLoadMore = visibleCount < filteredWorkers.length;
+  const showManagedFactoryNames =
+    mode === "all" && scope === "qlnm" && managedFactoryNames.length > 0;
 
   useEffect(() => {
     if (!canLoadMore || !loadMoreRef.current || typeof window === "undefined") return;
@@ -304,9 +310,21 @@ export function StaffWorkerDirectory({
       </div>
 
       <div className="text-xs text-muted-foreground">
-        {mode === "recruited"
-          ? `Đang hiển thị ${Math.min(visibleCount, filteredWorkers.length)}/${filteredWorkers.length} lao động bạn tuyển.`
-          : `Tổng ${filteredWorkers.length} hồ sơ hiển thị trong phạm vi quyền.`}
+        {mode === "recruited" ? (
+          `Đang hiển thị ${Math.min(visibleCount, filteredWorkers.length)}/${filteredWorkers.length} lao động bạn tuyển.`
+        ) : (
+          <>
+            {`Tổng ${filteredWorkers.length} hồ sơ hiển thị trong phạm vi quyền`}
+            {showManagedFactoryNames ? (
+              <>
+                <span className="hidden desktop:inline">{`: ${managedFactoryNames.join(", ")}`}</span>
+                <span className="desktop:hidden">.</span>
+              </>
+            ) : (
+              "."
+            )}
+          </>
+        )}
       </div>
 
       {loading ? (
@@ -427,6 +445,14 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
   const mainHouses = auxData?.mainHouses || [];
   const managedFactoryIds = workspace?.managedFactoryIds ?? EMPTY_MANAGED_FACTORY_IDS;
   const staffUsers = auxData?.staffUsers || [];
+  const managedFactoryNames = useMemo(
+    () =>
+      (auxData?.factories ?? [])
+        .filter((factory) => managedFactoryIds.has(factory.id))
+        .map((factory) => factory.name?.trim())
+        .filter((name): name is string => Boolean(name)),
+    [auxData?.factories, managedFactoryIds],
+  );
   const selected = useMemo(
     () => workers.find((worker) => worker.user.id === selectedWorkerId) || null,
     [selectedWorkerId, workers],
@@ -602,6 +628,7 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
           loading={loading}
           mode={mode}
           onSelectWorker={openWorker}
+          managedFactoryNames={managedFactoryNames}
         />
       )}
 

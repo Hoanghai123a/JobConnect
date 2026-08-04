@@ -20,6 +20,7 @@ import {
   ScanLine,
 } from "lucide-react";
 import { toast } from "sonner";
+import { CccdQrScanFeedbackDialog } from "@/components/cccd/CccdQrScanFeedbackDialog";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -50,7 +51,13 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { findOrCreateCccdVersion } from "@/lib/cccd-versions";
-import { displayDateToPocketBase, scanCccdQrFromFile, type CccdQrData } from "@/lib/cccd-qr";
+import {
+  displayDateToPocketBase,
+  scanCccdQrFromFileDetailed,
+  type CccdQrData,
+  type CccdQrScanFailureReason,
+  type CccdQrScanMode,
+} from "@/lib/cccd-qr";
 import { findUserByUsernameInsensitive, normalizeAccountUsername } from "@/lib/account-identity";
 import { createEmploymentHistory } from "@/lib/employment";
 import type { FactoryRecord } from "@/lib/factories";
@@ -61,6 +68,8 @@ import { updateCachedUser } from "@/lib/staff-cache";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { generateUid } from "@/lib/uid";
 import { cn } from "@/lib/utils";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
+import { normalizeUserPickerSearch } from "@/components/workforce/UserPicker";
 import { resolveBankName, VN_BANKS } from "@/lib/vn-banks";
 
 type QuickWorkerForm = {
@@ -91,6 +100,21 @@ type QuickWorkerEntry = {
   backFile: File | null;
   frontPreview: string;
   backPreview: string;
+};
+
+type QuickScanSide = "front" | "back";
+
+type QuickScanFailure = {
+  entryId: string;
+  side: QuickScanSide;
+  file: File;
+  reason: Exclude<CccdQrScanFailureReason, "cancelled">;
+};
+
+type PendingQrOverwrite = {
+  entryId: string;
+  data: CccdQrData;
+  fields: Array<keyof QuickWorkerForm>;
 };
 
 let quickWorkerEntrySequence = 0;
@@ -195,9 +219,18 @@ export function QuickWorkerAccountDialog({
 }) {
   const [entries, setEntries] = useState<QuickWorkerEntry[]>(() => [createQuickWorkerEntry()]);
   const [scanningEntrySide, setScanningEntrySide] = useState<string | null>(null);
+  const [scanProgress, setScanProgress] = useState("");
+  const [scanFailure, setScanFailure] = useState<QuickScanFailure | null>(null);
+  const [pendingQrOverwrite, setPendingQrOverwrite] = useState<PendingQrOverwrite | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [recordErrors, setRecordErrors] = useState<Record<string, string[]>>({});
   const entriesRef = useRef(entries);
+  const scanSequenceRef = useRef(0);
+  const activeScanRef = useRef<{
+    key: string;
+    sequence: number;
+    controller: AbortController;
+  } | null>(null);
   const frontCameraInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const frontLibraryInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const backCameraInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -207,22 +240,38 @@ export function QuickWorkerAccountDialog({
     entriesRef.current = entries;
   }, [entries]);
 
+  const cancelActiveScan = useCallback((key?: string) => {
+    const active = activeScanRef.current;
+    if (!active || (key && active.key !== key)) return;
+    active.controller.abort();
+    activeScanRef.current = null;
+    setScanningEntrySide((current) => (!key || current === key ? null : current));
+    setScanProgress("");
+  }, []);
+
   const resetFormState = useCallback(() => {
+    cancelActiveScan();
     setEntries((current) => {
       current.forEach(releaseEntryPreviews);
       return [createQuickWorkerEntry()];
     });
     setScanningEntrySide(null);
+    setScanProgress("");
+    setScanFailure(null);
+    setPendingQrOverwrite(null);
     setRecordErrors({});
     setSubmitting(false);
-  }, []);
+  }, [cancelActiveScan]);
 
   useEffect(() => {
     if (!open) resetFormState();
   }, [open, resetFormState]);
 
   useEffect(() => {
-    return () => entriesRef.current.forEach(releaseEntryPreviews);
+    return () => {
+      activeScanRef.current?.controller.abort();
+      entriesRef.current.forEach(releaseEntryPreviews);
+    };
   }, []);
 
   const clearRecordError = (entryId: string) => {
@@ -247,66 +296,99 @@ export function QuickWorkerAccountDialog({
     clearRecordError(entryId);
   };
 
-  const applyQrData = (entryId: string, data: CccdQrData) => {
+  const getQrChanges = (data: CccdQrData): Partial<QuickWorkerForm> => ({
+    cccd: data.cccd || "",
+    real_name: data.fullName || "",
+    worker_name_snapshot: data.fullName || "",
+    date_of_birth: data.dateOfBirth ? displayDateToPocketBase(data.dateOfBirth) : "",
+    cccd_issue_date: data.issuedDate ? displayDateToPocketBase(data.issuedDate) : "",
+    gender: data.gender || "",
+    address: data.address || "",
+  });
+
+  const applyQrData = (entryId: string, data: CccdQrData, overwriteAll: boolean) => {
     const currentEntry = entriesRef.current.find((entry) => entry.id === entryId);
     if (!currentEntry) return;
 
-    const changes: Partial<QuickWorkerForm> = {
-      cccd: data.cccd || "",
-      real_name: data.fullName || "",
-      worker_name_snapshot: data.fullName || "",
-      date_of_birth: data.dateOfBirth ? displayDateToPocketBase(data.dateOfBirth) : "",
-      cccd_issue_date: data.issuedDate ? displayDateToPocketBase(data.issuedDate) : "",
-      gender: data.gender || "",
-      address: data.address || "",
-    };
-    const changeEntries = Object.entries(changes) as Array<[keyof QuickWorkerForm, string]>;
-    const overwriteKeys = changeEntries
-      .filter(
-        ([key, value]) =>
-          Boolean(value) && Boolean(currentEntry.form[key]) && currentEntry.form[key] !== value,
-      )
-      .map(([key]) => key);
-    const overwriteKeySet = new Set(overwriteKeys);
-    const overwriteConfirmed =
-      overwriteKeys.length === 0 ||
-      window.confirm(
-        `QR c\u00f3 d\u1eef li\u1ec7u m\u1edbi cho ${overwriteKeys
-          .map((key) => fieldLabels[key])
-          .join(", ")}. B\u1ea1n c\u00f3 mu\u1ed1n ghi \u0111\u00e8 to\u00e0n b\u1ed9 kh\u00f4ng?`,
-      );
-
+    const changeEntries = Object.entries(getQrChanges(data)) as Array<
+      [keyof QuickWorkerForm, string]
+    >;
     setEntries((current) =>
       current.map((entry) => {
         if (entry.id !== entryId) return entry;
         const nextForm = { ...entry.form };
         for (const [key, value] of changeEntries) {
           if (!value) continue;
-          if (!nextForm[key] || !overwriteKeySet.has(key) || overwriteConfirmed) {
-            nextForm[key] = value;
-          }
+          if (!nextForm[key] || overwriteAll || nextForm[key] === value) nextForm[key] = value;
         }
         return { ...entry, form: nextForm };
       }),
     );
     clearRecordError(entryId);
+    setPendingQrOverwrite(null);
+    toast.success("Đã đọc thông tin CCCD từ QR");
   };
 
-  const scanImage = async (entryId: string, file: File, side: "front" | "back") => {
+  const prepareQrData = (entryId: string, data: CccdQrData) => {
+    const currentEntry = entriesRef.current.find((entry) => entry.id === entryId);
+    if (!currentEntry) return;
+    const overwriteKeys = (
+      Object.entries(getQrChanges(data)) as Array<[keyof QuickWorkerForm, string]>
+    )
+      .filter(
+        ([key, value]) =>
+          Boolean(value) && Boolean(currentEntry.form[key]) && currentEntry.form[key] !== value,
+      )
+      .map(([key]) => key);
+
+    if (overwriteKeys.length > 0) {
+      setPendingQrOverwrite({ entryId, data, fields: overwriteKeys });
+      return;
+    }
+    applyQrData(entryId, data, true);
+  };
+
+  const scanImage = async (
+    entryId: string,
+    file: File,
+    side: QuickScanSide,
+    mode: CccdQrScanMode = "auto",
+  ) => {
+    cancelActiveScan();
     const scanningKey = `${entryId}:${side}`;
+    const sequence = ++scanSequenceRef.current;
+    const controller = new AbortController();
+    activeScanRef.current = { key: scanningKey, sequence, controller };
     setScanningEntrySide(scanningKey);
+    setScanProgress("Đang chuẩn bị ảnh CCCD…");
+
     try {
-      const data = await scanCccdQrFromFile(file);
-      if (!data) {
-        toast.warning("Không đọc được QR, vui lòng nhập tay");
+      const result = await scanCccdQrFromFileDetailed(file, {
+        mode,
+        signal: controller.signal,
+        onProgress: (stage) => {
+          if (activeScanRef.current?.sequence === sequence) setScanProgress(stage.message);
+        },
+      });
+      if (activeScanRef.current?.sequence !== sequence) return;
+
+      if (result.status === "success") {
+        setScanFailure(null);
+        prepareQrData(entryId, result.data);
         return;
       }
-      applyQrData(entryId, data);
-      toast.success("Đã đọc thông tin CCCD từ QR");
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Không đọc được QR, vui lòng nhập tay"));
+      if (result.reason === "cancelled") return;
+      setScanFailure({ entryId, side, file, reason: result.reason });
+    } catch {
+      if (activeScanRef.current?.sequence === sequence) {
+        setScanFailure({ entryId, side, file, reason: "not_found" });
+      }
     } finally {
-      setScanningEntrySide((current) => (current === scanningKey ? null : current));
+      if (activeScanRef.current?.sequence === sequence) {
+        activeScanRef.current = null;
+        setScanningEntrySide(null);
+        setScanProgress("");
+      }
     }
   };
 
@@ -320,6 +402,7 @@ export function QuickWorkerAccountDialog({
         return;
       }
 
+      setScanFailure(null);
       const preview = URL.createObjectURL(file);
       setEntries((current) =>
         current.map((entry) => {
@@ -336,7 +419,12 @@ export function QuickWorkerAccountDialog({
       await scanImage(entryId, file, side);
     };
 
-  const clearCccdImage = (entryId: string, side: "front" | "back") => {
+  const clearCccdImage = (entryId: string, side: QuickScanSide) => {
+    const scanningKey = `${entryId}:${side}`;
+    cancelActiveScan(scanningKey);
+    setScanFailure((current) =>
+      current?.entryId === entryId && current.side === side ? null : current,
+    );
     setEntries((current) =>
       current.map((entry) => {
         if (entry.id !== entryId) return entry;
@@ -355,6 +443,9 @@ export function QuickWorkerAccountDialog({
   };
 
   const removeEntry = (entryId: string) => {
+    if (activeScanRef.current?.key.startsWith(`${entryId}:`)) cancelActiveScan();
+    setScanFailure((current) => (current?.entryId === entryId ? null : current));
+    setPendingQrOverwrite((current) => (current?.entryId === entryId ? null : current));
     setEntries((current) => {
       if (current.length === 1) return current;
       const entry = current.find((item) => item.id === entryId);
@@ -501,7 +592,6 @@ export function QuickWorkerAccountDialog({
         recruiter_staff: form.recruiter_staff,
         cccd_version: cccdVersionId,
         join_date: form.join_date,
-        status: "working",
         note: form.note.trim(),
       });
       historyId = history.id;
@@ -642,139 +732,228 @@ export function QuickWorkerAccountDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(value) => !submitting && onOpenChange(value)}>
-      <DialogContent
-        layout="raw"
-        overlayClassName="desktop:left-[var(--desktop-workspace-left,17.5rem)] desktop:top-20 desktop:right-0 desktop:bottom-0 desktop:bg-black/50"
-        className="fixed flex h-[92dvh] max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl desktop:left-[var(--desktop-workspace-left,17.5rem)] desktop:top-20 desktop:right-0 desktop:bottom-0 desktop:h-auto desktop:max-h-none desktop:w-auto desktop:max-w-none desktop:translate-x-0 desktop:translate-y-0 desktop:rounded-none"
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(value) => {
+          if (submitting) return;
+          if (!value) cancelActiveScan();
+          onOpenChange(value);
+        }}
       >
-        <DialogHeader className="shrink-0 border-b bg-background px-5 py-4 pr-14 desktop:px-5 desktop:py-3 desktop:pr-14">
-          <DialogTitle>Tạo nhanh tài khoản NLĐ</DialogTitle>
-          <DialogDescription>
-            Tạo tài khoản user và ghi nhận lịch sử đang đi làm trong một bước.
-          </DialogDescription>
-        </DialogHeader>
+        <DialogContent
+          layout="raw"
+          overlayClassName="desktop:left-[var(--desktop-workspace-left,17.5rem)] desktop:top-20 desktop:right-0 desktop:bottom-0 desktop:bg-black/50"
+          className="fixed flex h-[92dvh] max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl desktop:left-[var(--desktop-workspace-left,17.5rem)] desktop:top-20 desktop:right-0 desktop:bottom-0 desktop:h-auto desktop:max-h-none desktop:w-auto desktop:max-w-none desktop:translate-x-0 desktop:translate-y-0 desktop:rounded-none"
+        >
+          <DialogHeader className="shrink-0 border-b bg-background px-5 py-4 pr-14 desktop:px-5 desktop:py-3 desktop:pr-14">
+            <DialogTitle>Tạo nhanh tài khoản NLĐ</DialogTitle>
+            <DialogDescription>
+              Tạo tài khoản user và ghi nhận lịch sử đang đi làm trong một bước.
+            </DialogDescription>
+          </DialogHeader>
 
-        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 desktop:px-5 desktop:py-3">
-            <div className="space-y-3">
-              {entries.map((entry, index) => (
-                <section
-                  key={entry.id}
-                  className="desktop:rounded-xl desktop:border desktop:border-border desktop:bg-muted/15 desktop:p-3"
-                >
-                  <div className="mb-3 hidden items-center justify-between gap-3 desktop:flex">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold">NLĐ #{index + 1}</p>
-                      {recordErrors[entry.id]?.length ? (
-                        <p
-                          className="mt-0.5 truncate text-xs text-destructive"
-                          title={recordErrors[entry.id].join("; ")}
-                        >
-                          {recordErrors[entry.id].join("; ")}
-                        </p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Nhập thông tin người lao động
-                        </p>
-                      )}
+          <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 desktop:px-5 desktop:py-3">
+              <div className="space-y-3">
+                {entries.map((entry, index) => (
+                  <section
+                    key={entry.id}
+                    className="desktop:rounded-xl desktop:border desktop:border-border desktop:bg-muted/15 desktop:p-3"
+                  >
+                    <div className="mb-3 hidden items-center justify-between gap-3 desktop:flex">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">NLĐ #{index + 1}</p>
+                        {recordErrors[entry.id]?.length ? (
+                          <p
+                            className="mt-0.5 truncate text-xs text-destructive"
+                            title={recordErrors[entry.id].join("; ")}
+                          >
+                            {recordErrors[entry.id].join("; ")}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Nhập thông tin người lao động
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 shrink-0 text-destructive hover:text-destructive"
+                        onClick={() => removeEntry(entry.id)}
+                        disabled={submitting || entries.length === 1}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Xóa
+                      </Button>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 shrink-0 text-destructive hover:text-destructive"
-                      onClick={() => removeEntry(entry.id)}
-                      disabled={submitting || entries.length === 1}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Xóa
-                    </Button>
-                  </div>
 
-                  <QuickWorkerEntryFields
-                    entry={entry}
-                    scanningEntrySide={scanningEntrySide}
-                    staffUsers={staffUsers}
-                    mainHouses={mainHouses}
-                    factories={factories}
-                    frontCameraInputRef={(node) => {
-                      frontCameraInputRefs.current[entry.id] = node;
-                    }}
-                    frontLibraryInputRef={(node) => {
-                      frontLibraryInputRefs.current[entry.id] = node;
-                    }}
-                    backCameraInputRef={(node) => {
-                      backCameraInputRefs.current[entry.id] = node;
-                    }}
-                    backLibraryInputRef={(node) => {
-                      backLibraryInputRefs.current[entry.id] = node;
-                    }}
-                    onSetField={setField}
-                    onPick={pickCccdImage}
-                    onScan={scanImage}
-                    onClear={clearCccdImage}
-                    onRequestCamera={(side) =>
-                      (side === "front" ? frontCameraInputRefs : backCameraInputRefs).current[
-                        entry.id
-                      ]?.click()
-                    }
-                    onRequestLibrary={(side) =>
-                      (side === "front" ? frontLibraryInputRefs : backLibraryInputRefs).current[
-                        entry.id
-                      ]?.click()
-                    }
-                  />
-                </section>
-              ))}
+                    <QuickWorkerEntryFields
+                      entry={entry}
+                      scanningEntrySide={scanningEntrySide}
+                      scanProgress={scanProgress}
+                      staffUsers={staffUsers}
+                      mainHouses={mainHouses}
+                      factories={factories}
+                      frontCameraInputRef={(node) => {
+                        frontCameraInputRefs.current[entry.id] = node;
+                      }}
+                      frontLibraryInputRef={(node) => {
+                        frontLibraryInputRefs.current[entry.id] = node;
+                      }}
+                      backCameraInputRef={(node) => {
+                        backCameraInputRefs.current[entry.id] = node;
+                      }}
+                      backLibraryInputRef={(node) => {
+                        backLibraryInputRefs.current[entry.id] = node;
+                      }}
+                      onSetField={setField}
+                      onPick={pickCccdImage}
+                      onScan={scanImage}
+                      onClear={clearCccdImage}
+                      onRequestCamera={(side) =>
+                        (side === "front" ? frontCameraInputRefs : backCameraInputRefs).current[
+                          entry.id
+                        ]?.click()
+                      }
+                      onRequestLibrary={(side) =>
+                        (side === "front" ? frontLibraryInputRefs : backLibraryInputRefs).current[
+                          entry.id
+                        ]?.click()
+                      }
+                    />
+                  </section>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <datalist id="quick-worker-bank-list">
-            {VN_BANKS.map((bank) => (
-              <option key={bank.code} value={bank.name}>
-                {bank.code}
-              </option>
-            ))}
-          </datalist>
+            <datalist id="quick-worker-bank-list">
+              {VN_BANKS.map((bank) => (
+                <option key={bank.code} value={bank.name}>
+                  {bank.code}
+                </option>
+              ))}
+            </datalist>
 
-          <DialogFooter className="shrink-0 border-t bg-background px-5 py-4 desktop:px-5 desktop:py-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={submitting}
-            >
-              Hủy
+            <DialogFooter className="shrink-0 border-t bg-background px-5 py-4 desktop:px-5 desktop:py-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={submitting}
+              >
+                Hủy
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="hidden desktop:inline-flex"
+                onClick={addEntry}
+                disabled={submitting}
+              >
+                <Plus className="h-4 w-4" />
+                Bổ sung NLĐ
+              </Button>
+              <Button type="submit" disabled={submitting || scanningEntrySide !== null}>
+                <BriefcaseBusiness className="h-4 w-4" />
+                {submitting
+                  ? "Đang lưu..."
+                  : entries.length === 1
+                    ? "Tạo nhanh"
+                    : `Tạo ${entries.length} NLĐ`}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {scanFailure && (
+        <CccdQrScanFeedbackDialog
+          open
+          reason={scanFailure.reason}
+          scanning={scanningEntrySide === `${scanFailure.entryId}:${scanFailure.side}`}
+          progressText={scanProgress}
+          onRetry={() =>
+            void scanImage(scanFailure.entryId, scanFailure.file, scanFailure.side, "full")
+          }
+          onCapture={() => {
+            const input =
+              scanFailure.side === "front"
+                ? frontCameraInputRefs.current[scanFailure.entryId]
+                : backCameraInputRefs.current[scanFailure.entryId];
+            setScanFailure(null);
+            input?.click();
+          }}
+          onChooseImage={() => {
+            const input =
+              scanFailure.side === "front"
+                ? frontLibraryInputRefs.current[scanFailure.entryId]
+                : backLibraryInputRefs.current[scanFailure.entryId];
+            setScanFailure(null);
+            input?.click();
+          }}
+          onDismiss={() => {
+            cancelActiveScan(`${scanFailure.entryId}:${scanFailure.side}`);
+            setScanFailure(null);
+          }}
+        />
+      )}
+
+      <Dialog
+        open={Boolean(pendingQrOverwrite)}
+        onOpenChange={(nextOpen) => !nextOpen && setPendingQrOverwrite(null)}
+      >
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Xác nhận dữ liệu từ mã QR</DialogTitle>
+            <DialogDescription>
+              Một số thông tin đã có dữ liệu. Chọn cách áp dụng thông tin mới đọc từ CCCD.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingQrOverwrite && (
+            <div className="rounded-xl border border-border/70 bg-muted/35 p-3 text-sm">
+              <p className="font-medium">Các trường có dữ liệu khác:</p>
+              <p className="mt-1 leading-5 text-muted-foreground">
+                {pendingQrOverwrite.fields.map((field) => fieldLabels[field]).join(", ")}
+              </p>
+            </div>
+          )}
+          <DialogFooter className="sm:flex-wrap">
+            <Button type="button" variant="ghost" onClick={() => setPendingQrOverwrite(null)}>
+              Bỏ qua QR
             </Button>
             <Button
               type="button"
               variant="outline"
-              className="hidden desktop:inline-flex"
-              onClick={addEntry}
-              disabled={submitting}
+              onClick={() => {
+                if (!pendingQrOverwrite) return;
+                applyQrData(pendingQrOverwrite.entryId, pendingQrOverwrite.data, false);
+              }}
             >
-              <Plus className="h-4 w-4" />
-              Bổ sung NLĐ
+              Chỉ điền ô trống
             </Button>
-            <Button type="submit" disabled={submitting || scanningEntrySide !== null}>
-              <BriefcaseBusiness className="h-4 w-4" />
-              {submitting
-                ? "Đang lưu..."
-                : entries.length === 1
-                  ? "Tạo nhanh"
-                  : `Tạo ${entries.length} NLĐ`}
+            <Button
+              type="button"
+              onClick={() => {
+                if (!pendingQrOverwrite) return;
+                applyQrData(pendingQrOverwrite.entryId, pendingQrOverwrite.data, true);
+              }}
+            >
+              Ghi đè bằng QR
             </Button>
           </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
 function QuickWorkerEntryFields({
   entry,
   scanningEntrySide,
+  scanProgress,
   staffUsers,
   mainHouses,
   factories,
@@ -791,6 +970,7 @@ function QuickWorkerEntryFields({
 }: {
   entry: QuickWorkerEntry;
   scanningEntrySide: string | null;
+  scanProgress: string;
   staffUsers: UserRecord[];
   mainHouses: MainHouseRecord[];
   factories: FactoryRecord[];
@@ -807,8 +987,13 @@ function QuickWorkerEntryFields({
     entryId: string,
     side: "front" | "back",
   ) => (event: ChangeEvent<HTMLInputElement>) => void;
-  onScan: (entryId: string, file: File, side: "front" | "back") => Promise<void>;
-  onClear: (entryId: string, side: "front" | "back") => void;
+  onScan: (
+    entryId: string,
+    file: File,
+    side: QuickScanSide,
+    mode?: CccdQrScanMode,
+  ) => Promise<void>;
+  onClear: (entryId: string, side: QuickScanSide) => void;
   onRequestCamera: (side: "front" | "back") => void;
   onRequestLibrary: (side: "front" | "back") => void;
 }) {
@@ -823,10 +1008,11 @@ function QuickWorkerEntryFields({
           label="CCCD trước"
           preview={entry.frontPreview}
           scanning={scanningEntrySide === `${entry.id}:front`}
+          scanProgress={scanProgress}
           cameraInputRef={frontCameraInputRef}
           libraryInputRef={frontLibraryInputRef}
           onPick={onPick(entry.id, "front")}
-          onScan={() => entry.frontFile && onScan(entry.id, entry.frontFile, "front")}
+          onScan={() => entry.frontFile && onScan(entry.id, entry.frontFile, "front", "full")}
           onClear={() => onClear(entry.id, "front")}
           onRequestCamera={() => onRequestCamera("front")}
           onRequestLibrary={() => onRequestLibrary("front")}
@@ -835,10 +1021,11 @@ function QuickWorkerEntryFields({
           label="CCCD sau"
           preview={entry.backPreview}
           scanning={scanningEntrySide === `${entry.id}:back`}
+          scanProgress={scanProgress}
           cameraInputRef={backCameraInputRef}
           libraryInputRef={backLibraryInputRef}
           onPick={onPick(entry.id, "back")}
-          onScan={() => entry.backFile && onScan(entry.id, entry.backFile, "back")}
+          onScan={() => entry.backFile && onScan(entry.id, entry.backFile, "back", "full")}
           onClear={() => onClear(entry.id, "back")}
           onRequestCamera={() => onRequestCamera("back")}
           onRequestLibrary={() => onRequestLibrary("back")}
@@ -861,12 +1048,34 @@ function QuickWorkerEntryFields({
           desktopClassName="desktop:col-start-2 desktop:row-start-1"
         />
         <TextField
-          label="CMND/CCCD"
-          value={form.cccd}
-          onChange={(value) => setField("cccd", value)}
-          placeholder="CCCD"
-          inputMode="text"
-          desktopClassName="desktop:col-start-2 desktop:row-start-2"
+          label="Ngân hàng"
+          value={form.bank_name}
+          onChange={(value) => setField("bank_name", value)}
+          placeholder="Ngân hàng"
+          list="quick-worker-bank-list"
+          desktopClassName="desktop:col-start-3 desktop:row-start-1"
+        />
+        <TextField
+          label="STK"
+          value={form.bank_account_number}
+          onChange={(value) => setField("bank_account_number", value.replace(/\D/g, ""))}
+          placeholder="STK"
+          inputMode="numeric"
+          desktopClassName="desktop:col-start-4 desktop:row-start-1"
+        />
+        <TextField
+          label="Chủ TK"
+          value={form.bank_account_name}
+          onChange={(value) => setField("bank_account_name", value)}
+          placeholder="Chủ TK"
+          desktopClassName="desktop:col-start-5 desktop:row-start-1"
+        />
+        <TextField
+          label="Ghi chú TK"
+          value={form.bank_account_note}
+          onChange={(value) => setField("bank_account_note", value)}
+          placeholder="Ghi chú TK"
+          desktopClassName="desktop:col-start-6 desktop:row-start-1"
         />
         <TextField
           label="SĐT (tùy chọn)"
@@ -874,7 +1083,15 @@ function QuickWorkerEntryFields({
           onChange={(value) => setField("phone", value)}
           placeholder="SĐT (tùy chọn)"
           inputMode="tel"
-          desktopClassName="desktop:col-start-3 desktop:row-start-1"
+          desktopClassName="desktop:col-start-1 desktop:row-start-2"
+        />
+        <TextField
+          label="CMND/CCCD"
+          value={form.cccd}
+          onChange={(value) => setField("cccd", value)}
+          placeholder="CCCD"
+          inputMode="text"
+          desktopClassName="desktop:col-start-2 desktop:row-start-2"
         />
         <TextField
           label="Ngày sinh"
@@ -884,18 +1101,10 @@ function QuickWorkerEntryFields({
           placeholder="Ngày sinh"
           desktopClassName="desktop:col-start-3 desktop:row-start-2"
         />
-        <TextField
-          label="Ngày cấp CCCD"
-          type="date"
-          value={form.cccd_issue_date}
-          onChange={(value) => setField("cccd_issue_date", value)}
-          placeholder="Ngày cấp CCCD"
-          desktopClassName="desktop:col-start-6 desktop:row-start-2"
-        />
         <div className="flex min-w-0 flex-col gap-1 desktop:col-start-4 desktop:row-start-2 desktop:gap-0 desktop:max-w-none">
           <Label className="truncate text-xs desktop:hidden">Giới tính</Label>
           <Select value={form.gender} onValueChange={(value) => setField("gender", value)}>
-            <SelectTrigger className="desktop:h-9 desktop:rounded-lg desktop:px-2.5 desktop:text-sm">
+            <SelectTrigger className="bg-white text-slate-900 desktop:h-9 desktop:rounded-lg desktop:px-2.5 desktop:text-sm">
               <SelectValue placeholder="Giới tính" />
             </SelectTrigger>
             <SelectContent>
@@ -905,35 +1114,6 @@ function QuickWorkerEntryFields({
             </SelectContent>
           </Select>
         </div>
-        <TextField
-          label="Ngân hàng"
-          value={form.bank_name}
-          onChange={(value) => setField("bank_name", value)}
-          placeholder="Ngân hàng"
-          list="quick-worker-bank-list"
-          desktopClassName="desktop:col-start-4 desktop:row-start-1"
-        />
-        <TextField
-          label="STK"
-          value={form.bank_account_number}
-          onChange={(value) => setField("bank_account_number", value.replace(/\D/g, ""))}
-          placeholder="STK"
-          inputMode="numeric"
-          desktopClassName="desktop:col-start-5 desktop:row-start-1"
-        />
-        <TextField
-          label="Chủ TK"
-          value={form.bank_account_name}
-          onChange={(value) => setField("bank_account_name", value)}
-          placeholder="Chủ TK"
-          desktopClassName="desktop:col-start-6 desktop:row-start-1"
-        />
-        <TextField
-          label="Ghi chú STK"
-          value={form.bank_account_note}
-          onChange={(value) => setField("bank_account_note", value)}
-          placeholder="Ghi chú STK"
-        />
         <div className="sm:col-span-2 desktop:col-span-1 desktop:col-start-5 desktop:row-start-2 desktop:max-w-none">
           <TextField
             label="Địa chỉ"
@@ -942,6 +1122,14 @@ function QuickWorkerEntryFields({
             placeholder="Địa chỉ"
           />
         </div>
+        <TextField
+          label="Ngày cấp CCCD"
+          type="date"
+          value={form.cccd_issue_date}
+          onChange={(value) => setField("cccd_issue_date", value)}
+          placeholder="Ngày cấp CCCD"
+          desktopClassName="desktop:col-start-6 desktop:row-start-2"
+        />
         <ComboboxField
           label="Người tuyển"
           placeholder="Người tuyển"
@@ -952,7 +1140,7 @@ function QuickWorkerEntryFields({
           }))}
           value={form.recruiter_staff}
           onChange={(value) => setField("recruiter_staff", value)}
-          desktopClassName="desktop:col-start-1 desktop:row-start-2"
+          desktopClassName="desktop:col-start-1 desktop:row-start-3"
         />
         <TextField
           label="Ngày vào"
@@ -960,7 +1148,7 @@ function QuickWorkerEntryFields({
           value={form.join_date}
           onChange={(value) => setField("join_date", value)}
           placeholder="Ngày vào"
-          desktopClassName="desktop:col-start-1 desktop:row-start-3"
+          desktopClassName="desktop:col-start-2 desktop:row-start-3"
         />
         <ComboboxField
           label="Nhà chính"
@@ -972,7 +1160,7 @@ function QuickWorkerEntryFields({
           }))}
           value={form.main_house}
           onChange={(value) => setField("main_house", value)}
-          desktopClassName="desktop:col-start-2 desktop:row-start-3"
+          desktopClassName="desktop:col-start-3 desktop:row-start-3"
         />
         <ComboboxField
           label="Công ty"
@@ -984,16 +1172,16 @@ function QuickWorkerEntryFields({
           }))}
           value={form.factory}
           onChange={(value) => setField("factory", value)}
-          desktopClassName="desktop:col-start-3 desktop:row-start-3"
+          desktopClassName="desktop:col-start-4 desktop:row-start-3"
         />
         <TextField
           label="Mã NV"
           value={form.employee_code}
           onChange={(value) => setField("employee_code", value)}
           placeholder="Mã NV"
-          desktopClassName="desktop:col-start-4 desktop:row-start-3"
+          desktopClassName="desktop:col-start-5 desktop:row-start-3"
         />
-        <div className="sm:col-span-2 lg:col-span-4 desktop:col-span-2 desktop:col-start-5 desktop:row-start-3">
+        <div className="desktop:col-start-6 desktop:row-start-3">
           <Label className="text-xs desktop:hidden">Ghi chú</Label>
           <Textarea
             rows={1}
@@ -1001,7 +1189,7 @@ function QuickWorkerEntryFields({
             onChange={(event) => setField("note", event.target.value)}
             placeholder="Ghi chú"
             title={form.note || "Ghi chú"}
-            className="truncate desktop:h-9 desktop:min-h-9 desktop:resize-none desktop:rounded-lg desktop:px-2.5 desktop:py-2 desktop:text-sm"
+            className="truncate bg-white text-slate-900 desktop:h-9 desktop:min-h-9 desktop:resize-none desktop:rounded-lg desktop:px-2.5 desktop:py-2 desktop:text-sm"
           />
         </div>
       </div>
@@ -1021,6 +1209,7 @@ const fieldLabels: Record<keyof QuickWorkerForm, string> = {
   bank_name: "ngân hàng",
   bank_account_number: "số tài khoản",
   bank_account_name: "chủ tài khoản",
+  bank_account_note: "ghi chú tài khoản",
   recruiter_staff: "người tuyển",
   join_date: "ngày vào làm",
   main_house: "nhà chính",
@@ -1058,7 +1247,7 @@ function TextField({
           value={value}
           onChange={onChange}
           placeholder={placeholder}
-          className="desktop:[&_button]:h-7 desktop:[&_button]:w-7 desktop:[&_input]:h-9 desktop:[&_input]:rounded-lg desktop:[&_input]:px-2.5 desktop:[&_input]:pr-8 desktop:[&_input]:text-sm"
+          className="[&_input]:bg-white [&_input]:text-slate-900 desktop:[&_button]:h-7 desktop:[&_button]:w-7 desktop:[&_input]:h-9 desktop:[&_input]:rounded-lg desktop:[&_input]:px-2.5 desktop:[&_input]:pr-8 desktop:[&_input]:text-sm"
         />
       ) : (
         <Input
@@ -1069,7 +1258,7 @@ function TextField({
           inputMode={inputMode}
           list={list}
           title={value || placeholder}
-          className="truncate desktop:h-9 desktop:rounded-lg desktop:px-2.5 desktop:text-sm"
+          className="truncate bg-white text-slate-900 desktop:h-9 desktop:rounded-lg desktop:px-2.5 desktop:text-sm"
         />
       )}
     </div>
@@ -1080,6 +1269,7 @@ function CccdImageBox({
   label,
   preview,
   scanning,
+  scanProgress,
   cameraInputRef,
   libraryInputRef,
   onPick,
@@ -1091,6 +1281,7 @@ function CccdImageBox({
   label: string;
   preview: string;
   scanning: boolean;
+  scanProgress: string;
   cameraInputRef: RefCallback<HTMLInputElement>;
   libraryInputRef: RefCallback<HTMLInputElement>;
   onPick: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -1169,10 +1360,12 @@ function CccdImageBox({
               onClick={onScan}
               disabled={scanning}
               aria-busy={scanning}
-              title={scanning ? "Đang phân tích ảnh CCCD…" : "Quét QR"}
+              title={scanning ? scanProgress || "Đang phân tích ảnh CCCD…" : "Quét kỹ lại"}
             >
               <ScanLine className="h-4 w-4" />
-              {scanning ? "Đang phân tích ảnh CCCD…" : "Quét QR"}
+              <span className="truncate">
+                {scanning ? scanProgress || "Đang phân tích ảnh CCCD…" : "Quét kỹ lại"}
+              </span>
             </Button>
             <Button
               type="button"
@@ -1250,18 +1443,34 @@ function ComboboxField({
   desktopClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedSearch(query);
   const selected = options.find((option) => option.value === value);
+
+  const filteredOptions = useMemo(() => {
+    const keyword = normalizeUserPickerSearch(debouncedQuery);
+    if (!keyword) return options;
+    return options.filter((option) =>
+      normalizeUserPickerSearch(`${option.label} ${option.description || ""}`).includes(keyword),
+    );
+  }, [debouncedQuery, options]);
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-1 desktop:gap-0", desktopClassName)}>
       <Label className="truncate text-xs desktop:hidden" title={label}>
         {label}
       </Label>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setQuery("");
+        }}
+      >
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex h-10 w-full min-w-0 items-center justify-between rounded-md border border-input bg-background px-3 text-left text-sm desktop:h-9 desktop:rounded-lg desktop:px-2.5"
+            className="flex h-10 w-full min-w-0 items-center justify-between rounded-md border border-input bg-white px-3 text-left text-sm text-slate-900 desktop:h-9 desktop:rounded-lg desktop:px-2.5"
           >
             <span className={cn("truncate", !selected && "text-muted-foreground")}>
               {selected ? selected.label : placeholder}
@@ -1270,12 +1479,12 @@ function ComboboxField({
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-          <Command>
-            <CommandInput placeholder="Tìm kiếm..." />
+          <Command shouldFilter={false}>
+            <CommandInput placeholder="Tìm kiếm..." value={query} onValueChange={setQuery} />
             <CommandList>
               <CommandEmpty>Không tìm thấy.</CommandEmpty>
               <CommandGroup>
-                {options.map((option) => (
+                {filteredOptions.map((option) => (
                   <CommandItem
                     key={option.value}
                     value={`${option.label} ${option.description || ""}`}

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { Building2, FileSpreadsheet, Plus, Search, ShieldCheck, Upload, Users } from "lucide-react";
 import { toast } from "sonner";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -59,6 +60,7 @@ function AdminStaffPage() {
   const currentUser = pb.authStore.record as UserRecord;
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [assignmentCounts, setAssignmentCounts] = useState<Record<string, number>>({});
@@ -73,7 +75,7 @@ function AdminStaffPage() {
         pb
           .collection("users")
           .getList<UserRecord>(1, 500, {
-            filter: staffSearchFilter(search),
+            filter: staffSearchFilter(debouncedSearch),
             sort: "full_name,username",
           })
           .then((res) => res.items),
@@ -99,7 +101,7 @@ function AdminStaffPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [debouncedSearch]);
 
   const summary = useMemo(
     () => ({

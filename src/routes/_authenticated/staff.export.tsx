@@ -25,7 +25,7 @@ import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { useAuth } from "@/lib/auth";
 import type { FactoryRecord } from "@/lib/factories";
 import type { StaffWorkerRecord } from "@/lib/staff-permissions";
-import type { EmploymentHistoryRecord } from "@/lib/employment";
+import { isCurrentlyWorking, type EmploymentHistoryRecord } from "@/lib/employment";
 import type { UserRecord } from "@/lib/pocketbase";
 import { getApprovalStatus } from "@/lib/user-approval";
 import { toast } from "sonner";
@@ -93,7 +93,7 @@ function buildBasicRows(
     "Nhà chính": history.expand?.main_house?.name || "",
     "Ngày vào": formatDateOnly(history.join_date),
     "Ngày nghỉ": formatDateOnly(history.leave_date),
-    "Trạng thái": history.status === "working" ? "Đang làm" : "Đã nghỉ",
+    "Trạng thái": isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ",
     "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
     "Tài khoản gốc": history.expand?.user?.full_name || history.expand?.user?.username || "",
     "Số điện thoại": history.expand?.user?.phone || "",
@@ -130,7 +130,7 @@ function buildFullRows(
       "Ngày cấp CCCD": formatDateOnly(history.cccd_issue_date),
       "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
       "Mã số thuế": history.worker_tax_code_snapshot || "",
-      "Trạng thái lịch sử": history.status === "working" ? "Đang làm" : "Đã nghỉ",
+      "Trạng thái lịch sử": isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ",
       "Ghi chú": history.note || "",
       "Ngân hàng": user?.bank_name || "",
       "Số tài khoản": user?.bank_account_number || "",
@@ -193,7 +193,12 @@ function StaffExportPage() {
       .flatMap((worker) => worker.histories)
       .filter((history) => {
         if (factoryFilter !== "all" && history.factory !== factoryFilter) return false;
-        if (statusFilter !== "all" && history.status !== statusFilter) return false;
+        if (
+          statusFilter !== "all" &&
+          (isCurrentlyWorking(history) ? "working" : "left") !== statusFilter
+        ) {
+          return false;
+        }
         return true;
       });
   }, [factoryFilter, statusFilter, workers]);

@@ -38,10 +38,12 @@ import { canReportJoin, isRecentRecruiter, type StaffWorkerRecord } from "@/lib/
 import {
   createEmploymentHistory,
   fetchEmploymentHistories,
-  findActiveEmploymentByUser,
+  getCurrentEmploymentHistory,
   getLatestEmploymentHistory,
+  getStaleWorkingEmploymentHistories,
   getMissingEmploymentSnapshotFields,
   getEmploymentPersonalSnapshot,
+  isCurrentlyWorking,
   maskCccd,
   updateEmploymentHistory,
   updateUserAndCache,
@@ -236,9 +238,8 @@ export function WorkerQuickDrawer({
           normalizeCccdNumber(worker?.user.cccd) && worker?.user.cccd_back
       ? fileUrl(worker.user, worker.user.cccd_back)
       : "";
-  const isWorking = latest?.status === "working" && !latest.leave_date;
-  const activeHistory =
-    worker?.histories.find((h) => h.status === "working" && !h.leave_date) || null;
+  const isWorking = Boolean(latest && isCurrentlyWorking(latest));
+  const activeHistory = worker ? getCurrentEmploymentHistory(worker.histories) : null;
   const allowAdvanceAfterLeave = Boolean(settings.allow_advance_after_leave);
   const advanceInteractionAllowed = isAdvanceInteractionAllowed(settings, viewer?.role);
   const canReportAdvanceByScope = Boolean(
@@ -256,7 +257,6 @@ export function WorkerQuickDrawer({
     try {
       await updateEmploymentHistory(activeHistory.id, {
         leave_date: leaveDate,
-        status: "left",
         note: leaveNote.trim(),
       });
       const updated = await fetchEmploymentHistories([worker.user.id]);
@@ -308,11 +308,16 @@ export function WorkerQuickDrawer({
     }
     setSubmitting(true);
     try {
-      const active = await findActiveEmploymentByUser(worker.user.id);
+      const latestHistories = await fetchEmploymentHistories([worker.user.id]);
+      const active = getCurrentEmploymentHistory(latestHistories);
       if (active) {
         toast.error("Cần báo nghỉ nhà máy cũ trước");
         setSubmitting(false);
         return;
+      }
+
+      for (const history of getStaleWorkingEmploymentHistories(latestHistories)) {
+        await updateEmploymentHistory(history.id, { status: "left" });
       }
 
       let cccdVersionId: string | undefined;
@@ -374,7 +379,6 @@ export function WorkerQuickDrawer({
         recruiter_staff: joinForm.recruiter_staff,
         cccd_version: cccdVersionId,
         join_date: joinForm.join_date,
-        status: "working",
         note: joinForm.note.trim(),
       });
       await createStaffActionLog({

@@ -49,7 +49,6 @@ import {
 } from "@/lib/advance-policy";
 import {
   createEmploymentHistory,
-  deriveEmploymentStatus,
   fetchEmploymentHistories,
   getCurrentEmploymentHistory,
   getLatestEmploymentHistory,
@@ -727,7 +726,6 @@ export function WorkerEmploymentDrawer({
     try {
       await updateEmploymentHistory(active.id, {
         leave_date: leaveDate,
-        status: "left",
         note: leaveNote.trim(),
       });
       const updated = await fetchEmploymentHistories([user.id]);
@@ -835,7 +833,6 @@ export function WorkerEmploymentDrawer({
         recruiter_staff: joinForm.recruiter_staff,
         cccd_version: cccdVersionId,
         join_date: joinForm.join_date,
-        status: "working",
         note: joinForm.note.trim(),
       });
       await createStaffActionLog({
@@ -990,7 +987,6 @@ export function WorkerEmploymentDrawer({
         cccd_version: cccdVersionId,
         join_date: oldHistoryForm.join_date,
         leave_date: oldHistoryForm.leave_date,
-        status: deriveEmploymentStatus({ leave_date: oldHistoryForm.leave_date }),
         note: oldHistoryForm.note.trim(),
       });
       await createStaffActionLog({
@@ -1083,7 +1079,6 @@ export function WorkerEmploymentDrawer({
         main_house: form.main_house || undefined,
         join_date: form.join_date || undefined,
         leave_date: form.leave_date,
-        status: deriveEmploymentStatus({ leave_date: form.leave_date }),
         note: form.note.trim(),
       };
       const updated = isRestoring

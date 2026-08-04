@@ -3,13 +3,44 @@ import { normalizeDate } from "./date-utils";
 
 export type CccdQrScanMode = "auto" | "basic" | "full";
 
+export type CccdQrScanStage =
+  | { step: "decoding"; message: string }
+  | { step: "whole"; message: string }
+  | { step: "region" | "refining" | "enhancing"; region: number; total: number; message: string }
+  | {
+      step: "rotating";
+      region: number;
+      total: 4;
+      rotation: 90 | 180 | 270;
+      message: string;
+    };
+
 export type CccdQrScanOptions = {
   mode?: CccdQrScanMode;
   timeoutMs?: number;
+  signal?: AbortSignal;
+  onProgress?: (stage: CccdQrScanStage) => void;
 };
 
-const DESKTOP_QR_SCAN_TIMEOUT_MS = 7000;
-const MOBILE_QR_SCAN_TIMEOUT_MS = 2500;
+export type CccdQrScanFailureReason =
+  | "not_found"
+  | "invalid_qr"
+  | "timeout"
+  | "unsupported_image"
+  | "cancelled";
+
+export type CccdQrScanResult =
+  | { status: "success"; data: CccdQrData }
+  | { status: "failed"; reason: CccdQrScanFailureReason };
+
+const MAX_QR_SCAN_TIMEOUT_MS = 15000;
+const QUADRANT_OVERLAP_RATIO = 0.08;
+const REFINED_OVERLAP_RATIO = 0.12;
+const REFINED_LONG_EDGE = 1200;
+const AUTO_LONG_EDGE = 1600;
+const BASIC_LONG_EDGE = 1200;
+const FULL_LONG_EDGE = 2000;
+const MAX_UPSCALE = 3;
 
 export interface CccdQrData {
   cccd?: string;
@@ -44,7 +75,13 @@ export function displayDateToPocketBase(value: unknown): string {
 }
 
 export function parseCccdQrText(text: string): CccdQrData | null {
-  const parts = text.split("|").map((part) => part.trim());
+  const normalizedText = text
+    .split("\u0000")
+    .join("")
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, "")
+    .replace(/[\r\n]+/g, "")
+    .trim();
+  const parts = normalizedText.split("|").map((part) => part.trim());
   if (parts.length < 6) return null;
 
   return {
@@ -58,14 +95,11 @@ export function parseCccdQrText(text: string): CccdQrData | null {
   };
 }
 
-type QrScanRegion = {
+type ScanRegion = {
   x: number;
   y: number;
   width: number;
   height: number;
-  maxLongEdge: number;
-  minLongEdge: number;
-  tryThreshold?: boolean;
 };
 
 type BarcodeDetectorResult = { rawValue?: string };
@@ -77,53 +111,222 @@ type BarcodeDetectorConstructor = {
   getSupportedFormats?: () => Promise<string[]>;
 };
 
-// QR trên ảnh CCCD thường nằm sát một trong các góc. Quét vùng nhỏ trước giúp
-// mã QR chiếm nhiều pixel hơn và tránh nền/hoa văn trên phần còn lại của thẻ.
-const QR_SCAN_REGIONS: QrScanRegion[] = [
-  {
-    x: 0.45,
-    y: 0,
-    width: 0.55,
-    height: 0.68,
-    maxLongEdge: 1400,
-    minLongEdge: 900,
-    tryThreshold: true,
-  },
-  {
-    x: 0,
-    y: 0,
-    width: 0.55,
-    height: 0.68,
-    maxLongEdge: 1400,
-    minLongEdge: 900,
-    tryThreshold: true,
-  },
-  {
-    x: 0.45,
-    y: 0.32,
-    width: 0.55,
-    height: 0.68,
-    maxLongEdge: 1400,
-    minLongEdge: 900,
-    tryThreshold: true,
-  },
-  {
-    x: 0,
-    y: 0.32,
-    width: 0.55,
-    height: 0.68,
-    maxLongEdge: 1400,
-    minLongEdge: 900,
-    tryThreshold: true,
-  },
-  { x: 0.35, y: 0, width: 0.65, height: 1, maxLongEdge: 1500, minLongEdge: 900 },
-  { x: 0, y: 0, width: 0.65, height: 1, maxLongEdge: 1500, minLongEdge: 900 },
-  { x: 0, y: 0, width: 1, height: 1, maxLongEdge: 1800, minLongEdge: 1000, tryThreshold: true },
-];
+type DecodedImage = {
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+  close: () => void;
+};
+
+type DetectionAttempt = {
+  data: CccdQrData | null;
+  detected: boolean;
+};
+
+type ScanContext = {
+  deadline: number;
+  signal?: AbortSignal;
+  sawInvalidQr: boolean;
+};
+
+type TimedResult<T> =
+  | { status: "completed"; value: T }
+  | { status: "failed"; reason: "timeout" | "cancelled" }
+  | { status: "error" };
+
+function getStopReason(context: ScanContext): "timeout" | "cancelled" | null {
+  if (context.signal?.aborted) return "cancelled";
+  return Date.now() >= context.deadline ? "timeout" : null;
+}
+
+function recordAttempt(context: ScanContext, attempt: DetectionAttempt) {
+  if (attempt.detected && !attempt.data) context.sawInvalidQr = true;
+  return attempt.data;
+}
+
+function reportProgress(options: CccdQrScanOptions, stage: CccdQrScanStage) {
+  options.onProgress?.(stage);
+}
+
+async function yieldToUi() {
+  await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+}
+
+async function waitWithinDeadline<T>(
+  promise: Promise<T>,
+  context: ScanContext,
+): Promise<TimedResult<T>> {
+  const stopReason = getStopReason(context);
+  if (stopReason) return { status: "failed", reason: stopReason };
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const remainingMs = Math.max(1, context.deadline - Date.now());
+    const finish = (result: TimedResult<T>) => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timerId);
+      context.signal?.removeEventListener("abort", handleAbort);
+      resolve(result);
+    };
+    const handleAbort = () => finish({ status: "failed", reason: "cancelled" });
+    const timerId = globalThis.setTimeout(
+      () => finish({ status: "failed", reason: "timeout" }),
+      remainingMs,
+    );
+
+    context.signal?.addEventListener("abort", handleAbort, { once: true });
+    promise.then(
+      (value) => finish({ status: "completed", value }),
+      () => finish({ status: "error" }),
+    );
+  });
+}
+
+function createHtmlImage(file: File) {
+  const objectUrl = URL.createObjectURL(file);
+  const image = new Image();
+  const promise = new Promise<HTMLImageElement>((resolve, reject) => {
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Không giải mã được ảnh"));
+    image.src = objectUrl;
+  });
+  return {
+    image,
+    objectUrl,
+    promise,
+    cancel: () => {
+      image.onload = null;
+      image.onerror = null;
+      image.src = "";
+      URL.revokeObjectURL(objectUrl);
+    },
+  };
+}
+
+async function decodeImage(
+  file: File,
+  context: ScanContext,
+): Promise<DecodedImage | CccdQrScanFailureReason> {
+  if (typeof createImageBitmap === "function") {
+    const bitmapPromise = createImageBitmap(file);
+    const bitmapResult = await waitWithinDeadline(bitmapPromise, context);
+    if (bitmapResult.status === "completed") {
+      const bitmap = bitmapResult.value;
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        close: () => bitmap.close(),
+      };
+    }
+    if (bitmapResult.status === "failed") {
+      void bitmapPromise.then((lateBitmap) => lateBitmap.close()).catch(() => undefined);
+      return bitmapResult.reason;
+    }
+  }
+
+  if (typeof Image === "undefined") return "unsupported_image";
+  const fallback = createHtmlImage(file);
+  const imageResult = await waitWithinDeadline(fallback.promise, context);
+  if (imageResult.status !== "completed") {
+    fallback.cancel();
+    return imageResult.status === "failed" ? imageResult.reason : "unsupported_image";
+  }
+
+  const image = imageResult.value;
+  return {
+    source: image,
+    width: image.naturalWidth,
+    height: image.naturalHeight,
+    close: () => {
+      image.src = "";
+      URL.revokeObjectURL(fallback.objectUrl);
+    },
+  };
+}
+
+function buildQuadrantRegions(
+  width: number,
+  height: number,
+  overlapRatio = QUADRANT_OVERLAP_RATIO,
+): ScanRegion[] {
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  const overlapX = (width * overlapRatio) / 2;
+  const overlapY = (height * overlapRatio) / 2;
+  const rightX = Math.max(0, halfWidth - overlapX);
+  const bottomY = Math.max(0, halfHeight - overlapY);
+
+  // Ưu tiên phía trên bên phải vì QR trên CCCD thường xuất hiện tại đây.
+  return [
+    { x: rightX, y: 0, width: width - rightX, height: halfHeight + overlapY },
+    { x: 0, y: 0, width: halfWidth + overlapX, height: halfHeight + overlapY },
+    { x: rightX, y: bottomY, width: width - rightX, height: height - bottomY },
+    { x: 0, y: bottomY, width: halfWidth + overlapX, height: height - bottomY },
+  ];
+}
+
+function buildRefinedRegions(regions: ScanRegion[]) {
+  return regions.flatMap((parent) =>
+    buildQuadrantRegions(parent.width, parent.height, REFINED_OVERLAP_RATIO).map((child) => ({
+      x: parent.x + child.x,
+      y: parent.y + child.y,
+      width: child.width,
+      height: child.height,
+    })),
+  );
+}
+
+function renderScanRegion(image: DecodedImage, region: ScanRegion, targetLongEdge: number) {
+  const sourceX = Math.max(0, Math.floor(region.x));
+  const sourceY = Math.max(0, Math.floor(region.y));
+  const sourceWidth = Math.max(1, Math.min(image.width - sourceX, Math.ceil(region.width)));
+  const sourceHeight = Math.max(1, Math.min(image.height - sourceY, Math.ceil(region.height)));
+  const sourceLongEdge = Math.max(sourceWidth, sourceHeight);
+  const requestedScale = targetLongEdge / sourceLongEdge;
+  const scale = requestedScale > 1 ? Math.min(requestedScale, MAX_UPSCALE) : requestedScale;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+  canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+
+  // Ảnh camera bị mờ nhẹ đọc tốt hơn khi nội suy chất lượng cao thay vì nhân điểm ảnh.
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(
+    image.source,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
+  return { canvas, ctx };
+}
+
+function renderRotatedCanvas(source: HTMLCanvasElement, rotation: 90 | 180 | 270) {
+  const swapDimensions = rotation === 90 || rotation === 270;
+  const canvas = document.createElement("canvas");
+  canvas.width = swapDimensions ? source.height : source.width;
+  canvas.height = swapDimensions ? source.width : source.height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate((rotation * Math.PI) / 180);
+  ctx.drawImage(source, -source.width / 2, -source.height / 2);
+  return { canvas, ctx };
+}
 
 function parseDetectedQrText(value: string | undefined) {
   if (!value) return null;
-  return parseCccdQrText(value.split("\u0000").join("").trim());
+  return parseCccdQrText(value);
 }
 
 async function createQrBarcodeDetector(): Promise<BarcodeDetectorLike | null> {
@@ -146,66 +349,56 @@ async function createQrBarcodeDetector(): Promise<BarcodeDetectorLike | null> {
 async function scanWithBarcodeDetector(
   detector: BarcodeDetectorLike | null,
   source: CanvasImageSource,
-) {
-  if (!detector) return null;
+  context: ScanContext,
+): Promise<DetectionAttempt> {
+  if (!detector) return { data: null, detected: false };
   try {
-    const results = await detector.detect(source);
+    const detected = await waitWithinDeadline(detector.detect(source), context);
+    if (detected.status !== "completed") return { data: null, detected: false };
+
+    const results = detected.value;
     for (const result of results) {
-      const parsed = parseDetectedQrText(result.rawValue);
-      if (parsed) return parsed;
+      const data = parseDetectedQrText(result.rawValue);
+      if (data) return { data, detected: true };
     }
+    return { data: null, detected: results.some((result) => Boolean(result.rawValue)) };
   } catch {
-    // Trình duyệt có thể công bố BarcodeDetector nhưng không đọc được nguồn ảnh này.
+    // Một số trình duyệt công bố BarcodeDetector nhưng không đọc được nguồn ảnh này.
+    return { data: null, detected: false };
   }
-  return null;
 }
 
-function renderScanRegion(bitmap: ImageBitmap, region: QrScanRegion) {
-  const sourceX = Math.max(0, Math.floor(bitmap.width * region.x));
-  const sourceY = Math.max(0, Math.floor(bitmap.height * region.y));
-  const sourceWidth = Math.max(
-    1,
-    Math.min(bitmap.width - sourceX, Math.ceil(bitmap.width * region.width)),
-  );
-  const sourceHeight = Math.max(
-    1,
-    Math.min(bitmap.height - sourceY, Math.ceil(bitmap.height * region.height)),
-  );
-  const sourceLongEdge = Math.max(sourceWidth, sourceHeight);
-  const scale =
-    sourceLongEdge > region.maxLongEdge
-      ? region.maxLongEdge / sourceLongEdge
-      : sourceLongEdge < region.minLongEdge
-        ? region.minLongEdge / sourceLongEdge
-        : 1;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(sourceWidth * scale));
-  canvas.height = Math.max(1, Math.round(sourceHeight * scale));
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return null;
-
-  ctx.imageSmoothingEnabled = scale <= 1;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(
-    bitmap,
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
-    0,
-    0,
-    canvas.width,
-    canvas.height,
-  );
-  return { canvas, ctx };
-}
-
-function scanWithJsQr(imageData: ImageData) {
+function scanWithJsQr(imageData: ImageData): DetectionAttempt {
   const result = jsQR(imageData.data, imageData.width, imageData.height, {
     inversionAttempts: "attemptBoth",
   });
-  return parseDetectedQrText(result?.data);
+  return {
+    data: parseDetectedQrText(result?.data),
+    detected: Boolean(result?.data),
+  };
+}
+
+function getCanvasImageData(rendered: {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+}) {
+  return rendered.ctx.getImageData(0, 0, rendered.canvas.width, rendered.canvas.height);
+}
+
+async function scanCanvas(
+  detector: BarcodeDetectorLike | null,
+  rendered: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D },
+  context: ScanContext,
+) {
+  const nativeResult = recordAttempt(
+    context,
+    await scanWithBarcodeDetector(detector, rendered.canvas, context),
+  );
+  if (nativeResult) return nativeResult;
+  if (getStopReason(context)) return null;
+  const jsQrAttempt = scanWithJsQr(getCanvasImageData(rendered));
+  if (getStopReason(context)) return null;
+  return recordAttempt(context, jsQrAttempt);
 }
 
 function enhanceQrImage(source: ImageData) {
@@ -303,22 +496,163 @@ function isMobileDevice() {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
 
-async function createBitmapWithinDeadline(file: File, timeoutMs: number) {
-  const bitmapPromise = createImageBitmap(file);
-  let timerId: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<null>((resolve) => {
-    timerId = globalThis.setTimeout(() => resolve(null), timeoutMs);
-  });
+function getDefaultTimeout(mode: CccdQrScanMode, mobile: boolean) {
+  if (mode === "basic") return mobile ? 3000 : 4000;
+  if (mode === "full") return mobile ? 10000 : 12000;
+  return mobile ? 6000 : 8000;
+}
+
+function failed(reason: CccdQrScanFailureReason): CccdQrScanResult {
+  return { status: "failed", reason };
+}
+
+export async function scanCccdQrFromFileDetailed(
+  file: File,
+  options: CccdQrScanOptions = {},
+): Promise<CccdQrScanResult> {
+  if (!file.type.startsWith("image/")) return failed("unsupported_image");
+
+  const mode = options.mode ?? "auto";
+  const timeoutMs = Math.min(
+    Math.max(options.timeoutMs ?? getDefaultTimeout(mode, isMobileDevice()), 500),
+    MAX_QR_SCAN_TIMEOUT_MS,
+  );
+  const context: ScanContext = {
+    deadline: Date.now() + timeoutMs,
+    signal: options.signal,
+    sawInvalidQr: false,
+  };
+
+  reportProgress(options, { step: "decoding", message: "Đang chuẩn bị ảnh CCCD…" });
+  const decoded = await decodeImage(file, context);
+  if (typeof decoded === "string") return failed(decoded);
 
   try {
-    const bitmap = await Promise.race([bitmapPromise, timeoutPromise]);
-    if (!bitmap) {
-      void bitmapPromise.then((lateBitmap) => lateBitmap.close()).catch(() => undefined);
-      return null;
+    const stoppedBeforeScan = getStopReason(context);
+    if (stoppedBeforeScan) return failed(stoppedBeforeScan);
+
+    const detectorResult = await waitWithinDeadline(createQrBarcodeDetector(), context);
+    if (detectorResult.status === "failed") return failed(detectorResult.reason);
+    const detector = detectorResult.status === "completed" ? detectorResult.value : null;
+    reportProgress(options, { step: "whole", message: "Đang kiểm tra toàn ảnh…" });
+
+    const originalNative = recordAttempt(
+      context,
+      await scanWithBarcodeDetector(detector, decoded.source, context),
+    );
+    if (originalNative) return { status: "success", data: originalNative };
+    const stoppedAfterNativeScan = getStopReason(context);
+    if (stoppedAfterNativeScan) return failed(stoppedAfterNativeScan);
+
+    const wholeTarget = mode === "basic" ? BASIC_LONG_EDGE : AUTO_LONG_EDGE;
+    const whole = renderScanRegion(
+      decoded,
+      { x: 0, y: 0, width: decoded.width, height: decoded.height },
+      wholeTarget,
+    );
+    if (whole) {
+      const wholeResult = await scanCanvas(detector, whole, context);
+      if (wholeResult) return { status: "success", data: wholeResult };
     }
-    return bitmap;
+
+    const regions = buildQuadrantRegions(decoded.width, decoded.height);
+    const regionTarget =
+      mode === "basic" ? BASIC_LONG_EDGE : mode === "full" ? FULL_LONG_EDGE : AUTO_LONG_EDGE;
+
+    for (let index = 0; index < regions.length; index += 1) {
+      const stopReason = getStopReason(context);
+      if (stopReason) return failed(stopReason);
+      reportProgress(options, {
+        step: "region",
+        region: index + 1,
+        total: 4,
+        message: `Đang phóng to vùng ${index + 1}/4…`,
+      });
+      const rendered = renderScanRegion(decoded, regions[index], regionTarget);
+      if (rendered) {
+        const result = await scanCanvas(detector, rendered, context);
+        if (result) return { status: "success", data: result };
+      }
+      await yieldToUi();
+    }
+
+    if (mode !== "basic") {
+      const refinedRegions = buildRefinedRegions(regions);
+      for (let index = 0; index < refinedRegions.length; index += 1) {
+        const stopReason = getStopReason(context);
+        if (stopReason) return failed(stopReason);
+        reportProgress(options, {
+          step: "refining",
+          region: index + 1,
+          total: refinedRegions.length,
+          message: `Đang kiểm tra chi tiết vùng ${index + 1}/${refinedRegions.length}…`,
+        });
+        const rendered = renderScanRegion(decoded, refinedRegions[index], REFINED_LONG_EDGE);
+        if (rendered) {
+          const result = await scanCanvas(detector, rendered, context);
+          if (result) return { status: "success", data: result };
+        }
+        await yieldToUi();
+      }
+
+      for (let index = 0; index < regions.length; index += 1) {
+        const stopReason = getStopReason(context);
+        if (stopReason) return failed(stopReason);
+        reportProgress(options, {
+          step: "enhancing",
+          region: index + 1,
+          total: 4,
+          message: `Đang tăng độ rõ vùng ${index + 1}/4…`,
+        });
+        const rendered = renderScanRegion(decoded, regions[index], regionTarget);
+        if (!rendered) continue;
+
+        const enhanced = enhanceQrImage(getCanvasImageData(rendered));
+        const enhancedAttempt = scanWithJsQr(enhanced);
+        const stoppedAfterEnhancing = getStopReason(context);
+        if (stoppedAfterEnhancing) return failed(stoppedAfterEnhancing);
+        const enhancedResult = recordAttempt(context, enhancedAttempt);
+        if (enhancedResult) return { status: "success", data: enhancedResult };
+
+        const thresholdAttempt = scanWithJsQr(thresholdQrImage(enhanced));
+        const stoppedAfterThreshold = getStopReason(context);
+        if (stoppedAfterThreshold) return failed(stoppedAfterThreshold);
+        const thresholdResult = recordAttempt(context, thresholdAttempt);
+        if (thresholdResult) return { status: "success", data: thresholdResult };
+        await yieldToUi();
+      }
+    }
+
+    if (mode === "full") {
+      const rotations = [90, 180, 270] as const;
+      for (let index = 0; index < regions.length; index += 1) {
+        const rendered = renderScanRegion(decoded, regions[index], FULL_LONG_EDGE);
+        if (!rendered) continue;
+        for (const rotation of rotations) {
+          const stopReason = getStopReason(context);
+          if (stopReason) return failed(stopReason);
+          reportProgress(options, {
+            step: "rotating",
+            region: index + 1,
+            total: 4,
+            rotation,
+            message: `Đang xoay thử vùng ${index + 1}/4 (${rotation}°)…`,
+          });
+          const rotated = renderRotatedCanvas(rendered.canvas, rotation);
+          if (rotated) {
+            const result = await scanCanvas(detector, rotated, context);
+            if (result) return { status: "success", data: result };
+          }
+          await yieldToUi();
+        }
+      }
+    }
+
+    const finalStopReason = getStopReason(context);
+    if (finalStopReason) return failed(finalStopReason);
+    return failed(context.sawInvalidQr ? "invalid_qr" : "not_found");
   } finally {
-    if (timerId !== undefined) globalThis.clearTimeout(timerId);
+    decoded.close();
   }
 }
 
@@ -326,68 +660,6 @@ export async function scanCccdQrFromFile(
   file: File,
   options: CccdQrScanOptions = {},
 ): Promise<CccdQrData | null> {
-  if (!file.type.startsWith("image/")) return null;
-
-  const mobile = isMobileDevice();
-  const mode =
-    options.mode === "auto" || !options.mode ? (mobile ? "basic" : "full") : options.mode;
-  const maxTimeout = mobile ? MOBILE_QR_SCAN_TIMEOUT_MS : DESKTOP_QR_SCAN_TIMEOUT_MS;
-  const timeoutMs = Math.min(Math.max(options.timeoutMs ?? maxTimeout, 500), maxTimeout);
-  const deadline = Date.now() + timeoutMs;
-  const timedOut = () => Date.now() >= deadline;
-  const bitmap = await createBitmapWithinDeadline(file, timeoutMs);
-  if (!bitmap) return null;
-
-  try {
-    if (timedOut()) return null;
-
-    const detector = await createQrBarcodeDetector();
-    const nativeResult = await scanWithBarcodeDetector(detector, bitmap);
-    if (nativeResult) return nativeResult;
-    if (timedOut()) return null;
-
-    const regions = mode === "basic" ? QR_SCAN_REGIONS.slice(0, 4) : QR_SCAN_REGIONS;
-    for (const region of regions) {
-      if (timedOut()) return null;
-
-      const rendered = renderScanRegion(bitmap, region);
-      if (!rendered) continue;
-
-      const detected = await scanWithBarcodeDetector(detector, rendered.canvas);
-      if (detected) return detected;
-      if (timedOut()) return null;
-
-      const imageData = rendered.ctx.getImageData(
-        0,
-        0,
-        rendered.canvas.width,
-        rendered.canvas.height,
-      );
-      const originalResult = scanWithJsQr(imageData);
-      if (originalResult) return originalResult;
-      if (timedOut()) return null;
-
-      // Mobile keeps only the fast raw-image pass to avoid blocking the UI.
-      if (mode === "basic") {
-        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
-        continue;
-      }
-
-      const enhancedImage = enhanceQrImage(imageData);
-      const enhancedResult = scanWithJsQr(enhancedImage);
-      if (enhancedResult) return enhancedResult;
-      if (timedOut()) return null;
-
-      if (region.tryThreshold) {
-        const thresholdResult = scanWithJsQr(thresholdQrImage(enhancedImage));
-        if (thresholdResult) return thresholdResult;
-      }
-
-      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
-    }
-
-    return null;
-  } finally {
-    bitmap.close();
-  }
+  const result = await scanCccdQrFromFileDetailed(file, options);
+  return result.status === "success" ? result.data : null;
 }

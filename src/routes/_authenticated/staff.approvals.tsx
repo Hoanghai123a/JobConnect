@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
@@ -60,6 +61,7 @@ function ApprovalsPage() {
 
   const [items, setItems] = useState<ApprovalRequestRecord[]>([]);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [tab, setTab] = useState<Tab>("pending");
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -88,7 +90,9 @@ function ApprovalsPage() {
         ? `(admins ~ "${userId}" || creator = "${userId}")`
         : `creator = "${userId}"`;
       const tabPart = TAB_FILTERS[tab];
-      const searchPart = search.trim() ? `title ~ "${escapePb(search.trim())}"` : "";
+      const searchPart = debouncedSearch.trim()
+        ? `title ~ "${escapePb(debouncedSearch.trim())}"`
+        : "";
       const filter = [rolePart, tabPart, searchPart].filter(Boolean).join(" && ");
 
       const res = await pb.collection("approval_requests").getList(1, 200, {
@@ -102,7 +106,7 @@ function ApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, isAdmin, tab, search]);
+  }, [user?.id, isAdmin, tab, debouncedSearch]);
 
   const loadStats = useCallback(async () => {
     if (!user?.id) return;
@@ -111,10 +115,14 @@ function ApprovalsPage() {
       ? `(admins ~ "${userId}" || creator = "${userId}")`
       : `creator = "${userId}"`;
 
+    const searchPart = debouncedSearch.trim()
+      ? `title ~ "${escapePb(debouncedSearch.trim())}"`
+      : "";
+
     const counts = await Promise.all(
       (Object.keys(TAB_FILTERS) as Tab[]).map(async (key) => {
         const tabPart = TAB_FILTERS[key];
-        const filter = [rolePart, tabPart].filter(Boolean).join(" && ");
+        const filter = [rolePart, tabPart, searchPart].filter(Boolean).join(" && ");
         try {
           const r = await pb
             .collection("approval_requests")
@@ -126,7 +134,7 @@ function ApprovalsPage() {
       }),
     );
     setStats(Object.fromEntries(counts) as Record<Tab, number>);
-  }, [user?.id, isAdmin]);
+  }, [user?.id, isAdmin, debouncedSearch]);
 
   useEffect(() => {
     load();

@@ -1,6 +1,7 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Search } from "lucide-react";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -92,6 +93,7 @@ function SystemActionLogsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [logs, setLogs] = useState<StaffActionLogRecord[]>([]);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [actionFilter, setActionFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -104,7 +106,7 @@ function SystemActionLogsPage() {
     } else {
       setLoadingMore(true);
     }
-    const filter = buildLogFilter(actionFilter, search);
+    const filter = buildLogFilter(actionFilter, debouncedSearch);
 
     pb.collection("staff_action_logs")
       .getList<StaffActionLogRecord>(page, 50, {
@@ -129,7 +131,7 @@ function SystemActionLogsPage() {
     return () => {
       alive = false;
     };
-  }, [actionFilter, page, search]);
+  }, [actionFilter, debouncedSearch, page]);
 
   const updateActionFilter = (value: string) => {
     setActionFilter(value);

@@ -59,11 +59,13 @@ import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import {
   createEmploymentHistory,
   fetchEmploymentHistories,
-  findActiveEmploymentByUser,
+  getCurrentEmploymentHistory,
   getLatestEmploymentHistory,
+  getStaleWorkingEmploymentHistories,
   getEmploymentPersonalSnapshot,
   getMissingEmploymentEditFields,
   getMissingEmploymentSnapshotFields,
+  isCurrentlyWorking,
   maskCccd,
   updateEmploymentHistory,
   updateUserAndCache,
@@ -227,7 +229,6 @@ function StaffWorkerDetailPage() {
     main_house: "",
     join_date: "",
     leave_date: "",
-    status: "working",
     note: "",
   });
   const [oldHistoryForm, setOldHistoryForm] = useState({
@@ -380,10 +381,7 @@ function StaffWorkerDetailPage() {
     (viewer?.role === "staff" &&
       history.id === latestHistoryByJoinDate?.id &&
       canViewHistoryInStaffScope(viewer, history, allWorkerHistories, managedFactoryIds));
-  const activeHistory = useMemo(
-    () => histories.find((item) => item.status === "working" && !item.leave_date) || null,
-    [histories],
-  );
+  const activeHistory = useMemo(() => getCurrentEmploymentHistory(histories), [histories]);
   const recentRecruiter = isRecentRecruiter(viewer, histories);
   const canReportAdvanceForWorker = canReportAdvance(viewer, histories);
   const allowAdvanceAfterLeave = Boolean(settings.allow_advance_after_leave);
@@ -484,7 +482,7 @@ function StaffWorkerDetailPage() {
             "",
           "Ngày vào": formatDateOnly(history.join_date),
           "Ngày nghỉ": formatDateOnly(history.leave_date),
-          "Trạng thái": history.status === "working" ? "Đang làm" : "Đã nghỉ",
+          "Trạng thái": isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ",
           "Ghi chú": history.note || "",
         })),
       },
@@ -578,7 +576,6 @@ function StaffWorkerDetailPage() {
     const before = { ...activeHistory };
     await updateEmploymentHistory(activeHistory.id, {
       leave_date: leaveDate,
-      status: "left",
       note: leaveNote.trim(),
     });
 
@@ -620,10 +617,15 @@ function StaffWorkerDetailPage() {
       return;
     }
 
-    const active = await findActiveEmploymentByUser(workerUser.id);
+    const latestHistories = await fetchEmploymentHistories([workerUser.id]);
+    const active = getCurrentEmploymentHistory(latestHistories);
     if (active) {
       toast.error("Người lao động vẫn đang ở nhà máy cũ, cần báo nghỉ trước");
       return;
+    }
+
+    for (const history of getStaleWorkingEmploymentHistories(latestHistories)) {
+      await updateEmploymentHistory(history.id, { status: "left" });
     }
 
     if (latestLeaveDate && joinForm.join_date < latestLeaveDate) {
@@ -692,7 +694,6 @@ function StaffWorkerDetailPage() {
       recruiter_staff: joinForm.recruiter_staff,
       cccd_version: cccdVersionId,
       join_date: joinForm.join_date,
-      status: "working",
       note: joinForm.note.trim(),
     });
 
@@ -766,7 +767,6 @@ function StaffWorkerDetailPage() {
       main_house: history.main_house || "",
       join_date: history.join_date?.slice(0, 10) || "",
       leave_date: history.leave_date?.slice(0, 10) || "",
-      status: history.status || "working",
       note: history.note || "",
     });
   };
@@ -868,7 +868,6 @@ function StaffWorkerDetailPage() {
         cccd_version: cccdVersionId,
         join_date: oldHistoryForm.join_date,
         leave_date: oldHistoryForm.leave_date,
-        status: "left",
         note: oldHistoryForm.note.trim(),
       });
 
@@ -938,8 +937,7 @@ function StaffWorkerDetailPage() {
       recruiter_staff: historyForm.recruiter_staff || undefined,
       main_house: historyForm.main_house || undefined,
       join_date: historyForm.join_date,
-      leave_date: historyForm.leave_date || undefined,
-      status: historyForm.status as "working" | "left",
+      leave_date: historyForm.leave_date,
       note: historyForm.note.trim(),
     });
 
@@ -1056,8 +1054,10 @@ function StaffWorkerDetailPage() {
             ) : (
               <StatusChip tone="neutral">Bạn chỉ có quyền xem</StatusChip>
             )}
-            <StatusChip tone={latestHistory?.status === "working" ? "success" : "neutral"}>
-              {latestHistory?.status === "working" ? "Đang làm" : "Đã nghỉ"}
+            <StatusChip
+              tone={latestHistory && isCurrentlyWorking(latestHistory) ? "success" : "neutral"}
+            >
+              {latestHistory && isCurrentlyWorking(latestHistory) ? "Đang làm" : "Đã nghỉ"}
             </StatusChip>
           </div>
           <button
@@ -1206,8 +1206,8 @@ function StaffWorkerDetailPage() {
                 </div>
 
                 <div className="flex shrink-0 flex-wrap items-center gap-2 self-start">
-                  <StatusChip tone={history.status === "working" ? "success" : "neutral"}>
-                    {history.status === "working" ? "Đang làm" : "Đã nghỉ"}
+                  <StatusChip tone={isCurrentlyWorking(history) ? "success" : "neutral"}>
+                    {isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ"}
                   </StatusChip>
                   {canEditHistory(history) && (
                     <button
@@ -1880,22 +1880,6 @@ function StaffWorkerDetailPage() {
                 />
               </FormField>
             </div>
-            <FormField label="Trạng thái">
-              <Select
-                value={historyForm.status}
-                onValueChange={(value) =>
-                  setHistoryForm((current) => ({ ...current, status: value }))
-                }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn trạng thái" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="working">Đang làm</SelectItem>
-                  <SelectItem value="left">Đã nghỉ</SelectItem>
-                </SelectContent>
-              </Select>
-            </FormField>
             <FormField label="Ghi chú">
               <Textarea
                 value={historyForm.note}
@@ -1945,7 +1929,7 @@ function StaffWorkerDetailPage() {
                 <InfoCell label="Nhà máy" value={detailHistory.expand?.factory?.name || "—"} />
                 <InfoCell
                   label="Trạng thái"
-                  value={detailHistory.status === "working" ? "Đang làm" : "Đã nghỉ"}
+                  value={isCurrentlyWorking(detailHistory) ? "Đang làm" : "Đã nghỉ"}
                 />
                 <InfoCell label="Ngày vào" value={formatDate(detailHistory.join_date)} />
                 <InfoCell label="Ngày nghỉ" value={formatDate(detailHistory.leave_date)} />

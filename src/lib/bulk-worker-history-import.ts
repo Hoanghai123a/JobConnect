@@ -3,7 +3,12 @@ import * as XLSX from "xlsx";
 import { accountIdentityKey, normalizeAccountUsername } from "./account-identity";
 import { fetchAppSettings } from "./app-settings";
 import { normalizeDate } from "./date-utils";
-import { buildHistoryUid, computeMaxHistoryUidSeq, type EmploymentStatus } from "./employment";
+import {
+  buildHistoryUid,
+  computeMaxHistoryUidSeq,
+  deriveEmploymentStatus,
+  type EmploymentStatus,
+} from "./employment";
 import { exportToExcel } from "./excel";
 import { fetchFactories, type FactoryRecord } from "./factories";
 import { fetchMainHouses, type MainHouseRecord } from "./main-houses";
@@ -181,18 +186,6 @@ function parseOptionalDate(value: unknown, label: string) {
   return normalized;
 }
 
-function parseHistoryStatus(rawStatus: string, leaveDate: string): EmploymentStatus {
-  const normalized = normalizeLabel(rawStatus);
-  const explicitWorking = normalized === "working" || normalized === "dang lam";
-  const explicitLeft = normalized === "left" || normalized === "da nghi";
-  if (rawStatus && !explicitWorking && !explicitLeft) {
-    throw new Error('Trạng thái chỉ nhận "Đang làm", "Đã nghỉ", "working" hoặc "left".');
-  }
-  if (leaveDate && explicitWorking) throw new Error("Trạng thái Đang làm mâu thuẫn với Ngày nghỉ.");
-  if (!leaveDate && explicitLeft) throw new Error("Trạng thái Đã nghỉ bắt buộc phải có Ngày nghỉ.");
-  return leaveDate ? "left" : "working";
-}
-
 function createRecordId(usedIds: Set<string>) {
   for (;;) {
     const bytes = new Uint8Array(15);
@@ -350,7 +343,7 @@ function parseHistoryRow(
   const joinDate = parseRequiredDate(joinRaw, "Ngày vào làm");
   const leaveDate = parseOptionalDate(leaveRaw, "Ngày nghỉ");
   if (leaveDate && leaveDate < joinDate) throw new Error("Ngày nghỉ không thể trước Ngày vào làm.");
-  const status = parseHistoryStatus(pickValue(raw, ["Trạng thái", "status"]), leaveDate);
+  const status = deriveEmploymentStatus({ leave_date: leaveDate || undefined });
   const snapshotCccdRaw = pickValue(raw, [
     "CCCD tại thời điểm đi làm",
     "CCCD tại nhà máy",
@@ -650,10 +643,6 @@ export async function prepareBulkWorkerImport(file: File): Promise<PreparedBulkW
           reason = `Lịch sử dòng ${current.rowNumber} chồng ngày với dòng ${next.rowNumber}.`;
           break;
         }
-        if (index < historyEntries.length - 1 && current.status === "working") {
-          reason = "Chỉ lịch sử cuối cùng được phép có trạng thái Đang làm.";
-          break;
-        }
       }
     }
 
@@ -881,7 +870,6 @@ export function downloadBulkWorkerTemplate() {
           "Mã nhân viên": "NM001",
           "Ngày vào làm": "01/01/2025",
           "Ngày nghỉ": "31/12/2025",
-          "Trạng thái": "Đã nghỉ",
           "Mã số thuế": "0123456789",
           "Ghi chú": "Lịch sử cũ",
         },
@@ -894,7 +882,6 @@ export function downloadBulkWorkerTemplate() {
           "Mã nhân viên": "NM002",
           "Ngày vào làm": "01/01/2026",
           "Ngày nghỉ": "",
-          "Trạng thái": "Đang làm",
           "Mã số thuế": "0123456789",
           "Ghi chú": "Lịch sử hiện tại",
         },

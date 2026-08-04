@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { useAuth } from "@/lib/auth";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -2090,6 +2091,7 @@ function AdminBalances() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ coins: "", reserve_balance: "" });
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
 
   useEffect(() => {
     fetchAllBalances()
@@ -2098,8 +2100,8 @@ function AdminBalances() {
   }, []);
 
   const filtered = balances.filter((b) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
+    if (!debouncedSearch.trim()) return true;
+    const q = debouncedSearch.toLowerCase();
     const name = (b.expand?.user?.full_name || "").toLowerCase();
     const username = (b.expand?.user?.username || "").toLowerCase();
     const uid = (b.expand?.user?.uid || "").toLowerCase();

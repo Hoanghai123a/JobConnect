@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { pb, dataUrlToFile, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { useQueryClient } from "@tanstack/react-query";
@@ -393,6 +394,9 @@ function FactoriesTab() {
   const [factorySearch, setFactorySearch] = useState("");
   const [areaSearch, setAreaSearch] = useState("");
   const [mainHouseSearch, setMainHouseSearch] = useState("");
+  const debouncedFactorySearch = useDebouncedSearch(factorySearch);
+  const debouncedAreaSearch = useDebouncedSearch(areaSearch);
+  const debouncedMainHouseSearch = useDebouncedSearch(mainHouseSearch);
   const [bulkAdvanceLimit, setBulkAdvanceLimit] = useState("");
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
@@ -403,8 +407,8 @@ function FactoriesTab() {
   const [allowAfterLeavePending, setAllowAfterLeavePending] = useState(false);
 
   const filteredFactories = items.filter((f) => {
-    if (!factorySearch.trim()) return true;
-    const q = factorySearch.toLowerCase();
+    if (!debouncedFactorySearch.trim()) return true;
+    const q = debouncedFactorySearch.toLowerCase();
     return (
       f.name.toLowerCase().includes(q) ||
       (f.address || "").toLowerCase().includes(q) ||
@@ -413,14 +417,14 @@ function FactoriesTab() {
   });
 
   const filteredAreas = areas.filter((a) => {
-    if (!areaSearch.trim()) return true;
-    const q = areaSearch.toLowerCase();
+    if (!debouncedAreaSearch.trim()) return true;
+    const q = debouncedAreaSearch.toLowerCase();
     return a.name.toLowerCase().includes(q) || (a.note || "").toLowerCase().includes(q);
   });
 
   const filteredMainHouses = mainHouses.filter((h) => {
-    if (!mainHouseSearch.trim()) return true;
-    const q = mainHouseSearch.toLowerCase();
+    if (!debouncedMainHouseSearch.trim()) return true;
+    const q = debouncedMainHouseSearch.toLowerCase();
     return (
       h.name.toLowerCase().includes(q) ||
       (h.address || "").toLowerCase().includes(q) ||

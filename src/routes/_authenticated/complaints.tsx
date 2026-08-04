@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { StatusChip, toneBorder, ChipTone } from "@/components/ui/status-chip";
@@ -94,6 +95,7 @@ function ComplaintsPage() {
   const [items, setItems] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [tab, setTab] = useState<ComplaintTab>("pending");
   const [stats, setStats] = useState<Record<Status, number>>({
     pending: 0,
@@ -115,7 +117,12 @@ function ComplaintsPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const filter = buildComplaintFilter({ isAdmin, phone: user?.phone, tab, search });
+      const filter = buildComplaintFilter({
+        isAdmin,
+        phone: user?.phone,
+        tab,
+        search: debouncedSearch,
+      });
       const res = await pb.collection("complaints").getList(1, 200, {
         filter,
         sort: "-created",
@@ -129,7 +136,12 @@ function ComplaintsPage() {
   };
 
   const loadStats = async () => {
-    const base = buildComplaintFilter({ isAdmin, phone: user?.phone, tab: "all", search });
+    const base = buildComplaintFilter({
+      isAdmin,
+      phone: user?.phone,
+      tab: "all",
+      search: debouncedSearch,
+    });
     const [pending, accepted, rejected] = await Promise.all([
       countComplaints(joinPbFilters([base, 'status="pending"'])),
       countComplaints(joinPbFilters([base, 'status="accepted"'])),
@@ -142,7 +154,7 @@ function ComplaintsPage() {
     load();
     loadStats().catch(() => {});
     /* eslint-disable-next-line */
-  }, [isAdmin, user?.phone, tab, search]);
+  }, [debouncedSearch, isAdmin, user?.phone, tab]);
 
   useEffect(() => {
     if (!user?.id) {

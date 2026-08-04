@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Building2, ChevronRight } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/command";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import type { FactoryRecord } from "@/lib/factories";
 import type { UserRecord } from "@/lib/pocketbase";
 
@@ -42,12 +43,30 @@ export function UserPicker({
   allowClear?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedSearch(query);
   const selected = users.find((u) => u.id === value);
+
+  const filteredUsers = useMemo(() => {
+    const keyword = normalizeUserPickerSearch(debouncedQuery);
+    if (!keyword) return users;
+    return users.filter((u) =>
+      normalizeUserPickerSearch(
+        `${u.full_name || ""} ${u.username || ""} ${u.phone || ""} ${u.uid || ""} ${u.cccd || ""}`,
+      ).includes(keyword),
+    );
+  }, [debouncedQuery, users]);
 
   return (
     <div className="space-y-1">
       {label && <Label className="text-xs">{label}</Label>}
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setQuery("");
+        }}
+      >
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -62,14 +81,8 @@ export function UserPicker({
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-          <Command
-            filter={(itemValue, search) =>
-              normalizeUserPickerSearch(itemValue).includes(normalizeUserPickerSearch(search))
-                ? 1
-                : 0
-            }
-          >
-            <CommandInput placeholder="Tìm kiếm..." />
+          <Command shouldFilter={false}>
+            <CommandInput placeholder="Tìm kiếm..." value={query} onValueChange={setQuery} />
             <CommandList>
               <CommandEmpty>Không tìm thấy.</CommandEmpty>
               <CommandGroup>
@@ -84,7 +97,7 @@ export function UserPicker({
                     <span className="text-muted-foreground">Bỏ chọn</span>
                   </CommandItem>
                 )}
-                {users.map((u) => (
+                {filteredUsers.map((u) => (
                   <CommandItem
                     key={u.id}
                     value={`${u.full_name || ""} ${u.username || ""} ${u.phone || ""} ${u.uid || ""} ${u.cccd || ""}`}
@@ -122,9 +135,26 @@ export function FactoryPicker({
   onChange: (v: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedSearch(query);
   const selected = factories.find((f) => f.id === value);
+
+  const filteredFactories = useMemo(() => {
+    const keyword = normalizeUserPickerSearch(debouncedQuery);
+    if (!keyword) return factories;
+    return factories.filter((f) =>
+      normalizeUserPickerSearch(`${f.name} ${f.code || ""}`).includes(keyword),
+    );
+  }, [debouncedQuery, factories]);
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setQuery("");
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -137,12 +167,12 @@ export function FactoryPicker({
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Tìm nhà máy..." />
+        <Command shouldFilter={false}>
+          <CommandInput placeholder="Tìm nhà máy..." value={query} onValueChange={setQuery} />
           <CommandList>
             <CommandEmpty>Không tìm thấy.</CommandEmpty>
             <CommandGroup>
-              {factories.map((f) => (
+              {filteredFactories.map((f) => (
                 <CommandItem
                   key={f.id}
                   value={`${f.name} ${f.code || ""}`}
