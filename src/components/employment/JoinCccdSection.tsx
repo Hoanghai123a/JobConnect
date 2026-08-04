@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CccdQrPasteButton } from "@/components/cccd/CccdQrPasteButton";
 import { CccdQrScanFeedbackDialog } from "@/components/cccd/CccdQrScanFeedbackDialog";
 import {
   displayDateToPocketBase,
@@ -178,7 +179,7 @@ export function JoinCccdSection({
     });
     updateLocation(confirmDraft.address.trim());
     setConfirmDraft(null);
-    toast.success("Đã áp dụng thông tin từ mã QR CCCD");
+    toast.success("Đã áp dụng thông tin CCCD");
   };
 
   return (
@@ -193,13 +194,25 @@ export function JoinCccdSection({
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Số CCCD tại nhà máy</Label>
-          <Input
-            value={value.worker_cccd_snapshot}
-            onChange={(event) =>
-              onChange({ worker_cccd_snapshot: event.target.value.replace(/\D/g, "") })
-            }
-            inputMode="numeric"
-          />
+          <div className="relative">
+            <Input
+              value={value.worker_cccd_snapshot}
+              onChange={(event) =>
+                onChange({ worker_cccd_snapshot: event.target.value.replace(/\D/g, "") })
+              }
+              inputMode="numeric"
+              className="pr-16"
+            />
+            <CccdQrPasteButton
+              className="absolute right-1 top-1/2 -translate-y-1/2 bg-background/90"
+              disabled={scanning}
+              onData={(data) => {
+                cancelActiveScan();
+                setFailure(null);
+                setConfirmDraft(toQrConfirmDraft(data));
+              }}
+            />
+          </div>
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Ngày sinh</Label>
@@ -308,10 +321,10 @@ export function JoinCccdSection({
       >
         <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Xác nhận dữ liệu đọc từ CCCD</DialogTitle>
+            <DialogTitle>Xác nhận thông tin CCCD</DialogTitle>
             <DialogDescription>
-              Kiểm tra trước khi áp dụng vào biểu mẫu báo đi làm. Địa chỉ đọc từ mã QR có thể chỉnh
-              sửa trước khi áp dụng.
+              Kiểm tra trước khi áp dụng vào biểu mẫu báo đi làm. Các thông tin có thể chỉnh sửa
+              trước khi áp dụng.
             </DialogDescription>
           </DialogHeader>
           {confirmDraft && (

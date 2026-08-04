@@ -7,6 +7,7 @@ import {
   type ChangeEvent,
   type FormEvent,
   type HTMLAttributes,
+  type ReactNode,
   type RefCallback,
 } from "react";
 import {
@@ -20,6 +21,7 @@ import {
   ScanLine,
 } from "lucide-react";
 import { toast } from "sonner";
+import { CccdQrPasteButton } from "@/components/cccd/CccdQrPasteButton";
 import { CccdQrScanFeedbackDialog } from "@/components/cccd/CccdQrScanFeedbackDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -326,7 +328,7 @@ export function QuickWorkerAccountDialog({
     );
     clearRecordError(entryId);
     setPendingQrOverwrite(null);
-    toast.success("Đã đọc thông tin CCCD từ QR");
+    toast.success("Đã áp dụng thông tin CCCD");
   };
 
   const prepareQrData = (entryId: string, data: CccdQrData) => {
@@ -813,6 +815,11 @@ export function QuickWorkerAccountDialog({
                       onPick={pickCccdImage}
                       onScan={scanImage}
                       onClear={clearCccdImage}
+                      onPaste={(entryId, data) => {
+                        cancelActiveScan();
+                        setScanFailure(null);
+                        prepareQrData(entryId, data);
+                      }}
                       onRequestCamera={(side) =>
                         (side === "front" ? frontCameraInputRefs : backCameraInputRefs).current[
                           entry.id
@@ -907,9 +914,9 @@ export function QuickWorkerAccountDialog({
       >
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Xác nhận dữ liệu từ mã QR</DialogTitle>
+            <DialogTitle>Xác nhận thông tin CCCD</DialogTitle>
             <DialogDescription>
-              Một số thông tin đã có dữ liệu. Chọn cách áp dụng thông tin mới đọc từ CCCD.
+              Một số ô đã có dữ liệu. Chọn cách áp dụng thông tin CCCD mới.
             </DialogDescription>
           </DialogHeader>
           {pendingQrOverwrite && (
@@ -922,7 +929,7 @@ export function QuickWorkerAccountDialog({
           )}
           <DialogFooter className="sm:flex-wrap">
             <Button type="button" variant="ghost" onClick={() => setPendingQrOverwrite(null)}>
-              Bỏ qua QR
+              Bỏ qua
             </Button>
             <Button
               type="button"
@@ -941,7 +948,7 @@ export function QuickWorkerAccountDialog({
                 applyQrData(pendingQrOverwrite.entryId, pendingQrOverwrite.data, true);
               }}
             >
-              Ghi đè bằng QR
+              Ghi đè bằng dữ liệu mới
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -965,6 +972,7 @@ function QuickWorkerEntryFields({
   onPick,
   onScan,
   onClear,
+  onPaste,
   onRequestCamera,
   onRequestLibrary,
 }: {
@@ -994,6 +1002,7 @@ function QuickWorkerEntryFields({
     mode?: CccdQrScanMode,
   ) => Promise<void>;
   onClear: (entryId: string, side: QuickScanSide) => void;
+  onPaste: (entryId: string, data: CccdQrData) => void;
   onRequestCamera: (side: "front" | "back") => void;
   onRequestLibrary: (side: "front" | "back") => void;
 }) {
@@ -1091,6 +1100,13 @@ function QuickWorkerEntryFields({
           onChange={(value) => setField("cccd", value)}
           placeholder="CCCD"
           inputMode="text"
+          trailingAction={
+            <CccdQrPasteButton
+              disabled={scanningEntrySide !== null}
+              className="bg-white/90"
+              onData={(data) => onPaste(entry.id, data)}
+            />
+          }
           desktopClassName="desktop:col-start-2 desktop:row-start-2"
         />
         <TextField
@@ -1226,6 +1242,7 @@ function TextField({
   type = "text",
   inputMode,
   list,
+  trailingAction,
   desktopClassName,
 }: {
   label: string;
@@ -1235,6 +1252,7 @@ function TextField({
   type?: string;
   inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
   list?: string;
+  trailingAction?: ReactNode;
   desktopClassName?: string;
 }) {
   return (
@@ -1250,16 +1268,24 @@ function TextField({
           className="[&_input]:bg-white [&_input]:text-slate-900 desktop:[&_button]:h-7 desktop:[&_button]:w-7 desktop:[&_input]:h-9 desktop:[&_input]:rounded-lg desktop:[&_input]:px-2.5 desktop:[&_input]:pr-8 desktop:[&_input]:text-sm"
         />
       ) : (
-        <Input
-          type={type}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={placeholder}
-          inputMode={inputMode}
-          list={list}
-          title={value || placeholder}
-          className="truncate bg-white text-slate-900 desktop:h-9 desktop:rounded-lg desktop:px-2.5 desktop:text-sm"
-        />
+        <div className="relative">
+          <Input
+            type={type}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder={placeholder}
+            inputMode={inputMode}
+            list={list}
+            title={value || placeholder}
+            className={cn(
+              "truncate bg-white text-slate-900 desktop:h-9 desktop:rounded-lg desktop:px-2.5 desktop:text-sm",
+              trailingAction && "pr-16 desktop:pr-16",
+            )}
+          />
+          {trailingAction && (
+            <div className="absolute right-1 top-1/2 -translate-y-1/2">{trailingAction}</div>
+          )}
+        </div>
       )}
     </div>
   );

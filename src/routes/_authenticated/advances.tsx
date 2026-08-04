@@ -743,23 +743,36 @@ export function AdvancesPage() {
         disbursed_at: disbursed ? new Date().toISOString() : "",
       };
       await updateRow(row.id, after);
-      await createStaffActionLog({
-        actor: user,
-        targetUserId: row.user,
-        targetCollection: "advances",
-        targetRecord: row.id,
-        action: "update",
-        before: { disbursed: Boolean(row.disbursed) },
-        after,
-        note: disbursed ? "Admin đánh dấu đã giải ngân" : "Admin hoàn tác giải ngân",
-      });
       setAdvanceDetail((current) =>
         current && current.id === row.id ? { ...current, ...after } : current,
       );
-      toast.success(disbursed ? "Đã đánh dấu giải ngân" : "Đã hoàn tác giải ngân");
       load();
+
+      try {
+        await createStaffActionLog({
+          actor: user,
+          targetUserId: row.user,
+          targetCollection: "advances",
+          targetRecord: row.id,
+          action: "update",
+          before: { disbursed: Boolean(row.disbursed) },
+          after,
+          note: disbursed ? "Admin đánh dấu đã giải ngân" : "Admin hoàn tác giải ngân",
+        });
+      } catch {
+        toast.warning(
+          disbursed
+            ? "Đã cập nhật giải ngân nhưng chưa ghi được nhật ký"
+            : "Đã hoàn tác giải ngân nhưng chưa ghi được nhật ký",
+        );
+        return false;
+      }
+
+      toast.success(disbursed ? "Đã đánh dấu giải ngân" : "Đã hoàn tác giải ngân");
+      return true;
     } catch (error: unknown) {
       toast.error((error as any)?.message || "Lỗi");
+      return false;
     }
   };
 
@@ -1860,16 +1873,24 @@ function AdvanceDetailDialog({
   savingNotes: boolean;
   setSavingNotes: (v: boolean) => void;
   updateRow: (id: string, payload: Partial<AdvanceRecord>) => Promise<void>;
-  setDisbursed: (row: AdvanceRecord, disbursed: boolean) => Promise<void>;
+  setDisbursed: (row: AdvanceRecord, disbursed: boolean) => Promise<boolean>;
   requestAdvanceUndo: (row: AdvanceRecord, kind: AdvanceUndoKind) => void;
   load: () => void;
 }) {
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
+  const advanceDetailIdRef = useRef<string | null>(null);
+  const disbursingIdRef = useRef<string | null>(null);
   const [showQr, setShowQr] = useState(false);
+  const [loadedQrKey, setLoadedQrKey] = useState<string | null>(null);
+  const [failedQrKey, setFailedQrKey] = useState<string | null>(null);
+  const [qrRetry, setQrRetry] = useState(0);
+  const [disbursingId, setDisbursingId] = useState<string | null>(null);
 
   useEffect(() => {
+    advanceDetailIdRef.current = advanceDetail?.id || null;
     setShowQr(false);
+    setQrRetry(0);
   }, [advanceDetail?.id]);
 
   const status = advanceDetail?.status;
@@ -1880,6 +1901,26 @@ function AdvanceDetailDialog({
   const canDisburse = isAdmin && isAcceptedTabStatus && !disbursed;
   const canUndoRecovery = isAdmin && status === "accepted" && recovery !== "none";
   const canUndoRejection = isAdmin && status === "rejected";
+  const qrUrl = useMemo(() => {
+    if (!advanceDetail || payoutMethod !== "bank_transfer" || !isAcceptedTabStatus) return null;
+    return buildVietQrUrl({
+      bankName: advanceDetail.bank_name || "",
+      accountNumber: advanceDetail.bank_account_number || "",
+      accountName: advanceDetail.bank_account_name,
+      amount: advanceDetail.amount,
+      description: buildTransferDescription(transferDescriptionTemplate, advanceDetail.full_name),
+    });
+  }, [advanceDetail, isAcceptedTabStatus, payoutMethod, transferDescriptionTemplate]);
+  const qrKey = advanceDetail && qrUrl ? `${advanceDetail.id}:${qrUrl}:${qrRetry}` : null;
+  const qrImageUrl =
+    qrUrl && qrRetry > 0 ? `${qrUrl}${qrUrl.includes("?") ? "&" : "?"}_retry=${qrRetry}` : qrUrl;
+  const qrReady = Boolean(qrKey && loadedQrKey === qrKey);
+  const qrFailed = Boolean(qrKey && failedQrKey === qrKey);
+  const isDisbursing = Boolean(advanceDetail && disbursingId === advanceDetail.id);
+  const canSubmitDisbursement =
+    canDisburse &&
+    !isDisbursing &&
+    (payoutMethod === "cash" || Boolean(qrUrl && qrReady && !qrFailed));
 
   const currentIndex = useMemo(() => {
     if (!advanceDetail) return -1;
@@ -1897,6 +1938,32 @@ function AdvanceDetailDialog({
     if (hasNext) setAdvanceDetail(items[currentIndex + 1]);
   }, [hasNext, items, currentIndex, setAdvanceDetail]);
 
+  const disburseAndGoNext = useCallback(async () => {
+    const row = advanceDetail;
+    if (!row || !canDisburse || disbursingIdRef.current) return;
+
+    if (normalizeAdvancePayoutMethod(row.payout_method) === "bank_transfer" && !qrReady) {
+      toast.warning(
+        qrFailed || !qrUrl
+          ? "Mã QR chưa sẵn sàng, vui lòng tải lại trước khi giải ngân"
+          : "Vui lòng chờ mã QR của record hiện tại tải xong",
+      );
+      return;
+    }
+
+    disbursingIdRef.current = row.id;
+    setDisbursingId(row.id);
+    try {
+      const succeeded = await setDisbursed(row, true);
+      if (succeeded && advanceDetailIdRef.current === row.id) {
+        goNext();
+      }
+    } finally {
+      if (disbursingIdRef.current === row.id) disbursingIdRef.current = null;
+      setDisbursingId((current) => (current === row.id ? null : current));
+    }
+  }, [advanceDetail, canDisburse, goNext, qrFailed, qrReady, qrUrl, setDisbursed]);
+
   useEffect(() => {
     if (!advanceDetail) return;
     const handler = (e: KeyboardEvent) => {
@@ -1910,11 +1977,13 @@ function AdvanceDetailDialog({
       }
       if (e.key === "ArrowLeft") {
         e.preventDefault();
+        if (e.repeat || isDisbursing) return;
         goPrev();
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
+        if (e.repeat || isDisbursing) return;
         if (canDisburse && advanceDetail) {
-          void setDisbursed(advanceDetail, true).then(goNext);
+          void disburseAndGoNext();
         } else {
           goNext();
         }
@@ -1922,7 +1991,7 @@ function AdvanceDetailDialog({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [advanceDetail, canDisburse, setDisbursed, goPrev, goNext]);
+  }, [advanceDetail, canDisburse, disburseAndGoNext, goPrev, goNext, isDisbursing]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -1934,11 +2003,88 @@ function AdvanceDetailDialog({
   };
 
   const handleTouchEnd = () => {
+    if (isDisbursing) return;
     const diff = touchStartX.current - touchEndX.current;
     const threshold = 50;
     if (diff > threshold) goNext();
     else if (diff < -threshold) goPrev();
   };
+
+  const disbursementHint =
+    canDisburse || isDisbursing
+      ? isDisbursing
+        ? "Đang xác nhận giải ngân..."
+        : payoutMethod === "bank_transfer" && !qrUrl
+          ? "Không thể tạo mã QR cho record này"
+          : payoutMethod === "bank_transfer" && qrFailed
+            ? "Mã QR tải lỗi, vui lòng tải lại"
+            : payoutMethod === "bank_transfer" && !qrReady
+              ? "Đang tải mã QR của record hiện tại..."
+              : "Bấm → để đánh dấu đã giải ngân"
+      : "Vuốt hoặc bấm mũi tên để chuyển";
+
+  const qrBlock =
+    qrUrl && qrKey ? (
+      <div className="mt-3 flex flex-col items-center gap-2 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3">
+        <div className="text-[11px] font-semibold text-primary">Mã QR chuyển khoản</div>
+        <div className="relative flex h-52 w-52 items-center justify-center overflow-hidden rounded-lg bg-background">
+          {!qrReady && !qrFailed && (
+            <div
+              className="flex flex-col items-center gap-2 px-4 text-center text-xs text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              <RotateCcw className="h-5 w-5 animate-spin text-primary" />
+              Đang tải mã QR của record hiện tại...
+            </div>
+          )}
+          {qrFailed && (
+            <div
+              className="flex flex-col items-center gap-2 px-4 text-center text-xs text-destructive"
+              role="alert"
+            >
+              <TriangleAlert className="h-5 w-5" />
+              Không tải được mã QR. Không thể xác nhận giải ngân lúc này.
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setLoadedQrKey(null);
+                  setFailedQrKey(null);
+                  setQrRetry((current) => current + 1);
+                }}
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Tải lại mã QR
+              </Button>
+            </div>
+          )}
+          <img
+            key={qrKey}
+            src={qrImageUrl || qrUrl}
+            alt={`Mã QR chuyển khoản cho ${advanceDetail?.full_name || "người lao động"}`}
+            className={cn(
+              "h-52 w-52 rounded-lg transition-opacity",
+              qrReady ? "opacity-100" : "pointer-events-none absolute inset-0 opacity-0",
+            )}
+            loading="eager"
+            fetchPriority="high"
+            onLoad={() => {
+              setFailedQrKey((current) => (current === qrKey ? null : current));
+              setLoadedQrKey(qrKey);
+            }}
+            onError={() => {
+              setLoadedQrKey((current) => (current === qrKey ? null : current));
+              setFailedQrKey(qrKey);
+            }}
+          />
+        </div>
+        <div className="text-center text-[11px] text-muted-foreground">
+          Record hiện tại: {advanceDetail?.full_name || "-"} ·{" "}
+          {formatMoney(advanceDetail?.amount || 0)} VND
+        </div>
+      </div>
+    ) : null;
 
   return (
     <Dialog open={!!advanceDetail} onOpenChange={(open) => !open && setAdvanceDetail(null)}>
@@ -1952,40 +2098,39 @@ function AdvanceDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {(items.length > 1 || canDisburse) && (
-          <div className="flex items-center justify-between">
+        {(items.length > 1 || canDisburse || isDisbursing) && (
+          <div className="flex items-center justify-between gap-2">
             <Button
               size="icon"
               variant="outline"
-              className="h-9 w-9 rounded-full"
-              disabled={!hasPrev}
+              className="h-9 w-9 shrink-0 rounded-full"
+              disabled={!hasPrev || isDisbursing}
               onClick={goPrev}
               aria-label="Card trước"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-xs text-muted-foreground">
-              {canDisburse ? "Bấm → để đánh dấu đã giải ngân" : "Vuốt hoặc bấm mũi tên để chuyển"}
-            </span>
-            {canDisburse ? (
+            <span className="text-center text-xs text-muted-foreground">{disbursementHint}</span>
+            {canDisburse || isDisbursing ? (
               <Button
                 size="icon"
-                className="h-9 w-9 rounded-full"
-                onClick={async () => {
-                  if (!advanceDetail) return;
-                  await setDisbursed(advanceDetail, true);
-                  goNext();
-                }}
-                aria-label="Đánh dấu đã giải ngân & sang card tiếp"
-                title="Đánh dấu đã giải ngân & sang card tiếp"
+                className="h-9 w-9 shrink-0 rounded-full"
+                disabled={!canSubmitDisbursement}
+                onClick={() => void disburseAndGoNext()}
+                aria-label="Đánh dấu đã giải ngân và sang card tiếp"
+                title="Đánh dấu đã giải ngân và sang card tiếp"
               >
-                <ChevronRight className="h-4 w-4" />
+                {isDisbursing ? (
+                  <RotateCcw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
               </Button>
             ) : (
               <Button
                 size="icon"
                 variant="outline"
-                className="h-9 w-9 rounded-full"
+                className="h-9 w-9 shrink-0 rounded-full"
                 disabled={!hasNext}
                 onClick={goNext}
                 aria-label="Card tiếp theo"
@@ -2095,65 +2240,40 @@ function AdvanceDetailDialog({
                   </div>
                 </>
               )}
+              {payoutMethod === "bank_transfer" && isAcceptedTabStatus && !qrUrl && (
+                <div className="mt-3 flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  Không thể tạo mã QR. Vui lòng kiểm tra ngân hàng và số tài khoản trước khi giải
+                  ngân.
+                </div>
+              )}
               {payoutMethod === "bank_transfer" &&
                 isAcceptedTabStatus &&
-                (() => {
-                  const qrUrl = buildVietQrUrl({
-                    bankName: advanceDetail.bank_name || "",
-                    accountNumber: advanceDetail.bank_account_number || "",
-                    accountName: advanceDetail.bank_account_name,
-                    amount: advanceDetail.amount,
-                    description: buildTransferDescription(
-                      transferDescriptionTemplate,
-                      advanceDetail.full_name,
-                    ),
-                  });
-                  if (!qrUrl) return null;
-                  const qrBlock = (
-                    <div className="mt-3 flex flex-col items-center gap-2 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3">
-                      <div className="text-[11px] font-semibold text-primary">
-                        Mã QR chuyển khoản
-                      </div>
-                      <img
-                        src={qrUrl}
-                        alt="QR chuyển khoản"
-                        className="h-52 w-52 rounded-lg"
-                        loading="lazy"
-                      />
-                      <div className="text-center text-[11px] text-muted-foreground">
-                        Quét mã để chuyển {formatMoney(advanceDetail.amount)} VND
-                      </div>
-                    </div>
-                  );
-                  if (!disbursed) return qrBlock;
-                  return (
-                    <>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <Button size="sm" variant="outline" onClick={() => setShowQr((v) => !v)}>
-                          {showQr ? "Ẩn mã QR" : "Xem mã QR"}
+                qrUrl &&
+                (!disbursed ? (
+                  qrBlock
+                ) : (
+                  <>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setShowQr((v) => !v)}>
+                        {showQr ? "Ẩn mã QR" : "Xem mã QR"}
+                      </Button>
+                      {isAdmin && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-amber-600 hover:text-amber-700"
+                          onClick={async () => {
+                            await setDisbursed(advanceDetail, false);
+                          }}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" /> Hoàn tác giải ngân
                         </Button>
-                        {isAdmin && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-amber-600 hover:text-amber-700"
-                            onClick={async () => {
-                              await setDisbursed(advanceDetail, false);
-                              setAdvanceDetail({
-                                ...advanceDetail,
-                                disbursed: false,
-                                disbursed_at: "",
-                              });
-                            }}
-                          >
-                            <RotateCcw className="h-3.5 w-3.5" /> Hoàn tác giải ngân
-                          </Button>
-                        )}
-                      </div>
-                      {showQr && qrBlock}
-                    </>
-                  );
-                })()}
+                      )}
+                    </div>
+                    {showQr && qrBlock}
+                  </>
+                ))}
             </div>
             <AdvanceTextBlock label="Lý do ứng" value={advanceDetail.reason} />
             {isAdmin ? (

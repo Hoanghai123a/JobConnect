@@ -95,6 +95,95 @@ export function parseCccdQrText(text: string): CccdQrData | null {
   };
 }
 
+type PastedCccdField =
+  | "cccd"
+  | "oldIdentity"
+  | "fullName"
+  | "dateOfBirth"
+  | "gender"
+  | "address"
+  | "issuedDate";
+
+const PASTED_CCCD_LABELS: Record<string, PastedCccdField> = {
+  "so cccd": "cccd",
+  cccd: "cccd",
+  "so cmnd": "oldIdentity",
+  cmnd: "oldIdentity",
+  "so cmt": "oldIdentity",
+  cmt: "oldIdentity",
+  "ho va ten": "fullName",
+  "ho ten": "fullName",
+  "ngay sinh": "dateOfBirth",
+  "gioi tinh": "gender",
+  "noi thuong tru": "address",
+  "dia chi thuong tru": "address",
+  "thuong tru": "address",
+  "ngay cap cccd": "issuedDate",
+  "ngay cap": "issuedDate",
+};
+
+function normalizePastedCccdLabel(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u0110\u0111]/g, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export function parseCccdPastedText(text: string): CccdQrData | null {
+  const normalizedText = String(text ?? "")
+    .split("\u0000")
+    .join("")
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, "")
+    .replace(/\r\n?/g, "\n")
+    .trim();
+  if (!normalizedText) return null;
+
+  if (normalizedText.includes("|")) {
+    const qrData = parseCccdQrText(normalizedText);
+    if (qrData?.cccd?.length === 12 && qrData.fullName?.trim()) return qrData;
+  }
+
+  const values: Partial<Record<PastedCccdField, string>> = {};
+  let activeField: PastedCccdField | null = null;
+
+  for (const rawLine of normalizedText.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const labelledLine = /^([^:\uFF1A]+?)\s*[:\uFF1A]\s*(.*)$/.exec(line);
+    if (labelledLine) {
+      activeField = PASTED_CCCD_LABELS[normalizePastedCccdLabel(labelledLine[1])] ?? null;
+      if (activeField) values[activeField] = labelledLine[2].trim();
+      continue;
+    }
+
+    if (activeField) {
+      values[activeField] = [values[activeField], line].filter(Boolean).join(" ");
+    }
+  }
+
+  const cccd = values.cccd?.replace(/\D/g, "") || "";
+  const fullName = values.fullName?.trim() || "";
+  if (cccd.length !== 12 || !fullName) return null;
+
+  const dateOfBirth = normalizeDisplayDate(values.dateOfBirth);
+  const issuedDate = normalizeDisplayDate(values.issuedDate);
+  if ((values.dateOfBirth && !dateOfBirth) || (values.issuedDate && !issuedDate)) return null;
+
+  return {
+    cccd,
+    oldIdentity: values.oldIdentity?.replace(/\D/g, "") || "",
+    fullName,
+    dateOfBirth,
+    gender: values.gender?.trim() || "",
+    address: values.address?.trim() || "",
+    issuedDate,
+  };
+}
+
 type ScanRegion = {
   x: number;
   y: number;
