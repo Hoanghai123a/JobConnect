@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ClipboardList, Landmark, ShieldCheck } from "lucide-react";
+import { ClipboardList, Landmark, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -32,6 +32,7 @@ import { escapePb } from "@/lib/delegations";
 import { updateUserAndCache } from "@/lib/employment";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { VN_BANKS } from "@/lib/vn-banks";
+import { DeleteWorkerDialog } from "@/components/admin/DeleteWorkerDialog";
 
 function userSearchFilter(search: string) {
   const q = escapePb(search.trim());
@@ -53,6 +54,7 @@ function AdminAccountsPage() {
   const debouncedSearch = useDebouncedSearch(search);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [detailUser, setDetailUser] = useState<UserRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserRecord | null>(null);
   const [bankForm, setBankForm] = useState({
     bank_name: "",
     bank_account_number: "",
@@ -391,6 +393,17 @@ function AdminAccountsPage() {
             </div>
           )}
           <DrawerFooter>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setDeleteTarget(detailUser);
+                setDetailUser(null);
+              }}
+              disabled={!detailUser || saving || savingProfile}
+              className="rounded-xl"
+            >
+              <Trash2 className="h-4 w-4" /> Xóa tài khoản NLĐ
+            </Button>
             <Button variant="outline" onClick={() => setDetailUser(null)} className="rounded-xl">
               Đóng
             </Button>
@@ -400,6 +413,16 @@ function AdminAccountsPage() {
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
+
+      <DeleteWorkerDialog
+        worker={deleteTarget}
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        onDeleted={(workerId) => {
+          setUsers((current) => current.filter((item) => item.id !== workerId));
+          setDeleteTarget(null);
+        }}
+      />
     </PageContainer>
   );
 }

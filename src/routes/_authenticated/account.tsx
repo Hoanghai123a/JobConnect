@@ -13,6 +13,7 @@ import {
 } from "@/lib/account-identity";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { PushNotificationSettingsCard } from "@/components/layout/PushNotificationSettingsCard";
+import { DeleteWorkerDialog } from "@/components/admin/DeleteWorkerDialog";
 import { Button } from "@/components/ui/button";
 import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
@@ -544,6 +545,7 @@ function AdminUsersPanel() {
   const [adminPassword, setAdminPassword] = useState("");
   const [confirmingApproval, setConfirmingApproval] = useState(false);
   const [detailUser, setDetailUser] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserRecord | null>(null);
   const [detailBankEditing, setDetailBankEditing] = useState(false);
   const [detailBankForm, setDetailBankForm] = useState({
     bank_name: "",
@@ -671,20 +673,6 @@ function AdminUsersPanel() {
         });
       }
       toast.success("Đã cập nhật");
-      setSelected(new Set());
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
-    }
-  };
-
-  const bulkDelete = async () => {
-    if (!confirm("Xoá " + selected.size + " tài khoản? Hành động không thể hoàn tác.")) return;
-    try {
-      for (const id of selected) {
-        await pb.collection("users").delete(id);
-      }
-      toast.success("Đã xoá");
       setSelected(new Set());
       load();
     } catch (e: any) {
@@ -878,17 +866,6 @@ function AdminUsersPanel() {
       toast.error(e?.message || "Không xác thực được mật khẩu admin");
     } finally {
       setConfirmingApproval(false);
-    }
-  };
-
-  const deleteOne = async (u: any) => {
-    if (!confirm("Xoá tài khoản " + (u.full_name || u.username) + "?")) return;
-    try {
-      await pb.collection("users").delete(u.id);
-      toast.success("Đã xoá");
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
     }
   };
 
@@ -1579,17 +1556,6 @@ function AdminUsersPanel() {
                   >
                     <Ban className="h-3.5 w-3.5" /> Vô hiệu
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => {
-                      setActionSheetOpen(false);
-                      bulkDelete();
-                    }}
-                    className="justify-start rounded-2xl"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" /> Xoá
-                  </Button>
                 </div>
               )}
             </section>
@@ -1723,16 +1689,18 @@ function AdminUsersPanel() {
                   >
                     <UserCog className="h-4 w-4" />
                   </button>
-                  <button
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      deleteOne(u);
-                    }}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
-                    title="Xoá"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {(u.role === "user" || !u.role) && (
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setDeleteTarget(u as UserRecord);
+                      }}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
+                      title="Xóa tài khoản NLĐ"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -2050,6 +2018,18 @@ function AdminUsersPanel() {
             </>
           )}
           <DialogFooter className="border-t border-border/70 bg-card px-4 py-3 sm:px-5">
+            {(detailUser?.role === "user" || !detailUser?.role) && (
+              <Button
+                variant="destructive"
+                className="rounded-xl sm:mr-auto"
+                onClick={() => {
+                  setDeleteTarget(detailUser as UserRecord);
+                  closeDetailUser();
+                }}
+              >
+                <Trash2 className="h-4 w-4" /> Xóa tài khoản NLĐ
+              </Button>
+            )}
             <Button variant="outline" className="rounded-xl" onClick={closeDetailUser}>
               Đóng
             </Button>
@@ -2255,6 +2235,22 @@ function AdminUsersPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DeleteWorkerDialog
+        worker={deleteTarget}
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        onDeleted={(workerId) => {
+          setUsers((current) => current.filter((item) => item.id !== workerId));
+          setSelected((current) => {
+            const next = new Set(current);
+            next.delete(workerId);
+            return next;
+          });
+          if (detailUser?.id === workerId) closeDetailUser();
+          setDeleteTarget(null);
+        }}
+      />
     </Card>
   );
 }

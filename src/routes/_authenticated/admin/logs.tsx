@@ -62,6 +62,26 @@ const ROLE_LABELS: Record<string, string> = {
   user: "Người lao động",
 };
 
+function getLogSnapshot(log: StaffActionLogRecord | null | undefined) {
+  if (!log?.before || typeof log.before !== "object" || Array.isArray(log.before)) return null;
+  return log.before as Record<string, unknown>;
+}
+
+function getTargetName(log: StaffActionLogRecord | null | undefined) {
+  if (!log) return "";
+  const snapshot = getLogSnapshot(log);
+  const snapshotName = [snapshot?.full_name, snapshot?.username, snapshot?.uid].find(
+    (value) => typeof value === "string" && value.trim(),
+  );
+  return (
+    log.expand?.target_user?.full_name ||
+    log.expand?.target_user?.username ||
+    (typeof snapshotName === "string" ? snapshotName : "") ||
+    log.target_user ||
+    ""
+  );
+}
+
 function joinPbFilters(parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" && ");
 }
@@ -197,11 +217,7 @@ function SystemActionLogsPage() {
             const actorName =
               item.expand?.actor?.full_name || item.expand?.actor?.username || item.actor;
             const actorUsername = item.expand?.actor?.username;
-            const targetName =
-              item.expand?.target_user?.full_name ||
-              item.expand?.target_user?.username ||
-              item.target_user ||
-              "";
+            const targetName = getTargetName(item);
             const roleLabel = item.actor_role_snapshot || "user";
             const collectionLabel =
               COLLECTION_LABELS[item.target_collection] || item.target_collection;
@@ -267,8 +283,7 @@ function LogDetailDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const actorName = log?.expand?.actor?.full_name || log?.expand?.actor?.username || log?.actor;
-  const targetName =
-    log?.expand?.target_user?.full_name || log?.expand?.target_user?.username || log?.target_user;
+  const targetName = getTargetName(log);
   const collectionLabel = log
     ? COLLECTION_LABELS[log.target_collection] || log.target_collection
     : "";

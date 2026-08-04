@@ -1,0 +1,269 @@
+﻿import { getPBUpstream } from "@/lib/pocketbase-config";
+
+type AuthUser = {
+  id: string;
+  username?: string;
+  email?: string;
+  full_name?: string;
+  role?: string;
+};
+
+type WorkerRecord = AuthUser & {
+  uid?: string;
+  phone?: string;
+  status?: string;
+  approved?: boolean | string;
+  approvalStatus?: string;
+};
+
+type DependencyDefinition = {
+  collection: string;
+  label: string;
+  filter: (workerId: string) => string;
+};
+
+export type WorkerDeleteDependency = {
+  collection: string;
+  label: string;
+  count: number;
+};
+
+const DEPENDENCIES: DependencyDefinition[] = [
+  {
+    collection: "advances",
+    label: "Yêu cầu ứng lương",
+    filter: (id) => `user="${escapePb(id)}"`,
+  },
+  {
+    collection: "check_salary_items",
+    label: "Dữ liệu check lương",
+    filter: (id) => `user="${escapePb(id)}"`,
+  },
+  {
+    collection: "salary_holds",
+    label: "Dữ liệu giữ lương",
+    filter: (id) => `worker="${escapePb(id)}"`,
+  },
+  {
+    collection: "approval_requests",
+    label: "Yêu cầu phê duyệt có số tiền",
+    filter: (id) => `creator="${escapePb(id)}" && amount>0`,
+  },
+  {
+    collection: "garden_exchange_requests",
+    label: "Yêu cầu quy đổi thành tiền",
+    filter: (id) => `user="${escapePb(id)}"`,
+  },
+  {
+    collection: "garden_balances",
+    label: "Tiền thưởng dự trữ",
+    filter: (id) => `user="${escapePb(id)}" && reserve_balance>0`,
+  },
+];
+
+function escapePb(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function getBearerToken(request: Request) {
+  const match = /^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") || "");
+  return match?.[1] || "";
+}
+
+async function pbFetch(path: string, init: RequestInit = {}, token?: string) {
+  const headers = new Headers(init.headers);
+  headers.set("ngrok-skip-browser-warning", "true");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  return fetch(`${getPBUpstream()}${path}`, { ...init, headers });
+}
+
+async function readJson(response: Response) {
+  return response.json().catch(() => null);
+}
+
+function errorResponse(message: string, status: number, code: string, extra?: object) {
+  return Response.json({ message, code, ...extra }, { status });
+}
+
+async function getAuthenticatedAdmin(request: Request) {
+  const token = getBearerToken(request);
+  if (!token) return null;
+
+  const response = await pbFetch("/api/collections/users/auth-refresh", { method: "POST" }, token);
+  if (!response.ok) return null;
+
+  const body = await readJson(response);
+  const user = body?.record as AuthUser | undefined;
+  if (!user?.id || user.role !== "admin") return null;
+  return { token, user };
+}
+
+async function verifyAdminPassword(admin: AuthUser, password: string) {
+  const identity = admin.username || admin.email;
+  if (!identity) return null;
+
+  const response = await pbFetch("/api/collections/users/auth-with-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ identity, password }),
+  });
+  const body = await readJson(response);
+  if (!response.ok || body?.record?.id !== admin.id || body?.record?.role !== "admin") return null;
+  return typeof body?.token === "string" ? body.token : null;
+}
+
+async function getWorker(workerId: string, token: string) {
+  const response = await pbFetch(
+    `/api/collections/users/records/${encodeURIComponent(workerId)}`,
+    { method: "GET" },
+    token,
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error("Không tải được tài khoản NLĐ từ PocketBase.");
+  return (await readJson(response)) as WorkerRecord;
+}
+
+async function countDependency(definition: DependencyDefinition, workerId: string, token: string) {
+  const query = new URLSearchParams({
+    page: "1",
+    perPage: "1",
+    skipTotal: "0",
+    fields: "id",
+    filter: definition.filter(workerId),
+  });
+  const response = await pbFetch(
+    `/api/collections/${encodeURIComponent(definition.collection)}/records?${query}`,
+    { method: "GET" },
+    token,
+  );
+
+  if (response.status === 404) return 0;
+  if (!response.ok) {
+    throw new Error(`Không kiểm tra được nhóm dữ liệu “${definition.label}”.`);
+  }
+
+  const body = await readJson(response);
+  return Number(body?.totalItems || 0);
+}
+
+async function findDependencies(workerId: string, token: string) {
+  const counts = await Promise.all(
+    DEPENDENCIES.map(async (definition) => ({
+      definition,
+      count: await countDependency(definition, workerId, token),
+    })),
+  );
+
+  return counts
+    .filter((item) => item.count > 0)
+    .map<WorkerDeleteDependency>((item) => ({
+      collection: item.definition.collection,
+      label: item.definition.label,
+      count: item.count,
+    }));
+}
+
+function workerSnapshot(worker: WorkerRecord) {
+  return {
+    id: worker.id,
+    uid: worker.uid || "",
+    username: worker.username || "",
+    full_name: worker.full_name || "",
+    phone: worker.phone || "",
+    role: worker.role || "user",
+    status: worker.status || "",
+    approved: worker.approved ?? "",
+    approvalStatus: worker.approvalStatus || "",
+  };
+}
+
+async function deleteWorkerWithLog(admin: AuthUser, worker: WorkerRecord, token: string) {
+  const name = worker.full_name || worker.username || worker.uid || worker.id;
+  const payload = {
+    requests: [
+      {
+        method: "POST",
+        url: "/api/collections/staff_action_logs/records",
+        headers: {},
+        body: {
+          actor: admin.id,
+          actor_role_snapshot: "admin",
+          target_user: "",
+          target_collection: "users",
+          target_record: worker.id,
+          action: "delete",
+          before: workerSnapshot(worker),
+          after: null,
+          note: `Admin xóa tài khoản NLĐ ${name} sau khi xác thực lại mật khẩu`,
+        },
+      },
+      {
+        method: "DELETE",
+        url: `/api/collections/users/records/${encodeURIComponent(worker.id)}`,
+        headers: {},
+        body: {},
+      },
+    ],
+  };
+  const formData = new FormData();
+  formData.append("@jsonPayload", JSON.stringify(payload));
+
+  const response = await pbFetch("/api/batch", { method: "POST", body: formData }, token);
+  if (!response.ok) {
+    const body = await readJson(response);
+    const message = body?.message || "PocketBase không thể hoàn tất giao dịch xóa và ghi nhật ký.";
+    throw new Error(message);
+  }
+}
+
+export async function deleteWorkerAccount(request: Request, workerId: string) {
+  const auth = await getAuthenticatedAdmin(request);
+  if (!auth) {
+    return errorResponse("Phiên đăng nhập Admin không hợp lệ.", 401, "UNAUTHORIZED");
+  }
+
+  const body = await request.json().catch(() => null);
+  const password = typeof body?.password === "string" ? body.password : "";
+  if (!password) {
+    return errorResponse("Vui lòng nhập mật khẩu Admin.", 400, "PASSWORD_REQUIRED");
+  }
+
+  if (!workerId || workerId === auth.user.id) {
+    return errorResponse("Admin không thể tự xóa tài khoản đang đăng nhập.", 400, "INVALID_TARGET");
+  }
+
+  try {
+    const verifiedToken = await verifyAdminPassword(auth.user, password);
+    if (!verifiedToken) {
+      return errorResponse("Mật khẩu Admin không đúng.", 403, "INVALID_PASSWORD");
+    }
+
+    const worker = await getWorker(workerId, verifiedToken);
+    if (!worker) {
+      return errorResponse("Tài khoản NLĐ không còn tồn tại.", 404, "WORKER_NOT_FOUND");
+    }
+    if (worker.role && worker.role !== "user") {
+      return errorResponse(
+        "Chức năng này chỉ được phép xóa tài khoản người lao động.",
+        400,
+        "INVALID_WORKER_ROLE",
+      );
+    }
+
+    const dependencies = await findDependencies(workerId, verifiedToken);
+    if (dependencies.length > 0) {
+      return errorResponse(
+        "Không thể xóa vì NLĐ đang có nghiệp vụ liên quan tới tiền. Hãy xử lý các nghiệp vụ này trước hoặc vô hiệu hóa tài khoản.",
+        409,
+        "WORKER_HAS_DEPENDENCIES",
+        { dependencies },
+      );
+    }
+
+    await deleteWorkerWithLog(auth.user, worker, verifiedToken);
+    return Response.json({ deleted: true, workerId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Không thể xóa tài khoản NLĐ.";
+    return errorResponse(message, 502, "WORKER_DELETE_FAILED");
+  }
+}

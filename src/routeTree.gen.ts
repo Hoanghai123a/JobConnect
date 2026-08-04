@@ -67,6 +67,7 @@ import { Route as AuthenticatedStaffWorkersWorkerIdRouteImport } from './routes/
 import { Route as AuthenticatedAdminAccountsStatsRouteImport } from './routes/_authenticated/admin/accounts.stats'
 import { Route as AuthenticatedAdminAccountsLogsRouteImport } from './routes/_authenticated/admin/accounts.logs'
 import { Route as AuthenticatedAdminAccountsFactoriesRouteImport } from './routes/_authenticated/admin/accounts.factories'
+import { Route as ApiAdminWorkersWorkerIdDeleteRouteImport } from './routes/api/admin/workers.$workerId.delete'
 import { Route as AuthenticatedStaffWorkersWorkerIdPayrollRouteImport } from './routes/_authenticated/staff.workers.$workerId_.payroll'
 
 const RegisterRoute = RegisterRouteImport.update({
@@ -382,6 +383,12 @@ const AuthenticatedAdminAccountsFactoriesRoute =
     path: '/factories',
     getParentRoute: () => AuthenticatedAdminAccountsRoute,
   } as any)
+const ApiAdminWorkersWorkerIdDeleteRoute =
+  ApiAdminWorkersWorkerIdDeleteRouteImport.update({
+    id: '/api/admin/workers/$workerId/delete',
+    path: '/api/admin/workers/$workerId/delete',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedStaffWorkersWorkerIdPayrollRoute =
   AuthenticatedStaffWorkersWorkerIdPayrollRouteImport.update({
     id: '/workers/$workerId_/payroll',
@@ -448,6 +455,7 @@ export interface FileRoutesByFullPath {
   '/admin/staff/': typeof AuthenticatedAdminStaffIndexRoute
   '/staff/workers/': typeof AuthenticatedStaffWorkersIndexRoute
   '/staff/workers/$workerId/payroll': typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
+  '/api/admin/workers/$workerId/delete': typeof ApiAdminWorkersWorkerIdDeleteRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -505,6 +513,7 @@ export interface FileRoutesByTo {
   '/admin/staff': typeof AuthenticatedAdminStaffIndexRoute
   '/staff/workers': typeof AuthenticatedStaffWorkersIndexRoute
   '/staff/workers/$workerId/payroll': typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
+  '/api/admin/workers/$workerId/delete': typeof ApiAdminWorkersWorkerIdDeleteRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -567,6 +576,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/staff/': typeof AuthenticatedAdminStaffIndexRoute
   '/_authenticated/staff/workers/': typeof AuthenticatedStaffWorkersIndexRoute
   '/_authenticated/staff/workers/$workerId_/payroll': typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
+  '/api/admin/workers/$workerId/delete': typeof ApiAdminWorkersWorkerIdDeleteRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -629,6 +639,7 @@ export interface FileRouteTypes {
     | '/admin/staff/'
     | '/staff/workers/'
     | '/staff/workers/$workerId/payroll'
+    | '/api/admin/workers/$workerId/delete'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -686,6 +697,7 @@ export interface FileRouteTypes {
     | '/admin/staff'
     | '/staff/workers'
     | '/staff/workers/$workerId/payroll'
+    | '/api/admin/workers/$workerId/delete'
   id:
     | '__root__'
     | '/'
@@ -747,6 +759,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/staff/'
     | '/_authenticated/staff/workers/'
     | '/_authenticated/staff/workers/$workerId_/payroll'
+    | '/api/admin/workers/$workerId/delete'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -766,6 +779,7 @@ export interface RootRouteChildren {
   ApiPushSubscriptionRoute: typeof ApiPushSubscriptionRoute
   ApiPublicManifestWebmanifestRoute: typeof ApiPublicManifestWebmanifestRoute
   ApiPublicPbSplatRoute: typeof ApiPublicPbSplatRoute
+  ApiAdminWorkersWorkerIdDeleteRoute: typeof ApiAdminWorkersWorkerIdDeleteRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1176,6 +1190,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAccountsFactoriesRouteImport
       parentRoute: typeof AuthenticatedAdminAccountsRoute
     }
+    '/api/admin/workers/$workerId/delete': {
+      id: '/api/admin/workers/$workerId/delete'
+      path: '/api/admin/workers/$workerId/delete'
+      fullPath: '/api/admin/workers/$workerId/delete'
+      preLoaderRoute: typeof ApiAdminWorkersWorkerIdDeleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/staff/workers/$workerId_/payroll': {
       id: '/_authenticated/staff/workers/$workerId_/payroll'
       path: '/workers/$workerId/payroll'
@@ -1335,6 +1356,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPushSubscriptionRoute: ApiPushSubscriptionRoute,
   ApiPublicManifestWebmanifestRoute: ApiPublicManifestWebmanifestRoute,
   ApiPublicPbSplatRoute: ApiPublicPbSplatRoute,
+  ApiAdminWorkersWorkerIdDeleteRoute: ApiAdminWorkersWorkerIdDeleteRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
