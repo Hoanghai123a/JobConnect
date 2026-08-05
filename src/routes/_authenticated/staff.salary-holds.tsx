@@ -1,6 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Banknote, Check, Clock, Filter, Plus, QrCode, Search, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Banknote,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  FileSpreadsheet,
+  Filter,
+  Loader2,
+  Plus,
+  QrCode,
+  Search,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
@@ -39,6 +52,7 @@ import {
 import { createStaffActionLog } from "@/lib/staff-log";
 import { buildVietQrUrl } from "@/lib/vn-banks";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
+import { exportToExcel } from "@/lib/excel";
 
 export const Route = createFileRoute("/_authenticated/staff/salary-holds")({
   component: SalaryHoldsPage,
@@ -46,6 +60,12 @@ export const Route = createFileRoute("/_authenticated/staff/salary-holds")({
 const QR_TEMPLATE_KEY = "jobconnect.salaryHoldTransferDescriptionTemplate";
 const DEFAULT_QR_TEMPLATE = "Giải ngân giữ lương + tên";
 type Tab = SalaryHoldStatus | "all";
+
+function formatHistoryDate(value?: string, fallback = "Chưa có") {
+  if (!value) return fallback;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("vi-VN");
+}
 
 function SalaryHoldsPage() {
   const { user, isAdmin } = useAuth();
@@ -68,25 +88,71 @@ function SalaryHoldsPage() {
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [qrTemplate, setQrTemplate] = useState(DEFAULT_QR_TEMPLATE);
 
-  const load = useCallback(async () => {
-    if (!viewer?.id) return;
-    setLoading(true);
-    try {
-      const filter = isAdmin ? "" : `staff="${viewer.id}"`;
-      const result = await pb
-        .collection("salary_holds")
-        .getList<SalaryHoldRecord>(1, 500, { filter, sort: "-created", expand: "worker,staff" });
-      setRows(result.items);
-    } catch (error: any) {
-      toast.error(error?.message || "Không tải được danh sách giữ lương");
-    } finally {
-      setLoading(false);
-    }
-  }, [isAdmin, viewer?.id]);
+  const load = useCallback(
+    async (showLoading = true) => {
+      if (!viewer?.id) return;
+      if (showLoading) setLoading(true);
+      try {
+        const filter = isAdmin ? "" : `staff="${viewer.id}"`;
+        const result = await pb.collection("salary_holds").getList<SalaryHoldRecord>(1, 500, {
+          filter,
+          sort: "-created",
+          expand: "worker,staff,employment_history",
+        });
+        setRows(result.items);
+        setDetail((current) =>
+          current ? result.items.find((item) => item.id === current.id) || null : null,
+        );
+        setSelectedIds((current) => {
+          const availableIds = new Set(result.items.map((item) => item.id));
+          const next = new Set([...current].filter((id) => availableIds.has(id)));
+          return next.size === current.size ? current : next;
+        });
+      } catch (error: any) {
+        toast.error(error?.message || "Không tải được danh sách giữ lương");
+      } finally {
+        if (showLoading) setLoading(false);
+      }
+    },
+    [isAdmin, viewer?.id],
+  );
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!viewer?.id) return;
+
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const filter = isAdmin ? "" : `staff="${viewer.id}"`;
+
+    void pb
+      .collection("salary_holds")
+      .subscribe(
+        "*",
+        () => {
+          if (refreshTimer) clearTimeout(refreshTimer);
+          refreshTimer = setTimeout(() => void load(false), 150);
+        },
+        { filter: filter || undefined },
+      )
+      .then((stop) => {
+        if (cancelled) void stop();
+        else unsubscribe = stop;
+      })
+      .catch((error) => {
+        if (!cancelled) console.warn("[salary-holds] realtime subscription failed", error);
+      });
+
+    return () => {
+      cancelled = true;
+      if (refreshTimer) clearTimeout(refreshTimer);
+      if (unsubscribe) void unsubscribe();
+    };
+  }, [isAdmin, load, viewer?.id]);
   useEffect(() => {
     try {
       setQrTemplate(localStorage.getItem(QR_TEMPLATE_KEY) || DEFAULT_QR_TEMPLATE);
@@ -169,23 +235,84 @@ function SalaryHoldsPage() {
     : [];
   const selectedCount = selectableRows.filter((row) => selectedIds.has(row.id)).length;
 
+  const exportSalaryHolds = () => {
+    if (!filtered.length) {
+      toast.info("Không có dữ liệu giữ lương để xuất");
+      return;
+    }
+
+    const now = new Date();
+    const fileDate = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("-");
+    const sheetName = "Giữ lương";
+    const exportRows = filtered.map((row, index) => ({
+      STT: index + 1,
+      "Mã NV": row.employee_code || "",
+      "Họ tên": row.worker_name || "",
+      "Nhà máy": row.company_name || "",
+      "Ngày vào": row.expand?.employment_history?.join_date || "",
+      "Ngày nghỉ": row.expand?.employment_history?.leave_date || "",
+      "Số tiền": Number(row.amount) || 0,
+      "Trạng thái": SALARY_HOLD_STATUS[row.status].label,
+      "Nội dung": row.content || "",
+      "Staff báo giữ": row.expand?.staff?.full_name || row.expand?.staff?.username || "",
+      "Ngân hàng nhận": row.staff_bank_name || "",
+      "Số tài khoản": row.staff_bank_account_number || "",
+      "Chủ tài khoản": row.staff_bank_account_name || "",
+      "Ngày tạo": row.created || "",
+      "Ngày duyệt": row.approved_at || "",
+      "Ngày từ chối": row.rejected_at || "",
+      "Ngày giải ngân": row.disbursed_at || "",
+      "Ngày hủy": row.cancelled_at || "",
+    }));
+
+    try {
+      exportToExcel(
+        `danh-sach-giu-luong-${fileDate}.xlsx`,
+        { [sheetName]: exportRows },
+        {
+          [sheetName]: [
+            "Ngày vào",
+            "Ngày nghỉ",
+            "Ngày tạo",
+            "Ngày duyệt",
+            "Ngày từ chối",
+            "Ngày giải ngân",
+            "Ngày hủy",
+          ],
+        },
+      );
+      toast.success(`Đã xuất ${filtered.length} yêu cầu giữ lương`);
+    } catch {
+      toast.error("Không thể xuất file Excel");
+    }
+  };
+
   useEffect(() => {
     setSelectedIds(new Set());
   }, [debouncedSearch, factoryIds, tab]);
 
-  const updateStatus = async (row: SalaryHoldRecord, status: SalaryHoldStatus) => {
+  const updateStatus = async (
+    row: SalaryHoldRecord,
+    status: SalaryHoldStatus,
+    closeDetail = true,
+  ): Promise<boolean> => {
     if (status === "cancelled" && (row.status !== "received" || row.staff !== viewer.id)) {
       toast.error("Không thể hủy yêu cầu này");
-      return;
+      return false;
     }
     if (["approved", "rejected"].includes(status) && (!isAdmin || row.status !== "received")) {
       toast.error("Yêu cầu không còn ở trạng thái tiếp nhận");
-      return;
+      return false;
     }
     if (status === "disbursed" && (!isAdmin || row.status !== "approved")) {
       toast.error("Chỉ giải ngân yêu cầu đã duyệt");
-      return;
+      return false;
     }
+
     const now = new Date().toISOString();
     const payload: Partial<SalaryHoldRecord> = { status };
     if (status === "approved") Object.assign(payload, { approved_by: viewer.id, approved_at: now });
@@ -193,20 +320,33 @@ function SalaryHoldsPage() {
     if (status === "disbursed")
       Object.assign(payload, { disbursed_by: viewer.id, disbursed_at: now });
     if (status === "cancelled") Object.assign(payload, { cancelled_at: now });
-    await pb.collection("salary_holds").update(row.id, payload);
-    await createStaffActionLog({
-      actor: viewer,
-      targetUserId: row.worker,
-      targetCollection: "salary_holds",
-      targetRecord: row.id,
-      action: "update",
-      before: { status: row.status },
-      after: payload,
-      note: `Chuyển trạng thái giữ lương sang ${status}`,
-    });
-    toast.success("Đã cập nhật yêu cầu");
-    setDetail(null);
+
+    try {
+      await pb.collection("salary_holds").update(row.id, payload);
+    } catch (error: any) {
+      toast.error(error?.message || "Không thể cập nhật yêu cầu. Vui lòng thử lại.");
+      return false;
+    }
+
+    try {
+      await createStaffActionLog({
+        actor: viewer,
+        targetUserId: row.worker,
+        targetCollection: "salary_holds",
+        targetRecord: row.id,
+        action: "update",
+        before: { status: row.status },
+        after: payload,
+        note: `Chuyển trạng thái giữ lương sang ${status}`,
+      });
+    } catch {
+      toast.warning("Đã cập nhật yêu cầu nhưng chưa ghi được nhật ký thao tác");
+    }
+
+    toast.success(status === "disbursed" ? "Đã đánh dấu giải ngân" : "Đã cập nhật yêu cầu");
+    if (closeDetail) setDetail(null);
     await load();
+    return true;
   };
 
   const bulkUpdateStatus = async (
@@ -329,13 +469,26 @@ function SalaryHoldsPage() {
             </button>
           ))}
         </div>
-        <div className="order-1 flex items-center gap-2 desktop:order-2 desktop:ml-auto desktop:w-[22rem]">
+        <div className="order-1 flex items-center gap-2 desktop:order-2 desktop:ml-auto desktop:w-[30rem]">
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Tìm theo họ tên NLĐ"
             className="flex-1"
           />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-9 shrink-0 px-3"
+            disabled={!filtered.length}
+            onClick={exportSalaryHolds}
+            aria-label="Xuất danh sách giữ lương ra Excel"
+            title="Xuất Excel"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+            <span className="hidden desktop:inline">Xuất Excel</span>
+          </Button>
           {isAdmin && (
             <Popover>
               <PopoverTrigger asChild>
@@ -497,8 +650,16 @@ function SalaryHoldsPage() {
                             Mã NLĐ: {row.employee_code || "—"}
                           </div>
                         </div>
-                        <div className="truncate text-sm text-muted-foreground">
-                          {row.company_name || "Chưa có công ty"}
+                        <div className="min-w-0 text-sm text-muted-foreground">
+                          <div className="truncate">{row.company_name || "Chưa có nhà máy"}</div>
+                          <div className="text-xs">
+                            Vào {formatHistoryDate(row.expand?.employment_history?.join_date)} ·
+                            Nghỉ{" "}
+                            {formatHistoryDate(
+                              row.expand?.employment_history?.leave_date,
+                              "Chưa nghỉ",
+                            )}
+                          </div>
                         </div>
                         <div className="text-lg font-bold text-primary desktop:whitespace-nowrap">
                           {Number(row.amount).toLocaleString("vi-VN")} đ
@@ -612,26 +773,32 @@ function SalaryHoldsPage() {
           onCreated={load}
         />
       )}
-      <SalaryHoldDetailDialog
-        row={detail}
-        onClose={() => setDetail(null)}
-        isAdmin={isAdmin}
-        viewer={viewer}
-        qrTemplate={qrTemplate}
-        setQrTemplate={(value) => {
-          setQrTemplate(value);
-          try {
-            localStorage.setItem(QR_TEMPLATE_KEY, value);
-          } catch {}
-        }}
-        onStatus={updateStatus}
-      />
+      {detail && (
+        <SalaryHoldDetailDialog
+          row={detail}
+          items={filtered}
+          onSelectRow={setDetail}
+          onClose={() => setDetail(null)}
+          isAdmin={isAdmin}
+          viewer={viewer}
+          qrTemplate={qrTemplate}
+          setQrTemplate={(value) => {
+            setQrTemplate(value);
+            try {
+              localStorage.setItem(QR_TEMPLATE_KEY, value);
+            } catch {}
+          }}
+          onStatus={updateStatus}
+        />
+      )}
     </PageContainer>
   );
 }
 
 function SalaryHoldDetailDialog({
   row,
+  items,
+  onSelectRow,
   onClose,
   isAdmin,
   viewer,
@@ -639,15 +806,28 @@ function SalaryHoldDetailDialog({
   setQrTemplate,
   onStatus,
 }: {
-  row: SalaryHoldRecord | null;
+  row: SalaryHoldRecord;
+  items: SalaryHoldRecord[];
+  onSelectRow: (row: SalaryHoldRecord) => void;
   onClose: () => void;
   isAdmin: boolean;
   viewer: UserRecord;
   qrTemplate: string;
   setQrTemplate: (v: string) => void;
-  onStatus: (row: SalaryHoldRecord, status: SalaryHoldStatus) => Promise<void>;
+  onStatus: (
+    row: SalaryHoldRecord,
+    status: SalaryHoldStatus,
+    closeDetail?: boolean,
+  ) => Promise<boolean>;
 }) {
-  if (!row) return null;
+  const disbursingIdRef = useRef<string | null>(null);
+  const [disbursingId, setDisbursingId] = useState<string | null>(null);
+
+  const currentIndex = items.findIndex((item) => item.id === row.id);
+  const hasPrev = currentIndex > 0;
+  const hasNext = currentIndex >= 0 && currentIndex < items.length - 1;
+  const canDisburse = isAdmin && row.status === "approved";
+  const isDisbursing = disbursingId === row.id;
   const qrUrl =
     row.status === "approved"
       ? buildVietQrUrl({
@@ -658,32 +838,198 @@ function SalaryHoldDetailDialog({
           description: buildSalaryHoldTransferDescription(qrTemplate, row.worker_name),
         })
       : null;
+
+  const goPrev = useCallback(() => {
+    if (hasPrev && !isDisbursing) onSelectRow(items[currentIndex - 1]);
+  }, [currentIndex, hasPrev, isDisbursing, items, onSelectRow]);
+
+  const goNext = useCallback(() => {
+    if (hasNext && !isDisbursing) onSelectRow(items[currentIndex + 1]);
+  }, [currentIndex, hasNext, isDisbursing, items, onSelectRow]);
+
+  const disburseAndGoNext = useCallback(async () => {
+    if (!canDisburse || !qrUrl || disbursingIdRef.current) return;
+
+    const currentRow = row;
+    const nextRow = hasNext ? items[currentIndex + 1] : null;
+    disbursingIdRef.current = currentRow.id;
+    setDisbursingId(currentRow.id);
+
+    try {
+      const succeeded = await onStatus(currentRow, "disbursed", false);
+      if (!succeeded) return;
+      if (nextRow) onSelectRow(nextRow);
+      else onClose();
+    } finally {
+      if (disbursingIdRef.current === currentRow.id) disbursingIdRef.current = null;
+      setDisbursingId((current) => (current === currentRow.id ? null : current));
+    }
+  }, [canDisburse, currentIndex, hasNext, items, onClose, onSelectRow, onStatus, qrUrl, row]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        if (!event.repeat && !isDisbursing) goPrev();
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        if (event.repeat || isDisbursing) return;
+        if (canDisburse) void disburseAndGoNext();
+        else goNext();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canDisburse, disburseAndGoNext, goNext, goPrev, isDisbursing]);
+
+  const nextDisabled = canDisburse ? !qrUrl || isDisbursing : !hasNext || isDisbursing;
+  const navigationHint = canDisburse
+    ? !qrUrl
+      ? "Không thể tạo mã QR cho yêu cầu này"
+      : isDisbursing
+        ? "Đang xác nhận giải ngân..."
+        : "Bấm nút hoặc phím → để đánh dấu đã giải ngân"
+    : "Dùng phím ←/→ hoặc nút mũi tên để chuyển card";
+
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[92dvh] overflow-y-auto rounded-2xl sm:max-w-lg">
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !isDisbursing) onClose();
+      }}
+    >
+      <DialogContent className="max-h-[92dvh] overflow-y-auto rounded-2xl sm:max-w-lg desktop:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{row.worker_name}</DialogTitle>
           <DialogDescription>
+            {currentIndex >= 0 ? `${currentIndex + 1} / ${items.length}` : "Chi tiết giữ lương"} ·{" "}
             {row.company_name} · {Number(row.amount).toLocaleString("vi-VN")} đ
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
-          <StatusChip tone={SALARY_HOLD_STATUS[row.status].tone}>
-            {SALARY_HOLD_STATUS[row.status].label}
-          </StatusChip>
-          <div className="rounded-xl bg-muted/30 p-3 text-sm">{row.content}</div>
-          <details className="rounded-xl border p-3">
-            <summary className="cursor-pointer text-sm font-medium">STK Staff nhận tiền</summary>
-            <div className="mt-2 text-sm">
-              <div>{row.staff_bank_name}</div>
-              <div>{row.staff_bank_account_number}</div>
-              <div>{row.staff_bank_account_name}</div>
+
+        <div className="flex items-center justify-between gap-2">
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-11 w-11 shrink-0 rounded-full"
+            disabled={!hasPrev || isDisbursing}
+            onClick={goPrev}
+            aria-label="Card trước"
+            title="Card trước"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <span className="min-w-0 flex-1 text-center text-xs text-muted-foreground">
+            {navigationHint}
+          </span>
+          <Button
+            type="button"
+            size="icon"
+            variant={canDisburse ? "default" : "outline"}
+            className="h-11 w-11 shrink-0 rounded-full"
+            disabled={nextDisabled}
+            onClick={() => {
+              if (canDisburse) void disburseAndGoNext();
+              else goNext();
+            }}
+            aria-label={canDisburse ? "Đánh dấu đã giải ngân và sang card tiếp" : "Card tiếp theo"}
+            title={canDisburse ? "Đánh dấu đã giải ngân và sang card tiếp" : "Card tiếp theo"}
+          >
+            {isDisbursing ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <ChevronRight className="h-5 w-5" />
+            )}
+          </Button>
+        </div>
+
+        <div
+          className={
+            canDisburse
+              ? "grid gap-3 desktop:grid-cols-[minmax(0,1fr)_15rem] desktop:items-start"
+              : "space-y-3"
+          }
+        >
+          <div className="space-y-3">
+            <StatusChip tone={SALARY_HOLD_STATUS[row.status].tone}>
+              {SALARY_HOLD_STATUS[row.status].label}
+            </StatusChip>
+            <div className="rounded-xl border bg-muted/30 p-3 text-sm">
+              <div className="mb-2 font-semibold">Lần đi làm giữ lương</div>
+              <div className="grid grid-cols-2 gap-2 desktop:grid-cols-5">
+                <div className="min-w-0 rounded-lg border border-border/60 bg-background/70 px-2.5 py-2">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Mã NV
+                  </div>
+                  <div className="mt-0.5 truncate text-xs font-semibold">
+                    {row.employee_code || "Chưa có"}
+                  </div>
+                </div>
+                <div className="min-w-0 rounded-lg border border-border/60 bg-background/70 px-2.5 py-2">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Họ tên
+                  </div>
+                  <div className="mt-0.5 truncate text-xs font-semibold">
+                    {row.worker_name || "Chưa có"}
+                  </div>
+                </div>
+                <div className="min-w-0 rounded-lg border border-border/60 bg-background/70 px-2.5 py-2">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Nhà máy
+                  </div>
+                  <div className="mt-0.5 truncate text-xs font-semibold">
+                    {row.company_name || "Chưa có"}
+                  </div>
+                </div>
+                <div className="min-w-0 rounded-lg border border-border/60 bg-background/70 px-2.5 py-2">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Ngày vào
+                  </div>
+                  <div className="mt-0.5 truncate text-xs font-semibold">
+                    {formatHistoryDate(row.expand?.employment_history?.join_date)}
+                  </div>
+                </div>
+                <div className="min-w-0 rounded-lg border border-border/60 bg-background/70 px-2.5 py-2">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Ngày nghỉ
+                  </div>
+                  <div className="mt-0.5 truncate text-xs font-semibold">
+                    {formatHistoryDate(row.expand?.employment_history?.leave_date, "Chưa nghỉ")}
+                  </div>
+                </div>
+              </div>
             </div>
-          </details>
+            <div className="rounded-xl bg-muted/30 p-3 text-sm">{row.content}</div>
+            <details className="rounded-xl border p-3">
+              <summary className="cursor-pointer text-sm font-medium">STK Staff nhận tiền</summary>
+              <div className="mt-2 text-sm">
+                <div>{row.staff_bank_name}</div>
+                <div>{row.staff_bank_account_number}</div>
+                <div>{row.staff_bank_account_name}</div>
+              </div>
+            </details>
+          </div>
+
           {isAdmin && row.status === "approved" && (
-            <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+            <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3 desktop:sticky desktop:top-0">
               <Label>Nội dung chuyển khoản</Label>
-              <Input value={qrTemplate} onChange={(e) => setQrTemplate(e.target.value)} />
+              <Input
+                value={qrTemplate}
+                disabled={isDisbursing}
+                onChange={(e) => setQrTemplate(e.target.value)}
+              />
               <div className="text-[11px] text-muted-foreground">
                 Dùng + tên để tự lấy họ tên NLĐ.
               </div>
@@ -693,8 +1039,8 @@ function SalaryHoldDetailDialog({
                     <QrCode className="h-4 w-4" />
                     Mã QR chuyển khoản
                   </div>
-                  <img src={qrUrl} alt="QR giải ngân giữ lương" className="h-52 w-52 rounded-lg" />
-                  <div className="text-xs text-muted-foreground">
+                  <img src={qrUrl} alt="QR giải ngân giữ lương" className="h-48 w-48 rounded-lg" />
+                  <div className="text-center text-xs text-muted-foreground">
                     Quét mã để chuyển {Number(row.amount).toLocaleString("vi-VN")} đ
                   </div>
                 </div>
@@ -708,29 +1054,31 @@ function SalaryHoldDetailDialog({
         </div>
         <DialogFooter className="gap-2">
           {!isAdmin && row.staff === viewer.id && row.status === "received" && (
-            <Button variant="destructive" onClick={() => onStatus(row, "cancelled")}>
+            <Button
+              variant="destructive"
+              disabled={isDisbursing}
+              onClick={() => void onStatus(row, "cancelled")}
+            >
               <X className="mr-1 h-4 w-4" />
               Hủy yêu cầu
             </Button>
           )}
           {isAdmin && row.status === "received" && (
             <>
-              <Button variant="destructive" onClick={() => onStatus(row, "rejected")}>
+              <Button
+                variant="destructive"
+                disabled={isDisbursing}
+                onClick={() => void onStatus(row, "rejected")}
+              >
                 Từ chối
               </Button>
-              <Button onClick={() => onStatus(row, "approved")}>
+              <Button disabled={isDisbursing} onClick={() => void onStatus(row, "approved")}>
                 <Check className="mr-1 h-4 w-4" />
                 Duyệt
               </Button>
             </>
           )}
-          {isAdmin && row.status === "approved" && (
-            <Button disabled={!qrUrl} onClick={() => onStatus(row, "disbursed")}>
-              <Banknote className="mr-1 h-4 w-4" />
-              Xác nhận đã giải ngân
-            </Button>
-          )}
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" disabled={isDisbursing} onClick={onClose}>
             Đóng
           </Button>
         </DialogFooter>

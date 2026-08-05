@@ -27,7 +27,11 @@ export type SalaryHoldRecord = {
   cancelled_at?: string;
   created?: string;
   updated?: string;
-  expand?: { worker?: UserRecord; staff?: UserRecord };
+  expand?: {
+    worker?: UserRecord;
+    staff?: UserRecord;
+    employment_history?: EmploymentHistoryRecord;
+  };
 };
 
 export const SALARY_HOLD_STATUS = {
