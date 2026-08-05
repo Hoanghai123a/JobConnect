@@ -106,6 +106,7 @@ export function SalaryHoldCreateDialog({
               value={formatMoneyInput(amount)}
               onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))}
               placeholder="Nhập số tiền"
+              className="bg-white text-slate-900 placeholder:text-slate-400"
             />
           </div>
           <div className="space-y-1">
@@ -115,6 +116,7 @@ export function SalaryHoldCreateDialog({
               onChange={(e) => setContent(e.target.value)}
               placeholder="Nhập nội dung giữ lương"
               rows={3}
+              className="bg-white text-slate-900 placeholder:text-slate-400"
             />
           </div>
           <button

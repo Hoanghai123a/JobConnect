@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Banknote, Check, Clock, Filter, Plus, QrCode, X } from "lucide-react";
+import { Banknote, Check, Clock, Filter, Plus, QrCode, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ import { SalaryHoldCreateDialog } from "@/components/staff/SalaryHoldCreateDialo
 import {
   SALARY_HOLD_STATUS,
   buildSalaryHoldTransferDescription,
+  removeVietnameseTone,
   type SalaryHoldRecord,
   type SalaryHoldStatus,
 } from "@/lib/salary-holds";
@@ -62,7 +63,9 @@ function SalaryHoldsPage() {
   const [detail, setDetail] = useState<SalaryHoldRecord | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedWorkerId, setSelectedWorkerId] = useState("");
+  const [workerSearch, setWorkerSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [bulkProcessing, setBulkProcessing] = useState(false);
   const [qrTemplate, setQrTemplate] = useState(DEFAULT_QR_TEMPLATE);
 
   const load = useCallback(async () => {
@@ -133,8 +136,42 @@ function SalaryHoldsPage() {
       }),
     [debouncedSearch, factoryIds, rows, tab],
   );
+  const filteredWorkers = useMemo(() => {
+    const keyword = removeVietnameseTone(workerSearch.trim().toLocaleLowerCase("vi"));
+    if (!keyword) return workers;
+    return workers.filter((worker) => {
+      const history = worker.latestHistory;
+      const haystack = removeVietnameseTone(
+        [
+          history?.worker_name_snapshot,
+          worker.user.full_name,
+          worker.user.username,
+          worker.user.phone,
+          history?.employee_code,
+          history?.expand?.factory?.name,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLocaleLowerCase("vi"),
+      );
+      return haystack.includes(keyword);
+    });
+  }, [workerSearch, workers]);
   const selectedWorker = workers.find((worker) => worker.user.id === selectedWorkerId) || null;
   const receivedRows = filtered.filter((row) => row.status === "received");
+  const approvedRows = filtered.filter((row) => row.status === "approved");
+  const selectableRows = isAdmin
+    ? tab === "received"
+      ? receivedRows
+      : tab === "approved"
+        ? approvedRows
+        : []
+    : [];
+  const selectedCount = selectableRows.filter((row) => selectedIds.has(row.id)).length;
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [debouncedSearch, factoryIds, tab]);
 
   const updateStatus = async (row: SalaryHoldRecord, status: SalaryHoldStatus) => {
     if (status === "cancelled" && (row.status !== "received" || row.staff !== viewer.id)) {
@@ -172,10 +209,68 @@ function SalaryHoldsPage() {
     await load();
   };
 
-  const bulkApprove = async () => {
-    const targets = receivedRows.filter((row) => selectedIds.has(row.id));
-    for (const row of targets) await updateStatus(row, "approved");
-    setSelectedIds(new Set());
+  const bulkUpdateStatus = async (
+    sourceStatus: "received" | "approved",
+    status: "approved" | "rejected" | "disbursed",
+  ) => {
+    const targets = filtered.filter(
+      (row) => row.status === sourceStatus && selectedIds.has(row.id),
+    );
+    if (!targets.length || bulkProcessing) return;
+
+    setBulkProcessing(true);
+    const failedIds = new Set<string>();
+    let successCount = 0;
+
+    for (const row of targets) {
+      const now = new Date().toISOString();
+      const payload: Partial<SalaryHoldRecord> = { status };
+      if (status === "approved") {
+        Object.assign(payload, { approved_by: viewer.id, approved_at: now });
+      }
+      if (status === "rejected") {
+        Object.assign(payload, { rejected_by: viewer.id, rejected_at: now });
+      }
+      if (status === "disbursed") {
+        Object.assign(payload, { disbursed_by: viewer.id, disbursed_at: now });
+      }
+
+      try {
+        await pb.collection("salary_holds").update(row.id, payload);
+        await createStaffActionLog({
+          actor: viewer,
+          targetUserId: row.worker,
+          targetCollection: "salary_holds",
+          targetRecord: row.id,
+          action: "update",
+          before: { status: row.status },
+          after: payload,
+          note:
+            status === "approved"
+              ? "Admin duyệt yêu cầu giữ lương hàng loạt"
+              : status === "rejected"
+                ? "Admin từ chối yêu cầu giữ lương hàng loạt"
+                : "Admin xác nhận giải ngân giữ lương hàng loạt",
+        });
+        successCount += 1;
+      } catch {
+        failedIds.add(row.id);
+      }
+    }
+
+    setSelectedIds(failedIds);
+    await load();
+    setBulkProcessing(false);
+
+    const actionLabel =
+      status === "approved" ? "duyệt" : status === "rejected" ? "từ chối" : "giải ngân";
+    if (!failedIds.size) {
+      toast.success(`Đã ${actionLabel} ${successCount} yêu cầu`);
+    } else {
+      toast.warning(
+        `Đã ${actionLabel} ${successCount}/${targets.length} yêu cầu. Còn ${failedIds.size} yêu cầu chưa xử lý được.`,
+      );
+    }
   };
 
   const counts = useMemo(
@@ -302,21 +397,60 @@ function SalaryHoldsPage() {
           )}
         </div>
       </div>
-      {isAdmin && tab === "received" && receivedRows.length > 0 && (
-        <div className="sticky top-2 z-10 flex items-center justify-between rounded-xl border bg-background/95 p-2 shadow-sm">
+      {isAdmin && selectableRows.length > 0 && (
+        <div className="sticky top-[var(--header-h,3.25rem)] z-20 flex flex-col gap-2 rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
-              checked={receivedRows.every((row) => selectedIds.has(row.id))}
+              checked={
+                selectedCount === selectableRows.length
+                  ? true
+                  : selectedCount > 0
+                    ? "indeterminate"
+                    : false
+              }
+              disabled={bulkProcessing}
               onCheckedChange={(checked) =>
-                setSelectedIds(checked ? new Set(receivedRows.map((r) => r.id)) : new Set())
+                setSelectedIds(checked ? new Set(selectableRows.map((row) => row.id)) : new Set())
               }
             />
-            Chọn tất cả
+            Chọn tất cả ({selectableRows.length})
           </label>
-          <Button size="sm" disabled={!selectedIds.size} onClick={bulkApprove}>
-            <Check className="mr-1 h-4 w-4" />
-            Duyệt ({selectedIds.size})
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="mr-auto text-xs font-medium text-primary sm:mr-0">
+              {selectedCount} đã chọn
+            </span>
+            {tab === "received" && (
+              <>
+                <Button
+                  size="sm"
+                  disabled={!selectedCount || bulkProcessing}
+                  onClick={() => void bulkUpdateStatus("received", "approved")}
+                >
+                  <Check className="mr-1 h-4 w-4" />
+                  Duyệt ({selectedCount})
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={!selectedCount || bulkProcessing}
+                  onClick={() => void bulkUpdateStatus("received", "rejected")}
+                >
+                  <X className="mr-1 h-4 w-4" />
+                  Từ chối ({selectedCount})
+                </Button>
+              </>
+            )}
+            {tab === "approved" && (
+              <Button
+                size="sm"
+                disabled={!selectedCount || bulkProcessing}
+                onClick={() => void bulkUpdateStatus("approved", "disbursed")}
+              >
+                <Banknote className="mr-1 h-4 w-4" />
+                Xác nhận đã giải ngân ({selectedCount})
+              </Button>
+            )}
+          </div>
         </div>
       )}
       <div className="space-y-2">
@@ -327,49 +461,75 @@ function SalaryHoldsPage() {
             {loading && (
               <DataLoadingState variant="inline" label="Đang cập nhật danh sách giữ lương..." />
             )}
-            {filtered.map((row) => (
-              <Card
-                key={row.id}
-                onClick={() => setDetail(row)}
-                className="cursor-pointer p-3 shadow-soft"
-              >
-                <div className="flex items-start gap-3">
-                  {isAdmin && row.status === "received" && (
-                    <Checkbox
-                      checked={selectedIds.has(row.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      onCheckedChange={(checked) =>
-                        setSelectedIds((old) => {
-                          const next = new Set(old);
-                          if (checked) next.add(row.id);
-                          else next.delete(row.id);
-                          return next;
-                        })
-                      }
-                    />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex justify-between gap-2">
-                      <div className="font-semibold">{row.worker_name}</div>
-                      <StatusChip tone={SALARY_HOLD_STATUS[row.status].tone}>
-                        {SALARY_HOLD_STATUS[row.status].label}
-                      </StatusChip>
+            {filtered.map((row) => {
+              const selectable =
+                isAdmin &&
+                ((tab === "received" && row.status === "received") ||
+                  (tab === "approved" && row.status === "approved"));
+              return (
+                <Card
+                  key={row.id}
+                  onClick={() => setDetail(row)}
+                  className="cursor-pointer p-3 shadow-soft"
+                >
+                  <div className="flex items-start gap-3">
+                    {selectable && (
+                      <Checkbox
+                        checked={selectedIds.has(row.id)}
+                        disabled={bulkProcessing}
+                        className="mt-0.5 shrink-0 desktop:mt-1"
+                        onClick={(e) => e.stopPropagation()}
+                        onCheckedChange={(checked) =>
+                          setSelectedIds((old) => {
+                            const next = new Set(old);
+                            if (checked) next.add(row.id);
+                            else next.delete(row.id);
+                            return next;
+                          })
+                        }
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="space-y-2 desktop:grid desktop:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_auto_auto] desktop:items-center desktop:gap-4 desktop:space-y-0">
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold">{row.worker_name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Mã NLĐ: {row.employee_code || "—"}
+                          </div>
+                        </div>
+                        <div className="truncate text-sm text-muted-foreground">
+                          {row.company_name || "Chưa có công ty"}
+                        </div>
+                        <div className="text-lg font-bold text-primary desktop:whitespace-nowrap">
+                          {Number(row.amount).toLocaleString("vi-VN")} đ
+                        </div>
+                        <div className="desktop:justify-self-end">
+                          <StatusChip tone={SALARY_HOLD_STATUS[row.status].tone}>
+                            {SALARY_HOLD_STATUS[row.status].label}
+                          </StatusChip>
+                        </div>
+                      </div>
+                      <div className="mt-2 border-t border-border/60 pt-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">Nội dung: </span>
+                        <span className="line-clamp-2">{row.content}</span>
+                      </div>
                     </div>
-                    <div className="mt-1 text-sm text-muted-foreground">{row.company_name}</div>
-                    <div className="mt-2 text-lg font-bold text-primary">
-                      {Number(row.amount).toLocaleString("vi-VN")} đ
-                    </div>
-                    <div className="line-clamp-2 text-xs text-muted-foreground">{row.content}</div>
                   </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </>
         )}
       </div>
 
       {!isAdmin && (
-        <Dialog open={createOpen && !selectedWorker} onOpenChange={setCreateOpen}>
+        <Dialog
+          open={createOpen && !selectedWorker}
+          onOpenChange={(open) => {
+            setCreateOpen(open);
+            if (!open) setWorkerSearch("");
+          }}
+        >
           <DialogContent className="rounded-2xl">
             <DialogHeader>
               <DialogTitle>Chọn NLĐ</DialogTitle>
@@ -377,21 +537,64 @@ function SalaryHoldsPage() {
                 Chỉ hiển thị NLĐ có lịch sử gần nhất do bạn tuyển.
               </DialogDescription>
             </DialogHeader>
-            <div className="max-h-72 space-y-2 overflow-y-auto">
-              {workers.map((worker) => (
-                <button
-                  key={worker.user.id}
-                  onClick={() => setSelectedWorkerId(worker.user.id)}
-                  className="w-full rounded-xl border p-3 text-left"
-                >
-                  <div className="font-medium">
-                    {worker.latestHistory?.worker_name_snapshot || worker.user.full_name}
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={workerSearch}
+                  onChange={(event) => setWorkerSearch(event.target.value)}
+                  placeholder="Tìm tên, mã NLĐ, SĐT, nhà máy..."
+                  className="bg-white pl-9 pr-10 text-slate-900 placeholder:text-slate-400"
+                  autoFocus
+                />
+                {workerSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setWorkerSearch("")}
+                    className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100"
+                    aria-label="Xóa nội dung tìm kiếm"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border bg-white p-2">
+                {filteredWorkers.length > 0 ? (
+                  filteredWorkers.map((worker) => (
+                    <button
+                      key={worker.user.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedWorkerId(worker.user.id);
+                        setWorkerSearch("");
+                      }}
+                      className="w-full rounded-xl border bg-white p-3 text-left text-slate-900 transition hover:bg-slate-50"
+                    >
+                      <div className="font-medium">
+                        {worker.latestHistory?.worker_name_snapshot ||
+                          worker.user.full_name ||
+                          worker.user.username ||
+                          "Chưa có tên"}
+                      </div>
+                      <div className="mt-0.5 text-xs text-slate-500">
+                        {[
+                          worker.latestHistory?.employee_code
+                            ? `Mã NLĐ: ${worker.latestHistory.employee_code}`
+                            : "",
+                          worker.latestHistory?.expand?.factory?.name || "Chưa có lịch sử đi làm",
+                          worker.user.phone || "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="py-8 text-center text-sm text-slate-500">
+                    Không tìm thấy NLĐ phù hợp
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {worker.latestHistory?.expand?.factory?.name || "Chưa có lịch sử đi làm"}
-                  </div>
-                </button>
-              ))}
+                )}
+              </div>
             </div>
           </DialogContent>
         </Dialog>
