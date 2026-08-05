@@ -95,6 +95,8 @@ type QuickWorkerForm = {
   note: string;
 };
 
+type QuickScanSide = "front" | "back";
+
 type QuickWorkerEntry = {
   id: string;
   form: QuickWorkerForm;
@@ -102,9 +104,8 @@ type QuickWorkerEntry = {
   backFile: File | null;
   frontPreview: string;
   backPreview: string;
+  qrScannedSide: QuickScanSide | null;
 };
-
-type QuickScanSide = "front" | "back";
 
 type QuickScanFailure = {
   entryId: string;
@@ -130,6 +131,7 @@ function createQuickWorkerEntry(recruiterStaff = ""): QuickWorkerEntry {
     backFile: null,
     frontPreview: "",
     backPreview: "",
+    qrScannedSide: null,
   };
 }
 
@@ -223,6 +225,7 @@ export function QuickWorkerAccountDialog({
   const [scanningEntrySide, setScanningEntrySide] = useState<string | null>(null);
   const [scanProgress, setScanProgress] = useState("");
   const [scanFailure, setScanFailure] = useState<QuickScanFailure | null>(null);
+  const [scanFailureOpen, setScanFailureOpen] = useState(false);
   const [pendingQrOverwrite, setPendingQrOverwrite] = useState<PendingQrOverwrite | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [recordErrors, setRecordErrors] = useState<Record<string, string[]>>({});
@@ -259,6 +262,7 @@ export function QuickWorkerAccountDialog({
     });
     setScanningEntrySide(null);
     setScanProgress("");
+    setScanFailureOpen(false);
     setScanFailure(null);
     setPendingQrOverwrite(null);
     setRecordErrors({});
@@ -375,15 +379,23 @@ export function QuickWorkerAccountDialog({
       if (activeScanRef.current?.sequence !== sequence) return;
 
       if (result.status === "success") {
+        setScanFailureOpen(false);
         setScanFailure(null);
+        setEntries((current) =>
+          current.map((entry) =>
+            entry.id === entryId ? { ...entry, qrScannedSide: side } : entry,
+          ),
+        );
         prepareQrData(entryId, result.data);
         return;
       }
       if (result.reason === "cancelled") return;
       setScanFailure({ entryId, side, file, reason: result.reason });
+      setScanFailureOpen(true);
     } catch {
       if (activeScanRef.current?.sequence === sequence) {
         setScanFailure({ entryId, side, file, reason: "not_found" });
+        setScanFailureOpen(true);
       }
     } finally {
       if (activeScanRef.current?.sequence === sequence) {
@@ -404,6 +416,13 @@ export function QuickWorkerAccountDialog({
         return;
       }
 
+      const currentEntry = entriesRef.current.find((entry) => entry.id === entryId);
+      const skipAutomaticScan = Boolean(
+        currentEntry?.qrScannedSide && currentEntry.qrScannedSide !== side,
+      );
+      const resetSuccessfulScan = currentEntry?.qrScannedSide === side;
+
+      setScanFailureOpen(false);
       setScanFailure(null);
       const preview = URL.createObjectURL(file);
       setEntries((current) =>
@@ -411,19 +430,32 @@ export function QuickWorkerAccountDialog({
           if (entry.id !== entryId) return entry;
           if (side === "front") {
             if (entry.frontPreview) URL.revokeObjectURL(entry.frontPreview);
-            return { ...entry, frontFile: file, frontPreview: preview };
+            return {
+              ...entry,
+              frontFile: file,
+              frontPreview: preview,
+              qrScannedSide: resetSuccessfulScan ? null : entry.qrScannedSide,
+            };
           }
           if (entry.backPreview) URL.revokeObjectURL(entry.backPreview);
-          return { ...entry, backFile: file, backPreview: preview };
+          return {
+            ...entry,
+            backFile: file,
+            backPreview: preview,
+            qrScannedSide: resetSuccessfulScan ? null : entry.qrScannedSide,
+          };
         }),
       );
       clearRecordError(entryId);
-      await scanImage(entryId, file, side);
+      if (!skipAutomaticScan) await scanImage(entryId, file, side);
     };
 
   const clearCccdImage = (entryId: string, side: QuickScanSide) => {
     const scanningKey = `${entryId}:${side}`;
     cancelActiveScan(scanningKey);
+    if (scanFailure?.entryId === entryId && scanFailure.side === side) {
+      setScanFailureOpen(false);
+    }
     setScanFailure((current) =>
       current?.entryId === entryId && current.side === side ? null : current,
     );
@@ -432,10 +464,20 @@ export function QuickWorkerAccountDialog({
         if (entry.id !== entryId) return entry;
         if (side === "front") {
           if (entry.frontPreview) URL.revokeObjectURL(entry.frontPreview);
-          return { ...entry, frontFile: null, frontPreview: "" };
+          return {
+            ...entry,
+            frontFile: null,
+            frontPreview: "",
+            qrScannedSide: entry.qrScannedSide === side ? null : entry.qrScannedSide,
+          };
         }
         if (entry.backPreview) URL.revokeObjectURL(entry.backPreview);
-        return { ...entry, backFile: null, backPreview: "" };
+        return {
+          ...entry,
+          backFile: null,
+          backPreview: "",
+          qrScannedSide: entry.qrScannedSide === side ? null : entry.qrScannedSide,
+        };
       }),
     );
   };
@@ -446,6 +488,7 @@ export function QuickWorkerAccountDialog({
 
   const removeEntry = (entryId: string) => {
     if (activeScanRef.current?.key.startsWith(`${entryId}:`)) cancelActiveScan();
+    if (scanFailure?.entryId === entryId) setScanFailureOpen(false);
     setScanFailure((current) => (current?.entryId === entryId ? null : current));
     setPendingQrOverwrite((current) => (current?.entryId === entryId ? null : current));
     setEntries((current) => {
@@ -878,7 +921,7 @@ export function QuickWorkerAccountDialog({
 
       {scanFailure && (
         <CccdQrScanFeedbackDialog
-          open
+          open={scanFailureOpen}
           reason={scanFailure.reason}
           scanning={scanningEntrySide === `${scanFailure.entryId}:${scanFailure.side}`}
           progressText={scanProgress}
@@ -890,7 +933,7 @@ export function QuickWorkerAccountDialog({
               scanFailure.side === "front"
                 ? frontCameraInputRefs.current[scanFailure.entryId]
                 : backCameraInputRefs.current[scanFailure.entryId];
-            setScanFailure(null);
+            setScanFailureOpen(false);
             input?.click();
           }}
           onChooseImage={() => {
@@ -898,12 +941,12 @@ export function QuickWorkerAccountDialog({
               scanFailure.side === "front"
                 ? frontLibraryInputRefs.current[scanFailure.entryId]
                 : backLibraryInputRefs.current[scanFailure.entryId];
-            setScanFailure(null);
+            setScanFailureOpen(false);
             input?.click();
           }}
           onDismiss={() => {
             cancelActiveScan(`${scanFailure.entryId}:${scanFailure.side}`);
-            setScanFailure(null);
+            setScanFailureOpen(false);
           }}
         />
       )}
