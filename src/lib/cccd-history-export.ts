@@ -53,6 +53,7 @@ export interface CccdHistoryExportStats {
 export interface CccdHistoryPreparation {
   records: PreparedCccdHistoryRecord[];
   stats: CccdHistoryExportStats;
+  recordOrder: "default" | "source";
 }
 
 export interface CccdHistoryExportResult extends CccdHistoryExportStats {
@@ -72,9 +73,9 @@ type WordImage = {
   height: number;
 };
 
-const WORD_IMAGE_WIDTH_PX = 288;
+const WORD_IMAGE_WIDTH_PX = 432;
 const WORD_IMAGE_MAX_HEIGHT_PX = 3.5 * 96;
-const WORD_IMAGE_GAP_TWIP = 3 * 1440;
+const WORD_IMAGE_GAP_TWIP = 2 * 1440;
 
 function normalizeCccd(value?: string | null) {
   return String(value ?? "").replace(/\D/g, "");
@@ -111,14 +112,20 @@ function compareLatestHistory(a: EmploymentHistoryRecord, b: EmploymentHistoryRe
 
 export function filterCccdHistoriesByJoinDate(
   histories: EmploymentHistoryRecord[],
-  factoryId: string,
+  factoryIds: string[],
   fromDate: string,
   toDate: string,
 ) {
-  if (!factoryId || !fromDate || !toDate || fromDate > toDate) return [];
+  if (!factoryIds.length) return [];
+  const hasFromDate = Boolean(fromDate);
+  const hasToDate = Boolean(toDate);
+  if (hasFromDate !== hasToDate || (hasFromDate && fromDate > toDate)) return [];
+  const factoryIdSet = new Set(factoryIds);
   return histories.filter((history) => {
+    if (!factoryIdSet.has(history.factory)) return false;
+    if (!hasFromDate) return true;
     const joinDate = historyIsoDate(history.join_date);
-    return history.factory === factoryId && joinDate >= fromDate && joinDate <= toDate;
+    return joinDate >= fromDate && joinDate <= toDate;
   });
 }
 
@@ -363,6 +370,7 @@ export async function prepareCccdHistoryExport(
   histories: EmploymentHistoryRecord[],
   users: UserRecord[],
   factories: FactoryRecord[],
+  recordOrder: CccdHistoryPreparation["recordOrder"] = "default",
 ): Promise<CccdHistoryPreparation> {
   const userIds = [...new Set(histories.map((history) => history.user).filter(Boolean))];
   const versions = await fetchCccdVersionsByUsers(userIds);
@@ -371,27 +379,27 @@ export async function prepareCccdHistoryExport(
   const userById = new Map(users.map((user) => [user.id, user]));
   const factoryById = new Map(factories.map((factory) => [factory.id, factory]));
 
-  const records = histories
-    .map((history) => {
-      const user = userById.get(history.user) || history.expand?.user;
-      const userVersions = groupedVersions.get(history.user) || [];
-      return {
-        historyId: history.id,
-        factoryId: history.factory,
-        factoryName:
-          factoryById.get(history.factory)?.name ||
-          history.expand?.factory?.name ||
-          "Chưa rõ nhà máy",
-        joinDate: safeJoinDate(history.join_date),
-        workerName: history.worker_name_snapshot || "thieu-thong-tin",
-        cccdNumber: history.worker_cccd_snapshot || "khong-co-cccd",
-        frontUrl: resolveImageUrl(history, user, userVersions, versionById, "front") || undefined,
-        backUrl: resolveImageUrl(history, user, userVersions, versionById, "back") || undefined,
-      } satisfies PreparedCccdHistoryRecord;
-    })
-    .sort(comparePreparedRecords);
+  const records = histories.map((history) => {
+    const user = userById.get(history.user) || history.expand?.user;
+    const userVersions = groupedVersions.get(history.user) || [];
+    return {
+      historyId: history.id,
+      factoryId: history.factory,
+      factoryName:
+        factoryById.get(history.factory)?.name ||
+        history.expand?.factory?.name ||
+        "Chưa rõ nhà máy",
+      joinDate: safeJoinDate(history.join_date),
+      workerName: history.worker_name_snapshot || "thieu-thong-tin",
+      cccdNumber: history.worker_cccd_snapshot || "khong-co-cccd",
+      frontUrl: resolveImageUrl(history, user, userVersions, versionById, "front") || undefined,
+      backUrl: resolveImageUrl(history, user, userVersions, versionById, "back") || undefined,
+    } satisfies PreparedCccdHistoryRecord;
+  });
 
-  return { records, stats: summarizeRecords(records) };
+  if (recordOrder === "default") records.sort(comparePreparedRecords);
+
+  return { records, stats: summarizeRecords(records), recordOrder };
 }
 
 function inferImageExtension(blob: Blob) {
@@ -467,9 +475,9 @@ async function exportFolderArchive(
   const zip = new JSZip();
   const usedPaths = new Set<string>();
   const actualSides = new Map<string, Set<ImageSide>>();
-  const availableRecords = preparation.records.filter(
-    (record) => record.frontUrl || record.backUrl,
-  );
+  const availableRecords = preparation.records
+    .filter((record) => record.frontUrl || record.backUrl)
+    .sort(comparePreparedRecords);
   const totalImages = availableRecords.reduce(
     (total, record) => total + Number(Boolean(record.frontUrl)) + Number(Boolean(record.backUrl)),
     0,
@@ -639,7 +647,7 @@ async function exportWordArchive(
   let failedImages = 0;
 
   for (const records of recordsByFactory.values()) {
-    records.sort(comparePreparedRecords);
+    if (preparation.recordOrder === "default") records.sort(comparePreparedRecords);
     const children: DocxParagraph[] = [];
     let exportedInDocument = 0;
 

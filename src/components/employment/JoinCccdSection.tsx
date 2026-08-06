@@ -98,6 +98,7 @@ export function JoinCccdSection({
   const [scanning, setScanning] = useState(false);
   const [progressText, setProgressText] = useState("");
   const [failure, setFailure] = useState<FailureState | null>(null);
+  const [qrScannedSide, setQrScannedSide] = useState<ScanSide | null>(null);
   const [cropRequest, setCropRequest] = useState<CropRequest | null>(null);
   const locationLabel = locationField?.label || "Địa chỉ thường trú";
   const locationValue =
@@ -131,6 +132,14 @@ export function JoinCccdSection({
 
   useEffect(() => cancelActiveScan, [cancelActiveScan]);
 
+  useEffect(() => {
+    setQrScannedSide((current) => {
+      if (current === "front" && !frontFile) return null;
+      if (current === "back" && !backFile) return null;
+      return current;
+    });
+  }, [frontFile, backFile]);
+
   const runScan = useCallback(
     async (file: File, side: ScanSide, mode: "auto" | "full") => {
       cancelActiveScan();
@@ -152,6 +161,7 @@ export function JoinCccdSection({
 
         if (result.status === "success") {
           setFailure(null);
+          setQrScannedSide(side);
           setConfirmDraft(toQrConfirmDraft(result.data));
           return;
         }
@@ -173,11 +183,15 @@ export function JoinCccdSection({
   );
 
   const applyImage = async (file: File, side: ScanSide) => {
+    const skipAutomaticScan = Boolean(qrScannedSide && qrScannedSide !== side);
+    const resetSuccessfulScan = qrScannedSide === side;
+
     if (side === "front") onFrontFileChange(file);
     else onBackFileChange(file);
 
     setFailure(null);
-    await runScan(file, side, "auto");
+    if (resetSuccessfulScan) setQrScannedSide(null);
+    if (!skipAutomaticScan) await runScan(file, side, "auto");
   };
 
   const handleImagePick = async (file: File | null, side: ScanSide) => {
@@ -306,6 +320,7 @@ export function JoinCccdSection({
               onClear={() => {
                 cancelActiveScan();
                 setFailure(null);
+                if (qrScannedSide === "front") setQrScannedSide(null);
                 onFrontFileChange(null);
               }}
             />
@@ -324,6 +339,7 @@ export function JoinCccdSection({
               onClear={() => {
                 cancelActiveScan();
                 setFailure(null);
+                if (qrScannedSide === "back") setQrScannedSide(null);
                 onBackFileChange(null);
               }}
             />

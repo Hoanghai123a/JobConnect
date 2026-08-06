@@ -19,15 +19,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FactoryMultiSelect } from "@/components/factories/FactoryMultiSelect";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   exportCccdHistoryArchive,
   filterCccdHistoriesByJoinDate,
@@ -81,7 +75,7 @@ export function CccdHistoryExportDialog({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [source, setSource] = useState<CccdHistorySelectionSource>("date-range");
   const [mode, setMode] = useState<CccdHistoryExportMode>("folders");
-  const [factoryId, setFactoryId] = useState("");
+  const [factoryIds, setFactoryIds] = useState<string[]>([]);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [excelFileName, setExcelFileName] = useState("");
@@ -97,12 +91,14 @@ export function CccdHistoryExportDialog({
     message: "",
   });
   const busy = excelReading || preparing || exporting;
-  const dateRangeValid = Boolean(factoryId && fromDate && toDate && fromDate <= toDate);
+  const hasPartialDate = Boolean(fromDate) !== Boolean(toDate);
+  const dateOrderInvalid = Boolean(fromDate && toDate && fromDate > toDate);
+  const dateRangeValid = factoryIds.length > 0 && !hasPartialDate && !dateOrderInvalid;
 
   const selectedHistories = useMemo(() => {
     if (source === "excel") return excelResult?.histories ?? [];
-    return filterCccdHistoriesByJoinDate(histories, factoryId, fromDate, toDate);
-  }, [excelResult, factoryId, fromDate, histories, source, toDate]);
+    return filterCccdHistoriesByJoinDate(histories, factoryIds, fromDate, toDate);
+  }, [excelResult, factoryIds, fromDate, histories, source, toDate]);
 
   const selectionReady =
     source === "date-range" ? dateRangeValid : Boolean(excelResult && !excelResult.blockingError);
@@ -112,7 +108,7 @@ export function CccdHistoryExportDialog({
     if (open) return;
     setSource("date-range");
     setMode("folders");
-    setFactoryId("");
+    setFactoryIds([]);
     setFromDate("");
     setToDate("");
     setExcelFileName("");
@@ -137,7 +133,12 @@ export function CccdHistoryExportDialog({
     setPreparation(null);
     setPreparing(true);
     setProgressState({ completed: 0, total: 0, message: "Đang đọc dữ liệu CCCD..." });
-    prepareCccdHistoryExport(selectedHistories, users, factories)
+    prepareCccdHistoryExport(
+      selectedHistories,
+      users,
+      factories,
+      source === "excel" ? "source" : "default",
+    )
       .then((result) => {
         if (alive) setPreparation(result);
       })
@@ -153,7 +154,7 @@ export function CccdHistoryExportDialog({
     return () => {
       alive = false;
     };
-  }, [factories, open, selectedHistories, selectionReady, users]);
+  }, [factories, open, selectedHistories, selectionReady, source, users]);
 
   const handleExcelFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -257,20 +258,14 @@ export function CccdHistoryExportDialog({
 
           {source === "date-range" ? (
             <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Nhà máy</Label>
-                <Select value={factoryId} onValueChange={setFactoryId} disabled={busy}>
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue placeholder="Chọn nhà máy" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {factories.map((factory) => (
-                      <SelectItem key={factory.id} value={factory.id}>
-                        {factory.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <FactoryMultiSelect
+                factories={factories}
+                selectedIds={factoryIds}
+                onChange={setFactoryIds}
+                disabled={busy}
+              />
+              <div className="rounded-xl bg-background/70 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
+                Để trống cả hai ngày để xuất toàn bộ lịch sử của các nhà máy đã chọn.
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -292,7 +287,15 @@ export function CccdHistoryExportDialog({
                   />
                 </div>
               </div>
-              {fromDate && toDate && fromDate > toDate && (
+              {hasPartialDate && (
+                <div className="text-xs text-destructive">
+                  Vui lòng nhập đủ Từ ngày và Đến ngày hoặc để trống cả hai.
+                </div>
+              )}
+              {!factoryIds.length && (
+                <div className="text-xs text-destructive">Vui lòng chọn ít nhất một nhà máy.</div>
+              )}
+              {dateOrderInvalid && (
                 <div className="text-xs text-destructive">Từ ngày không được lớn hơn Đến ngày.</div>
               )}
               {dateRangeValid && !preparing && (

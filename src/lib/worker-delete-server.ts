@@ -61,6 +61,12 @@ const DEPENDENCIES: DependencyDefinition[] = [
   },
 ];
 
+const EMPLOYMENT_HISTORY_DEPENDENCY: DependencyDefinition = {
+  collection: "employment_histories",
+  label: "Lịch sử đi làm",
+  filter: (id) => `user="${escapePb(id)}"`,
+};
+
 function escapePb(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
@@ -177,7 +183,12 @@ function workerSnapshot(worker: WorkerRecord) {
   };
 }
 
-async function deleteWorkerWithLog(admin: AuthUser, worker: WorkerRecord, token: string) {
+async function deleteWorkerWithLog(
+  admin: AuthUser,
+  worker: WorkerRecord,
+  employmentHistoryCount: number,
+  token: string,
+) {
   const name = worker.full_name || worker.username || worker.uid || worker.id;
   const payload = {
     requests: [
@@ -192,9 +203,12 @@ async function deleteWorkerWithLog(admin: AuthUser, worker: WorkerRecord, token:
           target_collection: "users",
           target_record: worker.id,
           action: "delete",
-          before: workerSnapshot(worker),
+          before: {
+            ...workerSnapshot(worker),
+            employment_history_count: employmentHistoryCount,
+          },
           after: null,
-          note: `Admin xóa tài khoản NLĐ ${name} sau khi xác thực lại mật khẩu`,
+          note: `Admin xóa tài khoản NLĐ ${name} và ${employmentHistoryCount} lịch sử đi làm sau khi xác thực lại mật khẩu`,
         },
       },
       {
@@ -250,7 +264,10 @@ export async function deleteWorkerAccount(request: Request, workerId: string) {
       );
     }
 
-    const dependencies = await findDependencies(workerId, verifiedToken);
+    const [dependencies, employmentHistoryCount] = await Promise.all([
+      findDependencies(workerId, verifiedToken),
+      countDependency(EMPLOYMENT_HISTORY_DEPENDENCY, workerId, verifiedToken),
+    ]);
     if (dependencies.length > 0) {
       return errorResponse(
         "Không thể xóa vì NLĐ đang có nghiệp vụ liên quan tới tiền. Hãy xử lý các nghiệp vụ này trước hoặc vô hiệu hóa tài khoản.",
@@ -260,8 +277,12 @@ export async function deleteWorkerAccount(request: Request, workerId: string) {
       );
     }
 
-    await deleteWorkerWithLog(auth.user, worker, verifiedToken);
-    return Response.json({ deleted: true, workerId });
+    await deleteWorkerWithLog(auth.user, worker, employmentHistoryCount, verifiedToken);
+    return Response.json({
+      deleted: true,
+      workerId,
+      deletedEmploymentHistoryCount: employmentHistoryCount,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Không thể xóa tài khoản NLĐ.";
     return errorResponse(message, 502, "WORKER_DELETE_FAILED");

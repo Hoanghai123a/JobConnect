@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Download, FileDown, ImageDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CccdHistoryExportDialog } from "@/components/cccd/CccdHistoryExportDialog";
+import { FactoryMultiSelect } from "@/components/factories/FactoryMultiSelect";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
@@ -153,7 +154,7 @@ function StaffExportPage() {
   const [loading, setLoading] = useState(true);
   const [workers, setWorkers] = useState<StaffWorkerRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
-  const [factoryFilter, setFactoryFilter] = useState("all");
+  const [factoryFilters, setFactoryFilters] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [exportingAll, setExportingAll] = useState(false);
   const [cccdExportOpen, setCccdExportOpen] = useState(false);
@@ -192,7 +193,7 @@ function StaffExportPage() {
 
   const filteredHistories = useMemo(() => {
     return allHistories.filter((history) => {
-      if (factoryFilter !== "all" && history.factory !== factoryFilter) return false;
+      if (factoryFilters.length > 0 && !factoryFilters.includes(history.factory)) return false;
       if (
         statusFilter !== "all" &&
         (isCurrentlyWorking(history) ? "working" : "left") !== statusFilter
@@ -201,7 +202,7 @@ function StaffExportPage() {
       }
       return true;
     });
-  }, [allHistories, factoryFilter, statusFilter]);
+  }, [allHistories, factoryFilters, statusFilter]);
 
   const tenureDaysByUserId = useMemo(() => {
     return buildTenureDaysByUserId(workers);
@@ -270,22 +271,12 @@ function StaffExportPage() {
   return (
     <PageContainer title="Xuất dữ liệu" subtitle="Lọc nhanh hồ sơ được phép xem rồi xuất Excel">
       <div className="grid gap-3 rounded-2xl border border-border/60 bg-card p-4 shadow-soft">
-        <div className="space-y-1">
-          <Label className="text-xs">Nhà máy</Label>
-          <Select value={factoryFilter} onValueChange={setFactoryFilter}>
-            <SelectTrigger className="rounded-xl">
-              <SelectValue placeholder="Chọn nhà máy" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tất cả nhà máy</SelectItem>
-              {factories.map((factory) => (
-                <SelectItem key={factory.id} value={factory.id}>
-                  {factory.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <FactoryMultiSelect
+          factories={factories}
+          selectedIds={factoryFilters}
+          onChange={setFactoryFilters}
+          emptyMeansAll
+        />
 
         <div className="space-y-1">
           <Label className="text-xs">Trạng thái</Label>

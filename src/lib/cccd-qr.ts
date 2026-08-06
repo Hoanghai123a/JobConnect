@@ -10,7 +10,7 @@ export type CccdQrScanStage =
   | {
       step: "rotating";
       region: number;
-      total: 4;
+      total: 2;
       rotation: 90 | 180 | 270;
       message: string;
     };
@@ -34,9 +34,7 @@ export type CccdQrScanResult =
   | { status: "failed"; reason: CccdQrScanFailureReason };
 
 const MAX_QR_SCAN_TIMEOUT_MS = 15000;
-const QUADRANT_OVERLAP_RATIO = 0.08;
-const REFINED_OVERLAP_RATIO = 0.12;
-const REFINED_LONG_EDGE = 1200;
+const SCAN_REGION_OVERLAP_RATIO = 0.08;
 const AUTO_LONG_EDGE = 1600;
 const BASIC_LONG_EDGE = 1200;
 const FULL_LONG_EDGE = 2000;
@@ -335,36 +333,22 @@ async function decodeImage(
   };
 }
 
-function buildQuadrantRegions(
+function buildPriorityRegions(
   width: number,
   height: number,
-  overlapRatio = QUADRANT_OVERLAP_RATIO,
+  overlapRatio = SCAN_REGION_OVERLAP_RATIO,
 ): ScanRegion[] {
   const halfWidth = width / 2;
   const halfHeight = height / 2;
   const overlapX = (width * overlapRatio) / 2;
   const overlapY = (height * overlapRatio) / 2;
   const rightX = Math.max(0, halfWidth - overlapX);
-  const bottomY = Math.max(0, halfHeight - overlapY);
 
-  // Ưu tiên phía trên bên phải vì QR trên CCCD thường xuất hiện tại đây.
+  // Mẫu cũ có QR ở góc trên phải; mẫu mới thường nằm gần trung tâm bên phải.
   return [
     { x: rightX, y: 0, width: width - rightX, height: halfHeight + overlapY },
-    { x: 0, y: 0, width: halfWidth + overlapX, height: halfHeight + overlapY },
-    { x: rightX, y: bottomY, width: width - rightX, height: height - bottomY },
-    { x: 0, y: bottomY, width: halfWidth + overlapX, height: height - bottomY },
+    { x: rightX, y: 0, width: width - rightX, height },
   ];
-}
-
-function buildRefinedRegions(regions: ScanRegion[]) {
-  return regions.flatMap((parent) =>
-    buildQuadrantRegions(parent.width, parent.height, REFINED_OVERLAP_RATIO).map((child) => ({
-      x: parent.x + child.x,
-      y: parent.y + child.y,
-      width: child.width,
-      height: child.height,
-    })),
-  );
 }
 
 function renderScanRegion(image: DecodedImage, region: ScanRegion, targetLongEdge: number) {
@@ -644,7 +628,7 @@ export async function scanCccdQrFromFileDetailed(
       if (wholeResult) return { status: "success", data: wholeResult };
     }
 
-    const regions = buildQuadrantRegions(decoded.width, decoded.height);
+    const regions = buildPriorityRegions(decoded.width, decoded.height);
     const regionTarget =
       mode === "basic" ? BASIC_LONG_EDGE : mode === "full" ? FULL_LONG_EDGE : AUTO_LONG_EDGE;
 
@@ -654,8 +638,8 @@ export async function scanCccdQrFromFileDetailed(
       reportProgress(options, {
         step: "region",
         region: index + 1,
-        total: 4,
-        message: `Đang phóng to vùng ${index + 1}/4…`,
+        total: regions.length,
+        message: `Đang phóng to vùng ${index + 1}/${regions.length}…`,
       });
       const rendered = renderScanRegion(decoded, regions[index], regionTarget);
       if (rendered) {
@@ -666,32 +650,14 @@ export async function scanCccdQrFromFileDetailed(
     }
 
     if (mode !== "basic") {
-      const refinedRegions = buildRefinedRegions(regions);
-      for (let index = 0; index < refinedRegions.length; index += 1) {
-        const stopReason = getStopReason(context);
-        if (stopReason) return failed(stopReason);
-        reportProgress(options, {
-          step: "refining",
-          region: index + 1,
-          total: refinedRegions.length,
-          message: `Đang kiểm tra chi tiết vùng ${index + 1}/${refinedRegions.length}…`,
-        });
-        const rendered = renderScanRegion(decoded, refinedRegions[index], REFINED_LONG_EDGE);
-        if (rendered) {
-          const result = await scanCanvas(detector, rendered, context);
-          if (result) return { status: "success", data: result };
-        }
-        await yieldToUi();
-      }
-
       for (let index = 0; index < regions.length; index += 1) {
         const stopReason = getStopReason(context);
         if (stopReason) return failed(stopReason);
         reportProgress(options, {
           step: "enhancing",
           region: index + 1,
-          total: 4,
-          message: `Đang tăng độ rõ vùng ${index + 1}/4…`,
+          total: regions.length,
+          message: `Đang tăng độ rõ vùng ${index + 1}/${regions.length}…`,
         });
         const rendered = renderScanRegion(decoded, regions[index], regionTarget);
         if (!rendered) continue;
@@ -723,9 +689,9 @@ export async function scanCccdQrFromFileDetailed(
           reportProgress(options, {
             step: "rotating",
             region: index + 1,
-            total: 4,
+            total: regions.length,
             rotation,
-            message: `Đang xoay thử vùng ${index + 1}/4 (${rotation}°)…`,
+            message: `Đang xoay thử vùng ${index + 1}/${regions.length} (${rotation}°)…`,
           });
           const rotated = renderRotatedCanvas(rendered.canvas, rotation);
           if (rotated) {

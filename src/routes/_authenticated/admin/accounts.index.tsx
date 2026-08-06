@@ -204,6 +204,9 @@ function AdminAccountsPage() {
 
       <div className="relative">
         <Input
+          type="search"
+          name="worker-account-search"
+          autoComplete="off"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Tìm tài khoản theo tên, username, số điện thoại..."

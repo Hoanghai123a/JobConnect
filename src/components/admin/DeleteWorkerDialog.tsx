@@ -26,6 +26,7 @@ type DeleteErrorPayload = {
   code?: string;
   message?: string;
   dependencies?: DeleteDependency[];
+  deletedEmploymentHistoryCount?: number;
 };
 
 type DeleteWorkerDialogProps = {
@@ -46,6 +47,8 @@ export function DeleteWorkerDialog({
   const [submitting, setSubmitting] = useState(false);
   const [dependencies, setDependencies] = useState<DeleteDependency[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
+  const admin = pb.authStore.record as UserRecord | null;
+  const adminIdentity = admin?.username || admin?.email || "";
 
   useEffect(() => {
     if (!open) {
@@ -87,7 +90,12 @@ export function DeleteWorkerDialog({
       }
 
       await onDeleted(payload.workerId || worker.id);
-      toast.success("Đã xóa tài khoản NLĐ và lưu nhật ký");
+      const historyCount = Number(payload.deletedEmploymentHistoryCount || 0);
+      toast.success(
+        historyCount > 0
+          ? `Đã xóa tài khoản, ${historyCount} lịch sử đi làm và lưu nhật ký`
+          : "Đã xóa tài khoản NLĐ và lưu nhật ký",
+      );
       onOpenChange(false);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Không thể xóa tài khoản NLĐ.");
@@ -126,23 +134,35 @@ export function DeleteWorkerDialog({
             </div>
           </div>
 
-          <div className="space-y-1.5">
+          <form
+            id="delete-worker-auth-form"
+            className="space-y-1.5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submit();
+            }}
+          >
+            <input
+              type="text"
+              name="username"
+              autoComplete="username"
+              value={adminIdentity}
+              readOnly
+              tabIndex={-1}
+              aria-hidden="true"
+              className="sr-only"
+            />
             <Label htmlFor="delete-worker-admin-password">Mật khẩu Admin hiện tại</Label>
             <div className="relative">
               <Input
                 id="delete-worker-admin-password"
+                name="password"
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(event) => {
                   setPassword(event.target.value);
                   setErrorMessage("");
                   setDependencies([]);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void submit();
-                  }
                 }}
                 autoComplete="current-password"
                 autoFocus
@@ -160,7 +180,7 @@ export function DeleteWorkerDialog({
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
-          </div>
+          </form>
 
           {errorMessage && (
             <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
@@ -189,10 +209,10 @@ export function DeleteWorkerDialog({
         <AlertDialogFooter>
           <AlertDialogCancel disabled={submitting}>Hủy</AlertDialogCancel>
           <Button
-            type="button"
+            type="submit"
+            form="delete-worker-auth-form"
             variant="destructive"
             disabled={submitting || !password}
-            onClick={() => void submit()}
           >
             {submitting ? (
               <>
