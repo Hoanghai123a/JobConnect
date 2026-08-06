@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileDown,
+  ImageDown,
   Landmark,
   Plus,
   RefreshCw,
@@ -58,11 +59,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { pb, fileUrl, type UserRecord } from "@/lib/pocketbase";
-import { relationInFilter } from "@/lib/delegations";
+import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
-import type { CccdVersionRecord } from "@/lib/cccd-versions";
 import {
   fetchEmploymentHistories,
   getLatestEmploymentHistory,
@@ -86,6 +85,7 @@ import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { cn } from "@/lib/utils";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { CccdManager } from "@/components/cccd/CccdManager";
+import { CccdHistoryExportDialog } from "@/components/cccd/CccdHistoryExportDialog";
 import { WorkerEmploymentDrawer } from "@/components/employment/WorkerEmploymentDrawer";
 import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
 import { WorkerDesktopCard } from "@/components/staff/WorkerDesktopCard";
@@ -93,8 +93,6 @@ import { StaffWorkerDirectory } from "@/components/staff/StaffWorkerDirectory";
 import { RecruitChartDialog } from "@/components/workforce/RecruitChartDialog";
 import { RegisterDialog as SharedRegisterDialog } from "@/components/workforce/RegisterDialog";
 import { VN_BANKS } from "@/lib/vn-banks";
-import JSZip from "jszip";
-import { saveAs } from "file-saver";
 
 export const Route = createFileRoute("/_authenticated/admin/workforce")({
   beforeLoad: () => {
@@ -397,6 +395,15 @@ function WorkforcePage() {
           </Link>
           <button
             type="button"
+            onClick={() => setCccdExportOpen(true)}
+            className="hidden h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted active:scale-[0.98] desktop:flex"
+            aria-label="Xuất ảnh CCCD"
+          >
+            <ImageDown className="h-4 w-4" />
+            Xuất CCCD
+          </button>
+          <button
+            type="button"
             onClick={() => setQuickCreateOpen(true)}
             className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground shadow active:scale-[0.98]"
             aria-label="Tạo nhanh tài khoản NLĐ"
@@ -466,14 +473,22 @@ function WorkforcePage() {
               loading={loading}
               onSelectWorker={setSelectedUserId}
               headerSlot={
-                <div className="flex">
+                <div className="grid grid-cols-2 gap-2 desktop:hidden">
                   <Link
                     to="/staff/export"
-                    className="flex w-full items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground desktop:hidden"
+                    className="flex items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
                   >
                     <FileDown className="h-4 w-4" />
                     Xuất Excel
                   </Link>
+                  <button
+                    type="button"
+                    onClick={() => setCccdExportOpen(true)}
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-medium text-primary"
+                  >
+                    <ImageDown className="h-4 w-4" />
+                    Xuất CCCD
+                  </button>
                 </div>
               }
             />
@@ -653,14 +668,12 @@ function WorkforcePage() {
         onDataChanged={refreshWorkforce}
       />
 
-      <CccdExportDialog
+      <CccdHistoryExportDialog
         open={cccdExportOpen}
         onClose={() => setCccdExportOpen(false)}
         histories={histories}
         users={users}
         factories={factories}
-        from={from}
-        to={to}
       />
 
       <RecruitChartDialog
@@ -1537,258 +1550,5 @@ function MultiSelectRecruiterPicker({
         </button>
       )}
     </div>
-  );
-}
-
-function CccdExportDialog({
-  open,
-  onClose,
-  histories,
-  users,
-  factories,
-  from: defaultFrom,
-  to: defaultTo,
-}: {
-  open: boolean;
-  onClose: () => void;
-  histories: EmploymentHistoryRecord[];
-  users: UserRecord[];
-  factories: FactoryRecord[];
-  from: string;
-  to: string;
-}) {
-  const [factory, setFactory] = useState("all");
-  const [from, setFrom] = useState(defaultFrom);
-  const [to, setTo] = useState(defaultTo);
-  const [exporting, setExporting] = useState(false);
-  const [progressPct, setProgressPct] = useState(0);
-  const [progressText, setProgressText] = useState("");
-
-  useEffect(() => {
-    if (open) {
-      setFrom(defaultFrom);
-      setTo(defaultTo);
-      setFactory("all");
-      setProgressPct(0);
-      setProgressText("");
-    }
-  }, [open, defaultFrom, defaultTo]);
-
-  const matchingHistories = useMemo(() => {
-    const fromT = new Date(`${from}T00:00:00`).getTime();
-    const toT = new Date(`${to}T23:59:59.999`).getTime();
-
-    return histories.filter((h) => {
-      if (factory !== "all" && h.factory !== factory) return false;
-      const joinT = new Date(h.join_date).getTime();
-      if (Number.isNaN(joinT)) return false;
-      const inRange = joinT >= fromT && joinT <= toT;
-      if (inRange) return true;
-      if (h.leave_date) {
-        const leaveT = new Date(h.leave_date).getTime();
-        if (!Number.isNaN(leaveT) && leaveT >= fromT && leaveT <= toT) return true;
-      }
-      return false;
-    });
-  }, [histories, factory, from, to]);
-
-  const matchingWithCccd = useMemo(() => {
-    const userMap = new Map(users.map((u) => [u.id, u]));
-    return matchingHistories.filter((h) => {
-      if (h.cccd_version) return true;
-      const u = userMap.get(h.user);
-      return u && (u.cccd_front || u.cccd_back);
-    });
-  }, [matchingHistories, users]);
-
-  const doExport = async () => {
-    if (!matchingWithCccd.length) {
-      toast.warning("Không có ảnh CCCD phù hợp để xuất");
-      return;
-    }
-    setExporting(true);
-    setProgressText("Đang chuẩn bị...");
-    setProgressPct(0);
-
-    try {
-      const zip = new JSZip();
-      const userMap = new Map(users.map((u) => [u.id, u]));
-      const factoryMap = new Map(factories.map((f) => [f.id, f]));
-
-      const versionIds = [
-        ...new Set(matchingWithCccd.map((h) => h.cccd_version).filter(Boolean)),
-      ] as string[];
-      const versionMap = new Map<string, CccdVersionRecord>();
-      if (versionIds.length) {
-        setProgressText("Đang tải thông tin CCCD...");
-        const BATCH = 50;
-        for (let i = 0; i < versionIds.length; i += BATCH) {
-          const batch = versionIds.slice(i, i + BATCH);
-          const items = (await pb.collection("cccd_versions").getFullList({
-            filter: relationInFilter("id", batch),
-          })) as unknown as CccdVersionRecord[];
-          for (const v of items) versionMap.set(v.id, v);
-        }
-      }
-
-      type DownloadTask = { url: string; zipPath: string };
-      const tasks: DownloadTask[] = [];
-      const fetchedVersions = new Set<string>();
-
-      for (const h of matchingWithCccd) {
-        const workerName = (h.worker_name_snapshot || "worker").replace(/[/\\:*?"<>|]/g, "_");
-        const factoryName = (factoryMap.get(h.factory)?.name || "factory").replace(
-          /[/\\:*?"<>|]/g,
-          "_",
-        );
-        const dateStr = h.join_date ? h.join_date.slice(0, 10) : "";
-        const prefix = `${workerName}_${factoryName}${dateStr ? `_${dateStr}` : ""}`;
-
-        const ver = h.cccd_version ? versionMap.get(h.cccd_version) : undefined;
-        if (ver && !fetchedVersions.has(ver.id)) {
-          fetchedVersions.add(ver.id);
-          if (ver.front_image) {
-            tasks.push({ url: fileUrl(ver, ver.front_image), zipPath: `${prefix}_mat_truoc.jpg` });
-          }
-          if (ver.back_image) {
-            tasks.push({ url: fileUrl(ver, ver.back_image), zipPath: `${prefix}_mat_sau.jpg` });
-          }
-        } else if (!ver) {
-          const u = userMap.get(h.user);
-          if (u?.cccd_front) {
-            tasks.push({ url: fileUrl(u, u.cccd_front), zipPath: `${prefix}_mat_truoc.jpg` });
-          }
-          if (u?.cccd_back) {
-            tasks.push({ url: fileUrl(u, u.cccd_back), zipPath: `${prefix}_mat_sau.jpg` });
-          }
-        }
-      }
-
-      if (!tasks.length) {
-        toast.warning("Không tải được ảnh nào");
-        return;
-      }
-
-      setProgressText(`0 / ${tasks.length} ảnh`);
-      let completed = 0;
-      const CONCURRENCY = 4;
-
-      const downloadOne = async (task: DownloadTask) => {
-        try {
-          const res = await fetch(task.url);
-          if (!res.ok) return;
-          const blob = await res.blob();
-          zip.file(task.zipPath, blob);
-        } catch {
-          /* skip failed */
-        }
-        completed++;
-        const pct = Math.round((completed / tasks.length) * 100);
-        setProgressPct(pct);
-        setProgressText(`${completed} / ${tasks.length} ảnh`);
-      };
-
-      let idx = 0;
-      const workers = Array.from({ length: CONCURRENCY }, async () => {
-        while (idx < tasks.length) {
-          const current = idx++;
-          await downloadOne(tasks[current]);
-        }
-      });
-      await Promise.all(workers);
-
-      setProgressText("Đang nén file...");
-      const content = await zip.generateAsync({ type: "blob" });
-      const factoryLabel =
-        factory === "all"
-          ? "tat_ca"
-          : (factories.find((f) => f.id === factory)?.name || factory).replace(
-              /[/\\:*?"<>|]/g,
-              "_",
-            );
-      saveAs(content, `CCCD_${factoryLabel}_${from}_${to}.zip`);
-
-      toast.success(`Đã xuất ${completed} ảnh CCCD`);
-      onClose();
-    } catch (err: unknown) {
-      toast.error(getErrorMessage(err, "Lỗi xuất CCCD"));
-    } finally {
-      setExporting(false);
-      setProgressText("");
-      setProgressPct(0);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="rounded-2xl">
-        <DialogHeader>
-          <DialogTitle>Xuất ảnh CCCD hàng loạt</DialogTitle>
-          <DialogDescription>
-            Tải toàn bộ ảnh CCCD (mặt trước + mặt sau) theo công ty và khoảng ngày thành file ZIP.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Nhà máy / Công ty</Label>
-            <Select value={factory} onValueChange={setFactory}>
-              <SelectTrigger className="rounded-xl">
-                <SelectValue placeholder="Chọn nhà máy" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tất cả nhà máy</SelectItem>
-                {factories.map((f) => (
-                  <SelectItem key={f.id} value={f.id}>
-                    {f.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Từ ngày</Label>
-              <DateInput value={from} onChange={(v) => setFrom(v)} className="rounded-xl" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Đến ngày</Label>
-              <DateInput value={to} onChange={(v) => setTo(v)} className="rounded-xl" />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-center text-sm">
-            <span className="font-semibold text-primary">{matchingWithCccd.length}</span> lịch sử có
-            ảnh CCCD phù hợp
-          </div>
-
-          {progressText && (
-            <div className="space-y-1.5">
-              <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary transition-all duration-300"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-              <div className="text-center text-xs text-muted-foreground">{progressText}</div>
-            </div>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={exporting} className="rounded-xl">
-            Đóng
-          </Button>
-          <Button
-            onClick={doExport}
-            disabled={exporting || !matchingWithCccd.length}
-            className="rounded-xl"
-          >
-            {exporting ? "Đang xuất..." : "Tải ZIP"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

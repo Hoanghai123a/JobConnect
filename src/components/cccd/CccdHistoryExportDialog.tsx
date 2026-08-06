@@ -44,6 +44,8 @@ import type { EmploymentHistoryRecord } from "@/lib/employment";
 import type { FactoryRecord } from "@/lib/factories";
 import type { UserRecord } from "@/lib/pocketbase";
 
+const LARGE_EXPORT_THRESHOLD = 1_000;
+
 function exportExcelIssues(result: CccdHistoryExcelMatchResult) {
   if (!result.issues.length) return;
   exportToExcel(
@@ -85,6 +87,7 @@ export function CccdHistoryExportDialog({
   const [excelFileName, setExcelFileName] = useState("");
   const [excelResult, setExcelResult] = useState<CccdHistoryExcelMatchResult | null>(null);
   const [excelReading, setExcelReading] = useState(false);
+  const [largeExportConfirmed, setLargeExportConfirmed] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [preparation, setPreparation] = useState<CccdHistoryPreparation | null>(null);
@@ -103,6 +106,7 @@ export function CccdHistoryExportDialog({
 
   const selectionReady =
     source === "date-range" ? dateRangeValid : Boolean(excelResult && !excelResult.blockingError);
+  const largeSelection = selectedHistories.length > LARGE_EXPORT_THRESHOLD;
 
   useEffect(() => {
     if (open) return;
@@ -113,9 +117,14 @@ export function CccdHistoryExportDialog({
     setToDate("");
     setExcelFileName("");
     setExcelResult(null);
+    setLargeExportConfirmed(false);
     setPreparation(null);
     setProgressState({ completed: 0, total: 0, message: "" });
   }, [open]);
+
+  useEffect(() => {
+    setLargeExportConfirmed(false);
+  }, [selectedHistories]);
 
   useEffect(() => {
     if (!open || !selectionReady) {
@@ -154,6 +163,7 @@ export function CccdHistoryExportDialog({
     setExcelReading(true);
     setExcelFileName(file.name);
     setExcelResult(null);
+    setLargeExportConfirmed(false);
     setPreparation(null);
     setProgressState({ completed: 0, total: 0, message: "Đang đọc file Excel..." });
     try {
@@ -372,6 +382,33 @@ export function CccdHistoryExportDialog({
             />
           </div>
 
+          {largeSelection && (
+            <div className="space-y-2 rounded-xl border border-amber-400/60 bg-amber-50 p-3 text-xs text-amber-900">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Đang chọn <strong>{selectedHistories.length.toLocaleString("vi-VN")}</strong> lịch
+                  sử. Dữ liệu trên 1.000 có thể mất nhiều thời gian và làm trình duyệt dùng nhiều bộ
+                  nhớ.
+                </span>
+              </div>
+              {!largeExportConfirmed ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full rounded-lg border-amber-400 bg-white text-amber-900 hover:bg-amber-100"
+                  onClick={() => setLargeExportConfirmed(true)}
+                  disabled={busy}
+                >
+                  Tôi hiểu, tiếp tục xuất
+                </Button>
+              ) : (
+                <div className="font-medium">Đã xác nhận xuất dữ liệu lớn.</div>
+              )}
+            </div>
+          )}
+
           <div className="grid gap-2 sm:grid-cols-2">
             <ExportModeButton
               active={mode === "folders"}
@@ -419,7 +456,10 @@ export function CccdHistoryExportDialog({
             className="w-full rounded-xl"
             onClick={startExport}
             disabled={
-              busy || !preparation || !(preparation.stats.full || preparation.stats.partial)
+              busy ||
+              !preparation ||
+              !(preparation.stats.full || preparation.stats.partial) ||
+              (largeSelection && !largeExportConfirmed)
             }
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
