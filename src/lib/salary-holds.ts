@@ -22,6 +22,7 @@ export type SalaryHoldRecord = {
   approved_at?: string;
   rejected_by?: string;
   rejected_at?: string;
+  rejection_reason?: string;
   disbursed_by?: string;
   disbursed_at?: string;
   cancelled_at?: string;

@@ -29,6 +29,9 @@ cho admin/staff và các field ảnh CCCD/ngân hàng/ngày sinh như hướng d
   - `updateRule`: admin, staff, hoặc chính user. App chỉ mở luồng user tự báo nghỉ; các quyền chi tiết hơn được kiểm tra ở frontend.
   - Field lịch sử đi làm cần có `worker_tax_code_snapshot` để lưu mã số thuế theo từng nhà máy/lịch sử, không lấy cứng từ hồ sơ user.
   - Giữ index `idx_emphist_one_active` để mỗi user chỉ có một bản ghi `working`.
+- `salary_holds`
+  - C?n field text `rejection_reason` (t?i ?a 1000 k? t?) ?? l?u l? do Admin t? ch?i.
+  - `updateRule` b?t bu?c g?i `rejection_reason` khi chuy?n tr?ng th?i t? `received` sang `rejected`.
 - `advances`, `check_attendance_items`, `check_salary_items`
   - Cần cho staff đọc/tạo theo luồng app đang dùng.
   - PocketBase rule không biểu đạt gọn được điều kiện "người tuyển trong 3 lịch sử gần nhất", nên app bắt buộc kiểm tra quyền trước khi gọi API.

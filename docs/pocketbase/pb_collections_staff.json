@@ -875,7 +875,7 @@
     "listRule": "@request.auth.role = \"admin\" || staff = @request.auth.id",
     "viewRule": "@request.auth.role = \"admin\" || staff = @request.auth.id",
     "createRule": "@request.auth.role = \"staff\" && @request.body.staff = @request.auth.id && @request.body.status = \"received\" && employment_history.recruiter_staff = @request.auth.id",
-    "updateRule": "(@request.auth.role = \"admin\" && ((status = \"received\" && (@request.body.status = \"approved\" || @request.body.status = \"rejected\")) || (status = \"approved\" && @request.body.status = \"disbursed\"))) || (@request.auth.role = \"staff\" && staff = @request.auth.id && status = \"received\" && @request.body.status = \"cancelled\")",
+    "updateRule": "(@request.auth.role = \"admin\" && ((status = \"received\" && (@request.body.status = \"approved\" || (@request.body.status = \"rejected\" && @request.body.rejection_reason:isset = true && @request.body.rejection_reason != \"\"))) || (status = \"approved\" && @request.body.status = \"disbursed\"))) || (@request.auth.role = \"staff\" && staff = @request.auth.id && status = \"received\" && @request.body.status = \"cancelled\")",
     "deleteRule": null,
     "fields": [
       {
@@ -1118,6 +1118,20 @@
         "required": false,
         "system": false,
         "type": "date"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text_salaryhold_rejectionreason",
+        "max": 1000,
+        "min": 1,
+        "name": "rejection_reason",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
       },
       {
         "cascadeDelete": false,

@@ -22,6 +22,7 @@ import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
   Dialog,
@@ -60,6 +61,7 @@ export const Route = createFileRoute("/_authenticated/staff/salary-holds")({
 const QR_TEMPLATE_KEY = "jobconnect.salaryHoldTransferDescriptionTemplate";
 const DEFAULT_QR_TEMPLATE = "Giải ngân giữ lương + tên";
 type Tab = SalaryHoldStatus | "all";
+type RejectRequest = { mode: "single"; row: SalaryHoldRecord } | { mode: "bulk"; count: number };
 
 function formatHistoryDate(value?: string, fallback = "Chưa có") {
   if (!value) return fallback;
@@ -86,6 +88,9 @@ function SalaryHoldsPage() {
   const [workerSearch, setWorkerSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [rejectRequest, setRejectRequest] = useState<RejectRequest | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejecting, setRejecting] = useState(false);
   const [qrTemplate, setQrTemplate] = useState(DEFAULT_QR_TEMPLATE);
 
   const load = useCallback(
@@ -265,6 +270,7 @@ function SalaryHoldsPage() {
       "Ngày tạo": row.created || "",
       "Ngày duyệt": row.approved_at || "",
       "Ngày từ chối": row.rejected_at || "",
+      "Lý do từ chối": row.rejection_reason || "",
       "Ngày giải ngân": row.disbursed_at || "",
       "Ngày hủy": row.cancelled_at || "",
     }));
@@ -299,6 +305,7 @@ function SalaryHoldsPage() {
     row: SalaryHoldRecord,
     status: SalaryHoldStatus,
     closeDetail = true,
+    rejectionReason = "",
   ): Promise<boolean> => {
     if (status === "cancelled" && (row.status !== "received" || row.staff !== viewer.id)) {
       toast.error("Không thể hủy yêu cầu này");
@@ -306,6 +313,10 @@ function SalaryHoldsPage() {
     }
     if (["approved", "rejected"].includes(status) && (!isAdmin || row.status !== "received")) {
       toast.error("Yêu cầu không còn ở trạng thái tiếp nhận");
+      return false;
+    }
+    if (status === "rejected" && !rejectionReason.trim()) {
+      toast.error("Vui lòng nhập lý do từ chối");
       return false;
     }
     if (status === "disbursed" && (!isAdmin || row.status !== "approved")) {
@@ -316,7 +327,13 @@ function SalaryHoldsPage() {
     const now = new Date().toISOString();
     const payload: Partial<SalaryHoldRecord> = { status };
     if (status === "approved") Object.assign(payload, { approved_by: viewer.id, approved_at: now });
-    if (status === "rejected") Object.assign(payload, { rejected_by: viewer.id, rejected_at: now });
+    if (status === "rejected") {
+      Object.assign(payload, {
+        rejected_by: viewer.id,
+        rejected_at: now,
+        rejection_reason: rejectionReason.trim(),
+      });
+    }
     if (status === "disbursed")
       Object.assign(payload, { disbursed_by: viewer.id, disbursed_at: now });
     if (status === "cancelled") Object.assign(payload, { cancelled_at: now });
@@ -352,11 +369,16 @@ function SalaryHoldsPage() {
   const bulkUpdateStatus = async (
     sourceStatus: "received" | "approved",
     status: "approved" | "rejected" | "disbursed",
-  ) => {
+    rejectionReason = "",
+  ): Promise<boolean> => {
     const targets = filtered.filter(
       (row) => row.status === sourceStatus && selectedIds.has(row.id),
     );
-    if (!targets.length || bulkProcessing) return;
+    if (!targets.length || bulkProcessing) return false;
+    if (status === "rejected" && !rejectionReason.trim()) {
+      toast.error("Vui lòng nhập lý do từ chối");
+      return false;
+    }
 
     setBulkProcessing(true);
     const failedIds = new Set<string>();
@@ -369,7 +391,11 @@ function SalaryHoldsPage() {
         Object.assign(payload, { approved_by: viewer.id, approved_at: now });
       }
       if (status === "rejected") {
-        Object.assign(payload, { rejected_by: viewer.id, rejected_at: now });
+        Object.assign(payload, {
+          rejected_by: viewer.id,
+          rejected_at: now,
+          rejection_reason: rejectionReason.trim(),
+        });
       }
       if (status === "disbursed") {
         Object.assign(payload, { disbursed_by: viewer.id, disbursed_at: now });
@@ -410,6 +436,41 @@ function SalaryHoldsPage() {
       toast.warning(
         `Đã ${actionLabel} ${successCount}/${targets.length} yêu cầu. Còn ${failedIds.size} yêu cầu chưa xử lý được.`,
       );
+    }
+    return successCount > 0;
+  };
+
+  const requestSingleReject = (row: SalaryHoldRecord) => {
+    setRejectReason("");
+    setRejectRequest({ mode: "single", row });
+  };
+
+  const requestBulkReject = () => {
+    if (!selectedCount) return;
+    setRejectReason("");
+    setRejectRequest({ mode: "bulk", count: selectedCount });
+  };
+
+  const confirmReject = async () => {
+    if (!rejectRequest || rejecting) return;
+    const reason = rejectReason.trim();
+    if (!reason) {
+      toast.error("Vui lòng nhập lý do từ chối");
+      return;
+    }
+
+    setRejecting(true);
+    try {
+      const succeeded =
+        rejectRequest.mode === "single"
+          ? await updateStatus(rejectRequest.row, "rejected", true, reason)
+          : await bulkUpdateStatus("received", "rejected", reason);
+      if (succeeded) {
+        setRejectRequest(null);
+        setRejectReason("");
+      }
+    } finally {
+      setRejecting(false);
     }
   };
 
@@ -586,7 +647,7 @@ function SalaryHoldsPage() {
                   size="sm"
                   variant="destructive"
                   disabled={!selectedCount || bulkProcessing}
-                  onClick={() => void bulkUpdateStatus("received", "rejected")}
+                  onClick={requestBulkReject}
                 >
                   <X className="mr-1 h-4 w-4" />
                   Từ chối ({selectedCount})
@@ -674,6 +735,14 @@ function SalaryHoldsPage() {
                         <span className="font-medium text-foreground">Nội dung: </span>
                         <span className="line-clamp-2">{row.content}</span>
                       </div>
+                      {row.status === "rejected" && row.rejection_reason && (
+                        <div className="mt-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                          <span className="font-semibold">Lý do từ chối: </span>
+                          <span className="whitespace-pre-wrap break-words">
+                            {row.rejection_reason}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </Card>
@@ -789,8 +858,67 @@ function SalaryHoldsPage() {
             } catch {}
           }}
           onStatus={updateStatus}
+          onReject={requestSingleReject}
         />
       )}
+      <Dialog
+        open={!!rejectRequest}
+        onOpenChange={(open) => {
+          if (!open && !rejecting) {
+            setRejectRequest(null);
+            setRejectReason("");
+          }
+        }}
+      >
+        <DialogContent className="rounded-2xl bg-white text-slate-900 sm:max-w-md">
+          <DialogHeader className="bg-white">
+            <DialogTitle>Nhập lý do từ chối</DialogTitle>
+            <DialogDescription>
+              {rejectRequest?.mode === "bulk"
+                ? `Lý do này sẽ áp dụng cho ${rejectRequest.count} yêu cầu đang chọn.`
+                : "Staff sẽ nhìn thấy lý do này trong chi tiết yêu cầu."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="salary-hold-rejection-reason">Lý do từ chối</Label>
+            <Textarea
+              id="salary-hold-rejection-reason"
+              value={rejectReason}
+              onChange={(event) => setRejectReason(event.target.value)}
+              placeholder="Nhập lý do để Staff nắm được thông tin..."
+              className="min-h-28 bg-white text-slate-900 placeholder:text-slate-400"
+              maxLength={1000}
+              disabled={rejecting}
+              autoFocus
+            />
+            <div className="text-right text-xs text-slate-500">
+              {rejectReason.length}/1000 ký tự
+            </div>
+          </div>
+          <DialogFooter className="bg-white">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={rejecting}
+              onClick={() => {
+                setRejectRequest(null);
+                setRejectReason("");
+              }}
+            >
+              Hủy
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={rejecting || !rejectReason.trim()}
+              onClick={() => void confirmReject()}
+            >
+              {rejecting && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+              Xác nhận từ chối
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageContainer>
   );
 }
@@ -805,6 +933,7 @@ function SalaryHoldDetailDialog({
   qrTemplate,
   setQrTemplate,
   onStatus,
+  onReject,
 }: {
   row: SalaryHoldRecord;
   items: SalaryHoldRecord[];
@@ -818,7 +947,9 @@ function SalaryHoldDetailDialog({
     row: SalaryHoldRecord,
     status: SalaryHoldStatus,
     closeDetail?: boolean,
+    rejectionReason?: string,
   ) => Promise<boolean>;
+  onReject: (row: SalaryHoldRecord) => void;
 }) {
   const disbursingIdRef = useRef<string | null>(null);
   const [disbursingId, setDisbursingId] = useState<string | null>(null);
@@ -1012,6 +1143,14 @@ function SalaryHoldDetailDialog({
               </div>
             </div>
             <div className="rounded-xl bg-muted/30 p-3 text-sm">{row.content}</div>
+            {row.status === "rejected" && (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                <div className="mb-1 font-semibold text-destructive">Lý do từ chối</div>
+                <div className="whitespace-pre-wrap break-words text-foreground">
+                  {row.rejection_reason || "Chưa có thông tin lý do từ chối."}
+                </div>
+              </div>
+            )}
             <details className="rounded-xl border p-3">
               <summary className="cursor-pointer text-sm font-medium">STK Staff nhận tiền</summary>
               <div className="mt-2 text-sm">
@@ -1065,11 +1204,7 @@ function SalaryHoldDetailDialog({
           )}
           {isAdmin && row.status === "received" && (
             <>
-              <Button
-                variant="destructive"
-                disabled={isDisbursing}
-                onClick={() => void onStatus(row, "rejected")}
-              >
+              <Button variant="destructive" disabled={isDisbursing} onClick={() => onReject(row)}>
                 Từ chối
               </Button>
               <Button disabled={isDisbursing} onClick={() => void onStatus(row, "approved")}>
