@@ -1,7 +1,17 @@
-import { useEffect, useState } from "react";
-import { Archive, Download, FileText, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  AlertTriangle,
+  Archive,
+  CalendarRange,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Loader2,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { DateInput } from "@/components/ui/date-input";
 import {
   Dialog,
   DialogContent,
@@ -9,17 +19,49 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   exportCccdHistoryArchive,
+  filterCccdHistoriesByJoinDate,
+  matchCccdHistoriesFromExcelRows,
   prepareCccdHistoryExport,
+  type CccdHistoryExcelMatchResult,
   type CccdHistoryExportMode,
   type CccdHistoryExportProgress,
   type CccdHistoryPreparation,
+  type CccdHistorySelectionSource,
 } from "@/lib/cccd-history-export";
+import { exportToExcel, parseExcelToRows } from "@/lib/excel";
 import type { EmploymentHistoryRecord } from "@/lib/employment";
 import type { FactoryRecord } from "@/lib/factories";
 import type { UserRecord } from "@/lib/pocketbase";
+
+function exportExcelIssues(result: CccdHistoryExcelMatchResult) {
+  if (!result.issues.length) return;
+  exportToExcel(
+    `doi_chieu_xuat_anh_cccd_${Date.now()}`,
+    {
+      "Dòng cần kiểm tra": result.issues.map((issue) => ({
+        "Dòng Excel": issue.rowNumber,
+        "Mã nhân viên": issue.employeeCode,
+        "Tên nhà máy": issue.factoryName,
+        "Họ tên": issue.workerName,
+        "Lý do": issue.reason,
+        "Mã lịch sử đã chọn": issue.selectedHistoryId || "",
+        "Ngày vào đã chọn": issue.selectedJoinDate || "",
+      })),
+    },
+    { "Dòng cần kiểm tra": ["Ngày vào đã chọn"] },
+  );
+}
 
 export function CccdHistoryExportDialog({
   open,
@@ -34,7 +76,15 @@ export function CccdHistoryExportDialog({
   users: UserRecord[];
   factories: FactoryRecord[];
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [source, setSource] = useState<CccdHistorySelectionSource>("date-range");
   const [mode, setMode] = useState<CccdHistoryExportMode>("folders");
+  const [factoryId, setFactoryId] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [excelFileName, setExcelFileName] = useState("");
+  const [excelResult, setExcelResult] = useState<CccdHistoryExcelMatchResult | null>(null);
+  const [excelReading, setExcelReading] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [preparation, setPreparation] = useState<CccdHistoryPreparation | null>(null);
@@ -43,16 +93,42 @@ export function CccdHistoryExportDialog({
     total: 0,
     message: "",
   });
-  const busy = preparing || exporting;
+  const busy = excelReading || preparing || exporting;
+  const dateRangeValid = Boolean(factoryId && fromDate && toDate && fromDate <= toDate);
+
+  const selectedHistories = useMemo(() => {
+    if (source === "excel") return excelResult?.histories ?? [];
+    return filterCccdHistoriesByJoinDate(histories, factoryId, fromDate, toDate);
+  }, [excelResult, factoryId, fromDate, histories, source, toDate]);
+
+  const selectionReady =
+    source === "date-range" ? dateRangeValid : Boolean(excelResult && !excelResult.blockingError);
 
   useEffect(() => {
-    if (!open) return;
-    let alive = true;
+    if (open) return;
+    setSource("date-range");
     setMode("folders");
+    setFactoryId("");
+    setFromDate("");
+    setToDate("");
+    setExcelFileName("");
+    setExcelResult(null);
+    setPreparation(null);
+    setProgressState({ completed: 0, total: 0, message: "" });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !selectionReady) {
+      setPreparation(null);
+      setPreparing(false);
+      return;
+    }
+
+    let alive = true;
     setPreparation(null);
     setPreparing(true);
     setProgressState({ completed: 0, total: 0, message: "Đang đọc dữ liệu CCCD..." });
-    prepareCccdHistoryExport(histories, users, factories)
+    prepareCccdHistoryExport(selectedHistories, users, factories)
       .then((result) => {
         if (alive) setPreparation(result);
       })
@@ -64,10 +140,46 @@ export function CccdHistoryExportDialog({
       .finally(() => {
         if (alive) setPreparing(false);
       });
+
     return () => {
       alive = false;
     };
-  }, [open, histories, users, factories]);
+  }, [factories, open, selectedHistories, selectionReady, users]);
+
+  const handleExcelFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || excelReading || exporting) return;
+
+    setExcelReading(true);
+    setExcelFileName(file.name);
+    setExcelResult(null);
+    setPreparation(null);
+    setProgressState({ completed: 0, total: 0, message: "Đang đọc file Excel..." });
+    try {
+      const rows = await parseExcelToRows(file);
+      const result = matchCccdHistoriesFromExcelRows(rows, histories, factories);
+      setExcelResult(result);
+
+      if (result.issues.length) exportExcelIssues(result);
+      if (result.blockingError) {
+        toast.error(result.blockingError);
+      } else if (!result.histories.length) {
+        toast.warning("Không khớp được lịch sử đi làm nào từ file Excel");
+      } else if (result.issues.length) {
+        toast.warning(
+          `Đã khớp ${result.histories.length} lịch sử và tải file đối chiếu ${result.issues.length} dòng cần kiểm tra.`,
+        );
+      } else {
+        toast.success(`Đã khớp ${result.histories.length} lịch sử đi làm.`);
+      }
+    } catch (error: unknown) {
+      setExcelFileName("");
+      toast.error(error instanceof Error ? error.message : "Không đọc được file Excel");
+    } finally {
+      setExcelReading(false);
+    }
+  };
 
   const startExport = async () => {
     if (!preparation || busy) return;
@@ -81,7 +193,7 @@ export function CccdHistoryExportDialog({
     try {
       const result = await exportCccdHistoryArchive(mode, preparation, setProgressState);
       toast.success(
-        `Đã xuất ${result.exported} lịch sử (${result.full} Đủ 2 mặt, ${result.partial} thiếu 1 mặt).`,
+        `Đã xuất ${result.exported} lịch sử (${result.full} đủ 2 mặt, ${result.partial} thiếu 1 mặt).`,
       );
       if (result.missing || result.failedImages) {
         toast.warning(
@@ -99,23 +211,154 @@ export function CccdHistoryExportDialog({
   const progressValue =
     progressState.total > 0
       ? Math.min(100, Math.round((progressState.completed / progressState.total) * 100))
-      : exporting
+      : busy
         ? 8
         : 0;
 
   return (
     <Dialog open={open} onOpenChange={(value) => !value && !busy && onClose()}>
-      <DialogContent className="max-w-lg rounded-2xl p-4 sm:p-5">
+      <DialogContent className="max-h-[92dvh] max-w-xl overflow-y-auto rounded-2xl p-4 sm:p-5">
         <DialogHeader>
           <DialogTitle>Xuất ảnh CCCD theo lịch sử đi làm</DialogTitle>
           <DialogDescription>
-            Dữ liệu lấy theo bộ lọc Nhà máy và Trạng thái đang chọn trên trang này.
+            Chọn khoảng ngày và nhà máy hoặc đối chiếu danh sách từ file Excel.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2">
+            <SelectionSourceButton
+              active={source === "date-range"}
+              icon={CalendarRange}
+              title="Khoảng ngày"
+              description="Ngày vào và nhà máy"
+              onClick={() => setSource("date-range")}
+              disabled={busy}
+            />
+            <SelectionSourceButton
+              active={source === "excel"}
+              icon={FileSpreadsheet}
+              title="Danh sách Excel"
+              description="Mã NV và nhà máy"
+              onClick={() => setSource("excel")}
+              disabled={busy}
+            />
+          </div>
+
+          {source === "date-range" ? (
+            <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Nhà máy</Label>
+                <Select value={factoryId} onValueChange={setFactoryId} disabled={busy}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue placeholder="Chọn nhà máy" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {factories.map((factory) => (
+                      <SelectItem key={factory.id} value={factory.id}>
+                        {factory.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Từ ngày vào</Label>
+                  <DateInput
+                    value={fromDate}
+                    onChange={setFromDate}
+                    max={toDate || undefined}
+                    disabled={busy}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Đến ngày vào</Label>
+                  <DateInput
+                    value={toDate}
+                    onChange={setToDate}
+                    min={fromDate || undefined}
+                    disabled={busy}
+                  />
+                </div>
+              </div>
+              {fromDate && toDate && fromDate > toDate && (
+                <div className="text-xs text-destructive">Từ ngày không được lớn hơn Đến ngày.</div>
+              )}
+              {dateRangeValid && !preparing && (
+                <div className="text-xs text-muted-foreground">
+                  Đã chọn <strong className="text-foreground">{selectedHistories.length}</strong>{" "}
+                  lịch sử đi làm.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
+              <div className="rounded-xl bg-background/70 p-3 text-xs leading-5 text-muted-foreground">
+                Sheet đầu tiên cần có các cột <strong>Mã nhân viên</strong>,{" "}
+                <strong>Tên nhà máy</strong> và <strong>Họ tên</strong>. Hệ thống chỉ đối chiếu Mã
+                nhân viên + Tên nhà máy.
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-xl"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={busy}
+              >
+                {excelReading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                {excelReading ? "Đang đọc file..." : excelFileName || "Chọn file Excel"}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={handleExcelFile}
+                disabled={busy}
+              />
+
+              {excelResult && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <ExportStat label="Dòng Excel" value={excelResult.totalRows} />
+                    <ExportStat
+                      label="Đã khớp"
+                      value={excelResult.histories.length}
+                      tone="success"
+                    />
+                    <ExportStat
+                      label="Cần kiểm tra"
+                      value={excelResult.issues.length}
+                      tone={excelResult.issues.length ? "warning" : "default"}
+                    />
+                  </div>
+                  {excelResult.issues.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full rounded-xl text-amber-700"
+                      onClick={() => exportExcelIssues(excelResult)}
+                      disabled={busy}
+                    >
+                      <AlertTriangle className="h-4 w-4" />
+                      Tải lại file đối chiếu
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <ExportStat label="Lịch sử" value={preparation?.stats.total ?? histories.length} />
+            <ExportStat
+              label="Lịch sử"
+              value={preparation?.stats.total ?? (selectionReady ? selectedHistories.length : "—")}
+            />
             <ExportStat label="Đủ 2 mặt" value={preparation?.stats.full ?? "—"} tone="success" />
             <ExportStat
               label="Thiếu 1 mặt"
@@ -180,11 +423,13 @@ export function CccdHistoryExportDialog({
             }
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            {busy
+            {exporting
               ? "Đang xuất..."
-              : mode === "folders"
-                ? "Tạo ZIP thư mục ảnh"
-                : "Tạo ZIP file Word"}
+              : preparing || excelReading
+                ? "Đang chuẩn bị..."
+                : mode === "folders"
+                  ? "Tạo ZIP thư mục ảnh"
+                  : "Tạo ZIP file Word"}
           </Button>
         </div>
       </DialogContent>
@@ -212,6 +457,39 @@ function ExportStat({
       <div className={`text-lg font-semibold ${toneClass}`}>{value}</div>
       <div className="mt-0.5 text-[10px] text-muted-foreground">{label}</div>
     </div>
+  );
+}
+
+function SelectionSourceButton({
+  active,
+  icon: Icon,
+  title,
+  description,
+  onClick,
+  disabled,
+}: {
+  active: boolean;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-xl border p-3 text-left transition-colors ${
+        active
+          ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+          : "border-border/60 bg-card hover:bg-muted/40"
+      }`}
+    >
+      <Icon className={`h-5 w-5 ${active ? "text-primary" : "text-muted-foreground"}`} />
+      <span className="mt-2 block text-xs font-semibold">{title}</span>
+      <span className="mt-0.5 block text-[10px] text-muted-foreground">{description}</span>
+    </button>
   );
 }
 

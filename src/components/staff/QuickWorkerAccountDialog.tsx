@@ -15,12 +15,16 @@ import {
   Camera,
   Check,
   ChevronsUpDown,
+  ClipboardPaste,
+  Crop,
   IdCard,
   Plus,
   Trash2,
   ScanLine,
 } from "lucide-react";
 import { toast } from "sonner";
+import { CccdImageCropDialog } from "@/components/cccd/CccdImageCropDialog";
+import { readClipboardImage } from "@/lib/clipboard-image";
 import { CccdQrPasteButton } from "@/components/cccd/CccdQrPasteButton";
 import { CccdQrScanFeedbackDialog } from "@/components/cccd/CccdQrScanFeedbackDialog";
 import { Button } from "@/components/ui/button";
@@ -118,6 +122,13 @@ type PendingQrOverwrite = {
   entryId: string;
   data: CccdQrData;
   fields: Array<keyof QuickWorkerForm>;
+};
+
+type QuickCropRequest = {
+  entryId: string;
+  side: QuickScanSide;
+  file: File | null;
+  fallbackMessage?: string;
 };
 
 let quickWorkerEntrySequence = 0;
@@ -227,6 +238,7 @@ export function QuickWorkerAccountDialog({
   const [scanFailure, setScanFailure] = useState<QuickScanFailure | null>(null);
   const [scanFailureOpen, setScanFailureOpen] = useState(false);
   const [pendingQrOverwrite, setPendingQrOverwrite] = useState<PendingQrOverwrite | null>(null);
+  const [cropRequest, setCropRequest] = useState<QuickCropRequest | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [recordErrors, setRecordErrors] = useState<Record<string, string[]>>({});
   const entriesRef = useRef(entries);
@@ -265,6 +277,7 @@ export function QuickWorkerAccountDialog({
     setScanFailureOpen(false);
     setScanFailure(null);
     setPendingQrOverwrite(null);
+    setCropRequest(null);
     setRecordErrors({});
     setSubmitting(false);
   }, [cancelActiveScan]);
@@ -406,49 +419,69 @@ export function QuickWorkerAccountDialog({
     }
   };
 
-  const pickCccdImage =
-    (entryId: string, side: "front" | "back") => async (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0] || null;
-      event.target.value = "";
-      if (!file) return;
-      if (!file.type.startsWith("image/")) {
-        toast.error("Vui lòng chọn file ảnh CCCD");
-        return;
-      }
+  const applyCccdImage = async (entryId: string, side: QuickScanSide, file: File) => {
+    const currentEntry = entriesRef.current.find((entry) => entry.id === entryId);
+    const skipAutomaticScan = Boolean(
+      currentEntry?.qrScannedSide && currentEntry.qrScannedSide !== side,
+    );
+    const resetSuccessfulScan = currentEntry?.qrScannedSide === side;
 
-      const currentEntry = entriesRef.current.find((entry) => entry.id === entryId);
-      const skipAutomaticScan = Boolean(
-        currentEntry?.qrScannedSide && currentEntry.qrScannedSide !== side,
-      );
-      const resetSuccessfulScan = currentEntry?.qrScannedSide === side;
-
-      setScanFailureOpen(false);
-      setScanFailure(null);
-      const preview = URL.createObjectURL(file);
-      setEntries((current) =>
-        current.map((entry) => {
-          if (entry.id !== entryId) return entry;
-          if (side === "front") {
-            if (entry.frontPreview) URL.revokeObjectURL(entry.frontPreview);
-            return {
-              ...entry,
-              frontFile: file,
-              frontPreview: preview,
-              qrScannedSide: resetSuccessfulScan ? null : entry.qrScannedSide,
-            };
-          }
-          if (entry.backPreview) URL.revokeObjectURL(entry.backPreview);
+    setScanFailureOpen(false);
+    setScanFailure(null);
+    const preview = URL.createObjectURL(file);
+    setEntries((current) =>
+      current.map((entry) => {
+        if (entry.id !== entryId) return entry;
+        if (side === "front") {
+          if (entry.frontPreview) URL.revokeObjectURL(entry.frontPreview);
           return {
             ...entry,
-            backFile: file,
-            backPreview: preview,
+            frontFile: file,
+            frontPreview: preview,
             qrScannedSide: resetSuccessfulScan ? null : entry.qrScannedSide,
           };
-        }),
-      );
-      clearRecordError(entryId);
-      if (!skipAutomaticScan) await scanImage(entryId, file, side);
+        }
+        if (entry.backPreview) URL.revokeObjectURL(entry.backPreview);
+        return {
+          ...entry,
+          backFile: file,
+          backPreview: preview,
+          qrScannedSide: resetSuccessfulScan ? null : entry.qrScannedSide,
+        };
+      }),
+    );
+    clearRecordError(entryId);
+    if (!skipAutomaticScan) await scanImage(entryId, file, side);
+  };
+
+  const requestCrop = (
+    entryId: string,
+    side: QuickScanSide,
+    file: File | null,
+    fallbackMessage?: string,
+  ) => {
+    if (file && !file.type.startsWith("image/")) {
+      toast.error("Vui lòng chọn file ảnh CCCD");
+      return;
+    }
+    setCropRequest({ entryId, side, file, fallbackMessage });
+  };
+
+  const pickCccdImage =
+    (entryId: string, side: QuickScanSide) => (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0] || null;
+      event.target.value = "";
+      if (file) requestCrop(entryId, side, file);
     };
+
+  const pasteCccdImage = async (entryId: string, side: QuickScanSide) => {
+    const result = await readClipboardImage(side === "front" ? "Mặt trước" : "Mặt sau");
+    if (result.status === "success") {
+      requestCrop(entryId, side, result.file);
+      return;
+    }
+    requestCrop(entryId, side, null, result.message);
+  };
 
   const clearCccdImage = (entryId: string, side: QuickScanSide) => {
     const scanningKey = `${entryId}:${side}`;
@@ -491,6 +524,7 @@ export function QuickWorkerAccountDialog({
     if (scanFailure?.entryId === entryId) setScanFailureOpen(false);
     setScanFailure((current) => (current?.entryId === entryId ? null : current));
     setPendingQrOverwrite((current) => (current?.entryId === entryId ? null : current));
+    setCropRequest((current) => (current?.entryId === entryId ? null : current));
     setEntries((current) => {
       if (current.length === 1) return current;
       const entry = current.find((item) => item.id === entryId);
@@ -858,6 +892,13 @@ export function QuickWorkerAccountDialog({
                       onPick={pickCccdImage}
                       onScan={scanImage}
                       onClear={clearCccdImage}
+                      onPasteImage={(entryId, side) => void pasteCccdImage(entryId, side)}
+                      onCropImage={(entryId, side) => {
+                        const currentEntry = entriesRef.current.find((item) => item.id === entryId);
+                        const file =
+                          side === "front" ? currentEntry?.frontFile : currentEntry?.backFile;
+                        if (file) requestCrop(entryId, side, file);
+                      }}
                       onPaste={(entryId, data) => {
                         cancelActiveScan();
                         setScanFailure(null);
@@ -918,6 +959,20 @@ export function QuickWorkerAccountDialog({
           </form>
         </DialogContent>
       </Dialog>
+
+      <CccdImageCropDialog
+        open={Boolean(cropRequest)}
+        sourceFile={cropRequest?.file || null}
+        sideLabel={cropRequest?.side === "back" ? "Mặt sau" : "Mặt trước"}
+        fallbackMessage={cropRequest?.fallbackMessage}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setCropRequest(null);
+        }}
+        onConfirm={(file) => {
+          if (!cropRequest) return;
+          void applyCccdImage(cropRequest.entryId, cropRequest.side, file);
+        }}
+      />
 
       {scanFailure && (
         <CccdQrScanFeedbackDialog
@@ -1015,6 +1070,8 @@ function QuickWorkerEntryFields({
   onPick,
   onScan,
   onClear,
+  onPasteImage,
+  onCropImage,
   onPaste,
   onRequestCamera,
   onRequestLibrary,
@@ -1045,6 +1102,8 @@ function QuickWorkerEntryFields({
     mode?: CccdQrScanMode,
   ) => Promise<void>;
   onClear: (entryId: string, side: QuickScanSide) => void;
+  onPasteImage: (entryId: string, side: QuickScanSide) => void;
+  onCropImage: (entryId: string, side: QuickScanSide) => void;
   onPaste: (entryId: string, data: CccdQrData) => void;
   onRequestCamera: (side: "front" | "back") => void;
   onRequestLibrary: (side: "front" | "back") => void;
@@ -1066,6 +1125,8 @@ function QuickWorkerEntryFields({
           onPick={onPick(entry.id, "front")}
           onScan={() => entry.frontFile && onScan(entry.id, entry.frontFile, "front", "full")}
           onClear={() => onClear(entry.id, "front")}
+          onPasteImage={() => onPasteImage(entry.id, "front")}
+          onCropImage={() => onCropImage(entry.id, "front")}
           onRequestCamera={() => onRequestCamera("front")}
           onRequestLibrary={() => onRequestLibrary("front")}
         />
@@ -1079,6 +1140,8 @@ function QuickWorkerEntryFields({
           onPick={onPick(entry.id, "back")}
           onScan={() => entry.backFile && onScan(entry.id, entry.backFile, "back", "full")}
           onClear={() => onClear(entry.id, "back")}
+          onPasteImage={() => onPasteImage(entry.id, "back")}
+          onCropImage={() => onCropImage(entry.id, "back")}
           onRequestCamera={() => onRequestCamera("back")}
           onRequestLibrary={() => onRequestLibrary("back")}
         />
@@ -1344,6 +1407,8 @@ function CccdImageBox({
   onPick,
   onScan,
   onClear,
+  onPasteImage,
+  onCropImage,
   onRequestCamera,
   onRequestLibrary,
 }: {
@@ -1356,6 +1421,8 @@ function CccdImageBox({
   onPick: (event: ChangeEvent<HTMLInputElement>) => void;
   onScan: () => void;
   onClear: () => void;
+  onPasteImage: () => void;
+  onCropImage: () => void;
   onRequestCamera: () => void;
   onRequestLibrary: () => void;
 }) {
@@ -1394,7 +1461,7 @@ function CccdImageBox({
           <div className="flex size-full flex-col items-center justify-center gap-2 p-2 text-xs text-muted-foreground">
             <IdCard className="h-6 w-6 desktop:hidden" />
             <span className="desktop:hidden">{label}</span>
-            <div className="grid w-full grid-cols-2 gap-1 desktop:hidden">
+            <div className="grid w-full grid-cols-3 gap-1 desktop:hidden">
               <Button
                 type="button"
                 size="sm"
@@ -1415,6 +1482,17 @@ function CccdImageBox({
                 disabled={scanning}
               >
                 Thư viện
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-8 px-1 text-xs"
+                onClick={onPasteImage}
+                disabled={scanning}
+              >
+                <ClipboardPaste className="h-4 w-4" />
+                Dán
               </Button>
             </div>
           </div>
@@ -1451,33 +1529,57 @@ function CccdImageBox({
           </div>
         )}
       </div>
-      {preview && (
-        <>
-          <div className="grid grid-cols-2 gap-1 desktop:hidden">
+      <div className="grid grid-cols-2 gap-1 pt-0.5 desktop:pt-1">
+        {preview && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 px-2 text-xs desktop:h-7"
+            onClick={onCropImage}
+            disabled={scanning}
+          >
+            <Crop className="h-4 w-4" />
+            Cắt lại
+          </Button>
+        )}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className={cn("h-8 px-2 text-xs desktop:h-7", !preview && "col-span-2")}
+          onClick={onPasteImage}
+          disabled={scanning}
+        >
+          <ClipboardPaste className="h-4 w-4" />
+          Dán ảnh
+        </Button>
+        {preview && (
+          <>
             <Button
               type="button"
               size="sm"
               variant="outline"
-              className="h-8 px-2 text-xs"
-              onClick={() => onRequestCamera()}
+              className="h-8 px-2 text-xs desktop:hidden"
+              onClick={onRequestCamera}
               disabled={scanning}
             >
               <Camera className="h-4 w-4" />
-              Chụp lại
+              Ch?p l?i
             </Button>
             <Button
               type="button"
               size="sm"
               variant="outline"
-              className="h-8 px-2 text-xs"
-              onClick={() => onRequestLibrary()}
+              className="h-8 px-2 text-xs desktop:hidden"
+              onClick={onRequestLibrary}
               disabled={scanning}
             >
-              Thư viện
+              Th? vi?n
             </Button>
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
       <input
         ref={cameraInputRef}
         type="file"

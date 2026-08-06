@@ -12,6 +12,7 @@ import {
   Plus,
   ZoomIn,
   RotateCcw,
+  Trash2,
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +23,15 @@ import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -507,6 +517,8 @@ export function WorkerEmploymentDrawer({
     bank_account_note: "",
   });
   const [bankSaving, setBankSaving] = useState(false);
+  const [bankDeleteOpen, setBankDeleteOpen] = useState(false);
+  const [bankDeleting, setBankDeleting] = useState(false);
 
   const staffUsers = useMemo(
     () => users.filter((u) => u.role === "staff" || u.role === "admin"),
@@ -570,6 +582,7 @@ export function WorkerEmploymentDrawer({
   useEffect(() => {
     if (user) {
       setBankEditing(false);
+      setBankDeleteOpen(false);
       setBankForm({
         bank_name: user.bank_name || "",
         bank_account_number: user.bank_account_number || "",
@@ -1250,6 +1263,47 @@ export function WorkerEmploymentDrawer({
     }
   };
 
+  const deleteBankInfo = async () => {
+    if (!user || !actor || !permissions.canUpdateBank) return;
+
+    const before = {
+      bank_name: user.bank_name || "",
+      bank_account_number: user.bank_account_number || "",
+      bank_account_name: user.bank_account_name || "",
+      bank_account_note: user.bank_account_note || "",
+    };
+    const clearedBankInfo = {
+      bank_name: "",
+      bank_account_number: "",
+      bank_account_name: "",
+      bank_account_note: "",
+    };
+
+    setBankDeleting(true);
+    try {
+      await updateUserAndCache(user.id, clearedBankInfo);
+      await createStaffActionLog({
+        actor,
+        targetUserId: user.id,
+        targetCollection: "users",
+        targetRecord: user.id,
+        action: "update_bank",
+        before,
+        after: clearedBankInfo,
+        note: "Xóa thông tin tài khoản ngân hàng của NLĐ",
+      });
+      setBankForm(clearedBankInfo);
+      setBankDeleteOpen(false);
+      setBankEditing(false);
+      toast.success("Đã xóa thông tin tài khoản ngân hàng");
+      void notifyDataChanged();
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Không xóa được thông tin tài khoản ngân hàng"));
+    } finally {
+      setBankDeleting(false);
+    }
+  };
+
   if (!user) return null;
 
   const activeHistory = histories.find((item) => isCurrentlyWorking(item));
@@ -1259,6 +1313,10 @@ export function WorkerEmploymentDrawer({
   const canReportAdvanceByScope =
     permissions.canReportAdvance && (isWorking || allowAdvanceAfterLeave);
   const canOpenAdvance = canReportAdvanceByScope && advanceInteractionAllowed;
+  const hasBankInfo = Boolean(
+    user.bank_name || user.bank_account_number || user.bank_account_name || user.bank_account_note,
+  );
+  const bankBusy = bankSaving || bankDeleting;
   const advanceLimit = advancePolicy?.limit || 0;
   const advanceOutstanding = advancePolicy?.outstanding || 0;
   const workerBank = user.bank_account_number
@@ -1530,21 +1588,34 @@ export function WorkerEmploymentDrawer({
                             rows={2}
                           />
                         </div>
-                        <div className="flex gap-1.5">
+                        <div className="flex flex-wrap justify-end gap-1.5">
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
                             className="h-8 px-2 text-xs"
                             onClick={() => setBankEditing(false)}
+                            disabled={bankBusy}
                           >
                             Hủy
                           </Button>
+                          {hasBankInfo && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              className="h-8 px-2 text-xs"
+                              onClick={() => setBankDeleteOpen(true)}
+                              disabled={bankBusy}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Xóa STK
+                            </Button>
+                          )}
                           <Button
                             type="submit"
                             size="sm"
                             className="h-8 px-2 text-xs"
-                            disabled={bankSaving}
+                            disabled={bankBusy}
                           >
                             {bankSaving ? "Đang lưu..." : "Lưu STK"}
                           </Button>
@@ -1696,21 +1767,32 @@ export function WorkerEmploymentDrawer({
                                   rows={2}
                                 />
                               </div>
-                              <div className="flex gap-2 pt-1">
+                              <div className="grid grid-cols-2 gap-2 pt-1">
                                 <Button
                                   type="button"
                                   size="sm"
                                   variant="outline"
-                                  className="flex-1"
                                   onClick={() => setBankEditing(false)}
+                                  disabled={bankBusy}
                                 >
                                   Hủy
                                 </Button>
+                                {hasBankInfo && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => setBankDeleteOpen(true)}
+                                    disabled={bankBusy}
+                                  >
+                                    <Trash2 className="h-4 w-4" /> Xóa STK
+                                  </Button>
+                                )}
                                 <Button
                                   type="submit"
                                   size="sm"
-                                  className="flex-1"
-                                  disabled={bankSaving}
+                                  className={hasBankInfo ? "col-span-2" : ""}
+                                  disabled={bankBusy}
                                 >
                                   {bankSaving ? "Đang lưu..." : "Lưu STK"}
                                 </Button>
@@ -2753,6 +2835,7 @@ export function WorkerEmploymentDrawer({
             <div className="space-y-2">
               <div className="text-sm font-semibold">Thông tin CCCD</div>
               <JoinCccdSection
+                enableImagePasteAndCrop
                 value={joinForm}
                 onChange={(changes) => setJoinForm((current) => ({ ...current, ...changes }))}
                 frontFile={joinCccdFront}
@@ -2845,6 +2928,34 @@ export function WorkerEmploymentDrawer({
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={bankDeleteOpen}
+        onOpenChange={(nextOpen) => !bankDeleting && setBankDeleteOpen(nextOpen)}
+      >
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa thông tin tài khoản ngân hàng?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Toàn bộ ngân hàng, số tài khoản, tên chủ tài khoản và ghi chú STK của{" "}
+              {user.full_name || user.username || "NLĐ này"} sẽ bị xóa. Hành động này không thể hoàn
+              tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bankDeleting}>Hủy</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void deleteBankInfo()}
+              disabled={bankDeleting}
+            >
+              <Trash2 className="h-4 w-4" />
+              {bankDeleting ? "Đang xóa..." : "Xác nhận xóa"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

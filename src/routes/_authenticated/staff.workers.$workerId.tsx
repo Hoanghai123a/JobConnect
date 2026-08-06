@@ -1444,6 +1444,7 @@ function StaffWorkerDetailPage() {
             <div className="space-y-2">
               <div className="text-sm font-semibold">Thông tin CCCD</div>
               <JoinCccdSection
+                enableImagePasteAndCrop
                 value={joinForm}
                 onChange={(changes) => setJoinForm((current) => ({ ...current, ...changes }))}
                 frontFile={joinCccdFront}

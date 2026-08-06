@@ -7,6 +7,24 @@ import type { FactoryRecord } from "./factories";
 import { fileUrl, type UserRecord } from "./pocketbase";
 
 export type CccdHistoryExportMode = "folders" | "word";
+export type CccdHistorySelectionSource = "date-range" | "excel";
+
+export interface CccdHistoryExcelIssue {
+  rowNumber: number;
+  employeeCode: string;
+  factoryName: string;
+  workerName: string;
+  reason: string;
+  selectedHistoryId?: string;
+  selectedJoinDate?: string;
+}
+
+export interface CccdHistoryExcelMatchResult {
+  totalRows: number;
+  histories: EmploymentHistoryRecord[];
+  issues: CccdHistoryExcelIssue[];
+  blockingError?: string;
+}
 
 export interface CccdHistoryExportProgress {
   completed: number;
@@ -60,6 +78,162 @@ const WORD_IMAGE_GAP_TWIP = 3 * 1440;
 
 function normalizeCccd(value?: string | null) {
   return String(value ?? "").replace(/\D/g, "");
+}
+
+function normalizeLookupText(value?: string | null) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase("vi");
+}
+
+function normalizeEmployeeCode(value?: string | null) {
+  return normalizeLookupText(value).replace(/\s+/g, "");
+}
+
+function historyIsoDate(value?: string | null) {
+  return String(value ?? "").match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || "";
+}
+
+function compareLatestHistory(a: EmploymentHistoryRecord, b: EmploymentHistoryRecord) {
+  const joinDiff = historyIsoDate(b.join_date).localeCompare(historyIsoDate(a.join_date));
+  if (joinDiff) return joinDiff;
+  const updatedDiff = toTimestamp(b.updated) - toTimestamp(a.updated);
+  if (updatedDiff) return updatedDiff;
+  const createdDiff = toTimestamp(b.created) - toTimestamp(a.created);
+  if (createdDiff) return createdDiff;
+  return b.id.localeCompare(a.id);
+}
+
+export function filterCccdHistoriesByJoinDate(
+  histories: EmploymentHistoryRecord[],
+  factoryId: string,
+  fromDate: string,
+  toDate: string,
+) {
+  if (!factoryId || !fromDate || !toDate || fromDate > toDate) return [];
+  return histories.filter((history) => {
+    const joinDate = historyIsoDate(history.join_date);
+    return history.factory === factoryId && joinDate >= fromDate && joinDate <= toDate;
+  });
+}
+
+function findHeaderIndex(headers: string[], aliases: string[]) {
+  const normalizedAliases = new Set(aliases.map(normalizeLookupText));
+  return headers.findIndex((header) => normalizedAliases.has(normalizeLookupText(header)));
+}
+
+export function matchCccdHistoriesFromExcelRows(
+  rows: string[][],
+  histories: EmploymentHistoryRecord[],
+  factories: FactoryRecord[],
+): CccdHistoryExcelMatchResult {
+  const headers = rows[0] || [];
+  const employeeCodeIndex = findHeaderIndex(headers, ["Mã nhân viên", "Mã NV"]);
+  const factoryNameIndex = findHeaderIndex(headers, ["Tên nhà máy", "Nhà máy"]);
+  const workerNameIndex = findHeaderIndex(headers, ["Họ tên"]);
+  const missingColumns = [
+    employeeCodeIndex < 0 ? "Mã nhân viên" : "",
+    factoryNameIndex < 0 ? "Tên nhà máy" : "",
+    workerNameIndex < 0 ? "Họ tên" : "",
+  ].filter(Boolean);
+
+  if (missingColumns.length) {
+    const reason = `Thiếu cột bắt buộc: ${missingColumns.join(", ")}`;
+    return {
+      totalRows: Math.max(0, rows.length - 1),
+      histories: [],
+      issues: [
+        {
+          rowNumber: 1,
+          employeeCode: "",
+          factoryName: "",
+          workerName: "",
+          reason,
+        },
+      ],
+      blockingError: reason,
+    };
+  }
+
+  const factoryByName = new Map(
+    factories.map((factory) => [normalizeLookupText(factory.name), factory]),
+  );
+  const historiesByKey = new Map<string, EmploymentHistoryRecord[]>();
+  for (const history of histories) {
+    const code = normalizeEmployeeCode(history.employee_code);
+    if (!code || !history.factory) continue;
+    const key = `${history.factory}::${code}`;
+    const bucket = historiesByKey.get(key) || [];
+    bucket.push(history);
+    historiesByKey.set(key, bucket);
+  }
+  for (const bucket of historiesByKey.values()) bucket.sort(compareLatestHistory);
+
+  const dataRows = rows
+    .slice(1)
+    .map((row, index) => ({ row, rowNumber: index + 2 }))
+    .filter(({ row }) => row.some((cell) => String(cell ?? "").trim()));
+  const issues: CccdHistoryExcelIssue[] = [];
+  const selectedHistories = new Map<string, EmploymentHistoryRecord>();
+  const seenSourceKeys = new Set<string>();
+
+  dataRows.forEach(({ row, rowNumber }) => {
+    const employeeCode = String(row[employeeCodeIndex] ?? "").trim();
+    const factoryName = String(row[factoryNameIndex] ?? "").trim();
+    const workerName = String(row[workerNameIndex] ?? "").trim();
+    const normalizedCode = normalizeEmployeeCode(employeeCode);
+    const normalizedFactory = normalizeLookupText(factoryName);
+    const issueBase = { rowNumber, employeeCode, factoryName, workerName };
+
+    if (!normalizedCode || !normalizedFactory) {
+      issues.push({
+        ...issueBase,
+        reason: !normalizedCode ? "Thiếu Mã nhân viên" : "Thiếu Tên nhà máy",
+      });
+      return;
+    }
+
+    const sourceKey = `${normalizedFactory}::${normalizedCode}`;
+    if (seenSourceKeys.has(sourceKey)) {
+      issues.push({ ...issueBase, reason: "Dòng trùng Mã nhân viên và Nhà máy trong file" });
+      return;
+    }
+    seenSourceKeys.add(sourceKey);
+
+    const factory = factoryByName.get(normalizedFactory);
+    if (!factory) {
+      issues.push({ ...issueBase, reason: "Không tìm thấy nhà máy" });
+      return;
+    }
+
+    const matches = historiesByKey.get(`${factory.id}::${normalizedCode}`) || [];
+    const selected = matches[0];
+    if (!selected) {
+      issues.push({ ...issueBase, reason: "Không khớp lịch sử đi làm" });
+      return;
+    }
+
+    selectedHistories.set(selected.id, selected);
+    if (matches.length > 1) {
+      issues.push({
+        ...issueBase,
+        reason: `Khớp ${matches.length} lịch sử, đã chọn lịch sử mới nhất`,
+        selectedHistoryId: selected.id,
+        selectedJoinDate: historyIsoDate(selected.join_date),
+      });
+    }
+  });
+
+  return {
+    totalRows: dataRows.length,
+    histories: [...selectedHistories.values()],
+    issues,
+  };
 }
 
 function toTimestamp(value?: string) {

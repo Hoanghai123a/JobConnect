@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, IdCard, LoaderCircle, RefreshCw, ScanLine, Trash2 } from "lucide-react";
+import {
+  Camera,
+  ClipboardPaste,
+  Crop,
+  IdCard,
+  LoaderCircle,
+  RefreshCw,
+  ScanLine,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DateInput } from "@/components/ui/date-input";
@@ -14,6 +23,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CccdImageCropDialog } from "@/components/cccd/CccdImageCropDialog";
+import { readClipboardImage } from "@/lib/clipboard-image";
 import { CccdQrPasteButton } from "@/components/cccd/CccdQrPasteButton";
 import { CccdQrScanFeedbackDialog } from "@/components/cccd/CccdQrScanFeedbackDialog";
 import {
@@ -55,6 +66,12 @@ type FailureState = {
   file: File;
 };
 
+type CropRequest = {
+  side: ScanSide;
+  file: File | null;
+  fallbackMessage?: string;
+};
+
 export function JoinCccdSection({
   value,
   onChange,
@@ -65,6 +82,7 @@ export function JoinCccdSection({
   frontImageUrl,
   backImageUrl,
   locationField,
+  enableImagePasteAndCrop = false,
 }: {
   value: JoinCccdFields;
   onChange: (changes: Partial<JoinCccdFields>) => void;
@@ -75,10 +93,12 @@ export function JoinCccdSection({
   frontImageUrl?: string;
   backImageUrl?: string;
   locationField?: LocationField;
+  enableImagePasteAndCrop?: boolean;
 }) {
   const [scanning, setScanning] = useState(false);
   const [progressText, setProgressText] = useState("");
   const [failure, setFailure] = useState<FailureState | null>(null);
+  const [cropRequest, setCropRequest] = useState<CropRequest | null>(null);
   const locationLabel = locationField?.label || "Địa chỉ thường trú";
   const locationValue =
     locationField?.value ?? value.worker_address_snapshot ?? value.hometown_snapshot ?? "";
@@ -152,6 +172,14 @@ export function JoinCccdSection({
     [cancelActiveScan],
   );
 
+  const applyImage = async (file: File, side: ScanSide) => {
+    if (side === "front") onFrontFileChange(file);
+    else onBackFileChange(file);
+
+    setFailure(null);
+    await runScan(file, side, "auto");
+  };
+
   const handleImagePick = async (file: File | null, side: ScanSide) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -159,11 +187,25 @@ export function JoinCccdSection({
       return;
     }
 
-    if (side === "front") onFrontFileChange(file);
-    else onBackFileChange(file);
+    if (enableImagePasteAndCrop) {
+      setCropRequest({ side, file });
+      return;
+    }
+    await applyImage(file, side);
+  };
 
-    setFailure(null);
-    await runScan(file, side, "auto");
+  const pasteImage = async (side: ScanSide) => {
+    const result = await readClipboardImage(side === "front" ? "Mặt trước" : "Mặt sau");
+    setCropRequest(
+      result.status === "success"
+        ? { side, file: result.file }
+        : { side, file: null, fallbackMessage: result.message },
+    );
+  };
+
+  const recropImage = (side: ScanSide) => {
+    const file = side === "front" ? frontFile : backFile;
+    if (file) setCropRequest({ side, file });
   };
 
   const handleFrontPick = (file: File | null) => handleImagePick(file, "front");
@@ -257,6 +299,9 @@ export function JoinCccdSection({
               cameraInputRef={frontCameraInputRef}
               libraryInputRef={frontLibraryInputRef}
               onPick={handleFrontPick}
+              enableImagePasteAndCrop={enableImagePasteAndCrop}
+              onPasteImage={() => void pasteImage("front")}
+              onCropImage={() => recropImage("front")}
               onRescan={() => frontFile && runScan(frontFile, "front", "full")}
               onClear={() => {
                 cancelActiveScan();
@@ -272,6 +317,9 @@ export function JoinCccdSection({
               cameraInputRef={backCameraInputRef}
               libraryInputRef={backLibraryInputRef}
               onPick={handleBackPick}
+              enableImagePasteAndCrop={enableImagePasteAndCrop}
+              onPasteImage={() => void pasteImage("back")}
+              onCropImage={() => recropImage("back")}
               onRescan={() => backFile && runScan(backFile, "back", "full")}
               onClear={() => {
                 cancelActiveScan();
@@ -286,6 +334,20 @@ export function JoinCccdSection({
           </p>
         </div>
       </div>
+
+      <CccdImageCropDialog
+        open={Boolean(cropRequest)}
+        sourceFile={cropRequest?.file || null}
+        sideLabel={cropRequest?.side === "back" ? "Mặt sau" : "Mặt trước"}
+        fallbackMessage={cropRequest?.fallbackMessage}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setCropRequest(null);
+        }}
+        onConfirm={(file) => {
+          if (!cropRequest) return;
+          void applyImage(file, cropRequest.side);
+        }}
+      />
 
       {failure && (
         <CccdQrScanFeedbackDialog
@@ -424,6 +486,9 @@ function CccdFileSlot({
   cameraInputRef,
   libraryInputRef,
   onPick,
+  enableImagePasteAndCrop,
+  onPasteImage,
+  onCropImage,
   onRescan,
   onClear,
 }: {
@@ -434,6 +499,9 @@ function CccdFileSlot({
   cameraInputRef: React.RefObject<HTMLInputElement | null>;
   libraryInputRef: React.RefObject<HTMLInputElement | null>;
   onPick: (file: File | null) => void | Promise<void>;
+  enableImagePasteAndCrop: boolean;
+  onPasteImage: () => void;
+  onCropImage: () => void;
   onRescan: () => void;
   onClear: () => void;
 }) {
@@ -523,6 +591,34 @@ function CccdFileSlot({
           >
             <Camera className="h-4 w-4" />
             Chụp lại
+          </Button>
+        </div>
+      )}
+      {enableImagePasteAndCrop && (
+        <div className="grid grid-cols-2 gap-1">
+          {file && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 px-2 text-xs"
+              onClick={onCropImage}
+              disabled={scanning}
+            >
+              <Crop className="h-4 w-4" />
+              Cắt lại
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className={`h-8 px-2 text-xs ${file ? "" : "col-span-2"}`}
+            onClick={onPasteImage}
+            disabled={scanning}
+          >
+            <ClipboardPaste className="h-4 w-4" />
+            Dán ảnh
           </Button>
         </div>
       )}

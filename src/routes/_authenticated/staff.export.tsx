@@ -188,20 +188,20 @@ function StaffExportPage() {
     return () => clearTimeout(timer);
   }, [cacheSignal, user?.id]);
 
+  const allHistories = useMemo(() => workers.flatMap((worker) => worker.histories), [workers]);
+
   const filteredHistories = useMemo(() => {
-    return workers
-      .flatMap((worker) => worker.histories)
-      .filter((history) => {
-        if (factoryFilter !== "all" && history.factory !== factoryFilter) return false;
-        if (
-          statusFilter !== "all" &&
-          (isCurrentlyWorking(history) ? "working" : "left") !== statusFilter
-        ) {
-          return false;
-        }
-        return true;
-      });
-  }, [factoryFilter, statusFilter, workers]);
+    return allHistories.filter((history) => {
+      if (factoryFilter !== "all" && history.factory !== factoryFilter) return false;
+      if (
+        statusFilter !== "all" &&
+        (isCurrentlyWorking(history) ? "working" : "left") !== statusFilter
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [allHistories, factoryFilter, statusFilter]);
 
   const tenureDaysByUserId = useMemo(() => {
     return buildTenureDaysByUserId(workers);
@@ -338,7 +338,8 @@ function StaffExportPage() {
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold">Xuất ảnh CCCD theo lịch sử đi làm</div>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Nhóm theo nhà máy và ngày vào; có thể xuất cây thư mục ảnh hoặc file Word sẵn sàng in.
+              Chọn khoảng ngày và nhà máy hoặc tải danh sách Excel; hỗ trợ thư mục ảnh và file Word
+              sẵn sàng in.
             </p>
           </div>
         </div>
@@ -356,7 +357,7 @@ function StaffExportPage() {
       <CccdHistoryExportDialog
         open={cccdExportOpen}
         onClose={() => setCccdExportOpen(false)}
-        histories={filteredHistories}
+        histories={allHistories}
         users={workers.map((worker) => worker.user)}
         factories={factories}
       />
