@@ -487,7 +487,7 @@ export async function fetchStaffWorkspace(
         const items = (await pb.collection("employment_histories").getFullList({
           filter: relationInFilter("user", batch),
           sort: "-join_date,-created",
-          expand: "user,factory,recruiter_staff,main_house",
+          expand: "user,factory,recruiter_staff,recruiter_partner,main_house",
         })) as unknown as EmploymentHistoryRecord[];
         extraHistories.push(...items);
       }

@@ -158,6 +158,20 @@
   button {
     font-family: inherit;
   }
+  /* Form fields use a white surface so they stay distinct from the app background. */
+  :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="hidden"]),
+    textarea,
+    select,
+    [role="combobox"]
+  ) {
+    background-color: #fff;
+    color: #0f172a;
+  }
+  :where(input, textarea)::placeholder {
+    color: #64748b;
+    opacity: 1;
+  }
   /* Prevent iOS Safari zoom on input focus */
   input,
   textarea,

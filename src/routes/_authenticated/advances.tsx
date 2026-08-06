@@ -31,6 +31,7 @@ import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { BankPicker } from "@/components/staff/BankNameInput";
 import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -72,7 +73,7 @@ import {
   validateAdvanceAmount,
   type AdvancePolicy,
 } from "@/lib/advance-policy";
-import { VN_BANKS, buildVietQrUrl, resolveBankName } from "@/lib/vn-banks";
+import { buildVietQrUrl, resolveBankName } from "@/lib/vn-banks";
 import { toast } from "sonner";
 import {
   Banknote,
@@ -1020,21 +1021,10 @@ export function AdvancesPage() {
                   </div>
                   <div className="space-y-1">
                     <Label>Ngân hàng</Label>
-                    <Select
+                    <BankPicker
                       value={bankForm.bank_name || ""}
-                      onValueChange={(value) => setBankForm({ ...bankForm, bank_name: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Chọn ngân hàng" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-72">
-                        {VN_BANKS.map((bank) => (
-                          <SelectItem key={bank.code} value={bank.name}>
-                            {bank.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      onChange={(value) => setBankForm({ ...bankForm, bank_name: value })}
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="min-w-0 space-y-1">

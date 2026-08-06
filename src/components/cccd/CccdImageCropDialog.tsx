@@ -149,7 +149,7 @@ export function CccdImageCropDialog({
           ) : (
             <div
               tabIndex={0}
-              className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-primary/35 bg-background p-6 text-center outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-primary/35 bg-white p-6 text-center text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <ClipboardPaste className="h-10 w-10 text-primary" />
               <div>

@@ -48,7 +48,7 @@ const DEFAULT_PASSWORD = "nv123456";
 
 function staffSearchFilter(search: string) {
   const q = escapePb(search.trim());
-  const roleFilter = '(role="staff" || role="admin")';
+  const roleFilter = '((role="staff" || role="admin") && username!~"vd_")';
   if (!q) return roleFilter;
   const searchFilter = `(${["full_name", "username", "phone", "address"]
     .map((field) => `${field}~"${q}"`)

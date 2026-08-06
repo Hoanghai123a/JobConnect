@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Label } from "@/components/ui/label";
+import { UserPicker } from "@/components/workforce/UserPicker";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
   Dialog,
@@ -13,13 +14,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { createStaffActionLog } from "@/lib/staff-log";
 import {
@@ -53,7 +47,7 @@ export function FactoryManagersDialog({
         pb
           .collection("users")
           .getList<UserRecord>(1, 200, {
-            filter: 'role = "staff"',
+            filter: 'role = "staff" && username !~ "vd_"',
             sort: "full_name,username",
           })
           .then((res) => res.items),
@@ -177,23 +171,12 @@ export function FactoryManagersDialog({
           <div className="space-y-1.5">
             <Label className="text-xs">Thêm staff phụ trách</Label>
             <div className="flex gap-2">
-              <Select value={selectedStaff} onValueChange={setSelectedStaff}>
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn staff" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableStaff.map((staffUser) => (
-                    <SelectItem key={staffUser.id} value={staffUser.id}>
-                      {staffUser.full_name || staffUser.username || staffUser.id}
-                    </SelectItem>
-                  ))}
-                  {availableStaff.length === 0 && (
-                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                      Không còn staff nào để thêm. Cấp role staff trong menu Tài khoản trước.
-                    </div>
-                  )}
-                </SelectContent>
-              </Select>
+              <UserPicker
+                users={availableStaff}
+                value={selectedStaff}
+                onChange={setSelectedStaff}
+                placeholder="Chọn staff"
+              />
               <Button
                 className="rounded-xl"
                 onClick={addManager}

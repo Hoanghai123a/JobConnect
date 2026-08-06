@@ -38,7 +38,7 @@ function validRange(value: unknown): value is DateRange {
 }
 
 function validRecruitmentScope(value: unknown): value is RecruitmentSourceScope {
-  return value === "all" || value === "internal";
+  return value === "all" || value === "internal" || value === "partner";
 }
 
 function formatDate(value: string) {
@@ -193,6 +193,18 @@ export function WorkforceDashboard({
                 }`}
               >
                 Nội bộ
+              </button>
+              <button
+                type="button"
+                aria-pressed={recruitmentScope === "partner"}
+                onClick={() => setRecruitmentScope("partner")}
+                className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
+                  recruitmentScope === "partner"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                Đối tác
               </button>
             </div>
           </div>

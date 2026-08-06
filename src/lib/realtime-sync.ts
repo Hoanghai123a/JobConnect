@@ -3,24 +3,24 @@ import { pb, type UserRecord } from "./pocketbase";
 import type { EmploymentHistoryRecord } from "./employment";
 import type { CccdVersionRecord } from "./cccd-versions";
 import type { FactoryRecord } from "./factories";
-import type { MainHouseRecord } from "./main-houses";
+import type { RecruitmentEntityRecord } from "./recruitment-entities";
 import { buildScopedHistoryFilter } from "./staff-permissions";
 import {
   deleteCachedHistory,
   deleteCachedUser,
   deleteCachedCccdVersion,
   deleteCachedFactory,
-  deleteCachedMainHouse,
+  deleteCachedRecruitmentEntity,
   upsertCachedHistoryIfNewer,
   upsertCachedUserIfNewer,
   upsertCachedCccdVersionIfNewer,
   updateCachedFactory,
-  updateCachedMainHouse,
+  updateCachedRecruitmentEntity,
   readCachedHistory,
   readCachedUser,
   getCachedUserIds,
   factoryExistsInCache,
-  mainHouseExistsInCache,
+  recruitmentEntityExistsInCache,
   buildScopeFingerprint,
   reconcileStaffData,
   saveScopeFingerprint,
@@ -194,21 +194,21 @@ async function handleFactoryEvent(event: RealtimeEvent<FactoryRecord>) {
   dispatchSignal({ collection: "factories", action, id: record.id });
 }
 
-async function handleMainHouseEvent(event: RealtimeEvent<MainHouseRecord>) {
+async function handleRecruitmentEntityEvent(event: RealtimeEvent<RecruitmentEntityRecord>) {
   const { action, record } = event;
   if (!record?.id) return;
 
   if (action === "delete") {
-    await deleteCachedMainHouse(record.id);
-    dispatchSignal({ collection: "main_houses", action, id: record.id });
+    await deleteCachedRecruitmentEntity(record.id);
+    dispatchSignal({ collection: "recruitment_entities", action, id: record.id });
     return;
   }
 
-  const exists = await mainHouseExistsInCache(record.id);
+  const exists = await recruitmentEntityExistsInCache(record.id);
   if (!exists) return;
 
-  await updateCachedMainHouse(record);
-  dispatchSignal({ collection: "main_houses", action, id: record.id });
+  await updateCachedRecruitmentEntity(record);
+  dispatchSignal({ collection: "recruitment_entities", action, id: record.id });
 }
 
 async function cleanupSubscriptions(unsubs: UnsubscribeFunc[]) {
@@ -227,7 +227,7 @@ async function unsubscribeRealtimeTopics() {
     "users",
     "cccd_versions",
     "factories",
-    "main_houses",
+    "recruitment_entities",
   ]) {
     try {
       await pb.collection(collection).unsubscribe("*");
@@ -275,7 +275,7 @@ async function runStartStaffRealtimeSync(
           ).catch((err) => console.warn("[realtime-sync] history handler", err)),
         {
           filter: historyFilter || undefined,
-          expand: "user,factory,recruiter_staff,main_house",
+          expand: "user,factory,recruiter_staff,recruiter_partner,main_house",
         },
       );
     unsubs.push(historyUnsub);
@@ -323,14 +323,14 @@ async function runStartStaffRealtimeSync(
       return;
     }
 
-    const mainHouseUnsub = await pb
-      .collection("main_houses")
+    const recruitmentEntityUnsub = await pb
+      .collection("recruitment_entities")
       .subscribe("*", (e) =>
-        handleMainHouseEvent(e as unknown as RealtimeEvent<MainHouseRecord>).catch((err) =>
-          console.warn("[realtime-sync] main-house handler", err),
+        handleRecruitmentEntityEvent(e as unknown as RealtimeEvent<RecruitmentEntityRecord>).catch((err) =>
+          console.warn("[realtime-sync] recruitment-entity handler", err),
         ),
       );
-    unsubs.push(mainHouseUnsub);
+    unsubs.push(recruitmentEntityUnsub);
   } catch (error) {
     console.warn("[realtime-sync] failed to subscribe", error);
     await cleanupSubscriptions(unsubs);

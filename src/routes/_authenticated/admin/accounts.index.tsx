@@ -20,18 +20,11 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { escapePb } from "@/lib/delegations";
 import { updateUserAndCache } from "@/lib/employment";
 import { createStaffActionLog } from "@/lib/staff-log";
-import { VN_BANKS } from "@/lib/vn-banks";
+import { BankPicker } from "@/components/staff/BankNameInput";
 import { DeleteWorkerDialog } from "@/components/admin/DeleteWorkerDialog";
 
 function userSearchFilter(search: string) {
@@ -337,21 +330,13 @@ function AdminAccountsPage() {
                 <div className="space-y-2">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Ngân hàng</Label>
-                    <Select
+                    <BankPicker
                       value={bankForm.bank_name}
-                      onValueChange={(value) => setBankForm((c) => ({ ...c, bank_name: value }))}
-                    >
-                      <SelectTrigger className="rounded-xl">
-                        <SelectValue placeholder="Chọn ngân hàng" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-72">
-                        {VN_BANKS.map((bank) => (
-                          <SelectItem key={bank.code} value={bank.name}>
-                            {bank.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      onChange={(value) =>
+                        setBankForm((current) => ({ ...current, bank_name: value }))
+                      }
+                      triggerClassName="rounded-xl"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Số tài khoản</Label>

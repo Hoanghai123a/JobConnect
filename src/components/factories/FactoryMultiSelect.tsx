@@ -91,7 +91,7 @@ export function FactoryMultiSelect({
           <button
             type="button"
             disabled={disabled}
-            className="flex h-10 w-full items-center justify-between gap-2 rounded-xl border border-input bg-background px-3 text-left text-sm shadow-sm outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-10 w-full items-center justify-between gap-2 rounded-xl border border-input bg-white px-3 text-left text-sm text-slate-900 shadow-sm outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span
               className={cn(

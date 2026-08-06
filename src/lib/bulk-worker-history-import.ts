@@ -49,6 +49,7 @@ export interface HistorySheetRow {
   factoryCode: string;
   mainHouseName: string;
   recruiterUsername: string;
+  recruiterType: string;
   employeeCode: string;
   joinDate: string;
   leaveDate: string;
@@ -113,6 +114,44 @@ export interface BulkImportExecutionResult {
   createdHistoryCount: number;
 }
 
+export type MissingReferenceAction = "create" | "activate";
+
+export interface MissingFactoryReference {
+  name: string;
+  code: string;
+  rowNumbers: number[];
+  action: MissingReferenceAction;
+  existingId?: string;
+}
+
+export interface MissingMainHouseReference {
+  name: string;
+  rowNumbers: number[];
+  action: MissingReferenceAction;
+  existingId?: string;
+}
+
+export interface MissingRecruiterReference {
+  username: string;
+  recruiterType: string;
+  workerKeys: string[];
+  rowNumbers: number[];
+}
+
+export interface BulkImportReferenceInspection {
+  factories: MissingFactoryReference[];
+  mainHouses: MissingMainHouseReference[];
+  recruiters: MissingRecruiterReference[];
+}
+
+export interface AppliedImportReference {
+  id: string;
+  name: string;
+  collection: "factories" | "recruitment_entities";
+  action: MissingReferenceAction;
+  payload: Record<string, unknown>;
+}
+
 type ImportReferenceData = {
   factories: FactoryRecord[];
   mainHouses: MainHouseRecord[];
@@ -125,7 +164,8 @@ type ParsedHistoryEntry = {
   row: HistorySheetRow;
   factory: FactoryRecord;
   mainHouse: MainHouseRecord;
-  recruiter: UserRecord;
+  recruiterStaff?: UserRecord;
+  recruiterPartner?: MainHouseRecord;
 };
 
 const WORKER_SHEET_NAMES = new Set(["nguoi lao dong", "nld"]);
@@ -140,6 +180,10 @@ function normalizeLabel(value: unknown) {
     .replace(/Đ/g, "D")
     .trim()
     .toLowerCase();
+}
+
+function referenceKey(value: unknown) {
+  return normalizeLabel(value).replace(/\s+/g, " ");
 }
 
 function pickValue(row: RawExcelRow, keys: string[]) {
@@ -279,6 +323,7 @@ function makeFallbackHistoryRow(
     factoryCode: pickValue(raw, ["Mã nhà máy", "factory_code"]),
     mainHouseName: pickValue(raw, ["Nhà chính", "main_house_name"]),
     recruiterUsername: pickValue(raw, ["Người tuyển", "recruiter_username"]),
+    recruiterType: pickValue(raw, ["Loại người tuyển", "recruiter_type"]),
     employeeCode: pickValue(raw, ["Mã nhân viên", "Mã NV", "employee_code"]),
     joinDate: "",
     leaveDate: "",
@@ -300,8 +345,8 @@ function resolveFactory(
   factoryByName: Map<string, FactoryRecord>,
   factoryByCode: Map<string, FactoryRecord>,
 ) {
-  const byName = factoryName ? factoryByName.get(accountIdentityKey(factoryName)) : undefined;
-  const byCode = factoryCode ? factoryByCode.get(accountIdentityKey(factoryCode)) : undefined;
+  const byName = factoryName ? factoryByName.get(referenceKey(factoryName)) : undefined;
+  const byCode = factoryCode ? factoryByCode.get(referenceKey(factoryCode)) : undefined;
   if (byName && byCode && byName.id !== byCode.id) {
     throw new Error("Tên và mã nhà máy không khớp cùng một nhà máy.");
   }
@@ -326,6 +371,7 @@ function parseHistoryRow(
   const factoryCode = pickValue(raw, ["Mã nhà máy", "factory_code"]);
   const mainHouseName = pickValue(raw, ["Nhà chính", "main_house_name"]);
   const recruiterUsername = pickValue(raw, ["Người tuyển", "recruiter_username"]);
+  const recruiterType = pickValue(raw, ["Loại người tuyển", "recruiter_type"]);
   const employeeCode = pickValue(raw, ["Mã nhân viên", "Mã NV", "employee_code"]);
   const joinRaw = raw["Ngày vào làm"] ?? raw.join_date ?? raw["Ngày vào"] ?? "";
   const leaveRaw = raw["Ngày nghỉ"] ?? raw.leave_date ?? "";
@@ -335,10 +381,24 @@ function parseHistoryRow(
   if (!recruiterUsername) throw new Error("Thiếu Người tuyển.");
 
   const factory = resolveFactory(factoryName, factoryCode, refs.factoryByName, refs.factoryByCode);
-  const mainHouse = refs.mainHouseByName.get(accountIdentityKey(mainHouseName));
+  const mainHouse = refs.mainHouseByName.get(referenceKey(mainHouseName));
   if (!mainHouse) throw new Error(`Không tìm thấy Nhà chính "${mainHouseName}".`);
-  const recruiter = refs.recruiterByUsername.get(accountIdentityKey(recruiterUsername));
-  if (!recruiter) throw new Error(`Không tìm thấy Người tuyển "${recruiterUsername}".`);
+  const recruiterKey = accountIdentityKey(recruiterUsername);
+  const recruiterTypeKey = referenceKey(recruiterType);
+  const internalRecruiter = refs.recruiterByUsername.get(recruiterKey);
+  const partnerRecruiter = refs.mainHouseByName.get(referenceKey(recruiterUsername));
+  const wantsPartner = recruiterTypeKey === "partner" || recruiterTypeKey.includes("doi tac");
+  const wantsInternal = recruiterTypeKey === "internal" || recruiterTypeKey.includes("noi bo");
+  if (!wantsPartner && !wantsInternal && internalRecruiter && partnerRecruiter) {
+    throw new Error(
+      `Người tuyển "${recruiterUsername}" trùng giữa Nội bộ và Đối tác; cần cột Loại người tuyển.`,
+    );
+  }
+  const recruiterStaff = wantsPartner ? undefined : internalRecruiter;
+  const recruiterPartner = wantsInternal ? undefined : partnerRecruiter;
+  if (!recruiterStaff && !recruiterPartner) {
+    throw new Error(`Không tìm thấy Người tuyển "${recruiterUsername}" theo loại đã chọn.`);
+  }
 
   const joinDate = parseRequiredDate(joinRaw, "Ngày vào làm");
   const leaveDate = parseOptionalDate(leaveRaw, "Ngày nghỉ");
@@ -363,6 +423,7 @@ function parseHistoryRow(
     factoryCode,
     mainHouseName,
     recruiterUsername,
+    recruiterType,
     employeeCode,
     joinDate,
     leaveDate,
@@ -382,7 +443,7 @@ function parseHistoryRow(
     note: pickValue(raw, ["Ghi chú", "note"]),
     raw,
   };
-  return { row, factory, mainHouse, recruiter };
+  return { row, factory, mainHouse, recruiterStaff, recruiterPartner };
 }
 
 function findSheet(workbook: XLSX.WorkBook, acceptedNames: Set<string>) {
@@ -416,6 +477,223 @@ function addWorkerError(
   input: Omit<WorkerImportError, "historyRows"> & { historyRows?: HistorySheetRow[] },
 ) {
   errors.push({ ...input, historyRows: input.historyRows || [] });
+}
+
+function appendUnique(values: string[], value: string) {
+  if (value && !values.includes(value)) values.push(value);
+}
+
+function appendUniqueNumber(values: number[], value: number) {
+  if (!values.includes(value)) values.push(value);
+}
+
+function recruiterTypeFlags(value: string) {
+  const key = referenceKey(value);
+  return {
+    wantsPartner: key === "partner" || key.includes("doi tac"),
+    wantsInternal: key === "internal" || key.includes("noi bo"),
+  };
+}
+
+export async function inspectBulkWorkerImportReferences(
+  file: File,
+): Promise<BulkImportReferenceInspection> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const workerSheet = findSheet(workbook, WORKER_SHEET_NAMES);
+  const historySheet = findSheet(workbook, HISTORY_SHEET_NAMES);
+  if (!workerSheet || !historySheet) {
+    throw new Error('File phải có đủ hai sheet "Người lao động" và "Lịch sử đi làm".');
+  }
+
+  const [factories, mainHouses, users] = await Promise.all([
+    fetchFactories(),
+    fetchMainHouses({ includeInactive: true }),
+    pb
+      .collection("users")
+      .getFullList<UserRecord>({ fields: "id,username,role", sort: "username" }),
+  ]);
+  const factoryByName = new Map(
+    factories.filter((item) => item.name).map((item) => [referenceKey(item.name), item]),
+  );
+  const factoryByCode = new Map(
+    factories.filter((item) => item.code).map((item) => [referenceKey(item.code), item]),
+  );
+  const mainHouseByName = new Map(
+    mainHouses.filter((item) => item.name).map((item) => [referenceKey(item.name), item]),
+  );
+  const recruiterByUsername = new Map(
+    users
+      .filter(
+        (user) =>
+          (user.role === "staff" || user.role === "admin") &&
+          !String(user.username || "")
+            .toLowerCase()
+            .startsWith("vd_"),
+      )
+      .filter((user) => user.username)
+      .map((user) => [accountIdentityKey(user.username), user]),
+  );
+
+  const missingFactories = new Map<string, MissingFactoryReference>();
+  const missingMainHouses = new Map<string, MissingMainHouseReference>();
+  const missingRecruiters = new Map<string, MissingRecruiterReference>();
+
+  const addFactory = (
+    factory: FactoryRecord | undefined,
+    name: string,
+    code: string,
+    rowNumber: number,
+  ) => {
+    if (factory) {
+      if (factory.status !== "inactive") return;
+      const key = `activate:${factory.id}`;
+      const current = missingFactories.get(key) || {
+        name: factory.name,
+        code: factory.code || code,
+        rowNumbers: [],
+        action: "activate" as const,
+        existingId: factory.id,
+      };
+      appendUniqueNumber(current.rowNumbers, rowNumber);
+      missingFactories.set(key, current);
+      return;
+    }
+    if (!name) return;
+    const key = `create:${referenceKey(name)}`;
+    const current = missingFactories.get(key) || {
+      name,
+      code,
+      rowNumbers: [],
+      action: "create" as const,
+    };
+    if (!current.code && code) current.code = code;
+    appendUniqueNumber(current.rowNumbers, rowNumber);
+    missingFactories.set(key, current);
+  };
+
+  const addMainHouse = (name: string, rowNumber: number) => {
+    if (!name) return;
+    const existing = mainHouseByName.get(referenceKey(name));
+    if (existing && existing.status !== "inactive") return;
+    const key = existing ? `activate:${existing.id}` : `create:${referenceKey(name)}`;
+    const current = missingMainHouses.get(key) || {
+      name: existing?.name || name,
+      rowNumbers: [],
+      action: existing ? ("activate" as const) : ("create" as const),
+      existingId: existing?.id,
+    };
+    appendUniqueNumber(current.rowNumbers, rowNumber);
+    missingMainHouses.set(key, current);
+  };
+
+  for (const [index, raw] of workbookRows(historySheet).entries()) {
+    const rowNumber = index + 2;
+    const workerKey = pickValue(raw, ["Mã NLĐ trong file", "Mã NLĐ", "worker_key"]);
+    const factoryName = pickValue(raw, ["Tên nhà máy", "Nhà máy", "factory_name"]);
+    const factoryCode = pickValue(raw, ["Mã nhà máy", "factory_code"]);
+    const byName = factoryName ? factoryByName.get(referenceKey(factoryName)) : undefined;
+    const byCode = factoryCode ? factoryByCode.get(referenceKey(factoryCode)) : undefined;
+    if (!(byName && byCode && byName.id !== byCode.id)) {
+      addFactory(byName || byCode, factoryName, factoryCode, rowNumber);
+    }
+
+    const mainHouseName = pickValue(raw, ["Nhà chính", "main_house_name"]);
+    addMainHouse(mainHouseName, rowNumber);
+
+    const recruiterUsername = pickValue(raw, ["Người tuyển", "recruiter_username"]);
+    if (!recruiterUsername) continue;
+    const recruiterType = pickValue(raw, ["Loại người tuyển", "recruiter_type"]);
+    const { wantsPartner, wantsInternal } = recruiterTypeFlags(recruiterType);
+    const internalRecruiter = recruiterByUsername.get(accountIdentityKey(recruiterUsername));
+    const partnerRecruiter = mainHouseByName.get(referenceKey(recruiterUsername));
+
+    if (wantsPartner) {
+      addMainHouse(recruiterUsername, rowNumber);
+      continue;
+    }
+    if (!wantsInternal && (internalRecruiter || partnerRecruiter)) {
+      if (partnerRecruiter?.status === "inactive") addMainHouse(recruiterUsername, rowNumber);
+      continue;
+    }
+    if (internalRecruiter) continue;
+
+    const key = `${accountIdentityKey(recruiterUsername)}|${referenceKey(recruiterType)}`;
+    const current = missingRecruiters.get(key) || {
+      username: recruiterUsername,
+      recruiterType,
+      workerKeys: [],
+      rowNumbers: [],
+    };
+    appendUnique(current.workerKeys, workerKey);
+    appendUniqueNumber(current.rowNumbers, rowNumber);
+    missingRecruiters.set(key, current);
+  }
+
+  return {
+    factories: [...missingFactories.values()].sort((a, b) => a.name.localeCompare(b.name, "vi")),
+    mainHouses: [...missingMainHouses.values()].sort((a, b) => a.name.localeCompare(b.name, "vi")),
+    recruiters: [...missingRecruiters.values()].sort((a, b) =>
+      a.username.localeCompare(b.username, "vi"),
+    ),
+  };
+}
+
+export async function applyBulkWorkerImportReferences(
+  inspection: BulkImportReferenceInspection,
+): Promise<AppliedImportReference[]> {
+  const applied: AppliedImportReference[] = [];
+
+  for (const item of inspection.factories) {
+    const payload =
+      item.action === "create"
+        ? {
+            name: item.name.trim(),
+            code: item.code.trim(),
+            address: "",
+            hotline: "",
+            attendance_cutoff_day: 31,
+            advance_limit: 0,
+            status: "active",
+            note: "Tạo từ import NLĐ và lịch sử đi làm",
+          }
+        : { status: "active" };
+    const record = item.existingId
+      ? await pb.collection("factories").update(item.existingId, payload)
+      : await pb.collection("factories").create(payload);
+    applied.push({
+      id: record.id,
+      name: item.name,
+      collection: "factories",
+      action: item.action,
+      payload,
+    });
+  }
+
+  for (const item of inspection.mainHouses) {
+    const payload =
+      item.action === "create"
+        ? {
+            name: item.name.trim(),
+            address: "",
+            hotline: "",
+            status: "active",
+            note: "Tạo từ import NLĐ và lịch sử đi làm",
+          }
+        : { status: "active" };
+    const record = item.existingId
+      ? await pb.collection("recruitment_entities").update(item.existingId, payload)
+      : await pb.collection("recruitment_entities").create(payload);
+    applied.push({
+      id: record.id,
+      name: item.name,
+      collection: "recruitment_entities",
+      action: item.action,
+      payload,
+    });
+  }
+
+  return applied;
 }
 
 async function fetchReferenceData(): Promise<ImportReferenceData> {
@@ -523,19 +801,23 @@ export async function prepareBulkWorkerImport(file: File): Promise<PreparedBulkW
       .map((worker) => [accountIdentityKey(worker.workerKey), worker]),
   );
   const factoryByName = new Map(
-    refs.factories.map((factory) => [accountIdentityKey(factory.name), factory]),
+    refs.factories.map((factory) => [referenceKey(factory.name), factory]),
   );
   const factoryByCode = new Map(
     refs.factories
       .filter((factory) => factory.code)
-      .map((factory) => [accountIdentityKey(factory.code), factory]),
+      .map((factory) => [referenceKey(factory.code), factory]),
   );
-  const mainHouseByName = new Map(
-    refs.mainHouses.map((item) => [accountIdentityKey(item.name), item]),
-  );
+  const mainHouseByName = new Map(refs.mainHouses.map((item) => [referenceKey(item.name), item]));
   const recruiterByUsername = new Map(
     refs.users
-      .filter((user) => user.role === "staff" || user.role === "admin")
+      .filter(
+        (user) =>
+          (user.role === "staff" || user.role === "admin") &&
+          !String(user.username || "")
+            .toLowerCase()
+            .startsWith("vd_"),
+      )
       .filter((user) => user.username)
       .map((user) => [accountIdentityKey(user.username), user]),
   );
@@ -687,7 +969,8 @@ export async function prepareBulkWorkerImport(file: File): Promise<PreparedBulkW
           hometown_snapshot: entry.row.workerAddressSnapshot,
           cccd_issue_date: entry.row.cccdIssueDate,
           worker_tax_code_snapshot: entry.row.workerTaxCodeSnapshot,
-          recruiter_staff: entry.recruiter.id,
+          recruiter_staff: entry.recruiterStaff?.id || "",
+          recruiter_partner: entry.recruiterPartner?.id || "",
           join_date: entry.row.joinDate,
           leave_date: entry.row.leaveDate || "",
           status: entry.row.status,

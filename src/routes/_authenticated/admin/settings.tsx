@@ -299,7 +299,7 @@ function CompanyTab() {
               </button>
             </div>
           ))}
-          <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed text-muted-foreground">
+          <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed bg-white text-muted-foreground">
             <ImagePlus className="h-5 w-5" />
             <input
               type="file"
@@ -372,6 +372,7 @@ interface MainHouse {
   address?: string;
   hotline?: string;
   note?: string;
+  status?: "active" | "inactive";
 }
 
 function FactoriesTab() {
@@ -459,10 +460,10 @@ function FactoriesTab() {
   const loadMainHouses = async () => {
     setMainHousesLoading(true);
     try {
-      const res = await pb.collection("main_houses").getList(1, 300, { sort: "name" });
+      const res = await pb.collection("recruitment_entities").getList(1, 300, { sort: "name" });
       setMainHouses(res.items as any);
     } catch (e: any) {
-      toast.error(e?.message || "Lỗi tải nhà chính. Hãy tạo collection 'main_houses'.");
+      toast.error(e?.message || "Lỗi tải danh sách Nhà chính & Đối tác. Hãy cấu hình collection 'recruitment_entities'.");
     } finally {
       setMainHousesLoading(false);
     }
@@ -727,14 +728,14 @@ function FactoriesTab() {
   const saveMainHouse = async () => {
     const name = editingMainHouse?.name?.trim();
     if (!name) {
-      toast.error("Tên nhà chính bắt buộc");
+      toast.error("Tên đơn vị bắt buộc");
       return;
     }
     const duplicate = mainHouses.find(
       (h) => h.name.toLowerCase() === name.toLowerCase() && h.id !== editingMainHouse?.id,
     );
     if (duplicate) {
-      toast.error(`Nhà chính "${duplicate.name}" đã tồn tại`);
+      toast.error(`Đơn vị "${duplicate.name}" đã tồn tại`);
       return;
     }
     try {
@@ -743,55 +744,56 @@ function FactoriesTab() {
         address: editingMainHouse?.address || "",
         hotline: editingMainHouse?.hotline || "",
         note: editingMainHouse?.note || "",
+        status: editingMainHouse?.status || "active",
       };
       if (editingMainHouse?.id) {
         const before = mainHouses.find((m) => m.id === editingMainHouse.id);
-        await pb.collection("main_houses").update(editingMainHouse.id, payload);
+        await pb.collection("recruitment_entities").update(editingMainHouse.id, payload);
         await createStaffActionLog({
           actor: currentUser,
-          targetCollection: "main_houses",
+          targetCollection: "recruitment_entities",
           targetRecord: editingMainHouse.id,
           action: "update",
           before,
           after: payload,
-          note: "Admin cập nhật nhà chính",
+          note: "Admin cập nhật đơn vị Nhà chính & Đối tác",
         });
       } else {
-        const created = await pb.collection("main_houses").create(payload);
+        const created = await pb.collection("recruitment_entities").create(payload);
         await createStaffActionLog({
           actor: currentUser,
-          targetCollection: "main_houses",
+          targetCollection: "recruitment_entities",
           targetRecord: created.id,
           action: "create",
           after: payload,
-          note: "Admin tạo nhà chính mới",
+          note: "Admin tạo đơn vị Nhà chính & Đối tác",
         });
       }
-      toast.success("Đã lưu nhà chính");
+      toast.success("Đã lưu đơn vị");
       setEditingMainHouse(null);
       loadMainHouses();
     } catch (e: any) {
-      toast.error(e?.message || "Lỗi lưu nhà chính");
+      toast.error(e?.message || "Lỗi lưu đơn vị");
     }
   };
 
   const removeMainHouse = async (id: string) => {
-    if (!confirm("Xoá nhà chính này?")) return;
+    if (!confirm("Xoá đơn vị này?")) return;
     try {
       const before = mainHouses.find((m) => m.id === id);
-      await pb.collection("main_houses").delete(id);
+      await pb.collection("recruitment_entities").delete(id);
       await createStaffActionLog({
         actor: currentUser,
-        targetCollection: "main_houses",
+        targetCollection: "recruitment_entities",
         targetRecord: id,
         action: "delete",
         before,
-        note: "Admin xoá nhà chính",
+        note: "Admin xoá đơn vị Nhà chính & Đối tác",
       });
-      toast.success("Đã xoá nhà chính");
+      toast.success("Đã xoá đơn vị");
       loadMainHouses();
     } catch (e: any) {
-      toast.error(e?.message || "Lỗi xoá nhà chính");
+      toast.error(e?.message || "Lỗi xoá đơn vị");
     }
   };
 
@@ -1222,20 +1224,20 @@ function FactoriesTab() {
               <button
                 type="button"
                 className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                aria-label="Thu gọn hoặc mở rộng danh sách nhà chính"
+                aria-label="Thu gọn hoặc mở rộng danh sách Nhà chính & Đối tác"
               >
                 <ChevronDown
                   className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${mainHousesOpen ? "rotate-0" : "-rotate-90"}`}
                 />
                 <h2 className="text-sm font-semibold">
-                  Nhà chính <span className="text-muted-foreground">({mainHouses.length})</span>
+                  Nhà chính & Đối tác <span className="text-muted-foreground">({mainHouses.length})</span>
                 </h2>
               </button>
             </CollapsibleTrigger>
             <button
-              onClick={() => setEditingMainHouse({})}
+              onClick={() => setEditingMainHouse({ status: "active" })}
               className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-soft active:scale-95"
-              aria-label="Thêm nhà chính"
+              aria-label="Thêm đơn vị"
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -1247,25 +1249,25 @@ function FactoriesTab() {
                 <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   className="rounded-xl pl-9 text-xs"
-                  placeholder="Tìm nhà chính..."
+                  placeholder="Tìm Nhà chính hoặc Đối tác..."
                   value={mainHouseSearch}
                   onChange={(e) => setMainHouseSearch(e.target.value)}
                 />
               </div>
             )}
             {mainHousesLoading && mainHouses.length === 0 ? (
-              <DataLoadingState variant="list" label="Đang tải danh sách nhà chính..." rows={3} />
+              <DataLoadingState variant="list" label="Đang tải danh sách đơn vị..." rows={3} />
             ) : mainHousesLoading ? (
-              <DataLoadingState variant="inline" label="Đang cập nhật danh sách nhà chính..." />
+              <DataLoadingState variant="inline" label="Đang cập nhật danh sách đơn vị..." />
             ) : null}
             {!mainHousesLoading && mainHouses.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
-                Chưa có nhà chính. Bấm nút + để thêm.
+                Chưa có đơn vị. Bấm nút + để thêm.
               </div>
             )}
             {!mainHousesLoading && mainHouses.length > 0 && filteredMainHouses.length === 0 && (
               <div className="py-4 text-center text-xs text-muted-foreground">
-                Không tìm thấy nhà chính phù hợp
+                Không tìm thấy đơn vị phù hợp
               </div>
             )}
             {filteredMainHouses.map((house) => (
@@ -1278,6 +1280,9 @@ function FactoriesTab() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{house.name}</div>
+                  <div className="mt-0.5 text-[10px] font-medium text-muted-foreground">
+                    {house.status === "inactive" ? "Ngừng sử dụng" : "Đang hoạt động"}
+                  </div>
                   {house.address && (
                     <a
                       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(house.address)}`}
@@ -1300,14 +1305,14 @@ function FactoriesTab() {
                   <button
                     onClick={() => setEditingMainHouse(house)}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
-                    aria-label="Sửa nhà chính"
+                    aria-label="Sửa đơn vị"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={() => removeMainHouse(house.id)}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
-                    aria-label="Xoá nhà chính"
+                    aria-label="Xoá đơn vị"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -1321,11 +1326,11 @@ function FactoriesTab() {
       <Dialog open={!!editingMainHouse} onOpenChange={(o) => !o && setEditingMainHouse(null)}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
-            <DialogTitle>{editingMainHouse?.id ? "Sửa nhà chính" : "Thêm nhà chính"}</DialogTitle>
+            <DialogTitle>{editingMainHouse?.id ? "Sửa đơn vị" : "Thêm đơn vị"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <Field
-              label="Tên nhà chính *"
+              label="Tên đơn vị *"
               value={editingMainHouse?.name || ""}
               onChange={(v) => setEditingMainHouse({ ...editingMainHouse, name: v })}
             />
@@ -1339,6 +1344,23 @@ function FactoriesTab() {
               value={editingMainHouse?.hotline || ""}
               onChange={(v) => setEditingMainHouse({ ...editingMainHouse, hotline: v })}
             />
+            <div className="space-y-1">
+              <Label className="text-xs">Trạng thái</Label>
+              <Select
+                value={editingMainHouse?.status || "active"}
+                onValueChange={(status: "active" | "inactive") =>
+                  setEditingMainHouse({ ...editingMainHouse, status })
+                }
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Đang hoạt động</SelectItem>
+                  <SelectItem value="inactive">Ngừng sử dụng</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <Label className="text-xs">Ghi chú</Label>
               <Textarea

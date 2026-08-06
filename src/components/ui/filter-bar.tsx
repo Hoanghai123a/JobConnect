@@ -81,7 +81,7 @@ export function MobileListToolbar({
                 value={search || ""}
                 onChange={(event) => onSearchChange(event.target.value)}
                 placeholder={placeholder}
-                className="h-11 w-full rounded-full border border-border bg-card px-10 text-base outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="h-11 w-full rounded-full border border-border bg-white px-10 text-base text-slate-900 outline-none placeholder:text-slate-500 transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
               {search && (
                 <button

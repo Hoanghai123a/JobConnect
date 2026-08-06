@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+﻿import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -75,6 +75,7 @@ import type { FactoryRecord } from "@/lib/factories";
 import type { MainHouseRecord } from "@/lib/main-houses";
 import { fetchCachedStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
 import { readCachedAuxData } from "@/lib/staff-cache";
+import { getRecruiterDisplay } from "@/lib/recruiters";
 import {
   staffDirectoryAuxQueryKey,
   staffWorkspaceQueryKey,
@@ -92,7 +93,6 @@ import { WorkerDesktopCard } from "@/components/staff/WorkerDesktopCard";
 import { StaffWorkerDirectory } from "@/components/staff/StaffWorkerDirectory";
 import { RecruitChartDialog } from "@/components/workforce/RecruitChartDialog";
 import { RegisterDialog as SharedRegisterDialog } from "@/components/workforce/RegisterDialog";
-import { VN_BANKS } from "@/lib/vn-banks";
 
 export const Route = createFileRoute("/_authenticated/admin/workforce")({
   beforeLoad: () => {
@@ -229,7 +229,7 @@ function WorkforcePage() {
   const workspaceWorkers = workspace?.workers ?? EMPTY_WORKSPACE_WORKERS;
   const staffAdminUsers = auxQuery.data?.staffUsers ?? EMPTY_USERS;
   const factories = auxQuery.data?.factories ?? EMPTY_FACTORIES;
-  const mainHouses = auxQuery.data?.mainHouses ?? EMPTY_MAIN_HOUSES;
+  const mainHouses = auxQuery.data?.recruitmentEntities ?? EMPTY_MAIN_HOUSES;
   const histories = useMemo(
     () => workspaceWorkers.flatMap((worker) => worker.histories),
     [workspaceWorkers],
@@ -1208,9 +1208,10 @@ function WorkerList({
               const isWorking = !!latest && isCurrentlyWorking(latest);
               const factoryName =
                 latest?.expand?.factory?.name || factoryById.get(latest?.factory || "")?.name;
-              const recruiterName =
-                latest?.expand?.recruiter_staff?.full_name ||
-                latest?.expand?.recruiter_staff?.username;
+              const recruiter = getRecruiterDisplay(latest);
+              const recruiterName = recruiter
+                ? `${recruiter.name} · ${recruiter.label}`
+                : undefined;
               const mainHouseName = latest?.expand?.main_house?.name;
               const workerName = getWorkerDisplayName(user);
               const snapshotCccd = latest?.worker_cccd_snapshot || "";
@@ -1401,7 +1402,7 @@ function MultiSelectFactoryPicker({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-left text-sm"
+            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-white px-3 text-left text-sm text-slate-900"
           >
             <span className={cn("truncate", selected.length === 0 && "text-muted-foreground")}>
               {label}
@@ -1503,7 +1504,7 @@ function MultiSelectRecruiterPicker({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-left text-sm"
+            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-white px-3 text-left text-sm text-slate-900"
           >
             <span className={cn("truncate", selected.length === 0 && "text-muted-foreground")}>
               {label}
@@ -1552,3 +1553,4 @@ function MultiSelectRecruiterPicker({
     </div>
   );
 }
+

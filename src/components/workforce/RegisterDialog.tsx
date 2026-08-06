@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { BriefcaseBusiness } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -14,14 +14,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { FactoryPicker, UserPicker } from "./UserPicker";
+import { FactoryPicker, MainHousePicker, UserPicker } from "./UserPicker";
 import type { UserRecord } from "@/lib/pocketbase";
 import type { FactoryRecord } from "@/lib/factories";
 import type { MainHouseRecord } from "@/lib/main-houses";
@@ -42,6 +35,12 @@ import { createStaffActionLog } from "@/lib/staff-log";
 import { JoinCccdSection } from "@/components/employment/JoinCccdSection";
 import { compressImage } from "@/lib/image-compress";
 import { findOrCreateCccdVersion, updateCccdVersionImages } from "@/lib/cccd-versions";
+import { RecruiterPicker } from "@/components/employment/RecruiterPicker";
+import {
+  buildRecruiterPayload,
+  encodeInternalRecruiter,
+  type RecruiterSelectionValue,
+} from "@/lib/recruiters";
 
 function todayIso() {
   const now = new Date();
@@ -112,7 +111,6 @@ export function RegisterDialog({
   const [cccdFront, setCccdFront] = useState<File | null>(null);
   const [cccdBack, setCccdBack] = useState<File | null>(null);
 
-  const staffUsers = useMemo(() => users.filter((u) => u.role === "staff"), [users]);
   const selectedUser = candidateUsers.find((u) => u.id === userId);
   const roleLabel = actorRoleLabel || (actor?.role === "admin" ? "Quản trị viên" : "Nhân sự");
   const personalSnapshotValue = {
@@ -138,7 +136,7 @@ export function RegisterDialog({
     setUserId("");
     setFactoryId("");
     setMainHouseId("");
-    setRecruiterId(defaultRecruiterId);
+    setRecruiterId(encodeInternalRecruiter(defaultRecruiterId));
     setEmployeeCode("");
     setWorkerName("");
     setWorkerCccd("");
@@ -274,7 +272,7 @@ export function RegisterDialog({
         hometown_snapshot: workerAddress.trim(),
         cccd_issue_date: cccdIssueDate,
         worker_tax_code_snapshot: workerTaxCode.trim(),
-        recruiter_staff: recruiterId,
+        ...buildRecruiterPayload(recruiterId),
         cccd_version: cccdVersionId,
         join_date: joinDate,
         note: note.trim() || undefined,
@@ -376,30 +374,22 @@ export function RegisterDialog({
 
           <div className="space-y-1">
             <Label className="text-xs">Nhà chính</Label>
-            <Select value={mainHouseId} onValueChange={setMainHouseId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Chọn nhà chính" />
-              </SelectTrigger>
-              <SelectContent>
-                {mainHouses.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">Người tuyển</Label>
-            <UserPicker
-              users={staffUsers}
-              value={recruiterId}
-              onChange={setRecruiterId}
-              placeholder="Chọn nhân sự tuyển"
-              allowClear
+            <MainHousePicker
+              mainHouses={mainHouses}
+              value={mainHouseId}
+              onChange={setMainHouseId}
             />
           </div>
+
+          <RecruiterPicker
+            label="Người tuyển"
+            internalUsers={users}
+            partners={mainHouses}
+            value={recruiterId as RecruiterSelectionValue}
+            onChange={setRecruiterId}
+            placeholder="Chọn nhân sự hoặc Đối tác"
+            allowClear
+          />
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">

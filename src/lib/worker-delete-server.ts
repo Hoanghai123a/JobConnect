@@ -35,11 +35,6 @@ const DEPENDENCIES: DependencyDefinition[] = [
     filter: (id) => `user="${escapePb(id)}"`,
   },
   {
-    collection: "check_salary_items",
-    label: "Dữ liệu check lương",
-    filter: (id) => `user="${escapePb(id)}"`,
-  },
-  {
     collection: "salary_holds",
     label: "Dữ liệu giữ lương",
     filter: (id) => `worker="${escapePb(id)}"`,

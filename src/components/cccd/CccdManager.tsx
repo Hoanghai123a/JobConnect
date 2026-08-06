@@ -178,7 +178,7 @@ function CccdSlot({
   return (
     <div className="space-y-1.5">
       <Label className="text-xs">{label}</Label>
-      <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-muted/30">
+      <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-white">
         {url ? (
           <>
             <img src={url} alt={label} className="h-full w-full object-cover" />

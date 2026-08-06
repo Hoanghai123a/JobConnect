@@ -1,17 +1,7 @@
-import { pb } from "./pocketbase";
-
-export interface MainHouseRecord {
-  id: string;
-  name: string;
-  address?: string;
-  hotline?: string;
-  note?: string;
-  created?: string;
-  updated?: string;
-}
-
-export async function fetchMainHouses() {
-  return (await pb.collection("main_houses").getFullList({
-    sort: "name",
-  })) as unknown as MainHouseRecord[];
-}
+// Compatibility exports while existing screens migrate to the shared entity model.
+export {
+  fetchRecruitmentEntities as fetchMainHouses,
+  isRecruitmentEntityActive,
+  type RecruitmentEntityRecord as MainHouseRecord,
+  type RecruitmentEntityStatus,
+} from "./recruitment-entities";

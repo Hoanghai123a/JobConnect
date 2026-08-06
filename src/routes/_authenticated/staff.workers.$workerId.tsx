@@ -46,13 +46,6 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
@@ -84,6 +77,7 @@ import {
 } from "@/lib/advance-policy";
 import { CccdManager } from "@/components/cccd/CccdManager";
 import { BankNameInput } from "@/components/staff/BankNameInput";
+import { FactoryPicker, MainHousePicker } from "@/components/workforce/UserPicker";
 import { SalaryHoldCreateDialog } from "@/components/staff/SalaryHoldCreateDialog";
 import { canCreateSalaryHold } from "@/lib/salary-holds";
 import {
@@ -111,6 +105,14 @@ import { pb, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import { resolveBankName } from "@/lib/vn-banks";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
 import { AdvanceReadOnlyNotice } from "@/components/advances/AdvanceReadOnlyNotice";
+import { RecruiterPicker } from "@/components/employment/RecruiterPicker";
+import {
+  buildRecruiterPayload,
+  encodeInternalRecruiter,
+  getRecruiterDisplay,
+  recruiterSelectionFromHistory,
+  type RecruiterSelectionValue,
+} from "@/lib/recruiters";
 import {
   PAYOUT_METHOD_META,
   normalizeAdvancePayoutMethod,
@@ -316,7 +318,8 @@ function StaffWorkerDetailPage() {
           ...personalSnapshot,
           hometown_snapshot: personalSnapshot.worker_address_snapshot,
           worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
-          recruiter_staff: latest?.recruiter_staff || viewer.id,
+          recruiter_staff:
+            recruiterSelectionFromHistory(latest) || encodeInternalRecruiter(viewer.id),
           main_house: latest?.main_house || "",
         }));
         setBankForm({
@@ -389,7 +392,8 @@ function StaffWorkerDetailPage() {
   const canOpenAdvanceForWorker =
     canReportAdvanceForWorker &&
     (Boolean(activeHistory) || allowAdvanceAfterLeave) &&
-    advanceInteractionAllowed;
+    advanceInteractionAllowed &&
+    !latestHistory?.recruiter_partner;
   const canViewPayrollForWorker = canViewPayroll(viewer, histories, managedFactoryIds);
   const canReportLeaveForWorker = canReportLeave(
     viewer,
@@ -466,7 +470,9 @@ function StaffWorkerDetailPage() {
     exportToExcel(
       `lich_su_lao_dong_${workerId}_${Date.now()}`,
       {
-        "Lịch sử đi làm": histories.map((history, index) => ({
+        "Lịch sử đi làm": histories.map((history, index) => {
+          const recruiter = getRecruiterDisplay(history);
+          return {
           STT: index + 1,
           "Nhà máy": history.expand?.factory?.name || "",
           "Mã nhân viên": history.employee_code || "",
@@ -476,15 +482,14 @@ function StaffWorkerDetailPage() {
           "Địa chỉ thường trú": history.worker_address_snapshot || history.hometown_snapshot || "",
           "Mã số thuế": history.worker_tax_code_snapshot || "",
           "Ngày cấp CCCD": formatDateOnly(history.cccd_issue_date),
-          "Người tuyển":
-            history.expand?.recruiter_staff?.full_name ||
-            history.expand?.recruiter_staff?.username ||
-            "",
+          "Người tuyển": recruiter?.name || "",
+          "Loại người tuyển": recruiter?.label || "",
           "Ngày vào": formatDateOnly(history.join_date),
           "Ngày nghỉ": formatDateOnly(history.leave_date),
           "Trạng thái": isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ",
           "Ghi chú": history.note || "",
-        })),
+          };
+        }),
       },
       { "Lịch sử đi làm": ["Ngày cấp CCCD", "Ngày vào", "Ngày nghỉ"] },
     );
@@ -691,7 +696,7 @@ function StaffWorkerDetailPage() {
       hometown_snapshot: joinForm.worker_address_snapshot.trim(),
       cccd_issue_date: joinForm.cccd_issue_date,
       worker_tax_code_snapshot: joinForm.worker_tax_code_snapshot.trim(),
-      recruiter_staff: joinForm.recruiter_staff,
+      ...buildRecruiterPayload(joinForm.recruiter_staff),
       cccd_version: cccdVersionId,
       join_date: joinForm.join_date,
       note: joinForm.note.trim(),
@@ -763,7 +768,7 @@ function StaffWorkerDetailPage() {
       ...personalSnapshot,
       hometown_snapshot: personalSnapshot.worker_address_snapshot,
       worker_tax_code_snapshot: history.worker_tax_code_snapshot || "",
-      recruiter_staff: history.recruiter_staff || "",
+      recruiter_staff: recruiterSelectionFromHistory(history),
       main_house: history.main_house || "",
       join_date: history.join_date?.slice(0, 10) || "",
       leave_date: history.leave_date?.slice(0, 10) || "",
@@ -782,7 +787,8 @@ function StaffWorkerDetailPage() {
       ...personalSnapshot,
       hometown_snapshot: personalSnapshot.worker_address_snapshot,
       worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
-      recruiter_staff: latest?.recruiter_staff || viewer.id,
+      recruiter_staff:
+        recruiterSelectionFromHistory(latest) || encodeInternalRecruiter(viewer.id),
       join_date: "",
       leave_date: "",
       note: "",
@@ -864,7 +870,7 @@ function StaffWorkerDetailPage() {
         hometown_snapshot: oldHistoryForm.worker_address_snapshot.trim(),
         cccd_issue_date: oldHistoryForm.cccd_issue_date,
         worker_tax_code_snapshot: oldHistoryForm.worker_tax_code_snapshot.trim(),
-        recruiter_staff: oldHistoryForm.recruiter_staff,
+        ...buildRecruiterPayload(oldHistoryForm.recruiter_staff),
         cccd_version: cccdVersionId,
         join_date: oldHistoryForm.join_date,
         leave_date: oldHistoryForm.leave_date,
@@ -934,7 +940,7 @@ function StaffWorkerDetailPage() {
       cccd_issue_date: historyForm.cccd_issue_date,
       worker_tax_code_snapshot: historyForm.worker_tax_code_snapshot.trim(),
       cccd_version: cccdVersionId,
-      recruiter_staff: historyForm.recruiter_staff || undefined,
+      ...buildRecruiterPayload(historyForm.recruiter_staff),
       main_house: historyForm.main_house || undefined,
       join_date: historyForm.join_date,
       leave_date: historyForm.leave_date,
@@ -1092,9 +1098,10 @@ function StaffWorkerDetailPage() {
             <InfoCell
               label="Người tuyển gần nhất"
               value={
-                latestHistory?.expand?.recruiter_staff?.full_name ||
-                latestHistory?.expand?.recruiter_staff?.username ||
-                "Chưa gán"
+                (() => {
+                  const recruiter = getRecruiterDisplay(latestHistory);
+                  return recruiter ? `${recruiter.name} · ${recruiter.label}` : "Chưa gán";
+                })()
               }
             />
           </div>
@@ -1196,9 +1203,10 @@ function StaffWorkerDetailPage() {
                   </div>
                   <div className="mt-0.5 break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
                     Mã NV: {history.employee_code || "Chưa có"} · Người tuyển:{" "}
-                    {history.expand?.recruiter_staff?.full_name ||
-                      history.expand?.recruiter_staff?.username ||
-                      "Chưa gán"}
+                    {(() => {
+                      const recruiter = getRecruiterDisplay(history);
+                      return recruiter ? `${recruiter.name} · ${recruiter.label}` : "Chưa gán";
+                    })()}
                   </div>
                   <div className="mt-0.5 break-words text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
                     Nhà chính: {history.expand?.main_house?.name || "Chưa gán"}
@@ -1392,45 +1400,20 @@ function StaffWorkerDetailPage() {
           >
             <div className="text-sm font-semibold">Thông tin đi làm</div>
             <FormField label="Nhà máy">
-              <Select
+              <FactoryPicker
+                factories={joinableFactories}
                 value={joinForm.factory}
-                onValueChange={(value) =>
-                  setJoinForm((current) => ({ ...current, factory: value }))
-                }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn nhà máy" />
-                </SelectTrigger>
-                <SelectContent>
-                  {joinableFactories.map((factory) => (
-                    <SelectItem key={factory.id} value={factory.id}>
-                      {factory.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(value) => setJoinForm((current) => ({ ...current, factory: value }))}
+                triggerClassName="rounded-xl"
+              />
             </FormField>
             <FormField label="Nhà chính">
-              <Select
+              <MainHousePicker
+                mainHouses={mainHouses}
                 value={joinForm.main_house}
-                onValueChange={(value) =>
-                  setJoinForm((current) => ({
-                    ...current,
-                    main_house: value,
-                  }))
-                }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn nhà chính" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mainHouses.map((house) => (
-                    <SelectItem key={house.id} value={house.id}>
-                      {house.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(value) => setJoinForm((current) => ({ ...current, main_house: value }))}
+                triggerClassName="rounded-xl"
+              />
             </FormField>
             <FormField label="Mã NV">
               <Input
@@ -1485,23 +1468,14 @@ function StaffWorkerDetailPage() {
               )}
             </FormField>
             <FormField label="Người tuyển">
-              <Select
-                value={joinForm.recruiter_staff}
-                onValueChange={(value) =>
+              <RecruiterPicker
+                value={joinForm.recruiter_staff as RecruiterSelectionValue}
+                onChange={(value) =>
                   setJoinForm((current) => ({ ...current, recruiter_staff: value }))
                 }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn người tuyển" />
-                </SelectTrigger>
-                <SelectContent>
-                  {staffUsers.map((staffUser) => (
-                    <SelectItem key={staffUser.id} value={staffUser.id}>
-                      {staffUser.full_name || staffUser.username || staffUser.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                internalUsers={staffUsers}
+                partners={mainHouses}
+              />
             </FormField>
             <FormField label="Ghi chú">
               <Textarea
@@ -1627,61 +1601,34 @@ function StaffWorkerDetailPage() {
             }}
           >
             <FormField label="Nhà máy *">
-              <Select
+              <FactoryPicker
+                factories={factories}
                 value={oldHistoryForm.factory}
-                onValueChange={(value) =>
+                onChange={(value) =>
                   setOldHistoryForm((current) => ({ ...current, factory: value }))
                 }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn nhà máy" />
-                </SelectTrigger>
-                <SelectContent>
-                  {factories.map((factory) => (
-                    <SelectItem key={factory.id} value={factory.id}>
-                      {factory.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                triggerClassName="rounded-xl"
+              />
             </FormField>
             <FormField label="Nhà chính *">
-              <Select
+              <MainHousePicker
+                mainHouses={mainHouses}
                 value={oldHistoryForm.main_house}
-                onValueChange={(value) =>
+                onChange={(value) =>
                   setOldHistoryForm((current) => ({ ...current, main_house: value }))
                 }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn nhà chính" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mainHouses.map((house) => (
-                    <SelectItem key={house.id} value={house.id}>
-                      {house.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                triggerClassName="rounded-xl"
+              />
             </FormField>
             <FormField label="Người tuyển *">
-              <Select
-                value={oldHistoryForm.recruiter_staff}
-                onValueChange={(value) =>
+              <RecruiterPicker
+                value={oldHistoryForm.recruiter_staff as RecruiterSelectionValue}
+                onChange={(value) =>
                   setOldHistoryForm((current) => ({ ...current, recruiter_staff: value }))
                 }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn người tuyển" />
-                </SelectTrigger>
-                <SelectContent>
-                  {staffUsers.map((staffUser) => (
-                    <SelectItem key={staffUser.id} value={staffUser.id}>
-                      {staffUser.full_name || staffUser.username || staffUser.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                internalUsers={staffUsers}
+                partners={mainHouses}
+              />
             </FormField>
             <FormField label="Mã NV">
               <Input
@@ -1825,45 +1772,25 @@ function StaffWorkerDetailPage() {
               />
             </FormField>
             <FormField label="Người tuyển">
-              <Select
-                value={historyForm.recruiter_staff}
-                onValueChange={(value) =>
+              <RecruiterPicker
+                value={historyForm.recruiter_staff as RecruiterSelectionValue}
+                onChange={(value) =>
                   setHistoryForm((current) => ({ ...current, recruiter_staff: value }))
                 }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn người tuyển" />
-                </SelectTrigger>
-                <SelectContent>
-                  {staffUsers.map((staffUser) => (
-                    <SelectItem key={staffUser.id} value={staffUser.id}>
-                      {staffUser.full_name || staffUser.username || staffUser.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                internalUsers={staffUsers}
+                partners={mainHouses}
+              />
             </FormField>
             <FormField label="Nhà chính">
-              <Select
+              <MainHousePicker
+                mainHouses={mainHouses}
                 value={historyForm.main_house}
-                onValueChange={(value) =>
-                  setHistoryForm((current) => ({
-                    ...current,
-                    main_house: value,
-                  }))
+                onChange={(value) =>
+                  setHistoryForm((current) => ({ ...current, main_house: value }))
                 }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn nhà chính" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mainHouses.map((house) => (
-                    <SelectItem key={house.id} value={house.id}>
-                      {house.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                triggerClassName="rounded-xl"
+                allowClear
+              />
             </FormField>
             <div className="grid min-w-0 grid-cols-1 gap-3 min-[360px]:grid-cols-2">
               <FormField label="Ngày vào">
@@ -1956,9 +1883,10 @@ function StaffWorkerDetailPage() {
                 <InfoCell
                   label="Người tuyển"
                   value={
-                    detailHistory.expand?.recruiter_staff?.full_name ||
-                    detailHistory.expand?.recruiter_staff?.username ||
-                    "Chưa gán"
+                    (() => {
+                      const recruiter = getRecruiterDisplay(detailHistory);
+                      return recruiter ? `${recruiter.name} · ${recruiter.label}` : "Chưa gán";
+                    })()
                   }
                 />
                 <InfoCell
@@ -2240,7 +2168,7 @@ function CccdImageSlot({
   return (
     <div className="space-y-1.5">
       <Label className="text-xs">{label}</Label>
-      <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-muted/30">
+      <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-white">
         {url ? (
           <>
             <img src={url} alt={label} className="h-full w-full object-cover" />
@@ -2379,7 +2307,7 @@ function HistoryCccdUpload({
     <div className="grid grid-cols-2 gap-3">
       <div className="space-y-1.5">
         <Label className="text-xs">Mặt trước</Label>
-        <label className="flex aspect-[1.586/1] cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/30 text-muted-foreground">
+        <label className="flex aspect-[1.586/1] cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-white text-muted-foreground">
           <input
             type="file"
             accept="image/*"
@@ -2393,7 +2321,7 @@ function HistoryCccdUpload({
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs">Mặt sau</Label>
-        <label className="flex aspect-[1.586/1] cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/30 text-muted-foreground">
+        <label className="flex aspect-[1.586/1] cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-white text-muted-foreground">
           <input
             type="file"
             accept="image/*"

@@ -48,7 +48,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { VN_BANKS, resolveBankName } from "@/lib/vn-banks";
+import { resolveBankName } from "@/lib/vn-banks";
+import { BankPicker } from "@/components/staff/BankNameInput";
+import { FactoryPicker, UserPicker } from "@/components/workforce/UserPicker";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { normalizeDate } from "@/lib/date-utils";
 import { escapePb } from "@/lib/delegations";
@@ -416,21 +418,10 @@ function UserProfileForm() {
       <Section title="Số tài khoản (STK)">
         <div className="space-y-1">
           <Label className="text-xs">Ngân hàng</Label>
-          <Select
+          <BankPicker
             value={form.bank_name || ""}
-            onValueChange={(v) => setForm({ ...form, bank_name: v })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Chọn ngân hàng" />
-            </SelectTrigger>
-            <SelectContent className="max-h-72">
-              {VN_BANKS.map((b) => (
-                <SelectItem key={b.code} value={b.name}>
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(value) => setForm({ ...form, bank_name: value })}
+          />
         </div>
         <TextField
           label="Số TK"
@@ -2160,23 +2151,13 @@ function AdminUsersPanel() {
           </DialogHeader>
           <div className="space-y-4 px-5 py-4 sm:px-6">
             <DetailEditorField label="Ngân hàng">
-              <Select
+              <BankPicker
                 value={detailBankForm.bank_name}
-                onValueChange={(value) =>
+                onChange={(value) =>
                   setDetailBankForm((current) => ({ ...current, bank_name: value }))
                 }
-              >
-                <SelectTrigger className={DETAIL_EDITOR_CONTROL_CLASS}>
-                  <SelectValue placeholder="Chọn ngân hàng" />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {VN_BANKS.map((bank) => (
-                    <SelectItem key={bank.code} value={bank.name}>
-                      {bank.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                triggerClassName={DETAIL_EDITOR_CONTROL_CLASS}
+              />
             </DetailEditorField>
             <DetailEditorField label="Số tài khoản">
               <Input
@@ -2328,7 +2309,7 @@ const STAFF_DEFAULT_PASSWORD = "nv123456";
 
 function staffSearchFilter(search: string) {
   const q = escapePb(search.trim());
-  const roleFilter = '(role="staff" || role="admin")';
+  const roleFilter = '((role="staff" || role="admin") && username!~"vd_")';
   if (!q) return roleFilter;
   const searchFilter = `(${["full_name", "username", "phone", "address"]
     .map((field) => `${field}~"${q}"`)
@@ -2889,7 +2870,7 @@ function FactoryAssignmentsPanel() {
         pb
           .collection("users")
           .getList<UserRecord>(1, 200, {
-            filter: buildUserSearchFilter(debouncedSearch, `role="staff"`),
+            filter: buildUserSearchFilter(debouncedSearch, `role="staff" && username!~"vd_"`),
             sort: "full_name,username",
           })
           .then((res) => res.items),
@@ -3207,44 +3188,26 @@ function FactoryAssignmentsPanel() {
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Staff</Label>
-              <Select
+              <UserPicker
+                users={staffUsers}
                 value={editingAssignment?.staff || ""}
-                onValueChange={(value) =>
+                onChange={(value) =>
                   setEditingAssignment((current) => ({ ...(current || {}), staff: value }))
                 }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn staff" />
-                </SelectTrigger>
-                <SelectContent>
-                  {staffUsers.map((staff) => (
-                    <SelectItem key={staff.id} value={staff.id}>
-                      {staff.full_name || staff.username || staff.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Chọn staff"
+              />
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-xs">Nhà máy</Label>
-              <Select
+              <FactoryPicker
+                factories={factories}
                 value={editingAssignment?.factory || ""}
-                onValueChange={(value) =>
+                onChange={(value) =>
                   setEditingAssignment((current) => ({ ...(current || {}), factory: value }))
                 }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn nhà máy" />
-                </SelectTrigger>
-                <SelectContent>
-                  {factories.map((factory) => (
-                    <SelectItem key={factory.id} value={factory.id}>
-                      {factory.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                triggerClassName="rounded-xl"
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-3">

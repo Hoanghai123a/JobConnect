@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -1189,7 +1190,7 @@ function EditDialog({
                   </button>
                 </div>
               ))}
-              <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed text-muted-foreground">
+              <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed bg-white text-muted-foreground">
                 <ImagePlus className="h-5 w-5" />
                 <input type="file" accept="image/*" multiple className="hidden" onChange={onFile} />
               </label>
@@ -1267,7 +1268,7 @@ function WorkModeFilter({
 }) {
   return (
     <Select value={value === "all" ? undefined : value} onValueChange={onChange}>
-      <SelectTrigger className="rounded-xl bg-background text-xs">
+      <SelectTrigger className="rounded-xl bg-white text-xs text-slate-900">
         <SelectValue placeholder={label} />
       </SelectTrigger>
       <SelectContent>
@@ -1320,24 +1321,17 @@ function AreaField({
   return (
     <div className="space-y-1">
       <Label>{label}</Label>
-      <Select value={value || ""} onValueChange={onChange}>
-        <SelectTrigger>
-          <SelectValue placeholder={loading ? "Đang tải khu vực..." : "Chọn khu vực"} />
-        </SelectTrigger>
-        <SelectContent className="max-h-72">
-          {!hasMatch && value && <SelectItem value={value}>{value} (cũ)</SelectItem>}
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-          {options.length === 0 && !loading && (
-            <div className="px-2 py-1.5 text-xs text-muted-foreground">
-              Chưa có khu vực. Admin hãy thêm trong Cài đặt hệ thống.
-            </div>
-          )}
-        </SelectContent>
-      </Select>
+      <SearchableSelect
+        value={value || ""}
+        onValueChange={onChange}
+        options={options.map((option) => ({
+          value: option.value,
+          label: option.label,
+        }))}
+        placeholder={loading ? "Đang tải khu vực..." : "Chọn khu vực"}
+        searchPlaceholder="Tìm khu vực..."
+        emptyText={loading ? "Đang tải danh sách khu vực..." : "Không tìm thấy khu vực phù hợp."}
+      />
     </div>
   );
 }
@@ -1359,30 +1353,20 @@ function FactoryField({
   return (
     <div className="space-y-1">
       <Label>{label}</Label>
-      <Select
+      <SearchableSelect
         value={v || ""}
         onValueChange={(value) => {
-          const factory = factories.find((f) => f.name === value) || null;
+          const factory = factories.find((item) => item.name === value) || null;
           on(value, factory);
         }}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder={loading ? "Đang tải..." : "Chọn nhà máy"} />
-        </SelectTrigger>
-        <SelectContent className="max-h-72">
-          {!hasMatch && v && <SelectItem value={v}>{v} (cũ)</SelectItem>}
-          {factories.map((f) => (
-            <SelectItem key={f.id} value={f.name}>
-              {f.name}
-            </SelectItem>
-          ))}
-          {factories.length === 0 && !loading && (
-            <div className="px-2 py-1.5 text-xs text-muted-foreground">
-              Chưa có nhà máy. Admin hãy thêm trong Cài đặt hệ thống.
-            </div>
-          )}
-        </SelectContent>
-      </Select>
+        options={factories.map((factory) => ({
+          value: factory.name,
+          label: factory.name,
+        }))}
+        placeholder={loading ? "Đang tải..." : "Chọn nhà máy"}
+        searchPlaceholder="Tìm nhà máy..."
+        emptyText={loading ? "Đang tải danh sách nhà máy..." : "Không tìm thấy nhà máy phù hợp."}
+      />
     </div>
   );
 }

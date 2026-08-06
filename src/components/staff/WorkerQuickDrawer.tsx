@@ -20,13 +20,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Drawer,
   DrawerContent,
   DrawerDescription,
@@ -70,10 +63,18 @@ import { useAppSettings } from "@/lib/app-settings";
 import { fileUrl, pb, type UserRecord } from "@/lib/pocketbase";
 import { resolveBankName } from "@/lib/vn-banks";
 import { BankNameInput } from "@/components/staff/BankNameInput";
+import { FactoryPicker, MainHousePicker } from "@/components/workforce/UserPicker";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
 import { AdvanceReadOnlyNotice } from "@/components/advances/AdvanceReadOnlyNotice";
 import type { AdvancePayoutMethod } from "@/lib/advances";
 import { JoinCccdSection } from "@/components/employment/JoinCccdSection";
+import { RecruiterPicker } from "@/components/employment/RecruiterPicker";
+import {
+  buildRecruiterPayload,
+  encodeInternalRecruiter,
+  getRecruiterDisplay,
+  type RecruiterSelectionValue,
+} from "@/lib/recruiters";
 
 function todayDate() {
   const now = new Date();
@@ -195,7 +196,7 @@ export function WorkerQuickDrawer({
       ...personalSnapshot,
       hometown_snapshot: personalSnapshot.worker_address_snapshot,
       worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
-      recruiter_staff: viewer?.id || "",
+      recruiter_staff: encodeInternalRecruiter(viewer?.id),
       join_date: todayDate(),
       note: "",
     });
@@ -245,7 +246,8 @@ export function WorkerQuickDrawer({
   const canReportAdvanceByScope = Boolean(
     worker?.canReportAdvance && (isWorking || allowAdvanceAfterLeave),
   );
-  const canOpenAdvance = canReportAdvanceByScope && advanceInteractionAllowed;
+  const canOpenAdvance =
+    canReportAdvanceByScope && advanceInteractionAllowed && !latest?.recruiter_partner;
 
   const submitLeave = async () => {
     if (!worker || !activeHistory || !viewer?.id) return;
@@ -376,7 +378,7 @@ export function WorkerQuickDrawer({
         hometown_snapshot: joinForm.worker_address_snapshot.trim(),
         cccd_issue_date: joinForm.cccd_issue_date,
         worker_tax_code_snapshot: joinForm.worker_tax_code_snapshot.trim(),
-        recruiter_staff: joinForm.recruiter_staff,
+        ...buildRecruiterPayload(joinForm.recruiter_staff),
         cccd_version: cccdVersionId,
         join_date: joinForm.join_date,
         note: joinForm.note.trim(),
@@ -637,9 +639,10 @@ export function WorkerQuickDrawer({
                   <InfoCell
                     label="Người tuyển"
                     value={
-                      latest?.expand?.recruiter_staff?.full_name ||
-                      latest?.expand?.recruiter_staff?.username ||
-                      "—"
+                      (() => {
+                        const recruiter = getRecruiterDisplay(latest);
+                        return recruiter ? `${recruiter.name} · ${recruiter.label}` : "—";
+                      })()
                     }
                   />
                 </div>
@@ -724,39 +727,21 @@ export function WorkerQuickDrawer({
               <div className="text-sm font-semibold">Báo đi làm nhà máy mới</div>
               <div className="space-y-1">
                 <Label className="text-xs">Nhà máy</Label>
-                <Select
+                <FactoryPicker
+                  factories={joinableFactories}
                   value={joinForm.factory}
-                  onValueChange={(v) => setJoinForm((f) => ({ ...f, factory: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn nhà máy" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {joinableFactories.map((f) => (
-                      <SelectItem key={f.id} value={f.id}>
-                        {f.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(value) => setJoinForm((current) => ({ ...current, factory: value }))}
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Nhà chính</Label>
-                <Select
+                <MainHousePicker
+                  mainHouses={mainHouses}
                   value={joinForm.main_house}
-                  onValueChange={(v) => setJoinForm((f) => ({ ...f, main_house: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn nhà chính" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mainHouses.map((house) => (
-                      <SelectItem key={house.id} value={house.id}>
-                        {house.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(value) =>
+                    setJoinForm((current) => ({ ...current, main_house: value }))
+                  }
+                />
               </div>
               <div className="space-y-2">
                 <div className="text-sm font-semibold">Thông tin CCCD</div>
@@ -803,24 +788,15 @@ export function WorkerQuickDrawer({
                   />
                 </div>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Người tuyển</Label>
-                <Select
-                  value={joinForm.recruiter_staff}
-                  onValueChange={(v) => setJoinForm((f) => ({ ...f, recruiter_staff: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn người tuyển" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {staffUsers.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.full_name || s.username || s.id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <RecruiterPicker
+                label="Người tuyển"
+                value={joinForm.recruiter_staff as RecruiterSelectionValue}
+                onChange={(value) =>
+                  setJoinForm((form) => ({ ...form, recruiter_staff: value }))
+                }
+                internalUsers={staffUsers}
+                partners={mainHouses}
+              />
               <div className="space-y-1">
                 <Label className="text-xs">Ghi chú</Label>
                 <Textarea

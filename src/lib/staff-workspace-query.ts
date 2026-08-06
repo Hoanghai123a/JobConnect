@@ -1,6 +1,6 @@
 ﻿import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchFactories, type FactoryRecord } from "./factories";
-import { fetchMainHouses, type MainHouseRecord } from "./main-houses";
+import { fetchRecruitmentEntities, type RecruitmentEntityRecord } from "./recruitment-entities";
 import { pb, type UserRecord } from "./pocketbase";
 import { readCachedAuxData, writeCachedAuxData } from "./staff-cache";
 import { fetchStaffWorkspace, type StaffWorkspaceResult } from "./staff-permissions";
@@ -15,7 +15,7 @@ export const STAFF_DIRECTORY_STATE_PREFIX = "jobconnect:staff-worker-directory";
 
 export interface StaffDirectoryAuxData {
   factories: FactoryRecord[];
-  mainHouses: MainHouseRecord[];
+  recruitmentEntities: RecruitmentEntityRecord[];
   staffUsers: UserRecord[];
 }
 
@@ -69,16 +69,16 @@ export function useStaffDirectoryAuxQuery(viewer: UserRecord | null) {
       const cached = await readCachedAuxData();
       if (cached) queryClient.setQueryData(queryKey, cached);
 
-      const [factoriesResult, mainHousesResult, staffUsersResult] = await Promise.allSettled([
+      const [factoriesResult, recruitmentEntitiesResult, staffUsersResult] = await Promise.allSettled([
         fetchFactories(),
-        fetchMainHouses(),
+        fetchRecruitmentEntities(),
         pb.collection("users").getFullList<UserRecord>({
-          filter: `role="staff" || role="admin"`,
+          filter: `(role="staff" || role="admin") && username!~"vd_"`,
           sort: "full_name,username",
         }),
       ]);
 
-      const failedResults = [factoriesResult, mainHousesResult, staffUsersResult].filter(
+      const failedResults = [factoriesResult, recruitmentEntitiesResult, staffUsersResult].filter(
         (result) => result.status === "rejected",
       );
       if (failedResults.length === 3) {
@@ -88,10 +88,10 @@ export function useStaffDirectoryAuxQuery(viewer: UserRecord | null) {
       const data: StaffDirectoryAuxData = {
         factories:
           factoriesResult.status === "fulfilled" ? factoriesResult.value : cached?.factories || [],
-        mainHouses:
-          mainHousesResult.status === "fulfilled"
-            ? mainHousesResult.value
-            : cached?.mainHouses || [],
+        recruitmentEntities:
+          recruitmentEntitiesResult.status === "fulfilled"
+            ? recruitmentEntitiesResult.value
+            : cached?.recruitmentEntities || [],
         staffUsers:
           staffUsersResult.status === "fulfilled"
             ? staffUsersResult.value

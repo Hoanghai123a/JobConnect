@@ -29,10 +29,15 @@ async function authWithPassword(identity: string, password: string) {
     body: JSON.stringify({ identity, password }),
   });
 
-  return {
-    response,
-    body: await readPocketBaseAuthResponse(response),
-  };
+  const body = await readPocketBaseAuthResponse(response);
+  if (response.ok && body?.record?.status === "disabled") {
+    return {
+      response: new Response(null, { status: 403 }),
+      body: { message: "Tài khoản đã bị khóa và không thể đăng nhập." },
+    };
+  }
+
+  return { response, body };
 }
 
 function escapePocketBaseString(value: string) {

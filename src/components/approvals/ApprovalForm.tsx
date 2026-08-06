@@ -159,7 +159,7 @@ export function ApprovalForm({
               <button
                 type="button"
                 onClick={() => imgRef.current?.click()}
-                className="flex h-14 w-14 items-center justify-center rounded-lg border-2 border-dashed text-muted-foreground transition hover:border-primary hover:text-primary"
+                className="flex h-14 w-14 items-center justify-center rounded-lg border-2 border-dashed bg-white text-muted-foreground transition hover:border-primary hover:text-primary"
               >
                 <ImagePlus className="h-5 w-5" />
               </button>
@@ -198,7 +198,7 @@ export function ApprovalForm({
               <button
                 type="button"
                 onClick={() => excelRef.current?.click()}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border-2 border-dashed py-2 text-xs text-muted-foreground transition hover:border-primary hover:text-primary"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border-2 border-dashed bg-white py-2 text-xs text-muted-foreground transition hover:border-primary hover:text-primary"
               >
                 <FileSpreadsheet className="h-4 w-4" />
                 Thêm file Excel

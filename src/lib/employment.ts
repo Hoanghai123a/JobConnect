@@ -1,6 +1,6 @@
 import { pb, type UserRecord } from "./pocketbase";
 import type { FactoryRecord } from "./factories";
-import type { MainHouseRecord } from "./main-houses";
+import type { RecruitmentEntityRecord } from "./recruitment-entities";
 import type { CccdVersionRecord } from "./cccd-versions";
 import { relationInFilter } from "./delegations";
 import { updateCachedHistory, updateCachedUser } from "./staff-cache";
@@ -96,6 +96,7 @@ export interface EmploymentHistoryRecord {
   cccd_issue_date?: string;
   worker_tax_code_snapshot?: string;
   recruiter_staff?: string;
+  recruiter_partner?: string;
   cccd_version?: string;
   join_date: string;
   leave_date?: string;
@@ -106,8 +107,9 @@ export interface EmploymentHistoryRecord {
   expand?: {
     user?: UserRecord;
     factory?: FactoryRecord;
-    main_house?: MainHouseRecord;
+    main_house?: RecruitmentEntityRecord;
     recruiter_staff?: UserRecord;
+    recruiter_partner?: RecruitmentEntityRecord;
     cccd_version?: CccdVersionRecord;
   };
 }
@@ -125,6 +127,7 @@ export interface EmploymentDraft {
   cccd_issue_date: string;
   worker_tax_code_snapshot?: string;
   recruiter_staff?: string;
+  recruiter_partner?: string;
   cccd_version?: string;
   join_date: string;
   leave_date?: string;
@@ -283,7 +286,7 @@ export async function fetchEmploymentHistories(userIds?: string[]) {
   return (await pb.collection("employment_histories").getFullList({
     filter,
     sort: "-join_date,-created",
-    expand: "user,factory,recruiter_staff,main_house,cccd_version",
+    expand: "user,factory,recruiter_staff,recruiter_partner,main_house,cccd_version",
   })) as unknown as EmploymentHistoryRecord[];
 }
 
@@ -380,7 +383,7 @@ export async function findActiveEmploymentByUser(userId: string) {
   const histories = (await pb.collection("employment_histories").getFullList({
     filter: `user="${userId}"`,
     sort: "-join_date,-created",
-    expand: "user,factory,recruiter_staff,main_house",
+    expand: "user,factory,recruiter_staff,recruiter_partner,main_house",
   })) as unknown as EmploymentHistoryRecord[];
 
   return getCurrentEmploymentHistory(histories);
@@ -399,7 +402,7 @@ export async function createEmploymentHistory(draft: EmploymentDraft, opts?: { u
     .collection("employment_histories")
     .create(
       { ...normalizedDraft, uid },
-      { expand: "user,factory,recruiter_staff,main_house,cccd_version" },
+      { expand: "user,factory,recruiter_staff,recruiter_partner,main_house,cccd_version" },
     )) as unknown as EmploymentHistoryRecord;
   await updateCachedHistory(record);
   return record;
@@ -412,7 +415,7 @@ export async function updateEmploymentHistory(id: string, payload: Partial<Emplo
     normalizedPayload.status = deriveEmploymentStatus(normalizedPayload);
   }
   const record = (await pb.collection("employment_histories").update(id, normalizedPayload, {
-    expand: "user,factory,recruiter_staff,cccd_version",
+    expand: "user,factory,recruiter_staff,recruiter_partner,cccd_version",
   })) as unknown as EmploymentHistoryRecord;
   await updateCachedHistory(record);
   return record;

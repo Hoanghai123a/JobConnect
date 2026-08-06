@@ -520,15 +520,24 @@ function AdminImportsPage() {
         pb.collection("users").getFullList<UserRecord>({ sort: "full_name,username" }),
         fetchMainHouses().catch(() => [] as MainHouseRecord[]),
       ]);
-      const staffUsers = allUsers.filter((item) => item.role === "staff" || item.role === "admin");
+      const staffUsers = allUsers.filter(
+        (item) =>
+          (item.role === "staff" || item.role === "admin") &&
+          !String(item.username || "").toLowerCase().startsWith("vd_"),
+      );
       const factoryByName = new Map(factoryRows.map((item) => [item.name.toLowerCase(), item]));
       const factoryByCode = new Map(
         factoryRows.map((item) => [(item.code || "").toLowerCase(), item]),
       );
-      const mainHouseByName = new Map(mainHouseRows.map((item) => [item.name.toLowerCase(), item]));
+      const mainHouseByName = new Map(
+        mainHouseRows.map((item) => [accountIdentityKey(item.name), item]),
+      );
       const { userByUid, userByUsername } = buildUserIdentityMaps(allUsers);
       const staffByUsername = new Map(
         staffUsers.map((item) => [accountIdentityKey(item.username), item]),
+      );
+      const staffByUid = new Map(
+        staffUsers.filter((item) => item.uid).map((item) => [accountIdentityKey(item.uid), item]),
       );
       const existingHistories = await fetchEmploymentHistories();
       for (const history of getStaleWorkingEmploymentHistories(existingHistories)) {
@@ -586,6 +595,7 @@ function AdminImportsPage() {
           ),
           "Mã số thuế": pickValue(row, ["worker_tax_code_snapshot", "Mã số thuế", "MST"]),
           "Người tuyển": pickValue(row, ["recruiter_username", "Người tuyển"]),
+          "Loại người tuyển": pickValue(row, ["recruiter_type", "Loại người tuyển"]),
           "Trạng thái": pickValue(row, ["status", "Trạng thái"]),
           "Ghi chú": pickValue(row, ["note", "Ghi chú"]),
         });
@@ -612,6 +622,7 @@ function AdminImportsPage() {
         const cccdIssueDate = normalizeExcelDate(row["cccd_issue_date"] ?? row["Ngày cấp CCCD"]);
         const workerTaxCode = pickValue(row, ["worker_tax_code_snapshot", "Mã số thuế", "MST"]);
         const recruiterUsername = pickValue(row, ["recruiter_username", "Người tuyển"]);
+        const recruiterType = pickValue(row, ["recruiter_type", "Loại người tuyển"]);
         const joinDate = normalizeExcelDate(
           row["Ngày vào làm"] ?? row["join_date"] ?? row["Ngày vào"],
         );
@@ -626,9 +637,21 @@ function AdminImportsPage() {
           factoryByName.get(factoryName.toLowerCase()) ||
           factoryByCode.get(factoryCode.toLowerCase());
         const mainHouse = mainHouseName
-          ? mainHouseByName.get(mainHouseName.toLowerCase())
+          ? mainHouseByName.get(accountIdentityKey(mainHouseName))
           : undefined;
-        const recruiter = staffByUsername.get(recruiterUsername.toLowerCase());
+        const recruiterKey = accountIdentityKey(recruiterUsername);
+        const recruiterTypeKey = accountIdentityKey(recruiterType);
+        const internalRecruiter =
+          staffByUsername.get(recruiterKey) || staffByUid.get(recruiterKey);
+        const partnerRecruiter = mainHouseByName.get(recruiterKey);
+        const wantsPartner =
+          recruiterTypeKey === "partner" || recruiterTypeKey.includes("doi tac");
+        const wantsInternal =
+          recruiterTypeKey === "internal" || recruiterTypeKey.includes("noi bo");
+        const recruiterAmbiguous =
+          !wantsPartner && !wantsInternal && Boolean(internalRecruiter && partnerRecruiter);
+        const recruiterStaff = wantsPartner ? undefined : internalRecruiter;
+        const recruiterPartner = wantsInternal ? undefined : partnerRecruiter;
 
         if (!user) {
           addFailedRow(
@@ -644,6 +667,18 @@ function AdminImportsPage() {
         }
         if (!joinDate) {
           addFailedRow(row, rowNumber, "Thiếu hoặc sai ngày vào làm.");
+          continue;
+        }
+        if (recruiterAmbiguous) {
+          addFailedRow(
+            row,
+            rowNumber,
+            "Người tuyển trùng giữa Nội bộ và Đối tác; cần nhập Loại người tuyển.",
+          );
+          continue;
+        }
+        if (!recruiterStaff && !recruiterPartner) {
+          addFailedRow(row, rowNumber, "Không tìm thấy Người tuyển theo loại đã chọn.");
           continue;
         }
         const missingSnapshotFields = [
@@ -692,7 +727,8 @@ function AdminImportsPage() {
           hometown_snapshot: workerAddress,
           cccd_issue_date: cccdIssueDate,
           worker_tax_code_snapshot: workerTaxCode,
-          recruiter_staff: recruiter?.id || "",
+          recruiter_staff: recruiterStaff?.id || "",
+          recruiter_partner: recruiterPartner?.id || "",
           join_date: joinDate,
           leave_date: leaveDate || undefined,
           note,

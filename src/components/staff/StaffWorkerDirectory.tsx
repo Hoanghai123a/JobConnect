@@ -40,6 +40,7 @@ import {
   useStaffWorkspaceQuery,
 } from "@/lib/staff-workspace-query";
 import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
+import { getRecruiterDisplay } from "@/lib/recruiters";
 
 export type StaffWorkerDirectoryMode = "all" | "recruited";
 type WorkerScope = "all" | "qlnm" | "nvtd" | "working" | "left";
@@ -109,6 +110,8 @@ function buildWorkerSearchText(worker: StaffWorkerRecord) {
       history.expand?.main_house?.name,
       history.expand?.recruiter_staff?.full_name,
       history.expand?.recruiter_staff?.username,
+      history.expand?.recruiter_partner?.name,
+      history.expand?.recruiter_partner?.hotline,
     ]),
   ]
     .filter(Boolean)
@@ -344,9 +347,10 @@ export function StaffWorkerDirectory({
           {visibleWorkers.map((worker) => {
             const latest = worker.latestHistory;
             const isWorking = latest ? isCurrentlyWorking(latest) : false;
-            const recruiterName =
-              latest?.expand?.recruiter_staff?.full_name ||
-              latest?.expand?.recruiter_staff?.username;
+            const recruiter = getRecruiterDisplay(latest);
+            const recruiterName = recruiter
+              ? `${recruiter.name} · ${recruiter.label}`
+              : undefined;
             const mainHouseName = latest?.expand?.main_house?.name;
             const workerName = getWorkerDisplayName(worker);
             const snapshotCccd = latest?.worker_cccd_snapshot || "";
@@ -442,7 +446,7 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
   const auxData = auxQuery.data;
   const workers = workspace?.workers ?? EMPTY_WORKERS;
   const factories = auxData?.factories || [];
-  const mainHouses = auxData?.mainHouses || [];
+  const mainHouses = auxData?.recruitmentEntities || [];
   const managedFactoryIds = workspace?.managedFactoryIds ?? EMPTY_MANAGED_FACTORY_IDS;
   const staffUsers = auxData?.staffUsers || [];
   const managedFactoryNames = useMemo(

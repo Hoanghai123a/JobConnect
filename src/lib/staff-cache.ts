@@ -3,15 +3,15 @@ import { relationInFilter } from "./delegations";
 import type { EmploymentHistoryRecord } from "./employment";
 import type { CccdVersionRecord } from "./cccd-versions";
 import type { FactoryRecord } from "./factories";
-import type { MainHouseRecord } from "./main-houses";
+import type { RecruitmentEntityRecord } from "./recruitment-entities";
 
 const DB_NAME = "jobconnect-staff-cache";
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 const STORE_HISTORIES = "employment_histories";
 const STORE_USERS = "users";
 const STORE_CCCD_VERSIONS = "cccd_versions";
 const STORE_FACTORIES = "factories";
-const STORE_MAIN_HOUSES = "main_houses";
+const STORE_RECRUITMENT_ENTITIES = "recruitment_entities";
 const STORE_STAFF_USERS = "staff_users";
 const STORE_META = "_meta";
 const BATCH_SIZE = 50;
@@ -33,8 +33,8 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_FACTORIES)) {
         db.createObjectStore(STORE_FACTORIES, { keyPath: "id" });
       }
-      if (!db.objectStoreNames.contains(STORE_MAIN_HOUSES)) {
-        db.createObjectStore(STORE_MAIN_HOUSES, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(STORE_RECRUITMENT_ENTITIES)) {
+        db.createObjectStore(STORE_RECRUITMENT_ENTITIES, { keyPath: "id" });
       }
       if (!db.objectStoreNames.contains(STORE_STAFF_USERS)) {
         db.createObjectStore(STORE_STAFF_USERS, { keyPath: "id" });
@@ -42,13 +42,13 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_META)) {
         db.createObjectStore(STORE_META);
       }
-      if (event.oldVersion < 5) {
+      if (event.oldVersion < 6) {
         for (const store of [
           STORE_HISTORIES,
           STORE_USERS,
           STORE_CCCD_VERSIONS,
           STORE_FACTORIES,
-          STORE_MAIN_HOUSES,
+          STORE_RECRUITMENT_ENTITIES,
           STORE_STAFF_USERS,
           STORE_META,
         ]) {
@@ -205,7 +205,7 @@ export async function syncStaffData(opts?: {
   const freshHistories = (await pb.collection("employment_histories").getFullList({
     filter: historyFilter,
     sort: "-join_date,-created",
-    expand: "user,factory,recruiter_staff,main_house",
+    expand: "user,factory,recruiter_staff,recruiter_partner,main_house",
   })) as unknown as EmploymentHistoryRecord[];
   const expandedUsers = usersFromExpandedHistories(freshHistories);
 
@@ -289,7 +289,7 @@ export async function reconcileStaffData(opts: {
   const scopedHistories = (await pb.collection("employment_histories").getFullList({
     filter: historyFilter,
     sort: "-join_date,-created",
-    expand: "user,factory,recruiter_staff,main_house,cccd_version",
+    expand: "user,factory,recruiter_staff,recruiter_partner,main_house,cccd_version",
   })) as unknown as EmploymentHistoryRecord[];
 
   const scopeUserIds = [...new Set(scopedHistories.map((history) => history.user).filter(Boolean))];
@@ -299,7 +299,7 @@ export async function reconcileStaffData(opts: {
     const items = (await pb.collection("employment_histories").getFullList({
       filter: relationInFilter("user", batch),
       sort: "-join_date,-created",
-      expand: "user,factory,recruiter_staff,main_house,cccd_version",
+      expand: "user,factory,recruiter_staff,recruiter_partner,main_house,cccd_version",
     })) as unknown as EmploymentHistoryRecord[];
     allHistories.push(...items);
   }
@@ -325,16 +325,16 @@ export async function reconcileStaffData(opts: {
         .map((factory) => [factory.id, factory]),
     ).values(),
   ];
-  const mainHouses = [
+  const recruitmentEntities = [
     ...new Map(
       histories
         .map((history) => history.expand?.main_house)
-        .filter((mainHouse): mainHouse is MainHouseRecord => !!mainHouse?.id)
+        .filter((mainHouse): mainHouse is RecruitmentEntityRecord => !!mainHouse?.id)
         .map((mainHouse) => [mainHouse.id, mainHouse]),
     ).values(),
   ];
   if (factories.length) await idbPutMany(db, STORE_FACTORIES, factories);
-  if (mainHouses.length) await idbPutMany(db, STORE_MAIN_HOUSES, mainHouses);
+  if (recruitmentEntities.length) await idbPutMany(db, STORE_RECRUITMENT_ENTITIES, recruitmentEntities);
 
   if (opts.includeCccdVersions !== false) {
     const cccdVersions: CccdVersionRecord[] = [];
@@ -393,7 +393,7 @@ export async function clearStaffCache(): Promise<void> {
     await idbClear(db, STORE_USERS);
     await idbClear(db, STORE_CCCD_VERSIONS);
     await idbClear(db, STORE_FACTORIES);
-    await idbClear(db, STORE_MAIN_HOUSES);
+    await idbClear(db, STORE_RECRUITMENT_ENTITIES);
     await idbClear(db, STORE_STAFF_USERS);
     await idbClear(db, STORE_META);
   } catch {
@@ -430,16 +430,16 @@ export async function saveScopeFingerprint(fingerprint: string): Promise<void> {
 
 export async function readCachedAuxData(): Promise<{
   factories: FactoryRecord[];
-  mainHouses: MainHouseRecord[];
+  recruitmentEntities: RecruitmentEntityRecord[];
   staffUsers: UserRecord[];
 } | null> {
   try {
     const db = await openDB();
     const factories = await idbGetAll<FactoryRecord>(db, STORE_FACTORIES);
-    const mainHouses = await idbGetAll<MainHouseRecord>(db, STORE_MAIN_HOUSES);
+    const recruitmentEntities = await idbGetAll<RecruitmentEntityRecord>(db, STORE_RECRUITMENT_ENTITIES);
     const staffUsers = await idbGetAll<UserRecord>(db, STORE_STAFF_USERS);
     if (!factories.length) return null;
-    return { factories, mainHouses, staffUsers };
+    return { factories, recruitmentEntities, staffUsers };
   } catch {
     return null;
   }
@@ -447,13 +447,13 @@ export async function readCachedAuxData(): Promise<{
 
 export async function writeCachedAuxData(data: {
   factories: FactoryRecord[];
-  mainHouses: MainHouseRecord[];
+  recruitmentEntities: RecruitmentEntityRecord[];
   staffUsers: UserRecord[];
 }): Promise<void> {
   try {
     const db = await openDB();
     await idbPutMany(db, STORE_FACTORIES, data.factories);
-    await idbPutMany(db, STORE_MAIN_HOUSES, data.mainHouses);
+    await idbPutMany(db, STORE_RECRUITMENT_ENTITIES, data.recruitmentEntities);
     await idbPutMany(db, STORE_STAFF_USERS, data.staffUsers);
   } catch {
     // Ignore IndexedDB cache failures.
@@ -505,12 +505,12 @@ export async function deleteCachedFactory(id: string): Promise<void> {
   }
 }
 
-export async function deleteCachedMainHouse(id: string): Promise<void> {
+export async function deleteCachedRecruitmentEntity(id: string): Promise<void> {
   try {
     const db = await openDB();
-    await idbDelete(db, STORE_MAIN_HOUSES, id);
+    await idbDelete(db, STORE_RECRUITMENT_ENTITIES, id);
   } catch (error) {
-    console.warn("[staff-cache] deleteCachedMainHouse failed", error);
+    console.warn("[staff-cache] deleteCachedRecruitmentEntity failed", error);
   }
 }
 
@@ -597,12 +597,12 @@ export async function updateCachedFactory(record: FactoryRecord): Promise<void> 
   }
 }
 
-export async function updateCachedMainHouse(record: MainHouseRecord): Promise<void> {
+export async function updateCachedRecruitmentEntity(record: RecruitmentEntityRecord): Promise<void> {
   try {
     const db = await openDB();
-    await idbPut(db, STORE_MAIN_HOUSES, record);
+    await idbPut(db, STORE_RECRUITMENT_ENTITIES, record);
   } catch (error) {
-    console.warn("[staff-cache] updateCachedMainHouse failed", error);
+    console.warn("[staff-cache] updateCachedRecruitmentEntity failed", error);
   }
 }
 
@@ -616,10 +616,10 @@ export async function factoryExistsInCache(id: string): Promise<boolean> {
   }
 }
 
-export async function mainHouseExistsInCache(id: string): Promise<boolean> {
+export async function recruitmentEntityExistsInCache(id: string): Promise<boolean> {
   try {
     const db = await openDB();
-    const rec = await idbGet<MainHouseRecord>(db, STORE_MAIN_HOUSES, id);
+    const rec = await idbGet<RecruitmentEntityRecord>(db, STORE_RECRUITMENT_ENTITIES, id);
     return !!rec;
   } catch {
     return false;

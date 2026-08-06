@@ -29,6 +29,7 @@ import type { StaffWorkerRecord } from "@/lib/staff-permissions";
 import { isCurrentlyWorking, type EmploymentHistoryRecord } from "@/lib/employment";
 import type { UserRecord } from "@/lib/pocketbase";
 import { getApprovalStatus } from "@/lib/user-approval";
+import { getRecruiterDisplay } from "@/lib/recruiters";
 import { toast } from "sonner";
 
 const APPROVAL_STATUS_LABELS = {
@@ -77,7 +78,9 @@ function buildBasicRows(
   histories: EmploymentHistoryRecord[],
   tenureDaysByUserId: Map<string, number>,
 ) {
-  return histories.map((history, index) => ({
+  return histories.map((history, index) => {
+    const recruiter = getRecruiterDisplay(history);
+    return {
     STT: index + 1,
     "Mã lịch sử": history.uid || "",
     "Mã nhân viên": history.employee_code || "",
@@ -88,8 +91,8 @@ function buildBasicRows(
       history.worker_address_snapshot || history.hometown_snapshot || "",
     "Ngày cấp CCCD tại thời điểm đi làm": formatDateOnly(history.cccd_issue_date),
     "Mã số thuế": history.worker_tax_code_snapshot || "",
-    "Người tuyển":
-      history.expand?.recruiter_staff?.full_name || history.expand?.recruiter_staff?.username || "",
+    "Người tuyển": recruiter?.name || "",
+    "Loại người tuyển": recruiter?.label || "",
     "Nhà máy": history.expand?.factory?.name || "",
     "Nhà chính": history.expand?.main_house?.name || "",
     "Ngày vào": formatDateOnly(history.join_date),
@@ -98,7 +101,8 @@ function buildBasicRows(
     "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
     "Tài khoản gốc": history.expand?.user?.full_name || history.expand?.user?.username || "",
     "Số điện thoại": history.expand?.user?.phone || "",
-  }));
+    };
+  });
 }
 
 function buildFullRows(
@@ -107,6 +111,7 @@ function buildFullRows(
 ) {
   return histories.map((history, index) => {
     const user = history.expand?.user;
+    const recruiter = getRecruiterDisplay(history);
     return {
       STT: index + 1,
       "Mã tài khoản (UID)": user?.uid || "",
@@ -122,10 +127,8 @@ function buildFullRows(
       "Nhà chính": history.expand?.main_house?.name || "",
       "Ngày vào": formatDateOnly(history.join_date),
       "Ngày nghỉ": formatDateOnly(history.leave_date),
-      "Người tuyển":
-        history.expand?.recruiter_staff?.full_name ||
-        history.expand?.recruiter_staff?.username ||
-        "",
+      "Người tuyển": recruiter?.name || "",
+      "Loại người tuyển": recruiter?.label || "",
       "Họ tên gốc": user?.full_name || "",
       "CCCD gốc": user?.cccd || "",
       "Ngày cấp CCCD": formatDateOnly(history.cccd_issue_date),

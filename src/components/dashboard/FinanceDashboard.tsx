@@ -367,7 +367,7 @@ export function FinanceDashboard() {
             value={range.from}
             aria-label="Từ ngày"
             onChange={(event) => updateCustomRange("from", event.target.value)}
-            className="h-9 rounded-lg border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring/50"
+            className="h-9 rounded-lg border border-input bg-white px-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-ring/50"
           />
           <span className="text-muted-foreground">đến</span>
           <input
@@ -375,7 +375,7 @@ export function FinanceDashboard() {
             value={range.to}
             aria-label="Đến ngày"
             onChange={(event) => updateCustomRange("to", event.target.value)}
-            className="h-9 rounded-lg border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring/50"
+            className="h-9 rounded-lg border border-input bg-white px-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-ring/50"
           />
         </div>
       </section>

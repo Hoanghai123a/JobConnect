@@ -13,6 +13,9 @@ import type { Role } from "./pocketbase";
 export const ADVANCE_INTERACTION_DISABLED_MESSAGE =
   "Chức năng báo ứng đang tạm khóa. User và Staff hiện chỉ có thể xem dữ liệu.";
 
+export const PARTNER_RECRUITED_ADVANCE_DISABLED_MESSAGE =
+  "Người lao động do đối tác tuyển không được sử dụng chức năng ứng tiền.";
+
 export function isAdvanceInteractionAllowed(
   settings: Pick<AppSettings, "advance_reporting_enabled"> | null | undefined,
   role?: Role,
@@ -67,6 +70,10 @@ export async function resolveAdvancePolicy(
   const employment = getLatestEmploymentHistory(histories);
   if (!employment) {
     throw new Error("Người lao động chưa có lịch sử đi làm, không thể báo ứng");
+  }
+
+  if (employment.recruiter_partner) {
+    throw new Error(PARTNER_RECRUITED_ADVANCE_DISABLED_MESSAGE);
   }
 
   const allowAfterLeave = options.allowAfterLeave ?? Boolean(settings?.allow_advance_after_leave);

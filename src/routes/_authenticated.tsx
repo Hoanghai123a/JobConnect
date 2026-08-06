@@ -16,6 +16,10 @@ export const Route = createFileRoute("/_authenticated")({
       throw redirect({ to: "/login", search: { redirect: location.href } as any });
     }
     const u = pb.authStore.record as any;
+    if (u?.status === "disabled") {
+      pb.authStore.clear();
+      throw redirect({ to: "/login" });
+    }
     if (u && !isUserApproved(u)) {
       throw redirect({ to: "/pending" });
     }

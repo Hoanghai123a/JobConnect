@@ -21,6 +21,7 @@ import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
+import { FactoryPicker, UserPicker } from "@/components/workforce/UserPicker";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
   Dialog,
@@ -66,7 +67,7 @@ function staffSearchFilter(search: string) {
   const searchFilter = q
     ? `(${["full_name", "username", "phone"].map((field) => `${field}~"${q}"`).join(" || ")})`
     : "";
-  return ['role="staff"', searchFilter].filter(Boolean).join(" && ");
+  return ['role="staff" && username!~"vd_"', searchFilter].filter(Boolean).join(" && ");
 }
 
 function formatDateRange(record: FactoryManagerRecord) {
@@ -419,44 +420,26 @@ function AccountStaffFactoriesPage() {
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Staff</Label>
-              <Select
+              <UserPicker
+                users={staffUsers}
                 value={editingAssignment?.staff || selectedStaffId || ""}
-                onValueChange={(value) =>
+                onChange={(value) =>
                   setEditingAssignment((current) => ({ ...(current || {}), staff: value }))
                 }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn staff" />
-                </SelectTrigger>
-                <SelectContent>
-                  {staffUsers.map((staff) => (
-                    <SelectItem key={staff.id} value={staff.id}>
-                      {staff.full_name || staff.username || staff.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Chọn staff"
+              />
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-xs">Nhà máy</Label>
-              <Select
+              <FactoryPicker
+                factories={factories}
                 value={editingAssignment?.factory || ""}
-                onValueChange={(value) =>
+                onChange={(value) =>
                   setEditingAssignment((current) => ({ ...(current || {}), factory: value }))
                 }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Chọn nhà máy" />
-                </SelectTrigger>
-                <SelectContent>
-                  {factories.map((factory) => (
-                    <SelectItem key={factory.id} value={factory.id}>
-                      {factory.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                triggerClassName="rounded-xl"
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-3">

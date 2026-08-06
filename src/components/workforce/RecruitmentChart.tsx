@@ -77,22 +77,41 @@ function buildRecruitmentDayDetails({
     string,
     {
       factoryName: string;
-      recruiters: Map<string, { user?: UserRecord; count: number }>;
+      recruiters: Map<
+        string,
+        { name: string; username: string; isVendor: boolean; count: number }
+      >;
     }
   >();
 
   for (const history of dayHistories) {
     const factoryId = history.factory || "__none__";
-    const recruiterId = history.recruiter_staff || "__none__";
+    const partner = history.expand?.recruiter_partner;
+    const staff =
+      history.expand?.recruiter_staff ||
+      (history.recruiter_staff ? userById.get(history.recruiter_staff) : undefined);
+    const recruiterId = partner
+      ? `partner:${partner.id}`
+      : staff
+        ? `internal:${staff.id}`
+        : "__none__";
     const factoryName =
       history.expand?.factory?.name || factoryById.get(factoryId)?.name || "Không xác định";
-    const recruiter = history.expand?.recruiter_staff || userById.get(recruiterId);
+    const recruiter = partner
+      ? { name: partner.name || "Đối tác chưa xác định", username: "", isVendor: true }
+      : {
+          name: displayUserName(staff),
+          username: staff?.username || "",
+          isVendor: false,
+        };
     const group = factoryMap.get(factoryId) || {
       factoryName,
-      recruiters: new Map<string, { user?: UserRecord; count: number }>(),
+      recruiters: new Map<
+        string,
+        { name: string; username: string; isVendor: boolean; count: number }
+      >(),
     };
-    const recruiterEntry = group.recruiters.get(recruiterId) || { user: recruiter, count: 0 };
-    recruiterEntry.user ||= recruiter;
+    const recruiterEntry = group.recruiters.get(recruiterId) || { ...recruiter, count: 0 };
     recruiterEntry.count++;
     group.recruiters.set(recruiterId, recruiterEntry);
     factoryMap.set(factoryId, group);
@@ -103,10 +122,10 @@ function buildRecruitmentDayDetails({
       const recruiters = [...group.recruiters.entries()]
         .map(([recruiterId, entry]) => ({
           id: recruiterId,
-          name: displayUserName(entry.user),
-          username: entry.user?.username || "",
+          name: entry.name,
+          username: entry.username,
           count: entry.count,
-          isVendor: entry.user?.username?.startsWith("vd_") ?? false,
+          isVendor: entry.isVendor,
         }))
         .sort(
           (a, b) =>
@@ -128,6 +147,7 @@ function buildRecruitmentDayDetails({
 
   const workers = dayHistories
     .map((history) => {
+      const partner = history.expand?.recruiter_partner;
       const recruiter =
         history.expand?.recruiter_staff ||
         (history.recruiter_staff ? userById.get(history.recruiter_staff) : undefined);
@@ -140,7 +160,7 @@ function buildRecruitmentDayDetails({
         employeeCode: history.employee_code?.trim() || "—",
         workerName: history.worker_name_snapshot?.trim() || "Thiếu thông tin",
         mainHouseName: history.expand?.main_house?.name?.trim() || "—",
-        recruiterName: recruiter ? displayUserName(recruiter) : "—",
+        recruiterName: partner?.name || (recruiter ? displayUserName(recruiter) : "—"),
         joinDate: joinDate ? new Date(`${joinDate}T12:00:00`).toLocaleDateString("vi-VN") : "—",
       };
     })

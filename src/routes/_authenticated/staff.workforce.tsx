@@ -153,7 +153,7 @@ function StaffWorkforceDashboardPage() {
         pb
           .collection("users")
           .getList<UserRecord>(1, 200, {
-            filter: `role="staff" || role="admin"`,
+            filter: `(role="staff" || role="admin") && username!~"vd_"`,
             sort: "full_name,username",
           })
           .then((result) => result.items)

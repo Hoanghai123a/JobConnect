@@ -55,7 +55,8 @@ import {
   validateAdvanceAmount,
   type AdvancePolicy,
 } from "@/lib/advance-policy";
-import { VN_BANKS, resolveBankName } from "@/lib/vn-banks";
+import { resolveBankName } from "@/lib/vn-banks";
+import { BankPicker } from "@/components/staff/BankNameInput";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
@@ -1791,18 +1792,11 @@ function StaffAdvanceFormDialog({
             <>
               <div className="space-y-1.5">
                 <Label>Ngân hàng</Label>
-                <Input
+                <BankPicker
                   value={bankForm.bank_name}
-                  onChange={(e) => setBankForm({ ...bankForm, bank_name: e.target.value })}
-                  placeholder="Tên ngân hàng"
-                  className="rounded-xl"
-                  list="bank-list"
+                  onChange={(value) => setBankForm({ ...bankForm, bank_name: value })}
+                  triggerClassName="rounded-xl"
                 />
-                <datalist id="bank-list">
-                  {VN_BANKS.map((b) => (
-                    <option key={b.code} value={b.name} />
-                  ))}
-                </datalist>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5">

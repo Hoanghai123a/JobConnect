@@ -156,7 +156,7 @@ function MultiSelectDropdown({
         <Button
           type="button"
           variant="outline"
-          className="h-11 w-full justify-between gap-2 rounded-xl px-3 text-left font-normal"
+          className="h-11 w-full justify-between gap-2 rounded-xl bg-white px-3 text-left font-normal text-slate-900"
         >
           <span className={cn("truncate", selectedOptions.length === 0 && "text-muted-foreground")}>
             {summary}

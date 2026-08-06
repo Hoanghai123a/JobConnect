@@ -1754,7 +1754,7 @@ function AdminFoods({ onDataChanged }: { onDataChanged: () => void }) {
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="col-span-2 h-8 rounded-md border border-input bg-background px-2 text-xs"
+      className="col-span-2 h-8 rounded-md border border-input bg-white px-2 text-xs text-slate-900"
     >
       <option value="all">Tất cả loài thú</option>
       {PETS.map((p) => (
@@ -1994,7 +1994,7 @@ function AdminTiers({ onDataChanged }: { onDataChanged: () => void }) {
             onChange={(e) =>
               setForm((f) => ({ ...f, type: e.target.value as "instant" | "reserve" }))
             }
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+            className="h-8 rounded-md border border-input bg-white px-2 text-xs text-slate-900"
           >
             <option value="instant">Nhận ngay</option>
             <option value="reserve">Tích trữ</option>
@@ -2035,7 +2035,7 @@ function AdminTiers({ onDataChanged }: { onDataChanged: () => void }) {
                   onChange={(e) =>
                     setEditForm((ef) => ({ ...ef, type: e.target.value as "instant" | "reserve" }))
                   }
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  className="h-8 rounded-md border border-input bg-white px-2 text-xs text-slate-900"
                 >
                   <option value="instant">Nhận ngay</option>
                   <option value="reserve">Tích trữ</option>

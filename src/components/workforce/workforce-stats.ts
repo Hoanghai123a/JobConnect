@@ -16,7 +16,7 @@ export type WorkforceSummary = {
   working: number;
 };
 
-export type RecruitmentSourceScope = "all" | "internal";
+export type RecruitmentSourceScope = "all" | "internal" | "partner";
 
 export function localIsoDate(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -107,18 +107,13 @@ export function getActiveHistoriesAtDate(
 
 export function filterWorkforceHistoriesByRecruitmentScope(
   histories: EmploymentHistoryRecord[],
-  users: UserRecord[],
+  _users: UserRecord[],
   scope: RecruitmentSourceScope,
 ) {
   if (scope === "all") return histories;
-
-  const userById = new Map(users.map((user) => [user.id, user]));
-  return histories.filter((history) => {
-    const recruiter =
-      history.expand?.recruiter_staff ||
-      (history.recruiter_staff ? userById.get(history.recruiter_staff) : undefined);
-    return !(recruiter?.username?.startsWith("vd_") ?? false);
-  });
+  return histories.filter((history) =>
+    scope === "partner" ? Boolean(history.recruiter_partner) : Boolean(history.recruiter_staff),
+  );
 }
 
 export function getWorkforceSummary(

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Building2, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
@@ -13,7 +13,9 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import type { FactoryRecord } from "@/lib/factories";
+import type { MainHouseRecord } from "@/lib/main-houses";
 import type { UserRecord } from "@/lib/pocketbase";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 const COMBINING_DIACRITICS = /[̀-ͯ]/g;
 
@@ -70,7 +72,7 @@ export function UserPicker({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-left text-sm"
+            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-white px-3 text-left text-sm text-slate-900"
           >
             <span className={cn("truncate", !selected && "text-muted-foreground")}>
               {selected
@@ -129,66 +131,78 @@ export function FactoryPicker({
   factories,
   value,
   onChange,
+  placeholder = "Chọn nhà máy...",
+  triggerClassName,
+  allowClear = false,
 }: {
   factories: FactoryRecord[];
   value: string;
   onChange: (v: string) => void;
+  placeholder?: string;
+  triggerClassName?: string;
+  allowClear?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const debouncedQuery = useDebouncedSearch(query);
-  const selected = factories.find((f) => f.id === value);
-
-  const filteredFactories = useMemo(() => {
-    const keyword = normalizeUserPickerSearch(debouncedQuery);
-    if (!keyword) return factories;
-    return factories.filter((f) =>
-      normalizeUserPickerSearch(`${f.name} ${f.code || ""}`).includes(keyword),
-    );
-  }, [debouncedQuery, factories]);
+  const options = useMemo(
+    () =>
+      factories.map((factory) => ({
+        value: factory.id,
+        label: factory.name,
+        description: [factory.code, factory.address].filter(Boolean).join(" · "),
+        keywords: `${factory.code || ""} ${factory.address || ""} ${factory.hotline || ""}`,
+      })),
+    [factories],
+  );
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) setQuery("");
-      }}
-    >
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-left text-sm"
-        >
-          <span className={cn("truncate", !selected && "text-muted-foreground")}>
-            {selected ? selected.name : "Chọn nhà máy..."}
-          </span>
-          <ChevronRight className="h-4 w-4 rotate-90 text-muted-foreground" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-        <Command shouldFilter={false}>
-          <CommandInput placeholder="Tìm nhà máy..." value={query} onValueChange={setQuery} />
-          <CommandList>
-            <CommandEmpty>Không tìm thấy.</CommandEmpty>
-            <CommandGroup>
-              {filteredFactories.map((f) => (
-                <CommandItem
-                  key={f.id}
-                  value={`${f.name} ${f.code || ""}`}
-                  onSelect={() => {
-                    onChange(f.id);
-                    setOpen(false);
-                  }}
-                >
-                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                  <span className="truncate text-sm">{f.name}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+    <SearchableSelect
+      value={value}
+      onValueChange={onChange}
+      options={options}
+      placeholder={placeholder}
+      searchPlaceholder="Tìm tên hoặc mã nhà máy..."
+      emptyText="Không tìm thấy nhà máy phù hợp."
+      allowClear={allowClear}
+      triggerClassName={triggerClassName}
+    />
+  );
+}
+
+export function MainHousePicker({
+  mainHouses,
+  value,
+  onChange,
+  placeholder = "Chọn nhà chính...",
+  triggerClassName,
+  allowClear = false,
+}: {
+  mainHouses: MainHouseRecord[];
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  triggerClassName?: string;
+  allowClear?: boolean;
+}) {
+  const options = useMemo(
+    () =>
+      mainHouses.map((house) => ({
+        value: house.id,
+        label: house.name,
+        description: house.note || house.address || house.hotline || "",
+        keywords: `${house.address || ""} ${house.hotline || ""} ${house.legacy_username || ""}`,
+      })),
+    [mainHouses],
+  );
+
+  return (
+    <SearchableSelect
+      value={value}
+      onValueChange={onChange}
+      options={options}
+      placeholder={placeholder}
+      searchPlaceholder="Tìm nhà chính..."
+      emptyText="Không tìm thấy nhà chính phù hợp."
+      allowClear={allowClear}
+      triggerClassName={triggerClassName}
+    />
   );
 }

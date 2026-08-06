@@ -14,7 +14,6 @@ import {
   BriefcaseBusiness,
   Camera,
   Check,
-  ChevronsUpDown,
   ClipboardPaste,
   Crop,
   IdCard,
@@ -28,14 +27,7 @@ import { readClipboardImage } from "@/lib/clipboard-image";
 import { CccdQrPasteButton } from "@/components/cccd/CccdQrPasteButton";
 import { CccdQrScanFeedbackDialog } from "@/components/cccd/CccdQrScanFeedbackDialog";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+
 import {
   Dialog,
   DialogContent,
@@ -47,7 +39,6 @@ import {
 import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -74,9 +65,11 @@ import { updateCachedUser } from "@/lib/staff-cache";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { generateUid } from "@/lib/uid";
 import { cn } from "@/lib/utils";
-import { useDebouncedSearch } from "@/hooks/use-debounced-search";
-import { normalizeUserPickerSearch } from "@/components/workforce/UserPicker";
-import { resolveBankName, VN_BANKS } from "@/lib/vn-banks";
+import { FactoryPicker, MainHousePicker } from "@/components/workforce/UserPicker";
+import { RecruiterPicker } from "@/components/employment/RecruiterPicker";
+import { buildRecruiterPayload, type RecruiterSelectionValue } from "@/lib/recruiters";
+import { resolveBankName } from "@/lib/vn-banks";
+import { BankPicker } from "@/components/staff/BankNameInput";
 
 type QuickWorkerForm = {
   real_name: string;
@@ -668,7 +661,7 @@ export function QuickWorkerAccountDialog({
         worker_address_snapshot: form.address.trim(),
         hometown_snapshot: form.address.trim(),
         cccd_issue_date: issueDateForPb,
-        recruiter_staff: form.recruiter_staff,
+        ...buildRecruiterPayload(form.recruiter_staff),
         cccd_version: cccdVersionId,
         join_date: form.join_date,
         note: form.note.trim(),
@@ -920,14 +913,6 @@ export function QuickWorkerAccountDialog({
               </div>
             </div>
 
-            <datalist id="quick-worker-bank-list">
-              {VN_BANKS.map((bank) => (
-                <option key={bank.code} value={bank.name}>
-                  {bank.code}
-                </option>
-              ))}
-            </datalist>
-
             <DialogFooter className="shrink-0 border-t bg-background px-5 py-4 desktop:px-5 desktop:py-3">
               <Button
                 type="button"
@@ -1162,14 +1147,14 @@ function QuickWorkerEntryFields({
           placeholder="Tên đi làm"
           desktopClassName="desktop:col-start-2 desktop:row-start-1"
         />
-        <TextField
-          label="Ngân hàng"
-          value={form.bank_name}
-          onChange={(value) => setField("bank_name", value)}
-          placeholder="Ngân hàng"
-          list="quick-worker-bank-list"
-          desktopClassName="desktop:col-start-3 desktop:row-start-1"
-        />
+        <div className="flex min-w-0 flex-col gap-1 desktop:col-start-3 desktop:row-start-1 desktop:gap-0">
+          <Label className="truncate text-xs desktop:hidden">Ngân hàng</Label>
+          <BankPicker
+            value={form.bank_name}
+            onChange={(value) => setField("bank_name", value)}
+            triggerClassName="bg-white text-slate-900 desktop:h-9 desktop:rounded-lg desktop:px-2.5 desktop:text-sm"
+          />
+        </div>
         <TextField
           label="STK"
           value={form.bank_account_number}
@@ -1252,18 +1237,16 @@ function QuickWorkerEntryFields({
           placeholder="Ngày cấp CCCD"
           desktopClassName="desktop:col-start-6 desktop:row-start-2"
         />
-        <ComboboxField
-          label="Người tuyển"
-          placeholder="Người tuyển"
-          options={staffUsers.map((staff) => ({
-            value: staff.id,
-            label: staff.full_name || staff.username || staff.id,
-            description: staff.username || staff.phone || "",
-          }))}
-          value={form.recruiter_staff}
-          onChange={(value) => setField("recruiter_staff", value)}
-          desktopClassName="desktop:col-start-1 desktop:row-start-3"
-        />
+        <div className="desktop:col-start-1 desktop:row-start-3">
+          <RecruiterPicker
+            value={form.recruiter_staff as RecruiterSelectionValue}
+            onChange={(value) => setField("recruiter_staff", value)}
+            internalUsers={staffUsers}
+            partners={mainHouses}
+            placeholder="Người tuyển"
+            triggerClassName="bg-white"
+          />
+        </div>
         <TextField
           label="Ngày vào"
           type="date"
@@ -1272,30 +1255,26 @@ function QuickWorkerEntryFields({
           placeholder="Ngày vào"
           desktopClassName="desktop:col-start-2 desktop:row-start-3"
         />
-        <ComboboxField
-          label="Nhà chính"
-          placeholder="Nhà chính"
-          options={mainHouses.map((house) => ({
-            value: house.id,
-            label: house.name,
-            description: house.note || "",
-          }))}
-          value={form.main_house}
-          onChange={(value) => setField("main_house", value)}
-          desktopClassName="desktop:col-start-3 desktop:row-start-3"
-        />
-        <ComboboxField
-          label="Công ty"
-          placeholder="Công ty"
-          options={factories.map((factory) => ({
-            value: factory.id,
-            label: factory.name,
-            description: factory.code || "",
-          }))}
-          value={form.factory}
-          onChange={(value) => setField("factory", value)}
-          desktopClassName="desktop:col-start-4 desktop:row-start-3"
-        />
+        <div className="flex min-w-0 flex-col gap-1 desktop:col-start-3 desktop:row-start-3 desktop:gap-0">
+          <Label className="truncate text-xs desktop:hidden">Nhà chính</Label>
+          <MainHousePicker
+            mainHouses={mainHouses}
+            value={form.main_house}
+            onChange={(value) => setField("main_house", value)}
+            placeholder="Nhà chính"
+            triggerClassName="bg-white text-slate-900 desktop:h-9 desktop:rounded-lg desktop:px-2.5 desktop:text-sm"
+          />
+        </div>
+        <div className="flex min-w-0 flex-col gap-1 desktop:col-start-4 desktop:row-start-3 desktop:gap-0">
+          <Label className="truncate text-xs desktop:hidden">Công ty</Label>
+          <FactoryPicker
+            factories={factories}
+            value={form.factory}
+            onChange={(value) => setField("factory", value)}
+            placeholder="Công ty"
+            triggerClassName="bg-white text-slate-900 desktop:h-9 desktop:rounded-lg desktop:px-2.5 desktop:text-sm"
+          />
+        </div>
         <TextField
           label="Mã NV"
           value={form.employee_code}
@@ -1429,7 +1408,7 @@ function CccdImageBox({
   return (
     <div className="flex flex-col gap-1 desktop:h-full desktop:gap-0">
       <Label className="text-xs desktop:hidden">{label}</Label>
-      <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-muted/40 desktop:aspect-auto desktop:h-full">
+      <div className="relative aspect-[1.586/1] overflow-hidden rounded-xl border border-dashed border-border bg-white desktop:aspect-auto desktop:h-full">
         <span className="pointer-events-none absolute left-2 top-2 z-30 hidden rounded bg-background/85 px-1.5 py-0.5 text-xs font-medium text-foreground shadow-sm desktop:inline">
           {label}
         </span>
@@ -1595,96 +1574,6 @@ function CccdImageBox({
         className="hidden"
         onChange={onPick}
       />
-    </div>
-  );
-}
-function ComboboxField({
-  label,
-  placeholder,
-  options,
-  value,
-  onChange,
-  desktopClassName,
-}: {
-  label: string;
-  placeholder: string;
-  options: Array<{ value: string; label: string; description?: string }>;
-  value: string;
-  onChange: (value: string) => void;
-  desktopClassName?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const debouncedQuery = useDebouncedSearch(query);
-  const selected = options.find((option) => option.value === value);
-
-  const filteredOptions = useMemo(() => {
-    const keyword = normalizeUserPickerSearch(debouncedQuery);
-    if (!keyword) return options;
-    return options.filter((option) =>
-      normalizeUserPickerSearch(`${option.label} ${option.description || ""}`).includes(keyword),
-    );
-  }, [debouncedQuery, options]);
-
-  return (
-    <div className={cn("flex min-w-0 flex-col gap-1 desktop:gap-0", desktopClassName)}>
-      <Label className="truncate text-xs desktop:hidden" title={label}>
-        {label}
-      </Label>
-      <Popover
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) setQuery("");
-        }}
-      >
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="flex h-10 w-full min-w-0 items-center justify-between rounded-md border border-input bg-white px-3 text-left text-sm text-slate-900 desktop:h-9 desktop:rounded-lg desktop:px-2.5"
-          >
-            <span className={cn("truncate", !selected && "text-muted-foreground")}>
-              {selected ? selected.label : placeholder}
-            </span>
-            <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-          <Command shouldFilter={false}>
-            <CommandInput placeholder="Tìm kiếm..." value={query} onValueChange={setQuery} />
-            <CommandList>
-              <CommandEmpty>Không tìm thấy.</CommandEmpty>
-              <CommandGroup>
-                {filteredOptions.map((option) => (
-                  <CommandItem
-                    key={option.value}
-                    value={`${option.label} ${option.description || ""}`}
-                    onSelect={() => {
-                      onChange(option.value);
-                      setOpen(false);
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "h-4 w-4",
-                        option.value === value ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                    <div className="min-w-0">
-                      <div className="truncate">{option.label}</div>
-                      {option.description && (
-                        <div className="truncate text-[11px] text-muted-foreground">
-                          {option.description}
-                        </div>
-                      )}
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
     </div>
   );
 }

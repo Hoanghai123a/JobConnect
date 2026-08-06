@@ -66,7 +66,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         if (pb.authStore.isValid) {
           await refreshAuthOnce();
-          setUser((pb.authStore.record as UserRecord | null) ?? null);
+          const refreshedUser = pb.authStore.record as UserRecord | null;
+          if (refreshedUser?.status === "disabled") {
+            pb.authStore.clear();
+            setUser(null);
+          } else {
+            setUser(refreshedUser ?? null);
+          }
         } else {
           setUser(null);
         }

@@ -315,7 +315,7 @@ export function CccdHistoryExportDialog({
               <Button
                 type="button"
                 variant="outline"
-                className="w-full rounded-xl"
+                className="w-full rounded-xl bg-white text-slate-900"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={busy}
               >

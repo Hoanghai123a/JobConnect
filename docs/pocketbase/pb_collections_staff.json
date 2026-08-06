@@ -459,6 +459,19 @@
       },
       {
         "cascadeDelete": false,
+        "collectionId": "pbc_mainhouses001",
+        "hidden": false,
+        "id": "relation_emphist_partner",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "recruiter_partner",
+        "presentable": true,
+        "required": false,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "cascadeDelete": false,
         "collectionId": "pbc_cccdver00001",
         "hidden": false,
         "id": "relation_emphist_cccdver",
@@ -546,7 +559,8 @@
       "CREATE INDEX `idx_emphist_factory` ON `employment_histories` (`factory`)",
       "CREATE INDEX `idx_emphist_recruiter` ON `employment_histories` (`recruiter_staff`)",
       "CREATE INDEX `idx_emphist_join_date` ON `employment_histories` (`join_date`)",
-      "CREATE UNIQUE INDEX `idx_emphist_one_active` ON `employment_histories` (`user`) WHERE `status` = 'working'"
+      "CREATE UNIQUE INDEX `idx_emphist_one_active` ON `employment_histories` (`user`) WHERE `status` = 'working'",
+      "CREATE INDEX `idx_emphist_recruiter_partner` ON `employment_histories` (`recruiter_partner`)"
     ]
   },
   {

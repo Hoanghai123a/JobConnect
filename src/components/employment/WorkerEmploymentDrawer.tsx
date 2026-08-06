@@ -40,13 +40,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { fileUrl, pb, type UserRecord } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
@@ -89,7 +82,7 @@ import {
 import { StaffActionHistoryPanel } from "@/components/employment/StaffActionHistoryPanel";
 import { CccdManager } from "@/components/cccd/CccdManager";
 import { JoinCccdSection } from "@/components/employment/JoinCccdSection";
-import { VN_BANKS } from "@/lib/vn-banks";
+import { BankPicker } from "@/components/staff/BankNameInput";
 import {
   findOrCreateCccdVersion,
   getCccdVersionByNumber,
@@ -100,6 +93,15 @@ import {
 import { compressImage } from "@/lib/image-compress";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
 import { AdvanceReadOnlyNotice } from "@/components/advances/AdvanceReadOnlyNotice";
+import { RecruiterPicker } from "@/components/employment/RecruiterPicker";
+import { FactoryPicker, MainHousePicker } from "@/components/workforce/UserPicker";
+import {
+  buildRecruiterPayload,
+  encodeInternalRecruiter,
+  getRecruiterDisplay,
+  recruiterSelectionFromHistory,
+  type RecruiterSelectionValue,
+} from "@/lib/recruiters";
 import type { AdvancePayoutMethod } from "@/lib/advances";
 
 type RestoreRequest = {
@@ -613,7 +615,7 @@ export function WorkerEmploymentDrawer({
         ...personalSnapshot,
         hometown_snapshot: personalSnapshot.worker_address_snapshot,
         worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
-        recruiter_staff: actor?.id || "",
+        recruiter_staff: encodeInternalRecruiter(actor?.id),
         join_date: todayIso(),
         note: "",
       });
@@ -709,7 +711,7 @@ export function WorkerEmploymentDrawer({
       ...personalSnapshot,
       employee_code: h.employee_code || "",
       worker_tax_code_snapshot: h.worker_tax_code_snapshot || "",
-      recruiter_staff: h.recruiter_staff || "",
+      recruiter_staff: recruiterSelectionFromHistory(h),
       main_house: h.main_house || "",
       join_date: h.join_date?.slice(0, 10) || "",
       leave_date: h.leave_date?.slice(0, 10) || "",
@@ -843,7 +845,7 @@ export function WorkerEmploymentDrawer({
         hometown_snapshot: joinForm.worker_address_snapshot.trim(),
         cccd_issue_date: joinForm.cccd_issue_date,
         worker_tax_code_snapshot: joinForm.worker_tax_code_snapshot.trim(),
-        recruiter_staff: joinForm.recruiter_staff,
+        ...buildRecruiterPayload(joinForm.recruiter_staff),
         cccd_version: cccdVersionId,
         join_date: joinForm.join_date,
         note: joinForm.note.trim(),
@@ -917,7 +919,8 @@ export function WorkerEmploymentDrawer({
       ...personalSnapshot,
       hometown_snapshot: personalSnapshot.worker_address_snapshot,
       worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
-      recruiter_staff: latest?.recruiter_staff || actor?.id || "",
+      recruiter_staff:
+        recruiterSelectionFromHistory(latest) || encodeInternalRecruiter(actor?.id),
       join_date: "",
       leave_date: "",
       note: "",
@@ -996,7 +999,7 @@ export function WorkerEmploymentDrawer({
         hometown_snapshot: oldHistoryForm.worker_address_snapshot.trim(),
         cccd_issue_date: oldHistoryForm.cccd_issue_date,
         worker_tax_code_snapshot: oldHistoryForm.worker_tax_code_snapshot.trim(),
-        recruiter_staff: oldHistoryForm.recruiter_staff,
+        ...buildRecruiterPayload(oldHistoryForm.recruiter_staff),
         cccd_version: cccdVersionId,
         join_date: oldHistoryForm.join_date,
         leave_date: oldHistoryForm.leave_date,
@@ -1088,7 +1091,7 @@ export function WorkerEmploymentDrawer({
         hometown_snapshot: normalizedAddress,
         worker_tax_code_snapshot: form.worker_tax_code_snapshot.trim(),
         cccd_version: cccdVersionId || undefined,
-        recruiter_staff: form.recruiter_staff || undefined,
+        ...buildRecruiterPayload(form.recruiter_staff),
         main_house: form.main_house || undefined,
         join_date: form.join_date || undefined,
         leave_date: form.leave_date,
@@ -1312,7 +1315,8 @@ export function WorkerEmploymentDrawer({
   const advanceInteractionAllowed = isAdvanceInteractionAllowed(settings, actor?.role);
   const canReportAdvanceByScope =
     permissions.canReportAdvance && (isWorking || allowAdvanceAfterLeave);
-  const canOpenAdvance = canReportAdvanceByScope && advanceInteractionAllowed;
+  const canOpenAdvance =
+    canReportAdvanceByScope && advanceInteractionAllowed && !latestHistory?.recruiter_partner;
   const hasBankInfo = Boolean(
     user.bank_name || user.bank_account_number || user.bank_account_name || user.bank_account_note,
   );
@@ -1351,7 +1355,7 @@ export function WorkerEmploymentDrawer({
       ...personalSnapshot,
       hometown_snapshot: personalSnapshot.worker_address_snapshot,
       worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
-      recruiter_staff: actor?.id || "",
+      recruiter_staff: encodeInternalRecruiter(actor?.id),
       join_date: todayIso(),
       note: "",
     });
@@ -1534,21 +1538,13 @@ export function WorkerEmploymentDrawer({
                       >
                         <div className="min-w-0 space-y-1">
                           <Label className="text-[10px]">Ngân hàng</Label>
-                          <Select
+                          <BankPicker
                             value={bankForm.bank_name}
-                            onValueChange={(v) => setBankForm((c) => ({ ...c, bank_name: v }))}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Chọn ngân hàng" />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-72">
-                              {VN_BANKS.map((bank) => (
-                                <SelectItem key={bank.code} value={bank.name}>
-                                  {bank.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            onChange={(value) =>
+                              setBankForm((current) => ({ ...current, bank_name: value }))
+                            }
+                            triggerClassName="h-8 text-xs"
+                          />
                         </div>
                         <div className="min-w-0 space-y-1">
                           <Label className="text-[10px]">Số tài khoản</Label>
@@ -1708,23 +1704,12 @@ export function WorkerEmploymentDrawer({
                             >
                               <div className="space-y-1">
                                 <Label className="text-xs">Ngân hàng</Label>
-                                <Select
+                                <BankPicker
                                   value={bankForm.bank_name}
-                                  onValueChange={(v) =>
-                                    setBankForm((c) => ({ ...c, bank_name: v }))
+                                  onChange={(value) =>
+                                    setBankForm((current) => ({ ...current, bank_name: value }))
                                   }
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Chọn ngân hàng" />
-                                  </SelectTrigger>
-                                  <SelectContent className="max-h-72">
-                                    {VN_BANKS.map((bank) => (
-                                      <SelectItem key={bank.code} value={bank.name}>
-                                        {bank.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                />
                               </div>
                               <div className="space-y-1">
                                 <Label className="text-xs">Số tài khoản</Label>
@@ -1862,10 +1847,10 @@ export function WorkerEmploymentDrawer({
                       const canEdit = canEditHistoryRecord(h);
                       const factoryName = h.expand?.factory?.name || "Nhà máy";
                       const mainHouseName = h.expand?.main_house?.name || "—";
-                      const recruiterName =
-                        h.expand?.recruiter_staff?.full_name ||
-                        h.expand?.recruiter_staff?.username ||
-                        "—";
+                      const recruiter = getRecruiterDisplay(h);
+                      const recruiterName = recruiter
+                        ? `${recruiter.name} · ${recruiter.label}`
+                        : "—";
                       const employmentPeriod = `Vào: ${formatDate(h.join_date)} · Nghỉ: ${formatDate(h.leave_date) || "—"}`;
                       return (
                         <Card
@@ -2061,9 +2046,12 @@ export function WorkerEmploymentDrawer({
                 <div>
                   <span className="text-muted-foreground">Người tuyển: </span>
                   <span className="font-medium">
-                    {selectedHistory.expand?.recruiter_staff?.full_name ||
-                      selectedHistory.expand?.recruiter_staff?.username ||
-                      "Chưa có"}
+                    {(() => {
+                      const recruiter = getRecruiterDisplay(selectedHistory);
+                      return recruiter
+                        ? `${recruiter.name} · ${recruiter.label}`
+                        : "Chưa có";
+                    })()}
                   </span>
                 </div>
               </div>
@@ -2231,65 +2219,34 @@ export function WorkerEmploymentDrawer({
           >
             <div className="space-y-1">
               <Label className="text-xs">Nhà máy *</Label>
-              <Select
+              <FactoryPicker
+                factories={factories}
                 value={oldHistoryForm.factory}
-                onValueChange={(value) =>
+                onChange={(value) =>
                   setOldHistoryForm((current) => ({ ...current, factory: value }))
                 }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn nhà máy" />
-                </SelectTrigger>
-                <SelectContent>
-                  {factories.map((factory) => (
-                    <SelectItem key={factory.id} value={factory.id}>
-                      {factory.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
             <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs">Nhà chính *</Label>
-                <Select
+                <MainHousePicker
+                  mainHouses={mainHouses}
                   value={oldHistoryForm.main_house}
-                  onValueChange={(value) =>
+                  onChange={(value) =>
                     setOldHistoryForm((current) => ({ ...current, main_house: value }))
                   }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn nhà chính" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mainHouses.map((house) => (
-                      <SelectItem key={house.id} value={house.id}>
-                        {house.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Người tuyển *</Label>
-                <Select
-                  value={oldHistoryForm.recruiter_staff}
-                  onValueChange={(value) =>
-                    setOldHistoryForm((current) => ({ ...current, recruiter_staff: value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn Người tuyển" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {staffUsers.map((staff) => (
-                      <SelectItem key={staff.id} value={staff.id}>
-                        {staff.full_name || staff.username || staff.id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <RecruiterPicker
+                label="Người tuyển *"
+                value={oldHistoryForm.recruiter_staff as RecruiterSelectionValue}
+                onChange={(value) =>
+                  setOldHistoryForm((current) => ({ ...current, recruiter_staff: value }))
+                }
+                internalUsers={staffUsers}
+                partners={mainHouses}
+              />
             </div>
             <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
               <div className="space-y-1">
@@ -2400,64 +2357,31 @@ export function WorkerEmploymentDrawer({
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Nhà máy *</Label>
-                  <Select
+                  <FactoryPicker
+                    factories={factories}
                     value={form.factory}
-                    onValueChange={(value) =>
-                      setForm((current) => ({ ...current, factory: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn nhà máy" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {factories.map((factory) => (
-                        <SelectItem key={factory.id} value={factory.id}>
-                          {factory.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onChange={(value) => setForm((current) => ({ ...current, factory: value }))}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Nhà chính</Label>
-                  <Select
+                  <MainHousePicker
+                    mainHouses={mainHouses}
                     value={form.main_house}
-                    onValueChange={(value) =>
-                      setForm((current) => ({ ...current, main_house: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn nhà chính" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mainHouses.map((mainHouse) => (
-                        <SelectItem key={mainHouse.id} value={mainHouse.id}>
-                          {mainHouse.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onChange={(value) => setForm((current) => ({ ...current, main_house: value }))}
+                    allowClear
+                  />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Người tuyển</Label>
-                  <Select
-                    value={form.recruiter_staff}
-                    onValueChange={(value) =>
-                      setForm((current) => ({ ...current, recruiter_staff: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn người tuyển" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {staffUsers.map((staff) => (
-                        <SelectItem key={staff.id} value={staff.id}>
-                          {staff.full_name || staff.username || staff.id}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <RecruiterPicker
+                  label="Người tuyển"
+                  value={form.recruiter_staff as RecruiterSelectionValue}
+                  triggerClassName="bg-white"
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, recruiter_staff: value }))
+                  }
+                  internalUsers={staffUsers}
+                  partners={mainHouses}
+                />
               </div>
               <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-3">
                 <div className="space-y-1">
@@ -2761,59 +2685,32 @@ export function WorkerEmploymentDrawer({
             <div className="text-sm font-semibold">Thông tin đi làm</div>
             <div className="space-y-1">
               <Label className="text-xs">Nhà máy *</Label>
-              <Select
+              <FactoryPicker
+                factories={joinableFactories}
                 value={joinForm.factory}
-                onValueChange={(v) => setJoinForm((f) => ({ ...f, factory: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn nhà máy" />
-                </SelectTrigger>
-                <SelectContent>
-                  {joinableFactories.map((f) => (
-                    <SelectItem key={f.id} value={f.id}>
-                      {f.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(value) => setJoinForm((current) => ({ ...current, factory: value }))}
+              />
             </div>
             <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs">Nhà chính *</Label>
-                <Select
+                <MainHousePicker
+                  mainHouses={mainHouses}
                   value={joinForm.main_house}
-                  onValueChange={(v) => setJoinForm((f) => ({ ...f, main_house: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn nhà chính" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mainHouses.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(value) =>
+                    setJoinForm((current) => ({ ...current, main_house: value }))
+                  }
+                />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Người tuyển *</Label>
-                <Select
-                  value={joinForm.recruiter_staff}
-                  onValueChange={(v) => setJoinForm((f) => ({ ...f, recruiter_staff: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn Người tuyển" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {staffUsers.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.full_name || s.username || s.id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <RecruiterPicker
+                label="Người tuyển *"
+                value={joinForm.recruiter_staff as RecruiterSelectionValue}
+                onChange={(value) =>
+                  setJoinForm((current) => ({ ...current, recruiter_staff: value }))
+                }
+                internalUsers={staffUsers}
+                partners={mainHouses}
+              />
             </div>
             <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
               <div className="space-y-1">

@@ -829,7 +829,7 @@ function WorkerSearchSelect({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Tìm tên lao động..."
-              className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
           </div>
           <div className="max-h-48 overflow-y-auto px-1 pb-1">

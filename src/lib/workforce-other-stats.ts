@@ -2,6 +2,7 @@ import type { CccdVersionRecord } from "./cccd-versions";
 import type { EmploymentHistoryRecord } from "./employment";
 import type { FactoryRecord } from "./factories";
 import type { UserRecord } from "./pocketbase";
+import { getRecruiterDisplay } from "./recruiters";
 
 export type WorkforceStatsUser = UserRecord;
 
@@ -201,10 +202,13 @@ export function buildCccdCompletionDays(
       fullName: historyName(history, usersById),
       factoryName: factoryName(history, factoriesById),
       recruiterName:
-        history.expand?.recruiter_staff?.full_name ||
-        history.expand?.recruiter_staff?.username ||
-        (history.recruiter_staff ? usersById.get(history.recruiter_staff)?.full_name : "") ||
-        "Chưa có người tuyển",
+        (() => {
+          const recruiter = getRecruiterDisplay(history);
+          if (recruiter) return `${recruiter.name} · ${recruiter.label}`;
+          return (history.recruiter_staff
+            ? usersById.get(history.recruiter_staff)?.full_name
+            : "") || "Chưa có người tuyển";
+        })(),
       hasCccdImages: hasCompleteCccdImages(history, usersById, versionsById),
     });
     grouped.set(date, items);

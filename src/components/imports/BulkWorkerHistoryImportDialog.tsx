@@ -1,11 +1,14 @@
 import { type ChangeEvent, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Building2,
   CheckCircle2,
   Download,
+  Factory as FactoryIcon,
   FileSpreadsheet,
   Loader2,
   Upload,
+  UserRoundX,
   UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -22,10 +25,14 @@ import {
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import {
+  applyBulkWorkerImportReferences,
   downloadBulkWorkerTemplate,
   executePreparedBulkImport,
   exportBulkWorkerErrors,
+  inspectBulkWorkerImportReferences,
   prepareBulkWorkerImport,
+  type AppliedImportReference,
+  type BulkImportReferenceInspection,
   type BulkWorkerImportSummary,
   type WorkerImportError,
 } from "@/lib/bulk-worker-history-import";
@@ -33,11 +40,23 @@ import type { UserRecord } from "@/lib/pocketbase";
 import { clearStaffCache } from "@/lib/staff-cache";
 import { createStaffActionLog } from "@/lib/staff-log";
 
-type ImportPhase = "idle" | "reading" | "validating" | "importing" | "done" | "error";
+type ImportPhase =
+  | "idle"
+  | "reading"
+  | "inspecting"
+  | "references"
+  | "creatingReferences"
+  | "validating"
+  | "importing"
+  | "done"
+  | "error";
 type ImportProgress = { total: number; processed: number; created: number; failed: number };
 
 function phaseLabel(phase: ImportPhase) {
   if (phase === "reading") return "Đang đọc file Excel...";
+  if (phase === "inspecting") return "Đang kiểm tra Nhà máy, Nhà chính và Người tuyển...";
+  if (phase === "references") return "Cần bổ sung dữ liệu";
+  if (phase === "creatingReferences") return "Đang tạo dữ liệu còn thiếu...";
   if (phase === "validating") return "Đang kiểm tra dữ liệu...";
   if (phase === "importing") return "Đang tạo tài khoản và lịch sử...";
   if (phase === "done") return "Đã hoàn tất nhập dữ liệu";
@@ -50,11 +69,23 @@ function formatDuration(durationMs: number) {
   return `${(Math.round(durationMs / 100) / 10).toLocaleString("vi-VN")} giây`;
 }
 
+function hasReferenceIssues(inspection: BulkImportReferenceInspection) {
+  return Boolean(
+    inspection.factories.length || inspection.mainHouses.length || inspection.recruiters.length,
+  );
+}
+
+function hasReferenceActions(inspection: BulkImportReferenceInspection) {
+  return Boolean(inspection.factories.length || inspection.mainHouses.length);
+}
+
 export function BulkWorkerHistoryImportCard({ actor }: { actor: UserRecord }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<ImportPhase>("idle");
   const [fileName, setFileName] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [inspection, setInspection] = useState<BulkImportReferenceInspection | null>(null);
   const [progress, setProgress] = useState<ImportProgress>({
     total: 0,
     processed: 0,
@@ -64,7 +95,12 @@ export function BulkWorkerHistoryImportCard({ actor }: { actor: UserRecord }) {
   const [summary, setSummary] = useState<BulkWorkerImportSummary | null>(null);
   const [errors, setErrors] = useState<WorkerImportError[]>([]);
   const [fatalError, setFatalError] = useState("");
-  const busy = phase === "reading" || phase === "validating" || phase === "importing";
+  const busy =
+    phase === "reading" ||
+    phase === "inspecting" ||
+    phase === "creatingReferences" ||
+    phase === "validating" ||
+    phase === "importing";
   const progressValue = progress.total
     ? Math.min(100, Math.round((progress.processed / progress.total) * 100))
     : 0;
@@ -72,24 +108,42 @@ export function BulkWorkerHistoryImportCard({ actor }: { actor: UserRecord }) {
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && busy) return;
     setOpen(nextOpen);
-    if (!nextOpen) setPhase("idle");
+    if (!nextOpen) {
+      setPhase("idle");
+      setPendingFile(null);
+      setInspection(null);
+    }
   };
 
-  const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
+  const logAppliedReferences = async (items: AppliedImportReference[]) => {
+    await Promise.all(
+      items.map((item) =>
+        createStaffActionLog({
+          actor,
+          targetCollection: item.collection,
+          targetRecord: item.id,
+          action: item.action === "create" ? "create" : "update",
+          after: item.payload,
+          note:
+            item.collection === "factories"
+              ? `Admin ${item.action === "create" ? "tạo" : "kích hoạt lại"} Nhà máy từ import NLĐ: ${item.name}`
+              : `Admin ${item.action === "create" ? "tạo" : "kích hoạt lại"} Nhà chính & Đối tác từ import NLĐ: ${item.name}`,
+        }),
+      ),
+    );
+  };
 
+  const runImport = async (file: File, referenceInspection: BulkImportReferenceInspection) => {
     const startedAt = performance.now();
-    setSummary(null);
-    setErrors([]);
-    setFatalError("");
-    setProgress({ total: 0, processed: 0, created: 0, failed: 0 });
-    setFileName(file.name);
-    setOpen(true);
-    setPhase("reading");
-
     try {
+      if (hasReferenceActions(referenceInspection)) {
+        setPhase("creatingReferences");
+        const applied = await applyBulkWorkerImportReferences(referenceInspection);
+        await logAppliedReferences(applied).catch(() =>
+          toast.warning("Đã tạo dữ liệu tham chiếu nhưng chưa ghi được đầy đủ nhật ký thao tác"),
+        );
+      }
+
       setPhase("validating");
       const prepared = await prepareBulkWorkerImport(file);
       const validationFailed = Math.max(0, prepared.totalWorkers - prepared.workers.length);
@@ -122,6 +176,9 @@ export function BulkWorkerHistoryImportCard({ actor }: { actor: UserRecord }) {
         createdHistories: executed.createdHistoryCount,
         durationMs: Math.round(performance.now() - startedAt),
       };
+      const missingRecruiterWorkers = new Set(
+        referenceInspection.recruiters.flatMap((item) => item.workerKeys).filter(Boolean),
+      ).size;
 
       if (createdWorkers > 0) await clearStaffCache();
       const logPayload = {
@@ -130,6 +187,8 @@ export function BulkWorkerHistoryImportCard({ actor }: { actor: UserRecord }) {
         created_workers: result.createdWorkers,
         failed_workers: result.failedWorkers,
         created_histories: result.createdHistories,
+        missing_recruiters: referenceInspection.recruiters.length,
+        skipped_workers_due_to_missing_recruiter: missingRecruiterWorkers,
         exported_errors: allErrors.length,
       };
       await Promise.all([
@@ -157,6 +216,7 @@ export function BulkWorkerHistoryImportCard({ actor }: { actor: UserRecord }) {
         created: result.createdWorkers,
         failed: result.failedWorkers,
       });
+      setPendingFile(null);
       setPhase("done");
 
       if (allErrors.length) {
@@ -177,6 +237,42 @@ export function BulkWorkerHistoryImportCard({ actor }: { actor: UserRecord }) {
     }
   };
 
+  const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setSummary(null);
+    setErrors([]);
+    setFatalError("");
+    setInspection(null);
+    setProgress({ total: 0, processed: 0, created: 0, failed: 0 });
+    setFileName(file.name);
+    setPendingFile(file);
+    setOpen(true);
+    setPhase("reading");
+
+    try {
+      setPhase("inspecting");
+      const inspected = await inspectBulkWorkerImportReferences(file);
+      setInspection(inspected);
+      if (hasReferenceIssues(inspected)) {
+        setPhase("references");
+        return;
+      }
+      await runImport(file, inspected);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Không thể kiểm tra file Excel.";
+      setFatalError(message);
+      setPhase("error");
+      toast.error(message);
+    }
+  };
+
+  const confirmReferences = () => {
+    if (!pendingFile || !inspection) return;
+    void runImport(pendingFile, inspection);
+  };
   return (
     <>
       <Card className="relative overflow-hidden rounded-3xl border-primary/25 bg-gradient-to-br from-primary/10 via-card to-emerald-500/10 p-5 shadow-soft desktop:col-span-2">
@@ -240,6 +336,8 @@ export function BulkWorkerHistoryImportCard({ actor }: { actor: UserRecord }) {
         summary={summary}
         errors={errors}
         fatalError={fatalError}
+        inspection={inspection}
+        onConfirmReferences={confirmReferences}
       />
     </>
   );
@@ -256,6 +354,8 @@ type ImportDialogProps = {
   summary: BulkWorkerImportSummary | null;
   errors: WorkerImportError[];
   fatalError: string;
+  inspection: BulkImportReferenceInspection | null;
+  onConfirmReferences: () => void;
 };
 
 function BulkWorkerHistoryImportDialog({
@@ -269,11 +369,13 @@ function BulkWorkerHistoryImportDialog({
   summary,
   errors,
   fatalError,
+  inspection,
+  onConfirmReferences,
 }: ImportDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="desktop:max-w-xl"
+        className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl desktop:max-w-2xl"
         onEscapeKeyDown={(event) => busy && event.preventDefault()}
         onInteractOutside={(event) => busy && event.preventDefault()}
       >
@@ -304,6 +406,10 @@ function BulkWorkerHistoryImportDialog({
               )}
             </div>
           </div>
+
+          {phase === "references" && inspection && (
+            <ReferenceInspectionPanel inspection={inspection} />
+          )}
 
           {(phase === "importing" || phase === "done") && progress.total > 0 && (
             <div className="space-y-2">
@@ -359,12 +465,28 @@ function BulkWorkerHistoryImportDialog({
         </div>
 
         {!busy && (
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Đóng
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() => onOpenChange(false)}
+            >
+              {phase === "references" ? "Hủy" : "Đóng"}
             </Button>
-            {errors.length > 0 && (
-              <Button type="button" onClick={() => exportBulkWorkerErrors(errors)}>
+            {phase === "references" && inspection && (
+              <Button type="button" className="w-full sm:w-auto" onClick={onConfirmReferences}>
+                {hasReferenceActions(inspection)
+                  ? "Tạo đơn vị và nhập phần hợp lệ"
+                  : "Nhập phần hợp lệ"}
+              </Button>
+            )}
+            {errors.length > 0 && phase !== "references" && (
+              <Button
+                type="button"
+                className="w-full sm:w-auto"
+                onClick={() => exportBulkWorkerErrors(errors)}
+              >
                 <Download className="h-4 w-4" /> Tải lại file lỗi
               </Button>
             )}
@@ -375,6 +497,119 @@ function BulkWorkerHistoryImportDialog({
   );
 }
 
+function ReferenceInspectionPanel({ inspection }: { inspection: BulkImportReferenceInspection }) {
+  return (
+    <div className="space-y-4">
+      {(inspection.factories.length > 0 || inspection.mainHouses.length > 0) && (
+        <div className="space-y-3 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 text-sky-950">
+          <div>
+            <div className="text-sm font-semibold">Đơn vị cần tạo hoặc kích hoạt lại</div>
+            <p className="mt-1 text-xs leading-5 text-sky-800">
+              Kiểm tra danh sách trước khi xác nhận. Hệ thống chỉ tạo dữ liệu sau khi Admin bấm nút
+              tiếp tục.
+            </p>
+          </div>
+
+          {inspection.factories.length > 0 && (
+            <ReferenceGroup
+              icon={<FactoryIcon className="h-4 w-4" />}
+              title={`Nhà máy (${inspection.factories.length})`}
+              items={inspection.factories.map((item) => ({
+                key: `${item.action}-${item.existingId || item.name}`,
+                name: item.code ? `${item.name} · ${item.code}` : item.name,
+                meta: `${item.action === "create" ? "Tạo mới" : "Kích hoạt lại"} · Dòng ${item.rowNumbers.join(", ")}`,
+              }))}
+            />
+          )}
+
+          {inspection.mainHouses.length > 0 && (
+            <ReferenceGroup
+              icon={<Building2 className="h-4 w-4" />}
+              title={`Nhà chính & Đối tác (${inspection.mainHouses.length})`}
+              items={inspection.mainHouses.map((item) => ({
+                key: `${item.action}-${item.existingId || item.name}`,
+                name: item.name,
+                meta: `${item.action === "create" ? "Tạo mới" : "Kích hoạt lại"} · Dòng ${item.rowNumbers.join(", ")}`,
+              }))}
+            />
+          )}
+        </div>
+      )}
+
+      {inspection.recruiters.length > 0 && (
+        <div className="space-y-3 rounded-2xl border border-amber-300/70 bg-amber-50 p-4 text-amber-950">
+          <div className="flex items-start gap-2">
+            <UserRoundX className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <div className="text-sm font-semibold">
+                Người tuyển chưa có tài khoản ({inspection.recruiters.length})
+              </div>
+              <p className="mt-1 text-xs leading-5 text-amber-800">
+                Admin cần chủ động tạo tài khoản Staff. Các NLĐ liên quan sẽ được bỏ qua; những NLĐ
+                hợp lệ khác vẫn được nhập.
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-amber-200 bg-white/70">
+            <table className="w-full min-w-[32rem] text-left text-xs">
+              <thead className="bg-amber-100/80 text-amber-900">
+                <tr>
+                  <th className="px-3 py-2 font-semibold">Người tuyển</th>
+                  <th className="px-3 py-2 font-semibold">Mã NLĐ</th>
+                  <th className="px-3 py-2 font-semibold">Dòng Excel</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-amber-100">
+                {inspection.recruiters.map((item) => (
+                  <tr key={`${item.username}-${item.recruiterType}`}>
+                    <td className="px-3 py-2 align-top font-medium">
+                      {item.username}
+                      {item.recruiterType && (
+                        <div className="mt-0.5 text-[11px] font-normal text-amber-700">
+                          {item.recruiterType}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-top">{item.workerKeys.join(", ") || "—"}</td>
+                    <td className="px-3 py-2 align-top">{item.rowNumbers.join(", ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReferenceGroup({
+  icon,
+  title,
+  items,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  items: Array<{ key: string; name: string; meta: string }>;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-xs font-semibold">
+        {icon}
+        {title}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {items.map((item) => (
+          <div key={item.key} className="rounded-xl border border-sky-200 bg-white/70 px-3 py-2">
+            <div className="text-xs font-semibold">{item.name}</div>
+            <div className="mt-0.5 text-[11px] text-sky-700">{item.meta}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 function ResultStat({
   label,
   value,
