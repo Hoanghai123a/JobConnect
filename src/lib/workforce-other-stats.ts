@@ -201,14 +201,14 @@ export function buildCccdCompletionDays(
       id: history.id,
       fullName: historyName(history, usersById),
       factoryName: factoryName(history, factoriesById),
-      recruiterName:
-        (() => {
-          const recruiter = getRecruiterDisplay(history);
-          if (recruiter) return `${recruiter.name} · ${recruiter.label}`;
-          return (history.recruiter_staff
-            ? usersById.get(history.recruiter_staff)?.full_name
-            : "") || "Chưa có người tuyển";
-        })(),
+      recruiterName: (() => {
+        const recruiter = getRecruiterDisplay(history);
+        if (recruiter) return `${recruiter.name} · ${recruiter.label}`;
+        return (
+          (history.recruiter_staff ? usersById.get(history.recruiter_staff)?.full_name : "") ||
+          "Chưa có người tuyển"
+        );
+      })(),
       hasCccdImages: hasCompleteCccdImages(history, usersById, versionsById),
     });
     grouped.set(date, items);

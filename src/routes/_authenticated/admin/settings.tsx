@@ -463,7 +463,10 @@ function FactoriesTab() {
       const res = await pb.collection("recruitment_entities").getList(1, 300, { sort: "name" });
       setMainHouses(res.items as any);
     } catch (e: any) {
-      toast.error(e?.message || "Lỗi tải danh sách Nhà chính & Đối tác. Hãy cấu hình collection 'recruitment_entities'.");
+      toast.error(
+        e?.message ||
+          "Lỗi tải danh sách Nhà chính & Đối tác. Hãy cấu hình collection 'recruitment_entities'.",
+      );
     } finally {
       setMainHousesLoading(false);
     }
@@ -1230,7 +1233,8 @@ function FactoriesTab() {
                   className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${mainHousesOpen ? "rotate-0" : "-rotate-90"}`}
                 />
                 <h2 className="text-sm font-semibold">
-                  Nhà chính & Đối tác <span className="text-muted-foreground">({mainHouses.length})</span>
+                  Nhà chính & Đối tác{" "}
+                  <span className="text-muted-foreground">({mainHouses.length})</span>
                 </h2>
               </button>
             </CollapsibleTrigger>

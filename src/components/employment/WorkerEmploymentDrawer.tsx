@@ -920,8 +920,7 @@ export function WorkerEmploymentDrawer({
       ...personalSnapshot,
       hometown_snapshot: personalSnapshot.worker_address_snapshot,
       worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
-      recruiter_staff:
-        recruiterSelectionFromHistory(latest) || encodeInternalRecruiter(actor?.id),
+      recruiter_staff: recruiterSelectionFromHistory(latest) || encodeInternalRecruiter(actor?.id),
       join_date: "",
       leave_date: "",
       note: "",
@@ -2052,9 +2051,7 @@ export function WorkerEmploymentDrawer({
                   <span className="font-medium">
                     {(() => {
                       const recruiter = getRecruiterDisplay(selectedHistory);
-                      return recruiter
-                        ? `${recruiter.name} · ${recruiter.label}`
-                        : "Chưa có";
+                      return recruiter ? `${recruiter.name} · ${recruiter.label}` : "Chưa có";
                     })()}
                   </span>
                 </div>

@@ -376,6 +376,7 @@ export function DesktopAppShell({ children }: { children: ReactNode }) {
               <div className="relative flex items-center gap-2">
                 <Link
                   to="/account"
+                  search={{ incomplete: undefined }}
                   title={collapsed ? "Tài khoản" : undefined}
                   aria-label="Tài khoản"
                   className={cn(

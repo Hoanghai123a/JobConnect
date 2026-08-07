@@ -275,6 +275,7 @@ function isWorkerInStaffScope(
   if (!latestManaged) return false;
 
   if (isCurrentlyWorking(latestManaged)) return true;
+  if (!latestManaged.leave_date) return false;
 
   const leaveDate = new Date(latestManaged.leave_date);
   return !Number.isNaN(leaveDate.getTime()) && leaveDate >= sixMonthsAgo;

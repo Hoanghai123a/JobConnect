@@ -1,6 +1,14 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
@@ -1145,6 +1153,7 @@ export function AdvancesPage() {
           setAdvanceDetail={setAdvanceDetail}
           items={items}
           isAdmin={false}
+          actor={user}
           adminNoteDraft={adminNoteDraft}
           setAdminNoteDraft={setAdminNoteDraft}
           recoveryNoteDraft={recoveryNoteDraft}
@@ -1686,6 +1695,7 @@ export function AdvancesPage() {
         setAdvanceDetail={setAdvanceDetail}
         items={filtered}
         isAdmin={isAdmin}
+        actor={user}
         adminNoteDraft={adminNoteDraft}
         setAdminNoteDraft={setAdminNoteDraft}
         recoveryNoteDraft={recoveryNoteDraft}
@@ -1841,6 +1851,7 @@ function AdvanceDetailDialog({
   setAdvanceDetail,
   items,
   isAdmin,
+  actor,
   adminNoteDraft,
   setAdminNoteDraft,
   recoveryNoteDraft,
@@ -1857,6 +1868,7 @@ function AdvanceDetailDialog({
   setAdvanceDetail: (v: AdvanceRecord | null) => void;
   items: AdvanceRecord[];
   isAdmin: boolean;
+  actor: UserRecord | null;
   adminNoteDraft: string;
   setAdminNoteDraft: (v: string) => void;
   recoveryNoteDraft: string;
@@ -1872,17 +1884,29 @@ function AdvanceDetailDialog({
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
   const advanceDetailIdRef = useRef<string | null>(null);
+  const activeQrKeyRef = useRef<string | null>(null);
   const disbursingIdRef = useRef<string | null>(null);
   const [showQr, setShowQr] = useState(false);
   const [loadedQrKey, setLoadedQrKey] = useState<string | null>(null);
   const [failedQrKey, setFailedQrKey] = useState<string | null>(null);
   const [qrRetry, setQrRetry] = useState(0);
   const [disbursingId, setDisbursingId] = useState<string | null>(null);
+  const [bankEditOpen, setBankEditOpen] = useState(false);
+  const [savingBank, setSavingBank] = useState(false);
+  const [bankDraft, setBankDraft] = useState({
+    bank_name: "",
+    bank_account_number: "",
+    bank_account_name: "",
+  });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     advanceDetailIdRef.current = advanceDetail?.id || null;
     setShowQr(false);
+    setLoadedQrKey(null);
+    setFailedQrKey(null);
     setQrRetry(0);
+    setBankEditOpen(false);
+    setSavingBank(false);
   }, [advanceDetail?.id]);
 
   const status = advanceDetail?.status;
@@ -1903,16 +1927,26 @@ function AdvanceDetailDialog({
       description: buildTransferDescription(transferDescriptionTemplate, advanceDetail.full_name),
     });
   }, [advanceDetail, isAcceptedTabStatus, payoutMethod, transferDescriptionTemplate]);
-  const qrKey = advanceDetail && qrUrl ? `${advanceDetail.id}:${qrUrl}:${qrRetry}` : null;
+  const qrKey =
+    advanceDetail && qrUrl
+      ? [
+          advanceDetail.id,
+          qrUrl,
+          advanceDetail.bank_name || "",
+          advanceDetail.bank_account_number || "",
+          advanceDetail.amount,
+          buildTransferDescription(transferDescriptionTemplate, advanceDetail.full_name),
+          qrRetry,
+        ].join(":")
+      : null;
+  advanceDetailIdRef.current = advanceDetail?.id || null;
+  activeQrKeyRef.current = qrKey;
   const qrImageUrl =
     qrUrl && qrRetry > 0 ? `${qrUrl}${qrUrl.includes("?") ? "&" : "?"}_retry=${qrRetry}` : qrUrl;
   const qrReady = Boolean(qrKey && loadedQrKey === qrKey);
   const qrFailed = Boolean(qrKey && failedQrKey === qrKey);
   const isDisbursing = Boolean(advanceDetail && disbursingId === advanceDetail.id);
-  const canSubmitDisbursement =
-    canDisburse &&
-    !isDisbursing &&
-    (payoutMethod === "cash" || Boolean(qrUrl && qrReady && !qrFailed));
+  const canSubmitDisbursement = canDisburse && !isDisbursing;
 
   const currentIndex = useMemo(() => {
     if (!advanceDetail) return -1;
@@ -1922,26 +1956,30 @@ function AdvanceDetailDialog({
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex >= 0 && currentIndex < items.length - 1;
 
+  const resetQrState = useCallback(() => {
+    activeQrKeyRef.current = null;
+    setShowQr(false);
+    setLoadedQrKey(null);
+    setFailedQrKey(null);
+    setQrRetry(0);
+    setBankEditOpen(false);
+  }, []);
+
   const goPrev = useCallback(() => {
-    if (hasPrev) setAdvanceDetail(items[currentIndex - 1]);
-  }, [hasPrev, items, currentIndex, setAdvanceDetail]);
+    if (!hasPrev) return;
+    resetQrState();
+    setAdvanceDetail(items[currentIndex - 1]);
+  }, [hasPrev, items, currentIndex, resetQrState, setAdvanceDetail]);
 
   const goNext = useCallback(() => {
-    if (hasNext) setAdvanceDetail(items[currentIndex + 1]);
-  }, [hasNext, items, currentIndex, setAdvanceDetail]);
+    if (!hasNext) return;
+    resetQrState();
+    setAdvanceDetail(items[currentIndex + 1]);
+  }, [hasNext, items, currentIndex, resetQrState, setAdvanceDetail]);
 
   const disburseAndGoNext = useCallback(async () => {
     const row = advanceDetail;
     if (!row || !canDisburse || disbursingIdRef.current) return;
-
-    if (normalizeAdvancePayoutMethod(row.payout_method) === "bank_transfer" && !qrReady) {
-      toast.warning(
-        qrFailed || !qrUrl
-          ? "Mã QR chưa sẵn sàng, vui lòng tải lại trước khi giải ngân"
-          : "Vui lòng chờ mã QR của record hiện tại tải xong",
-      );
-      return;
-    }
 
     disbursingIdRef.current = row.id;
     setDisbursingId(row.id);
@@ -1954,12 +1992,13 @@ function AdvanceDetailDialog({
       if (disbursingIdRef.current === row.id) disbursingIdRef.current = null;
       setDisbursingId((current) => (current === row.id ? null : current));
     }
-  }, [advanceDetail, canDisburse, goNext, qrFailed, qrReady, qrUrl, setDisbursed]);
+  }, [advanceDetail, canDisburse, goNext, setDisbursed]);
 
   useEffect(() => {
     if (!advanceDetail) return;
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
+      if (bankEditOpen) return;
       if (
         target?.tagName === "INPUT" ||
         target?.tagName === "TEXTAREA" ||
@@ -1983,7 +2022,7 @@ function AdvanceDetailDialog({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [advanceDetail, canDisburse, disburseAndGoNext, goPrev, goNext, isDisbursing]);
+  }, [advanceDetail, bankEditOpen, canDisburse, disburseAndGoNext, goPrev, goNext, isDisbursing]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -2002,22 +2041,87 @@ function AdvanceDetailDialog({
     else if (diff < -threshold) goPrev();
   };
 
+  const openBankEditor = useCallback(() => {
+    if (!advanceDetail) return;
+    setBankDraft({
+      bank_name: advanceDetail.bank_name || "",
+      bank_account_number: advanceDetail.bank_account_number || "",
+      bank_account_name: advanceDetail.bank_account_name || "",
+    });
+    setBankEditOpen(true);
+  }, [advanceDetail]);
+
+  const saveBankDetails = useCallback(async () => {
+    const row = advanceDetail;
+    if (!row || !isAdmin || savingBank) return;
+
+    const payload: Partial<AdvanceRecord> = {
+      bank_name: bankDraft.bank_name.trim(),
+      bank_account_number: bankDraft.bank_account_number.trim(),
+      bank_account_name: bankDraft.bank_account_name.trim(),
+    };
+    setSavingBank(true);
+    try {
+      await updateRow(row.id, payload);
+      try {
+        await createStaffActionLog({
+          actor,
+          targetUserId: row.user,
+          targetCollection: "advances",
+          targetRecord: row.id,
+          action: "update",
+          before: {
+            bank_name: row.bank_name || "",
+            bank_account_number: row.bank_account_number || "",
+            bank_account_name: row.bank_account_name || "",
+          },
+          after: payload,
+          note: "Admin sửa tài khoản nhận báo ứng",
+        });
+      } catch {
+        toast.warning("Đã cập nhật STK nhưng chưa ghi được nhật ký");
+      }
+      if (advanceDetailIdRef.current === row.id) {
+        resetQrState();
+        setAdvanceDetail({ ...row, ...payload });
+        setBankEditOpen(false);
+      }
+      toast.success("Đã cập nhật STK nhận tiền của card");
+      load();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Lỗi cập nhật STK nhận tiền");
+    } finally {
+      setSavingBank(false);
+    }
+  }, [
+    actor,
+    advanceDetail,
+    bankDraft,
+    isAdmin,
+    load,
+    resetQrState,
+    savingBank,
+    setAdvanceDetail,
+    updateRow,
+  ]);
+
   const disbursementHint =
     canDisburse || isDisbursing
       ? isDisbursing
         ? "Đang xác nhận giải ngân..."
-        : payoutMethod === "bank_transfer" && !qrUrl
-          ? "Không thể tạo mã QR cho record này"
-          : payoutMethod === "bank_transfer" && qrFailed
-            ? "Mã QR tải lỗi, vui lòng tải lại"
-            : payoutMethod === "bank_transfer" && !qrReady
-              ? "Đang tải mã QR của record hiện tại..."
-              : "Bấm → để đánh dấu đã giải ngân"
+        : payoutMethod === "bank_transfer" && (!qrUrl || qrFailed)
+          ? "QR lỗi · Bấm → để vẫn đánh dấu đã giải ngân"
+          : payoutMethod === "bank_transfer" && !qrReady
+            ? "Đang tải QR · Bấm → để đánh dấu đã giải ngân"
+            : "Bấm → để đánh dấu đã giải ngân"
       : "Vuốt hoặc bấm mũi tên để chuyển";
 
   const qrBlock =
     qrUrl && qrKey ? (
-      <div className="mt-3 flex flex-col items-center gap-2 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3">
+      <div
+        key={`${advanceDetail.id}:${qrKey}`}
+        className="mt-3 flex flex-col items-center gap-2 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3"
+      >
         <div className="text-[11px] font-semibold text-primary">Mã QR chuyển khoản</div>
         <div className="relative flex h-52 w-52 items-center justify-center overflow-hidden rounded-lg bg-background">
           {!qrReady && !qrFailed && (
@@ -2036,7 +2140,12 @@ function AdvanceDetailDialog({
               role="alert"
             >
               <TriangleAlert className="h-5 w-5" />
-              Không tải được mã QR. Không thể xác nhận giải ngân lúc này.
+              Không tải được mã QR. Hãy kiểm tra lại thông tin nhận tiền trước khi chuyển khoản.
+              {isAdmin && (
+                <Button type="button" size="sm" variant="outline" onClick={openBankEditor}>
+                  <Pencil className="h-3.5 w-3.5" /> Sửa STK nhận tiền
+                </Button>
+              )}
               <Button
                 type="button"
                 size="sm"
@@ -2062,11 +2171,23 @@ function AdvanceDetailDialog({
             loading="eager"
             fetchPriority="high"
             onLoad={() => {
-              setFailedQrKey((current) => (current === qrKey ? null : current));
+              if (
+                advanceDetailIdRef.current !== advanceDetail?.id ||
+                activeQrKeyRef.current !== qrKey
+              ) {
+                return;
+              }
+              setFailedQrKey(null);
               setLoadedQrKey(qrKey);
             }}
             onError={() => {
-              setLoadedQrKey((current) => (current === qrKey ? null : current));
+              if (
+                advanceDetailIdRef.current !== advanceDetail?.id ||
+                activeQrKeyRef.current !== qrKey
+              ) {
+                return;
+              }
+              setLoadedQrKey(null);
               setFailedQrKey(qrKey);
             }}
           />
@@ -2233,10 +2354,17 @@ function AdvanceDetailDialog({
                 </>
               )}
               {payoutMethod === "bank_transfer" && isAcceptedTabStatus && !qrUrl && (
-                <div className="mt-3 flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
-                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                  Không thể tạo mã QR. Vui lòng kiểm tra ngân hàng và số tài khoản trước khi giải
-                  ngân.
+                <div className="mt-3 space-y-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                  <div className="flex items-start gap-2">
+                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                    Không nhận diện được mã ngân hàng. Bạn có thể sửa STK hoặc vẫn đánh dấu đã giải
+                    ngân.
+                  </div>
+                  {isAdmin && (
+                    <Button type="button" size="sm" variant="outline" onClick={openBankEditor}>
+                      <Pencil className="h-3.5 w-3.5" /> Sửa STK nhận tiền
+                    </Button>
+                  )}
                 </div>
               )}
               {payoutMethod === "bank_transfer" &&
@@ -2337,6 +2465,68 @@ function AdvanceDetailDialog({
             )}
           </div>
         )}
+        <Dialog open={bankEditOpen} onOpenChange={setBankEditOpen}>
+          <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
+            <DialogHeader>
+              <DialogTitle>Sửa STK nhận tiền</DialogTitle>
+              <DialogDescription>
+                Chỉ thay đổi thông tin của card báo ứng hiện tại, không sửa hồ sơ người dùng.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label>Ngân hàng hoặc mã ngân hàng</Label>
+                <BankPicker
+                  value={bankDraft.bank_name}
+                  onChange={(value) =>
+                    setBankDraft((current) => ({ ...current, bank_name: value }))
+                  }
+                  disabled={savingBank}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Chỉ dùng mã chính xác, ví dụ ICB hoặc MB.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Label>Số tài khoản</Label>
+                <Input
+                  value={bankDraft.bank_account_number}
+                  inputMode="numeric"
+                  onChange={(e) =>
+                    setBankDraft((current) => ({
+                      ...current,
+                      bank_account_number: e.target.value.replace(/\D/g, ""),
+                    }))
+                  }
+                  disabled={savingBank}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Tên chủ tài khoản</Label>
+                <Input
+                  value={bankDraft.bank_account_name}
+                  onChange={(e) =>
+                    setBankDraft((current) => ({ ...current, bank_account_name: e.target.value }))
+                  }
+                  disabled={savingBank}
+                />
+              </div>
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setBankEditOpen(false)}
+                disabled={savingBank}
+              >
+                Huỷ
+              </Button>
+              <Button type="button" onClick={() => void saveBankDetails()} disabled={savingBank}>
+                {savingBank ? "Đang lưu…" : "Lưu STK"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );

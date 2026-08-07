@@ -17,7 +17,11 @@ import {
   ShieldCheck,
   Wallet,
 } from "lucide-react";
-import { APPROVAL_DASHBOARD_STATUSES, type ApprovalDashboardStats } from "@/lib/approval-dashboard";
+import {
+  APPROVAL_DASHBOARD_STATUSES,
+  type ApprovalDashboardStats,
+  type ApprovalDashboardStatus,
+} from "@/lib/approval-dashboard";
 
 const APPROVAL_STATUS_META: Array<{
   key: ApprovalDashboardStatus;

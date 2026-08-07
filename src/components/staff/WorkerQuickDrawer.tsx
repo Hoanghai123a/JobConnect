@@ -641,12 +641,10 @@ export function WorkerQuickDrawer({
                   <InfoCell label="Nhà chính" value={latest?.expand?.main_house?.name || "—"} />
                   <InfoCell
                     label="Người tuyển"
-                    value={
-                      (() => {
-                        const recruiter = getRecruiterDisplay(latest);
-                        return recruiter ? `${recruiter.name} · ${recruiter.label}` : "—";
-                      })()
-                    }
+                    value={(() => {
+                      const recruiter = getRecruiterDisplay(latest);
+                      return recruiter ? `${recruiter.name} · ${recruiter.label}` : "—";
+                    })()}
                   />
                 </div>
               )}
@@ -794,9 +792,7 @@ export function WorkerQuickDrawer({
               <RecruiterPicker
                 label="Người tuyển"
                 value={joinForm.recruiter_staff as RecruiterSelectionValue}
-                onChange={(value) =>
-                  setJoinForm((form) => ({ ...form, recruiter_staff: value }))
-                }
+                onChange={(value) => setJoinForm((form) => ({ ...form, recruiter_staff: value }))}
                 internalUsers={staffUsers}
                 partners={mainHouses}
               />

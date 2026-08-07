@@ -37,7 +37,7 @@ export const Route = createFileRoute("/api/public/app-icon-192")({
 
         if (!resized) return fallback();
 
-        return new Response(resized, {
+        return new Response(new Uint8Array(resized), {
           status: 200,
           headers: {
             "Content-Type": "image/png",

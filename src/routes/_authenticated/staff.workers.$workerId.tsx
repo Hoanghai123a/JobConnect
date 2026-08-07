@@ -476,21 +476,22 @@ function StaffWorkerDetailPage() {
         "Lịch sử đi làm": histories.map((history, index) => {
           const recruiter = getRecruiterDisplay(history);
           return {
-          STT: index + 1,
-          "Nhà máy": history.expand?.factory?.name || "",
-          "Mã nhân viên": history.employee_code || "",
-          "Họ tên tại nhà máy": history.worker_name_snapshot,
-          CCCD: history.worker_cccd_snapshot,
-          "Ngày sinh": formatDateOnly(history.worker_date_of_birth_snapshot),
-          "Địa chỉ thường trú": history.worker_address_snapshot || history.hometown_snapshot || "",
-          "Mã số thuế": history.worker_tax_code_snapshot || "",
-          "Ngày cấp CCCD": formatDateOnly(history.cccd_issue_date),
-          "Người tuyển": recruiter?.name || "",
-          "Loại người tuyển": recruiter?.label || "",
-          "Ngày vào": formatDateOnly(history.join_date),
-          "Ngày nghỉ": formatDateOnly(history.leave_date),
-          "Trạng thái": isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ",
-          "Ghi chú": history.note || "",
+            STT: index + 1,
+            "Nhà máy": history.expand?.factory?.name || "",
+            "Mã nhân viên": history.employee_code || "",
+            "Họ tên tại nhà máy": history.worker_name_snapshot,
+            CCCD: history.worker_cccd_snapshot,
+            "Ngày sinh": formatDateOnly(history.worker_date_of_birth_snapshot),
+            "Địa chỉ thường trú":
+              history.worker_address_snapshot || history.hometown_snapshot || "",
+            "Mã số thuế": history.worker_tax_code_snapshot || "",
+            "Ngày cấp CCCD": formatDateOnly(history.cccd_issue_date),
+            "Người tuyển": recruiter?.name || "",
+            "Loại người tuyển": recruiter?.label || "",
+            "Ngày vào": formatDateOnly(history.join_date),
+            "Ngày nghỉ": formatDateOnly(history.leave_date),
+            "Trạng thái": isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ",
+            "Ghi chú": history.note || "",
           };
         }),
       },
@@ -791,8 +792,7 @@ function StaffWorkerDetailPage() {
       ...personalSnapshot,
       hometown_snapshot: personalSnapshot.worker_address_snapshot,
       worker_tax_code_snapshot: latest?.worker_tax_code_snapshot || "",
-      recruiter_staff:
-        recruiterSelectionFromHistory(latest) || encodeInternalRecruiter(viewer.id),
+      recruiter_staff: recruiterSelectionFromHistory(latest) || encodeInternalRecruiter(viewer.id),
       join_date: "",
       leave_date: "",
       note: "",
@@ -1101,12 +1101,10 @@ function StaffWorkerDetailPage() {
             />
             <InfoCell
               label="Người tuyển gần nhất"
-              value={
-                (() => {
-                  const recruiter = getRecruiterDisplay(latestHistory);
-                  return recruiter ? `${recruiter.name} · ${recruiter.label}` : "Chưa gán";
-                })()
-              }
+              value={(() => {
+                const recruiter = getRecruiterDisplay(latestHistory);
+                return recruiter ? `${recruiter.name} · ${recruiter.label}` : "Chưa gán";
+              })()}
             />
           </div>
         )}
@@ -1886,12 +1884,10 @@ function StaffWorkerDetailPage() {
                 />
                 <InfoCell
                   label="Người tuyển"
-                  value={
-                    (() => {
-                      const recruiter = getRecruiterDisplay(detailHistory);
-                      return recruiter ? `${recruiter.name} · ${recruiter.label}` : "Chưa gán";
-                    })()
-                  }
+                  value={(() => {
+                    const recruiter = getRecruiterDisplay(detailHistory);
+                    return recruiter ? `${recruiter.name} · ${recruiter.label}` : "Chưa gán";
+                  })()}
                 />
                 <InfoCell
                   label="Nhà chính"

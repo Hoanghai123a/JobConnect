@@ -81,26 +81,26 @@ function buildBasicRows(
   return histories.map((history, index) => {
     const recruiter = getRecruiterDisplay(history);
     return {
-    STT: index + 1,
-    "Mã lịch sử": history.uid || "",
-    "Mã nhân viên": history.employee_code || "",
-    "Họ tên tại thời điểm đi làm": history.worker_name_snapshot,
-    "CCCD tại thời điểm đi làm": history.worker_cccd_snapshot,
-    "Ngày sinh tại thời điểm đi làm": formatDateOnly(history.worker_date_of_birth_snapshot),
-    "Địa chỉ thường trú tại thời điểm đi làm":
-      history.worker_address_snapshot || history.hometown_snapshot || "",
-    "Ngày cấp CCCD tại thời điểm đi làm": formatDateOnly(history.cccd_issue_date),
-    "Mã số thuế": history.worker_tax_code_snapshot || "",
-    "Người tuyển": recruiter?.name || "",
-    "Loại người tuyển": recruiter?.label || "",
-    "Nhà máy": history.expand?.factory?.name || "",
-    "Nhà chính": history.expand?.main_house?.name || "",
-    "Ngày vào": formatDateOnly(history.join_date),
-    "Ngày nghỉ": formatDateOnly(history.leave_date),
-    "Trạng thái": isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ",
-    "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
-    "Tài khoản gốc": history.expand?.user?.full_name || history.expand?.user?.username || "",
-    "Số điện thoại": history.expand?.user?.phone || "",
+      STT: index + 1,
+      "Mã lịch sử": history.uid || "",
+      "Mã nhân viên": history.employee_code || "",
+      "Họ tên tại thời điểm đi làm": history.worker_name_snapshot,
+      "CCCD tại thời điểm đi làm": history.worker_cccd_snapshot,
+      "Ngày sinh tại thời điểm đi làm": formatDateOnly(history.worker_date_of_birth_snapshot),
+      "Địa chỉ thường trú tại thời điểm đi làm":
+        history.worker_address_snapshot || history.hometown_snapshot || "",
+      "Ngày cấp CCCD tại thời điểm đi làm": formatDateOnly(history.cccd_issue_date),
+      "Mã số thuế": history.worker_tax_code_snapshot || "",
+      "Người tuyển": recruiter?.name || "",
+      "Loại người tuyển": recruiter?.label || "",
+      "Nhà máy": history.expand?.factory?.name || "",
+      "Nhà chính": history.expand?.main_house?.name || "",
+      "Ngày vào": formatDateOnly(history.join_date),
+      "Ngày nghỉ": formatDateOnly(history.leave_date),
+      "Trạng thái": isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ",
+      "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
+      "Tài khoản gốc": history.expand?.user?.full_name || history.expand?.user?.username || "",
+      "Số điện thoại": history.expand?.user?.phone || "",
     };
   });
 }
@@ -371,7 +371,7 @@ function StaffExportPage() {
               key={`${row.STT}-${row["Mã nhân viên"]}-${row["Ngày vào"]}`}
               className="list-card border-l-[color:var(--status-info)]"
             >
-              <div className="text-sm font-semibold">{row["Họ tên tại nhà máy"]}</div>
+              <div className="text-sm font-semibold">{row["Họ tên tại thời điểm đi làm"]}</div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">
                 {row["Nhà máy"]} · {row["Mã nhân viên"] || "Chưa có mã"} · {row["Trạng thái"]}
               </div>

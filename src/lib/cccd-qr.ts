@@ -10,7 +10,7 @@ export type CccdQrScanStage =
   | {
       step: "rotating";
       region: number;
-      total: 2;
+      total: number;
       rotation: 90 | 180 | 270;
       message: string;
     };

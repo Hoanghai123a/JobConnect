@@ -523,7 +523,9 @@ function AdminImportsPage() {
       const staffUsers = allUsers.filter(
         (item) =>
           (item.role === "staff" || item.role === "admin") &&
-          !String(item.username || "").toLowerCase().startsWith("vd_"),
+          !String(item.username || "")
+            .toLowerCase()
+            .startsWith("vd_"),
       );
       const factoryByName = new Map(factoryRows.map((item) => [item.name.toLowerCase(), item]));
       const factoryByCode = new Map(
@@ -641,11 +643,9 @@ function AdminImportsPage() {
           : undefined;
         const recruiterKey = accountIdentityKey(recruiterUsername);
         const recruiterTypeKey = accountIdentityKey(recruiterType);
-        const internalRecruiter =
-          staffByUsername.get(recruiterKey) || staffByUid.get(recruiterKey);
+        const internalRecruiter = staffByUsername.get(recruiterKey) || staffByUid.get(recruiterKey);
         const partnerRecruiter = mainHouseByName.get(recruiterKey);
-        const wantsPartner =
-          recruiterTypeKey === "partner" || recruiterTypeKey.includes("doi tac");
+        const wantsPartner = recruiterTypeKey === "partner" || recruiterTypeKey.includes("doi tac");
         const wantsInternal =
           recruiterTypeKey === "internal" || recruiterTypeKey.includes("noi bo");
         const recruiterAmbiguous =

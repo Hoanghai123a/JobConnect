@@ -76,9 +76,6 @@ export function filterInternalRecruiters(users: UserRecord[]) {
   );
 }
 
-export function findRecruitmentEntity(
-  entities: RecruitmentEntityRecord[],
-  id?: string,
-) {
+export function findRecruitmentEntity(entities: RecruitmentEntityRecord[], id?: string) {
   return id ? entities.find((entity) => entity.id === id) : undefined;
 }

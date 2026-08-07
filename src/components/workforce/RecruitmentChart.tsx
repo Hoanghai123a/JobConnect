@@ -77,10 +77,7 @@ function buildRecruitmentDayDetails({
     string,
     {
       factoryName: string;
-      recruiters: Map<
-        string,
-        { name: string; username: string; isVendor: boolean; count: number }
-      >;
+      recruiters: Map<string, { name: string; username: string; isVendor: boolean; count: number }>;
     }
   >();
 

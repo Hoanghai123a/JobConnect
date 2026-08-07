@@ -348,9 +348,7 @@ export function StaffWorkerDirectory({
             const latest = worker.latestHistory;
             const isWorking = latest ? isCurrentlyWorking(latest) : false;
             const recruiter = getRecruiterDisplay(latest);
-            const recruiterName = recruiter
-              ? `${recruiter.name} · ${recruiter.label}`
-              : undefined;
+            const recruiterName = recruiter ? `${recruiter.name} · ${recruiter.label}` : undefined;
             const mainHouseName = latest?.expand?.main_house?.name;
             const workerName = getWorkerDisplayName(worker);
             const snapshotCccd = latest?.worker_cccd_snapshot || "";

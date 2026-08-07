@@ -69,14 +69,15 @@ export function useStaffDirectoryAuxQuery(viewer: UserRecord | null) {
       const cached = await readCachedAuxData();
       if (cached) queryClient.setQueryData(queryKey, cached);
 
-      const [factoriesResult, recruitmentEntitiesResult, staffUsersResult] = await Promise.allSettled([
-        fetchFactories(),
-        fetchRecruitmentEntities(),
-        pb.collection("users").getFullList<UserRecord>({
-          filter: `(role="staff" || role="admin") && username!~"vd_"`,
-          sort: "full_name,username",
-        }),
-      ]);
+      const [factoriesResult, recruitmentEntitiesResult, staffUsersResult] =
+        await Promise.allSettled([
+          fetchFactories(),
+          fetchRecruitmentEntities(),
+          pb.collection("users").getFullList<UserRecord>({
+            filter: `(role="staff" || role="admin") && username!~"vd_"`,
+            sort: "full_name,username",
+          }),
+        ]);
 
       const failedResults = [factoriesResult, recruitmentEntitiesResult, staffUsersResult].filter(
         (result) => result.status === "rejected",

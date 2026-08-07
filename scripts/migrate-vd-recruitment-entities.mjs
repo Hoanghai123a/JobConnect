@@ -40,7 +40,12 @@ function normalizeName(value) {
 }
 
 function partnerName(user) {
-  return text(user.full_name) || text(user.username).replace(/^vd_/i, "").replace(/[._-]+/g, " ");
+  return (
+    text(user.full_name) ||
+    text(user.username)
+      .replace(/^vd_/i, "")
+      .replace(/[._-]+/g, " ")
+  );
 }
 
 function fieldNames(collection) {
@@ -91,7 +96,9 @@ function ensureEntitySchema(collection) {
     indexes.push("CREATE INDEX `idx_recruitment_entities_name` ON `recruitment_entities` (`name`)");
   }
   if (!indexes.some((index) => index.includes("idx_recruitment_entities_status"))) {
-    indexes.push("CREATE INDEX `idx_recruitment_entities_status` ON `recruitment_entities` (`status`)");
+    indexes.push(
+      "CREATE INDEX `idx_recruitment_entities_status` ON `recruitment_entities` (`status`)",
+    );
   }
   return { name: "recruitment_entities", fields, indexes };
 }
@@ -136,10 +143,15 @@ async function main() {
 
   let collections = await pb.collections.getFullList();
   let entityCollection = collections.find(
-    (collection) => collection.id === "pbc_mainhouses001" || ["main_houses", "recruitment_entities"].includes(collection.name),
+    (collection) =>
+      collection.id === "pbc_mainhouses001" ||
+      ["main_houses", "recruitment_entities"].includes(collection.name),
   );
-  const historyCollection = collections.find((collection) => collection.name === "employment_histories");
-  if (!entityCollection) throw new Error("Khong tim thay collection main_houses/recruitment_entities.");
+  const historyCollection = collections.find(
+    (collection) => collection.name === "employment_histories",
+  );
+  if (!entityCollection)
+    throw new Error("Khong tim thay collection main_houses/recruitment_entities.");
   if (!historyCollection) throw new Error("Khong tim thay collection employment_histories.");
 
   const schemaPlan = {
@@ -165,11 +177,17 @@ async function main() {
 
   const [allUsers, entities] = await Promise.all([
     pb.collection("users").getFullList({ sort: "created" }),
-    pb.collection(APPLY ? "recruitment_entities" : entityCollection.name).getFullList({ sort: "name" }),
+    pb
+      .collection(APPLY ? "recruitment_entities" : entityCollection.name)
+      .getFullList({ sort: "name" }),
   ]);
-  const partnerUsers = allUsers.filter((user) => text(user.username).toLowerCase().startsWith("vd_"));
+  const partnerUsers = allUsers.filter((user) =>
+    text(user.username).toLowerCase().startsWith("vd_"),
+  );
   const entitiesByLegacyUser = new Map(
-    entities.filter((entity) => entity.legacy_user_id).map((entity) => [entity.legacy_user_id, entity]),
+    entities
+      .filter((entity) => entity.legacy_user_id)
+      .map((entity) => [entity.legacy_user_id, entity]),
   );
   const entitiesByName = new Map();
   for (const entity of entities) {
@@ -184,7 +202,14 @@ async function main() {
     mode: APPLY ? "apply" : "dry-run",
     generatedAt: new Date().toISOString(),
     schemaPlan,
-    totals: { partnerUsers: partnerUsers.length, createdEntities: 0, reusedEntities: 0, histories: 0, assignments: 0, lockedUsers: 0 },
+    totals: {
+      partnerUsers: partnerUsers.length,
+      createdEntities: 0,
+      reusedEntities: 0,
+      histories: 0,
+      assignments: 0,
+      lockedUsers: 0,
+    },
     migrated: [],
     review: [],
   };
@@ -201,7 +226,13 @@ async function main() {
     if (!entity) {
       const exactMatches = entitiesByName.get(normalized) || [];
       if (exactMatches.length > 1) {
-        report.review.push({ userId: user.id, username: user.username, name, reason: "duplicate_exact_name", entityIds: exactMatches.map((item) => item.id) });
+        report.review.push({
+          userId: user.id,
+          username: user.username,
+          name,
+          reason: "duplicate_exact_name",
+          entityIds: exactMatches.map((item) => item.id),
+        });
         continue;
       }
       entity = exactMatches[0];
@@ -241,7 +272,10 @@ async function main() {
 
     const [histories, assignments] = await Promise.all([
       pb.collection("employment_histories").getFullList({ filter: `recruiter_staff="${user.id}"` }),
-      pb.collection("factory_managers").getFullList({ filter: `staff="${user.id}"` }).catch(() => []),
+      pb
+        .collection("factory_managers")
+        .getFullList({ filter: `staff="${user.id}"` })
+        .catch(() => []),
     ]);
 
     if (APPLY) {
@@ -260,7 +294,15 @@ async function main() {
     report.totals.histories += histories.length;
     report.totals.assignments += assignments.length;
     report.totals.lockedUsers++;
-    report.migrated.push({ userId: user.id, username: user.username, name, entityId: entity.id, action, histories: histories.length, assignments: assignments.length });
+    report.migrated.push({
+      userId: user.id,
+      username: user.username,
+      name,
+      entityId: entity.id,
+      action,
+      histories: histories.length,
+      assignments: assignments.length,
+    });
   }
 
   if (reportPath) await fs.writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");

@@ -39,10 +39,14 @@ import {
   getCurrentEmploymentHistory,
 } from "@/lib/employment";
 import { toast } from "sonner";
-import * as Icons from "lucide-react";
 import {
+  AlertTriangle,
+  Banknote,
   BookOpen,
+  Briefcase,
+  Calendar,
   ChevronDown,
+  Clock,
   Download,
   Pencil,
   Plus,
@@ -51,6 +55,14 @@ import {
   Send,
   Users,
   Factory as FactoryIcon,
+  FileText,
+  GraduationCap,
+  HelpCircle,
+  Lightbulb,
+  Mail,
+  Map as MapIcon,
+  Phone,
+  ShieldCheck,
   User as UserIcon,
 } from "lucide-react";
 
@@ -58,23 +70,25 @@ export const Route = createFileRoute("/_authenticated/guides")({
   component: GuidesPage,
 });
 
-const ICONS = [
-  "BookOpen",
-  "Lightbulb",
-  "FileText",
-  "ShieldCheck",
-  "Phone",
-  "Briefcase",
-  "GraduationCap",
-  "Calendar",
-  "Clock",
-  "Banknote",
-  "AlertTriangle",
-  "Users",
-  "Map",
-  "Mail",
-  "HelpCircle",
-];
+const GUIDE_ICONS = {
+  BookOpen,
+  Lightbulb,
+  FileText,
+  ShieldCheck,
+  Phone,
+  Briefcase,
+  GraduationCap,
+  Calendar,
+  Clock,
+  Banknote,
+  AlertTriangle,
+  Users,
+  Map: MapIcon,
+  Mail,
+  HelpCircle,
+} as const;
+
+const ICONS = Object.keys(GUIDE_ICONS) as Array<keyof typeof GUIDE_ICONS>;
 
 type TargetType = "all" | "factories" | "users";
 
@@ -468,7 +482,7 @@ function GuidesPage() {
       ) : (
         <div className="grid grid-cols-2 gap-2.5">
           {filtered.map((g) => {
-            const Icon = (Icons as any)[g.icon] || BookOpen;
+            const Icon = GUIDE_ICONS[g.icon as keyof typeof GUIDE_ICONS] || BookOpen;
             const t = (g.target_type || "all") as TargetType;
             const TIcon = TARGET_META[t].icon;
             return (
@@ -609,7 +623,7 @@ function GuidesPage() {
                 <Label>Icon</Label>
                 <div className="grid grid-cols-6 gap-2">
                   {ICONS.map((name) => {
-                    const I = (Icons as any)[name];
+                    const I = GUIDE_ICONS[name];
                     const active = editing.icon === name;
                     return (
                       <button

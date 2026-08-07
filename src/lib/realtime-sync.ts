@@ -326,8 +326,8 @@ async function runStartStaffRealtimeSync(
     const recruitmentEntityUnsub = await pb
       .collection("recruitment_entities")
       .subscribe("*", (e) =>
-        handleRecruitmentEntityEvent(e as unknown as RealtimeEvent<RecruitmentEntityRecord>).catch((err) =>
-          console.warn("[realtime-sync] recruitment-entity handler", err),
+        handleRecruitmentEntityEvent(e as unknown as RealtimeEvent<RecruitmentEntityRecord>).catch(
+          (err) => console.warn("[realtime-sync] recruitment-entity handler", err),
         ),
       );
     unsubs.push(recruitmentEntityUnsub);

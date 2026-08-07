@@ -334,7 +334,8 @@ export async function reconcileStaffData(opts: {
     ).values(),
   ];
   if (factories.length) await idbPutMany(db, STORE_FACTORIES, factories);
-  if (recruitmentEntities.length) await idbPutMany(db, STORE_RECRUITMENT_ENTITIES, recruitmentEntities);
+  if (recruitmentEntities.length)
+    await idbPutMany(db, STORE_RECRUITMENT_ENTITIES, recruitmentEntities);
 
   if (opts.includeCccdVersions !== false) {
     const cccdVersions: CccdVersionRecord[] = [];
@@ -436,7 +437,10 @@ export async function readCachedAuxData(): Promise<{
   try {
     const db = await openDB();
     const factories = await idbGetAll<FactoryRecord>(db, STORE_FACTORIES);
-    const recruitmentEntities = await idbGetAll<RecruitmentEntityRecord>(db, STORE_RECRUITMENT_ENTITIES);
+    const recruitmentEntities = await idbGetAll<RecruitmentEntityRecord>(
+      db,
+      STORE_RECRUITMENT_ENTITIES,
+    );
     const staffUsers = await idbGetAll<UserRecord>(db, STORE_STAFF_USERS);
     if (!factories.length) return null;
     return { factories, recruitmentEntities, staffUsers };
@@ -597,7 +601,9 @@ export async function updateCachedFactory(record: FactoryRecord): Promise<void> 
   }
 }
 
-export async function updateCachedRecruitmentEntity(record: RecruitmentEntityRecord): Promise<void> {
+export async function updateCachedRecruitmentEntity(
+  record: RecruitmentEntityRecord,
+): Promise<void> {
   try {
     const db = await openDB();
     await idbPut(db, STORE_RECRUITMENT_ENTITIES, record);

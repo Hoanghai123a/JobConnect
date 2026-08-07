@@ -791,7 +791,7 @@ function DesktopAdminDashboard({
   cccdVersions: CccdVersionRecord[];
   loading: boolean;
   error: string;
-  approvalStats: ApprovalStats;
+  approvalStats: ApprovalDashboardStats;
   onRetry: () => void;
 }) {
   const sectionMeta = {

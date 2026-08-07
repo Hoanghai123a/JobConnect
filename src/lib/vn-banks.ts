@@ -1,7 +1,7 @@
 // Common Vietnamese banks (short name — full name)
 export const VN_BANKS: { code: string; name: string; bin: string }[] = [
   { code: "VCB", name: "Vietcombank - NH TMCP Ngoại thương Việt Nam", bin: "970436" },
-  { code: "VTB", name: "VietinBank - NH TMCP Công thương Việt Nam", bin: "970415" },
+  { code: "ICB", name: "VietinBank - NH TMCP Công thương Việt Nam", bin: "970415" },
   { code: "BIDV", name: "BIDV - NH TMCP Đầu tư và Phát triển Việt Nam", bin: "970418" },
   { code: "AGR", name: "Agribank - NH Nông nghiệp và PT Nông thôn", bin: "970405" },
   { code: "TCB", name: "Techcombank - NH TMCP Kỹ thương Việt Nam", bin: "970407" },
@@ -46,21 +46,22 @@ export const VN_BANKS: { code: string; name: string; bin: string }[] = [
   { code: "VRB", name: "Vietnam-Russia Joint Venture Bank (VRB)", bin: "970421" },
 ];
 
+function findExactBank(input: string) {
+  const value = input.trim();
+  if (!value) return undefined;
+
+  const code = value.toLowerCase();
+  return VN_BANKS.find((bank) => bank.code.toLowerCase() === code || bank.name === value);
+}
+
 export function getBankBin(bankName: string): string | undefined {
-  const resolved = resolveBankName(bankName);
-  return VN_BANKS.find((b) => b.name === resolved)?.bin;
+  return findExactBank(bankName)?.bin;
 }
 
 export function resolveBankName(input: string): string {
-  if (!input) return "";
-  const lower = input.toLowerCase().trim();
-  const byCode = VN_BANKS.find((b) => b.code.toLowerCase() === lower);
-  if (byCode) return byCode.name;
-  const byName = VN_BANKS.find((b) => b.name === input);
-  if (byName) return byName.name;
-  const byPartial = VN_BANKS.find((b) => b.name.toLowerCase().includes(lower));
-  if (byPartial) return byPartial.name;
-  return input;
+  const value = input.trim();
+  if (!value) return "";
+  return findExactBank(value)?.name || value;
 }
 
 export function buildVietQrUrl(opts: {
