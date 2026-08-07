@@ -470,6 +470,7 @@ export function AdvancesPage() {
     setAdvancePolicyLoading(true);
     resolveAdvancePolicy(selectedAdvanceUser.id, {
       allowAfterLeave: Boolean(settings.allow_advance_after_leave),
+      actorRole: user?.role,
     })
       .then((policy) => {
         if (!active) return;
@@ -487,7 +488,7 @@ export function AdvancesPage() {
     return () => {
       active = false;
     };
-  }, [isAdmin, isStaff, selectedAdvanceUser?.id, settings.allow_advance_after_leave]);
+  }, [isAdmin, isStaff, selectedAdvanceUser?.id, settings.allow_advance_after_leave, user?.role]);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -576,6 +577,7 @@ export function AdvancesPage() {
       await assertAdvanceInteractionAllowed(user?.role);
       const policy = await resolveAdvancePolicy(selectedAdvanceUser.id, {
         allowAfterLeave: Boolean(settings.allow_advance_after_leave),
+        actorRole: user?.role,
       });
       validateAdvanceAmount(policy, amount);
       const employment = policy.employment;

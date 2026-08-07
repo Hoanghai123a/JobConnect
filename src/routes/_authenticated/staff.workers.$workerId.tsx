@@ -393,7 +393,7 @@ function StaffWorkerDetailPage() {
     canReportAdvanceForWorker &&
     (Boolean(activeHistory) || allowAdvanceAfterLeave) &&
     advanceInteractionAllowed &&
-    !latestHistory?.recruiter_partner;
+    (!latestHistory?.recruiter_partner || viewer?.role === "admin");
   const canViewPayrollForWorker = canViewPayroll(viewer, histories, managedFactoryIds);
   const canReportLeaveForWorker = canReportLeave(
     viewer,
@@ -419,7 +419,10 @@ function StaffWorkerDetailPage() {
     if (!advanceOpen || !workerUser?.id) return;
     let active = true;
     setAdvancePolicyLoading(true);
-    resolveAdvancePolicy(workerUser.id, { allowAfterLeave: allowAdvanceAfterLeave })
+    resolveAdvancePolicy(workerUser.id, {
+      allowAfterLeave: allowAdvanceAfterLeave,
+      actorRole: viewer?.role,
+    })
       .then((policy) => {
         if (!active) return;
         setAdvancePolicy(policy);
@@ -436,7 +439,7 @@ function StaffWorkerDetailPage() {
     return () => {
       active = false;
     };
-  }, [advanceOpen, allowAdvanceAfterLeave, workerUser?.id]);
+  }, [advanceOpen, allowAdvanceAfterLeave, viewer?.role, workerUser?.id]);
 
   const joinableFactories = useMemo(() => {
     if (viewer?.role === "admin" || recentRecruiter) return factories;
@@ -518,6 +521,7 @@ function StaffWorkerDetailPage() {
       await assertAdvanceInteractionAllowed(viewer.role);
       const policy = await resolveAdvancePolicy(workerUser.id, {
         allowAfterLeave: allowAdvanceAfterLeave,
+        actorRole: viewer.role,
       });
       validateAdvanceAmount(policy, amount);
       const employment = policy.employment;

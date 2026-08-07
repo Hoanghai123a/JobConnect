@@ -492,6 +492,7 @@ export function WorkerEmploymentDrawer({
     setAdvanceOutstandingLoading(true);
     resolveAdvancePolicy(user.id, {
       allowAfterLeave: Boolean(settings?.allow_advance_after_leave),
+      actorRole: actor?.role,
     })
       .then((policy) => {
         if (!active) return;
@@ -510,7 +511,7 @@ export function WorkerEmploymentDrawer({
     return () => {
       active = false;
     };
-  }, [advanceOpen, settings?.allow_advance_after_leave, user?.id]);
+  }, [actor?.role, advanceOpen, settings?.allow_advance_after_leave, user?.id]);
 
   const [bankForm, setBankForm] = useState({
     bank_name: "",
@@ -1190,6 +1191,7 @@ export function WorkerEmploymentDrawer({
       await assertAdvanceInteractionAllowed(actor.role);
       const policy = await resolveAdvancePolicy(user.id, {
         allowAfterLeave: Boolean(settings?.allow_advance_after_leave),
+        actorRole: actor.role,
       });
       validateAdvanceAmount(policy, amount);
       const employment = policy.employment;
@@ -1316,7 +1318,9 @@ export function WorkerEmploymentDrawer({
   const canReportAdvanceByScope =
     permissions.canReportAdvance && (isWorking || allowAdvanceAfterLeave);
   const canOpenAdvance =
-    canReportAdvanceByScope && advanceInteractionAllowed && !latestHistory?.recruiter_partner;
+    canReportAdvanceByScope &&
+    advanceInteractionAllowed &&
+    (!latestHistory?.recruiter_partner || actor?.role === "admin");
   const hasBankInfo = Boolean(
     user.bank_name || user.bank_account_number || user.bank_account_name || user.bank_account_note,
   );

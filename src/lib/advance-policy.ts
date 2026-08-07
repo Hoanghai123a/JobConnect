@@ -44,6 +44,7 @@ export type AdvancePolicy = {
 
 export type AdvancePolicyOptions = {
   allowAfterLeave?: boolean;
+  actorRole?: Role;
 };
 
 const OUTSTANDING_FILTER =
@@ -72,7 +73,7 @@ export async function resolveAdvancePolicy(
     throw new Error("Người lao động chưa có lịch sử đi làm, không thể báo ứng");
   }
 
-  if (employment.recruiter_partner) {
+  if (employment.recruiter_partner && options.actorRole !== "admin") {
     throw new Error(PARTNER_RECRUITED_ADVANCE_DISABLED_MESSAGE);
   }
 

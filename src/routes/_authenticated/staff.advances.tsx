@@ -534,6 +534,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
     setLoadingWorkerPolicy(true);
     resolveAdvancePolicy(selectedWorkerId, {
       allowAfterLeave: Boolean(settings.allow_advance_after_leave),
+      actorRole: user?.role,
     })
       .then((policy) => {
         if (!active) return;
@@ -551,7 +552,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
     return () => {
       active = false;
     };
-  }, [selectedWorkerId, settings.allow_advance_after_leave]);
+  }, [selectedWorkerId, settings.allow_advance_after_leave, user?.role]);
 
   const updateRow = async (id: string, payload: Partial<AdvanceRecord>) => {
     await assertAdvanceInteractionAllowed(user?.role);
@@ -646,6 +647,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
       }
       const policy = await resolveAdvancePolicy(currentWorker.user.id, {
         allowAfterLeave: Boolean(settings.allow_advance_after_leave),
+        actorRole: user.role,
       });
       validateAdvanceAmount(policy, amount);
       const employment = policy.employment;

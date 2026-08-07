@@ -247,7 +247,9 @@ export function WorkerQuickDrawer({
     worker?.canReportAdvance && (isWorking || allowAdvanceAfterLeave),
   );
   const canOpenAdvance =
-    canReportAdvanceByScope && advanceInteractionAllowed && !latest?.recruiter_partner;
+    canReportAdvanceByScope &&
+    advanceInteractionAllowed &&
+    (!latest?.recruiter_partner || viewer?.role === "admin");
 
   const submitLeave = async () => {
     if (!worker || !activeHistory || !viewer?.id) return;
@@ -428,6 +430,7 @@ export function WorkerQuickDrawer({
       await assertAdvanceInteractionAllowed(viewer.role);
       const policy = await resolveAdvancePolicy(worker.user.id, {
         allowAfterLeave: allowAdvanceAfterLeave,
+        actorRole: viewer.role,
       });
       validateAdvanceAmount(policy, amount);
       const employment = policy.employment;
@@ -1040,7 +1043,7 @@ function AdvanceForm({
   useEffect(() => {
     let active = true;
     setPolicyLoading(true);
-    resolveAdvancePolicy(worker.user.id, { allowAfterLeave })
+    resolveAdvancePolicy(worker.user.id, { allowAfterLeave, actorRole: viewer.role })
       .then((result) => {
         if (!active) return;
         setPolicy(result);
@@ -1057,7 +1060,7 @@ function AdvanceForm({
     return () => {
       active = false;
     };
-  }, [allowAfterLeave, worker.user.id]);
+  }, [allowAfterLeave, viewer.role, worker.user.id]);
 
   const limit = policy?.limit || 0;
 
