@@ -21,7 +21,7 @@ import {
   Users,
   WifiOff,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { normalizeUserPickerSearch } from "@/components/workforce/UserPicker";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -93,6 +93,7 @@ import { WorkerDesktopCard } from "@/components/staff/WorkerDesktopCard";
 import { StaffWorkerDirectory } from "@/components/staff/StaffWorkerDirectory";
 import { RecruitChartDialog } from "@/components/workforce/RecruitChartDialog";
 import { RegisterDialog as SharedRegisterDialog } from "@/components/workforce/RegisterDialog";
+import { getUserErrorMessage } from "@/lib/toast";
 
 export const Route = createFileRoute("/_authenticated/admin/workforce")({
   beforeLoad: () => {
@@ -189,7 +190,7 @@ function getWorkerDisplayName(user?: UserRecord) {
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+  return getUserErrorMessage(error, fallback);
 }
 
 function getPocketBaseFieldErrors(error: unknown) {

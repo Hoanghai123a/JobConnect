@@ -90,3 +90,20 @@ Trong PocketBase Admin UI, vào **Settings -> Application -> Batch requests** v�
 - Giữ quyền tạo hiện tại cho admin đối với `users`, `employment_histories` và `staff_action_logs`.
 
 Nếu Batch API chưa bật hoặc giới hạn request thấp hơn cấu hình của app, luồng import sẽ báo lỗi và không chuyển sang cách tạo tuần tự.
+
+
+## Tiến độ công việc Admin
+
+Trong PocketBase Admin UI, vào **Collections -> Import collections**, chọn
+`pb_collections_work_progress.json` và xác nhận import để tạo ba collection dùng chung cho các
+tài khoản Admin:
+
+- `work_progress_tabs`: tên và thứ tự các tab công việc.
+- `work_progress_statuses`: trạng thái thuộc từng tab; trạng thái cuối cùng được tính là hoàn thành.
+- `work_progress_tasks`: công việc và trạng thái hiện tại.
+
+Cả ba collection chỉ cho phép tài khoản có `role = "admin"` đọc và thay đổi dữ liệu. Relation từ trạng thái/công việc tới tab bật cascade delete; relation từ công việc tới trạng thái không cascade để ngăn xóa trạng thái đang được sử dụng. Giữ file JSON và tài liệu ở UTF-8 để không lỗi tiếng Việt.
+
+Lưu ý: chỉ import file này khi ba collection chưa tồn tại. Nếu đã có dữ liệu thực tế, hãy sao lưu
+PocketBase và đối chiếu field, rule, relation cascade cùng index trước khi cập nhật schema; không
+xóa collection thủ công vì sẽ mất toàn bộ tab, trạng thái và công việc liên quan.

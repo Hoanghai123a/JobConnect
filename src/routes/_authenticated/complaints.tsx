@@ -22,7 +22,7 @@ import {
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { escapePb } from "@/lib/delegations";
 import { findActiveEmploymentByUser, type EmploymentHistoryRecord } from "@/lib/employment";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   Phone,
   Send,

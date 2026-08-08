@@ -30,7 +30,7 @@ import { isCurrentlyWorking, type EmploymentHistoryRecord } from "@/lib/employme
 import type { UserRecord } from "@/lib/pocketbase";
 import { getApprovalStatus } from "@/lib/user-approval";
 import { getRecruiterDisplay } from "@/lib/recruiters";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 const APPROVAL_STATUS_LABELS = {
   pending: "Chờ duyệt",

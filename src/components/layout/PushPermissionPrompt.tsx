@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Bell, BellRing } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { useAuth } from "@/lib/auth";
 import {

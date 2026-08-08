@@ -43,7 +43,8 @@ import {
   Upload,
   Wallet,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
+import { getUserErrorMessage } from "@/lib/toast";
 
 export const Route = createFileRoute("/_authenticated/check-attendance")({
   component: CheckAttendancePage,
@@ -656,7 +657,7 @@ function AdminCheckAttendance() {
       setNote("");
       await load();
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Không nhập được file check công");
+      toast.error(getUserErrorMessage(error, "Không nhập được file check công"));
     } finally {
       setUploading(false);
     }
@@ -839,7 +840,7 @@ function AdminCheckAttendance() {
       setSalaryNote("");
       await load();
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Không nhập được file check lương");
+      toast.error(getUserErrorMessage(error, "Không nhập được file check lương"));
     } finally {
       setSalaryUploading(false);
     }
@@ -1216,7 +1217,7 @@ function UserCheckAttendance() {
       );
       markSeen("check-attendance", user.id, latest || Date.now());
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Không tải Được check công/lương");
+      toast.error(getUserErrorMessage(error, "Không tải Được check công/lương"));
     } finally {
       setLoading(false);
     }

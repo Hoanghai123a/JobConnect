@@ -39,7 +39,7 @@ import {
   getEmploymentHistoryAtDate,
   type EmploymentHistoryRecord,
 } from "@/lib/employment";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   ChevronLeft,
   ChevronRight,

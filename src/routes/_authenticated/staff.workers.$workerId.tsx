@@ -19,7 +19,7 @@ import {
   Wallet,
   ZoomIn,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card } from "@/components/ui/card";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
@@ -106,6 +106,7 @@ import { resolveBankName } from "@/lib/vn-banks";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
 import { AdvanceReadOnlyNotice } from "@/components/advances/AdvanceReadOnlyNotice";
 import { RecruiterPicker } from "@/components/employment/RecruiterPicker";
+import { getUserErrorMessage } from "@/lib/toast";
 import {
   buildRecruiterPayload,
   encodeInternalRecruiter,
@@ -432,7 +433,7 @@ function StaffWorkerDetailPage() {
         if (!active) return;
         setAdvancePolicy(null);
         setAdvancePolicyError(
-          error instanceof Error ? error.message : "Không thể kiểm tra hạn mức ứng tiền",
+          getUserErrorMessage(error, "Không thể kiểm tra hạn mức ứng tiền"),
         );
       })
       .finally(() => active && setAdvancePolicyLoading(false));
@@ -565,7 +566,7 @@ function StaffWorkerDetailPage() {
       setAdvancePayoutMethod("bank_transfer");
       toast.success("Đã gửi yêu cầu ứng lương");
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Không thể tạo yêu cầu ứng tiền");
+      toast.error(getUserErrorMessage(error, "Không thể tạo yêu cầu ứng tiền"));
     }
   };
 
@@ -896,7 +897,7 @@ function StaffWorkerDetailPage() {
       setOldHistoryCccdBack(null);
       toast.success("Đã bổ sung lịch sử đi làm cũ");
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Không thể bổ sung lịch sử cũ");
+      toast.error(getUserErrorMessage(error, "Không thể bổ sung lịch sử cũ"));
     } finally {
       setOldHistorySubmitting(false);
     }
@@ -2069,7 +2070,7 @@ function HistoryCccdImages({
         await onUpdated(updatedVersion);
         toast.success("Đã cập nhật ảnh CCCD");
       } catch (error: unknown) {
-        toast.error(error instanceof Error ? error.message : "Lỗi upload ảnh");
+        toast.error(getUserErrorMessage(error, "Lỗi upload ảnh"));
       } finally {
         setUploading(false);
         e.target.value = "";
@@ -2088,7 +2089,7 @@ function HistoryCccdImages({
       await onUpdated(updatedVersion);
       toast.success("Đã xoá ảnh CCCD");
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Lỗi xoá ảnh");
+      toast.error(getUserErrorMessage(error, "Lỗi xoá ảnh"));
     } finally {
       setUploading(false);
     }
@@ -2269,7 +2270,7 @@ function HistoryCccdUpload({
         toast.success("Đã thêm ảnh CCCD");
         onCreated(version);
       } catch (error: unknown) {
-        toast.error(error instanceof Error ? error.message : "Lỗi upload ảnh");
+        toast.error(getUserErrorMessage(error, "Lỗi upload ảnh"));
       } finally {
         setUploading(false);
         e.target.value = "";

@@ -82,7 +82,7 @@ import {
   type AdvancePolicy,
 } from "@/lib/advance-policy";
 import { buildVietQrUrl, resolveBankName } from "@/lib/vn-banks";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   Banknote,
   Check,
@@ -103,6 +103,7 @@ import {
 import { cn } from "@/lib/utils";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
 import { AdvanceReadOnlyNotice } from "@/components/advances/AdvanceReadOnlyNotice";
+import { getUserErrorMessage } from "@/lib/toast";
 
 export const Route = createFileRoute("/_authenticated/advances")({
   component: AdvancesPage,
@@ -489,7 +490,7 @@ export function AdvancesPage() {
         if (!active) return;
         setAdvancePolicy(null);
         setAdvancePolicyError(
-          error instanceof Error ? error.message : "Không thể kiểm tra hạn mức ứng tiền",
+          getUserErrorMessage(error, "Không thể kiểm tra hạn mức ứng tiền"),
         );
       })
       .finally(() => active && setAdvancePolicyLoading(false));
@@ -558,7 +559,7 @@ export function AdvancesPage() {
       if (!enabled) setDisableConfirmationOpen(false);
     } catch (error: unknown) {
       toast.error(
-        error instanceof Error ? error.message : "Không thể lưu trạng thái chức năng báo ứng",
+        getUserErrorMessage(error, "Không thể lưu trạng thái chức năng báo ứng"),
       );
     } finally {
       setAdvanceSettingSaving(false);
@@ -904,7 +905,7 @@ export function AdvancesPage() {
       await load();
       loadStats().catch(() => {});
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Không thể hoàn tác trạng thái");
+      toast.error(getUserErrorMessage(error, "Không thể hoàn tác trạng thái"));
     } finally {
       setUndoing(false);
     }
@@ -2089,7 +2090,7 @@ function AdvanceDetailDialog({
       toast.success("Đã cập nhật STK nhận tiền của card");
       load();
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Lỗi cập nhật STK nhận tiền");
+      toast.error(getUserErrorMessage(error, "Lỗi cập nhật STK nhận tiền"));
     } finally {
       setSavingBank(false);
     }
@@ -2416,7 +2417,7 @@ function AdvanceDetailDialog({
                       setAdvanceDetail({ ...advanceDetail, ...payload });
                       load();
                     } catch (error: unknown) {
-                      toast.error(error instanceof Error ? error.message : "Lỗi lưu ghi chú");
+                      toast.error(getUserErrorMessage(error, "Lỗi lưu ghi chú"));
                     } finally {
                       setSavingNotes(false);
                     }

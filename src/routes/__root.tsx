@@ -11,6 +11,7 @@ import { useEffect } from "react";
 
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/lib/auth";
+import { getUserErrorMessage } from "@/lib/toast";
 import { Toaster } from "@/components/ui/sonner";
 import { installPwaPromptListeners } from "@/lib/pwa-install";
 import { RoamingPet } from "@/components/garden/RoamingPet";
@@ -46,6 +47,11 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
   const chunkLoadFailed = isChunkLoadError(error);
+  const userMessage = getUserErrorMessage(error);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) console.error("[JobConnect] L?i giao di?n g?c:", error);
+  }, [error]);
 
   useEffect(() => {
     if (!chunkLoadFailed) return;
@@ -61,7 +67,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold">Đã có lỗi xảy ra</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{userMessage}</p>
         <button
           onClick={() => {
             if (chunkLoadFailed) {

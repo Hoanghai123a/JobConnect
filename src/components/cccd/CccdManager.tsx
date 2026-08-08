@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Download, IdCard, ImagePlus, Trash, ZoomIn } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";

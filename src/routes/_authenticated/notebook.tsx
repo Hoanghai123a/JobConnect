@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { escapePb } from "@/lib/delegations";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   Ban,
   BookOpenText,

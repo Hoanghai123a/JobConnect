@@ -11,7 +11,7 @@ import {
   UserRoundX,
   UsersRound,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -39,6 +39,7 @@ import {
 import type { UserRecord } from "@/lib/pocketbase";
 import { clearStaffCache } from "@/lib/staff-cache";
 import { createStaffActionLog } from "@/lib/staff-log";
+import { getUserErrorMessage } from "@/lib/toast";
 
 type ImportPhase =
   | "idle"
@@ -230,7 +231,7 @@ export function BulkWorkerHistoryImportCard({ actor }: { actor: UserRecord }) {
         );
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Không thể xử lý file Excel.";
+      const message = getUserErrorMessage(error, "Không thể xử lý file Excel.");
       setFatalError(message);
       setPhase("error");
       toast.error(message);
@@ -262,7 +263,7 @@ export function BulkWorkerHistoryImportCard({ actor }: { actor: UserRecord }) {
       }
       await runImport(file, inspected);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Không thể kiểm tra file Excel.";
+      const message = getUserErrorMessage(error, "Không thể kiểm tra file Excel.");
       setFatalError(message);
       setPhase("error");
       toast.error(message);

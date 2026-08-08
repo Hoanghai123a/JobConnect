@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Users, ShieldCheck, UserRoundCheck, UserRound } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { StatCard } from "@/components/ui/stat-card";
 import { Card } from "@/components/ui/card";

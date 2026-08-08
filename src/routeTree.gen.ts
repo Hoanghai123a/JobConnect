@@ -51,6 +51,7 @@ import { Route as AuthenticatedStaffExportRouteImport } from './routes/_authenti
 import { Route as AuthenticatedStaffApprovalsRouteImport } from './routes/_authenticated/staff.approvals'
 import { Route as AuthenticatedStaffAdvancesRouteImport } from './routes/_authenticated/staff.advances'
 import { Route as AuthenticatedAdminWorkforceRouteImport } from './routes/_authenticated/admin/workforce'
+import { Route as AuthenticatedAdminWorkProgressRouteImport } from './routes/_authenticated/admin/work-progress'
 import { Route as AuthenticatedAdminStaffRouteImport } from './routes/_authenticated/admin/staff'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminManageRouteImport } from './routes/_authenticated/admin/manage'
@@ -290,6 +291,12 @@ const AuthenticatedAdminWorkforceRoute =
     path: '/admin/workforce',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedAdminWorkProgressRoute =
+  AuthenticatedAdminWorkProgressRouteImport.update({
+    id: '/admin/work-progress',
+    path: '/admin/work-progress',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedAdminStaffRoute = AuthenticatedAdminStaffRouteImport.update({
   id: '/admin/staff',
   path: '/admin/staff',
@@ -428,6 +435,7 @@ export interface FileRoutesByFullPath {
   '/admin/manage': typeof AuthenticatedAdminManageRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/staff': typeof AuthenticatedAdminStaffRouteWithChildren
+  '/admin/work-progress': typeof AuthenticatedAdminWorkProgressRoute
   '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
   '/staff/advances': typeof AuthenticatedStaffAdvancesRoute
   '/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
@@ -486,6 +494,7 @@ export interface FileRoutesByTo {
   '/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/admin/manage': typeof AuthenticatedAdminManageRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/work-progress': typeof AuthenticatedAdminWorkProgressRoute
   '/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
   '/staff/advances': typeof AuthenticatedStaffAdvancesRoute
   '/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
@@ -549,6 +558,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/manage': typeof AuthenticatedAdminManageRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/staff': typeof AuthenticatedAdminStaffRouteWithChildren
+  '/_authenticated/admin/work-progress': typeof AuthenticatedAdminWorkProgressRoute
   '/_authenticated/admin/workforce': typeof AuthenticatedAdminWorkforceRoute
   '/_authenticated/staff/advances': typeof AuthenticatedStaffAdvancesRoute
   '/_authenticated/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
@@ -612,6 +622,7 @@ export interface FileRouteTypes {
     | '/admin/manage'
     | '/admin/settings'
     | '/admin/staff'
+    | '/admin/work-progress'
     | '/admin/workforce'
     | '/staff/advances'
     | '/staff/approvals'
@@ -670,6 +681,7 @@ export interface FileRouteTypes {
     | '/admin/logs'
     | '/admin/manage'
     | '/admin/settings'
+    | '/admin/work-progress'
     | '/admin/workforce'
     | '/staff/advances'
     | '/staff/approvals'
@@ -732,6 +744,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/manage'
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/staff'
+    | '/_authenticated/admin/work-progress'
     | '/_authenticated/admin/workforce'
     | '/_authenticated/staff/advances'
     | '/_authenticated/staff/approvals'
@@ -1078,6 +1091,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminWorkforceRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/admin/work-progress': {
+      id: '/_authenticated/admin/work-progress'
+      path: '/admin/work-progress'
+      fullPath: '/admin/work-progress'
+      preLoaderRoute: typeof AuthenticatedAdminWorkProgressRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/admin/staff': {
       id: '/_authenticated/admin/staff'
       path: '/admin/staff'
@@ -1302,6 +1322,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAdminManageRoute: typeof AuthenticatedAdminManageRoute
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
   AuthenticatedAdminStaffRoute: typeof AuthenticatedAdminStaffRouteWithChildren
+  AuthenticatedAdminWorkProgressRoute: typeof AuthenticatedAdminWorkProgressRoute
   AuthenticatedAdminWorkforceRoute: typeof AuthenticatedAdminWorkforceRoute
 }
 
@@ -1332,6 +1353,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminManageRoute: AuthenticatedAdminManageRoute,
   AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
   AuthenticatedAdminStaffRoute: AuthenticatedAdminStaffRouteWithChildren,
+  AuthenticatedAdminWorkProgressRoute: AuthenticatedAdminWorkProgressRoute,
   AuthenticatedAdminWorkforceRoute: AuthenticatedAdminWorkforceRoute,
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarClock, Eye, IdCard, NotebookPen, ZoomIn } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -17,6 +17,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { fileUrl } from "@/lib/pocketbase";
 import type { CccdVersionRecord } from "@/lib/cccd-versions";
+import { getUserErrorMessage } from "@/lib/toast";
 import {
   fetchEmploymentHistories,
   isCurrentlyWorking,
@@ -121,7 +122,7 @@ function formatDate(value?: string) {
 }
 
 function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+  return getUserErrorMessage(error, fallback);
 }
 
 export function UserWorkHistoryPanel() {

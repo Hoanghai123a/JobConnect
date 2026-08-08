@@ -473,56 +473,56 @@
     padding: 0.625rem;
   }
 
-  html[data-ui-device="desktop"] .desktop-shell[data-desktop-role="user"] .worker-salary-card {
-    width: min(100%, 54rem);
+  html[data-ui-device="desktop"] .worker-salary-card {
+    width: min(100%, 26.25rem);
     margin-inline: auto;
   }
 
-  html[data-ui-device="desktop"] .desktop-shell[data-desktop-role="user"] .worker-salary-layout {
-    display: grid;
-    grid-template-areas: "details personal";
-    grid-template-columns: minmax(0, 1.2fr) minmax(15rem, 0.8fr);
-    align-items: start;
-    gap: 0.625rem;
+  html[data-ui-device="desktop"] .worker-salary-card > .gradient-accent {
+    padding: 0.75rem 0.875rem;
+  }
+
+  html[data-ui-device="desktop"] .worker-salary-layout {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
     padding: 0.75rem;
   }
 
-  html[data-ui-device="desktop"] .desktop-shell[data-desktop-role="user"] .worker-salary-details {
-    grid-area: details;
+  html[data-ui-device="desktop"] .worker-salary-details,
+  html[data-ui-device="desktop"] .worker-salary-personal {
+    width: 100%;
     min-width: 0;
+    max-width: none;
   }
 
-  html[data-ui-device="desktop"] .desktop-shell[data-desktop-role="user"] .worker-salary-personal {
-    grid-area: personal;
-    min-width: 0;
-  }
-
-  html[data-ui-device="desktop"]
-    .desktop-shell[data-desktop-role="user"]
-    .worker-salary-personal-grid {
+  html[data-ui-device="desktop"] .worker-salary-personal-grid {
     gap: 0.375rem;
   }
 
-  html[data-ui-device="desktop"] .desktop-shell[data-desktop-role="user"] .worker-salary-details {
-    max-width: 36rem;
-  }
-
-  html[data-ui-device="desktop"]
-    .desktop-shell[data-desktop-role="user"]
-    .worker-salary-personal-grid
-    > div,
-  html[data-ui-device="desktop"] .desktop-shell[data-desktop-role="user"] .worker-salary-line,
-  html[data-ui-device="desktop"] .desktop-shell[data-desktop-role="user"] .worker-salary-total,
-  html[data-ui-device="desktop"] .desktop-shell[data-desktop-role="user"] .worker-salary-net {
+  html[data-ui-device="desktop"] .worker-salary-personal-grid > div,
+  html[data-ui-device="desktop"] .worker-salary-line,
+  html[data-ui-device="desktop"] .worker-salary-total,
+  html[data-ui-device="desktop"] .worker-salary-net {
+    min-width: 0;
     padding: 0.5rem 0.625rem;
     border-radius: 0.625rem;
   }
 
-  html[data-ui-device="desktop"]
-    .desktop-shell[data-desktop-role="user"]
-    .worker-salary-card
-    > .gradient-accent
-    .text-xl {
+  html[data-ui-device="desktop"] .worker-salary-personal-grid > div > div:last-child,
+  html[data-ui-device="desktop"] .worker-salary-line > div:first-child,
+  html[data-ui-device="desktop"] .worker-salary-total > div:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  html[data-ui-device="desktop"] .worker-salary-line > div:last-child,
+  html[data-ui-device="desktop"] .worker-salary-total > div:last-child {
+    flex-shrink: 0;
+  }
+
+  html[data-ui-device="desktop"] .worker-salary-card > .gradient-accent .text-xl {
     font-size: 1.25rem;
     line-height: 1.2;
   }

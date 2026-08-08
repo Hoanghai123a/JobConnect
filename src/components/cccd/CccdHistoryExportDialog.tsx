@@ -9,7 +9,7 @@ import {
   Loader2,
   Upload,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { DateInput } from "@/components/ui/date-input";
 import {
@@ -37,6 +37,7 @@ import { exportToExcel, parseExcelToRows } from "@/lib/excel";
 import type { EmploymentHistoryRecord } from "@/lib/employment";
 import type { FactoryRecord } from "@/lib/factories";
 import type { UserRecord } from "@/lib/pocketbase";
+import { getUserErrorMessage } from "@/lib/toast";
 
 const LARGE_EXPORT_THRESHOLD = 1_000;
 
@@ -144,7 +145,7 @@ export function CccdHistoryExportDialog({
       })
       .catch((error: unknown) => {
         if (alive) {
-          toast.error(error instanceof Error ? error.message : "Không đọc được dữ liệu CCCD");
+          toast.error(getUserErrorMessage(error, "Không đọc được dữ liệu CCCD"));
         }
       })
       .finally(() => {
@@ -186,7 +187,7 @@ export function CccdHistoryExportDialog({
       }
     } catch (error: unknown) {
       setExcelFileName("");
-      toast.error(error instanceof Error ? error.message : "Không đọc được file Excel");
+      toast.error(getUserErrorMessage(error, "Không đọc được file Excel"));
     } finally {
       setExcelReading(false);
     }
@@ -213,7 +214,7 @@ export function CccdHistoryExportDialog({
       }
       onClose();
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Lỗi xuất ảnh CCCD");
+      toast.error(getUserErrorMessage(error, "Lỗi xuất ảnh CCCD"));
     } finally {
       setExporting(false);
     }

@@ -21,7 +21,7 @@ import type {
   ApprovalStatus,
 } from "@/lib/approval-requests";
 import { deleteOldRequests } from "@/lib/approval-requests";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { ClipboardCheck, Clock, Plus, Trash2 } from "lucide-react";
 

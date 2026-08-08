@@ -15,7 +15,7 @@ import {
   Trash2,
   Wallet,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -103,6 +103,7 @@ import {
   type RecruiterSelectionValue,
 } from "@/lib/recruiters";
 import type { AdvancePayoutMethod } from "@/lib/advances";
+import { getUserErrorMessage } from "@/lib/toast";
 
 type RestoreRequest = {
   history: EmploymentHistoryRecord;
@@ -138,7 +139,7 @@ function formatDate(value?: string) {
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+  return getUserErrorMessage(error, fallback);
 }
 
 function versionedCccdUrl(version: CccdVersionRecord | undefined, filename?: string) {
@@ -503,7 +504,7 @@ export function WorkerEmploymentDrawer({
         if (!active) return;
         setAdvancePolicy(null);
         setAdvancePolicyError(
-          error instanceof Error ? error.message : "Không thể kiểm tra hạn mức ứng tiền",
+          getUserErrorMessage(error, "Không thể kiểm tra hạn mức ứng tiền"),
         );
       })
       .finally(() => active && setAdvanceOutstandingLoading(false));

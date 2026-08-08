@@ -1,6 +1,6 @@
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   WorkerPayrollView,
   type WorkerAttendanceCheckItem,
@@ -14,6 +14,7 @@ import { escapePb } from "@/lib/delegations";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { fetchStaffWorkerWorkspace } from "@/lib/staff-permissions";
 import { CalendarCheck } from "lucide-react";
+import { getUserErrorMessage } from "@/lib/toast";
 
 export const Route = createFileRoute("/_authenticated/staff/workers/$workerId_/payroll")({
   component: StaffWorkerPayrollPage,
@@ -83,7 +84,7 @@ function StaffWorkerPayrollPage() {
         })),
       );
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Không tải Được check công/lương");
+      toast.error(getUserErrorMessage(error, "Không tải Được check công/lương"));
     } finally {
       setLoading(false);
     }

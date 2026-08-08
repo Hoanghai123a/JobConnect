@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ResponsiveOverlay } from "@/components/layout/ResponsiveOverlay";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Check, X, CheckCircle2, Clock, Undo2 } from "lucide-react";
 
 const STATUS_TONE: Record<string, ChipTone> = {

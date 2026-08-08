@@ -10,7 +10,7 @@ import {
   UsersRound,
   Workflow,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { BulkWorkerHistoryImportCard } from "@/components/imports/BulkWorkerHistoryImportDialog";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,7 @@ import {
 } from "@/lib/account-identity";
 import { generateUid } from "@/lib/uid";
 import { resolveBankName } from "@/lib/vn-banks";
+import { getUserErrorMessage } from "@/lib/toast";
 
 const HISTORY_LOOKUP_KEYS = [
   "history_id",
@@ -442,7 +443,7 @@ function AdminImportsPage() {
           addFailedRow(
             row,
             rowNumber,
-            error instanceof Error ? error.message : "Lỗi PocketBase khi cập nhật dữ liệu",
+            getUserErrorMessage(error, "Lỗi PocketBase khi cập nhật dữ liệu"),
           );
         }
       }
@@ -473,7 +474,7 @@ function AdminImportsPage() {
         note: "Admin cập nhật nhanh lịch sử đi làm/NLĐ từ Excel",
       });
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Không đọc được file cập nhật nhanh");
+      toast.error(getUserErrorMessage(error, "Không đọc được file cập nhật nhanh"));
     } finally {
       setImportingBulkEdit(false);
     }
@@ -751,7 +752,7 @@ function AdminImportsPage() {
           addFailedRow(
             row,
             rowNumber,
-            error instanceof Error ? error.message : "Không lưu được lịch sử đi làm.",
+            getUserErrorMessage(error, "Không lưu được lịch sử đi làm."),
           );
         }
       }
@@ -786,7 +787,7 @@ function AdminImportsPage() {
         note: "Quản trị viên nhập lịch sử đi làm từ Excel",
       });
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Không đọc được file lịch sử đi làm");
+      toast.error(getUserErrorMessage(error, "Không đọc được file lịch sử đi làm"));
     } finally {
       setImportingHistories(false);
     }
@@ -918,7 +919,7 @@ function AdminImportsPage() {
           uidKeys.add(accountIdentityKey(uid));
           created++;
         } catch (error: unknown) {
-          addFailedRow(error instanceof Error ? error.message : "Lỗi PocketBase khi tạo tài khoản");
+          addFailedRow(getUserErrorMessage(error, "Lỗi PocketBase khi tạo tài khoản"));
         }
       }
 
@@ -941,7 +942,7 @@ function AdminImportsPage() {
         note: "Admin import tài khoản NLĐ từ Excel",
       });
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Không đọc được file import tài khoản");
+      toast.error(getUserErrorMessage(error, "Không đọc được file import tài khoản"));
     } finally {
       setImportingAccounts(false);
     }

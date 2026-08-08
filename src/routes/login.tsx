@@ -1,8 +1,8 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Eye, EyeOff, Loader2, LogIn } from "lucide-react";
-import { toast } from "sonner";
-import { useAuth } from "@/lib/auth";
+import { toast } from "@/lib/toast";
+import { PASSWORD_REAUTH_NOTICE_KEY, useAuth } from "@/lib/auth";
 import { normalizeAccountIdentity } from "@/lib/account-identity";
 import { pb } from "@/lib/pocketbase";
 import { isProfileComplete } from "@/lib/profile";
@@ -45,6 +45,14 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const notice = window.sessionStorage.getItem(PASSWORD_REAUTH_NOTICE_KEY);
+    if (!notice) return;
+
+    window.sessionStorage.removeItem(PASSWORD_REAUTH_NOTICE_KEY);
+    toast.info(notice);
+  }, []);
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -93,7 +101,7 @@ function LoginPage() {
           role === "admin"
             ? "Bạn đã đăng nhập với quyền quản trị viên."
             : role === "staff"
-              ? "Bạn đã đăng nhập với quyền staff."
+              ? "Bạn đã đăng nhập với quyền nhân sự."
               : "Đăng nhập thành công. Chúc bạn một ngày làm việc hiệu quả.",
       });
 

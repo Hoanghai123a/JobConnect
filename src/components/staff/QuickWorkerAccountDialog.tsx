@@ -21,7 +21,7 @@ import {
   Trash2,
   ScanLine,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { CccdImageCropDialog } from "@/components/cccd/CccdImageCropDialog";
 import { readClipboardImage } from "@/lib/clipboard-image";
 import { CccdQrPasteButton } from "@/components/cccd/CccdQrPasteButton";
@@ -70,6 +70,7 @@ import { RecruiterPicker } from "@/components/employment/RecruiterPicker";
 import { buildRecruiterPayload, type RecruiterSelectionValue } from "@/lib/recruiters";
 import { resolveBankName } from "@/lib/vn-banks";
 import { BankPicker } from "@/components/staff/BankNameInput";
+import { getUserErrorMessage } from "@/lib/toast";
 
 type QuickWorkerForm = {
   real_name: string;
@@ -188,7 +189,7 @@ function buildUsername(phone: string, cccd: string) {
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+  return getUserErrorMessage(error, fallback);
 }
 
 function getPocketBaseFieldErrors(error: unknown) {

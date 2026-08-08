@@ -18,7 +18,8 @@ import {
   type PayrollPeriod,
 } from "@/lib/payroll-cycle";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
+import { getUserErrorMessage } from "@/lib/toast";
 
 export type PayrollBatchRecord = {
   id: string;
@@ -300,7 +301,7 @@ function CopyImageButton({ targetSelector, label }: { targetSelector: string; la
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       toast.success(`\u0110\u00e3 copy \u1ea3nh ${label}`);
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Kh\u00f4ng th\u1ec3 copy \u1ea3nh");
+      toast.error(getUserErrorMessage(error, "Kh\u00f4ng th\u1ec3 copy \u1ea3nh"));
     } finally {
       setCopying(false);
     }

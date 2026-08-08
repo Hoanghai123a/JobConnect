@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Download, ZoomIn } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   Dialog,
   DialogContent,

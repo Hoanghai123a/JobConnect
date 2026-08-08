@@ -11,7 +11,7 @@ import {
   UserSquare2,
   Wallet,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +69,7 @@ import { AdvanceReadOnlyNotice } from "@/components/advances/AdvanceReadOnlyNoti
 import type { AdvancePayoutMethod } from "@/lib/advances";
 import { JoinCccdSection } from "@/components/employment/JoinCccdSection";
 import { RecruiterPicker } from "@/components/employment/RecruiterPicker";
+import { getUserErrorMessage } from "@/lib/toast";
 import {
   buildRecruiterPayload,
   encodeInternalRecruiter,
@@ -1049,7 +1050,7 @@ function AdvanceForm({
         if (!active) return;
         setPolicy(null);
         setPolicyError(
-          error instanceof Error ? error.message : "Không thể kiểm tra hạn mức ứng tiền",
+          getUserErrorMessage(error, "Không thể kiểm tra hạn mức ứng tiền"),
         );
       })
       .finally(() => active && setPolicyLoading(false));

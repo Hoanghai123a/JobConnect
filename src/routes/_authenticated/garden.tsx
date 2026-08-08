@@ -4,7 +4,7 @@ import { AppHeader } from "@/components/layout/BottomNav";
 import { useAuth } from "@/lib/auth";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,7 @@ import { Card } from "@/components/ui/card";
 import { StatusChip } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
+import { getUserErrorMessage } from "@/lib/toast";
 import {
   FLOWERS,
   PETS,
@@ -102,7 +103,7 @@ type GardenOwner = { id?: string; full_name?: string; username?: string };
 type VisitedGarden = GardenBalance & { expand?: { user?: GardenOwner } };
 
 function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+  return getUserErrorMessage(error, fallback);
 }
 function GardenPage() {
   const { user, isAdmin } = useAuth();

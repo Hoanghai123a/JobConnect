@@ -14,7 +14,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { escapePb } from "@/lib/delegations";
 import { cn } from "@/lib/utils";
 import { BusFront, Clock3, Pencil, Phone, Plus, Search } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
+import { getUserErrorMessage } from "@/lib/toast";
 
 export const Route = createFileRoute("/_authenticated/transport")({
   component: TransportPage,
@@ -42,7 +43,7 @@ type TransportRecord = {
 };
 
 function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback;
+  return getUserErrorMessage(error, fallback);
 }
 
 function TransportPage() {

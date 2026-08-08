@@ -15,6 +15,8 @@ import { WorkforceDashboard } from "@/components/workforce/WorkforceDashboard";
 import { FinanceDashboard } from "@/components/dashboard/FinanceDashboard";
 import { OtherDashboard } from "@/components/dashboard/OtherDashboard";
 import { ApprovalDashboard } from "@/components/dashboard/ApprovalDashboard";
+import { WorkProgressBoard } from "@/components/dashboard/WorkProgressBoard";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   createEmptyApprovalDashboardStats,
   isApprovalDashboardStatus,
@@ -53,6 +55,7 @@ import {
   RefreshCw,
   NotebookPen,
   ClipboardCheck,
+  ClipboardList,
 } from "lucide-react";
 import {
   Dialog,
@@ -528,6 +531,13 @@ function DashboardPage() {
                   description="Thiết lập hệ thống"
                   icon={Settings}
                 />
+                <FeatureTile
+                  to="/admin/work-progress"
+                  label="Tiến độ công việc"
+                  description="Theo dõi công việc chung"
+                  icon={ClipboardList}
+                  variant="accent"
+                />
               </div>
             </MobileSection>
 
@@ -843,18 +853,29 @@ function DesktopAdminDashboard({
           ) : section === "tai-chinh" ? (
             <FinanceDashboard />
           ) : (
-            <div className="space-y-4">
-              <OtherDashboard
-                histories={histories}
-                users={users}
-                factories={factories}
-                cccdVersions={cccdVersions}
-                loading={loading}
-                error={error}
-                onRetry={onRetry}
-              />
-              <ApprovalDashboard stats={approvalStats} />
-            </div>
+            <Tabs defaultValue="overview" className="space-y-4">
+              <TabsList aria-label="Nội dung khác">
+                <TabsTrigger value="overview">Tổng quan khác</TabsTrigger>
+                <TabsTrigger value="progress">Tiến độ công việc</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="overview" className="mt-0 space-y-4">
+                <OtherDashboard
+                  histories={histories}
+                  users={users}
+                  factories={factories}
+                  cccdVersions={cccdVersions}
+                  loading={loading}
+                  error={error}
+                  onRetry={onRetry}
+                />
+                <ApprovalDashboard stats={approvalStats} />
+              </TabsContent>
+
+              <TabsContent value="progress" className="mt-0">
+                <WorkProgressBoard />
+              </TabsContent>
+            </Tabs>
           )}
         </section>
       </div>

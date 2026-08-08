@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ResponsiveOverlay } from "@/components/layout/ResponsiveOverlay";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { ImagePlus, FileSpreadsheet, Send, X } from "lucide-react";
 
 export function ApprovalForm({

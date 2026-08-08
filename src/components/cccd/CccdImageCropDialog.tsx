@@ -2,8 +2,9 @@
 import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import { ClipboardPaste, LoaderCircle, RotateCcw } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
+import { getUserErrorMessage } from "@/lib/toast";
 import {
   Dialog,
   DialogContent,
@@ -95,7 +96,7 @@ export function CccdImageCropDialog({
       await onConfirm(croppedFile);
       onOpenChange(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Không cắt được ảnh CCCD");
+      toast.error(getUserErrorMessage(error, "Không cắt được ảnh CCCD"));
     } finally {
       setSaving(false);
     }

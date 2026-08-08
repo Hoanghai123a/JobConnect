@@ -57,7 +57,7 @@ import {
 } from "@/lib/advance-policy";
 import { resolveBankName } from "@/lib/vn-banks";
 import { BankPicker } from "@/components/staff/BankNameInput";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { AdvancePayoutMethodPicker } from "@/components/advances/AdvancePayoutMethodPicker";
 import { AdvanceReadOnlyNotice } from "@/components/advances/AdvanceReadOnlyNotice";
@@ -76,6 +76,7 @@ import {
   X,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { getUserErrorMessage } from "@/lib/toast";
 
 export const Route = createFileRoute("/_authenticated/staff/advances")({
   component: StaffAdvancesPage,
@@ -545,7 +546,7 @@ function WorkerAdvancesView({ interactionAllowed }: { interactionAllowed: boolea
         if (!active) return;
         setWorkerPolicy(null);
         setWorkerPolicyError(
-          error instanceof Error ? error.message : "Không thể kiểm tra hạn mức ứng tiền",
+          getUserErrorMessage(error, "Không thể kiểm tra hạn mức ứng tiền"),
         );
       })
       .finally(() => active && setLoadingWorkerPolicy(false));

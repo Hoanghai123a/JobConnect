@@ -66,7 +66,7 @@ import {
 } from "@/lib/factories";
 import { createStaffActionLog } from "@/lib/staff-log";
 import * as XLSX from "xlsx";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   ClipboardList,
   LogOut,

@@ -38,7 +38,7 @@ import {
   findActiveEmploymentByUser,
   getCurrentEmploymentHistory,
 } from "@/lib/employment";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   AlertTriangle,
   Banknote,

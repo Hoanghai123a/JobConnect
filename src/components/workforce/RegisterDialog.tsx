@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { BriefcaseBusiness } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +36,7 @@ import { JoinCccdSection } from "@/components/employment/JoinCccdSection";
 import { compressImage } from "@/lib/image-compress";
 import { findOrCreateCccdVersion, updateCccdVersionImages } from "@/lib/cccd-versions";
 import { RecruiterPicker } from "@/components/employment/RecruiterPicker";
+import { getUserErrorMessage } from "@/lib/toast";
 import {
   buildRecruiterPayload,
   encodeInternalRecruiter,
@@ -48,7 +49,7 @@ function todayIso() {
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+  return getUserErrorMessage(error, fallback);
 }
 
 function getPocketBaseFieldErrors(error: unknown) {

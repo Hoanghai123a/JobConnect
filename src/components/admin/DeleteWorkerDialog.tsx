@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { AlertTriangle, Eye, EyeOff, Loader2, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import {
   AlertDialog,
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { pb, type UserRecord } from "@/lib/pocketbase";
+import { getUserErrorMessage } from "@/lib/toast";
 
 type DeleteDependency = {
   collection: string;
@@ -98,7 +99,7 @@ export function DeleteWorkerDialog({
       );
       onOpenChange(false);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Không thể xóa tài khoản NLĐ.");
+      setErrorMessage(getUserErrorMessage(error, "Không thể xóa tài khoản NLĐ."));
     } finally {
       setSubmitting(false);
     }
