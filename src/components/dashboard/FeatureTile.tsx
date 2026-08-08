@@ -8,6 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { LoginRequiredDialog } from "@/components/auth/LoginRequiredDialog";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -20,6 +22,7 @@ interface Props {
   badge?: string;
   disabled?: boolean;
   disabledReason?: string;
+  allowGuest?: boolean;
 }
 
 export function FeatureTile({
@@ -32,8 +35,12 @@ export function FeatureTile({
   badge,
   disabled = false,
   disabledReason,
+  allowGuest = false,
 }: Props) {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  const isLoginRequired = !user && !allowGuest;
+  const isLocked = disabled || isLoginRequired;
   const isCompact = size === "compact";
 
   const tileClass = cn(
@@ -48,7 +55,7 @@ export function FeatureTile({
     "flex shrink-0 items-center justify-center rounded-xl text-primary-foreground",
     isCompact ? "h-10 w-10" : "h-11 w-11",
     variant === "accent" ? "gradient-accent text-accent-foreground" : "gradient-primary",
-    disabled && "grayscale",
+    isLocked && "grayscale",
   );
 
   const content = (
@@ -56,7 +63,7 @@ export function FeatureTile({
       <div className={iconClass}>
         <Icon className={isCompact ? "h-[18px] w-[18px]" : "h-5 w-5"} />
       </div>
-      {disabled ? (
+      {isLocked ? (
         <span
           className={cn(
             "absolute inline-flex items-center justify-center rounded-full bg-muted p-1.5 text-muted-foreground",
@@ -90,23 +97,28 @@ export function FeatureTile({
     </>
   );
 
-  if (disabled) {
+  if (isLocked) {
     return (
       <>
         <button type="button" onClick={() => setOpen(true)} className={tileClass}>
           {content}
         </button>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{label}</DialogTitle>
-              <DialogDescription>
+        {isLoginRequired ? (
+          <LoginRequiredDialog open={open} onOpenChange={setOpen} redirectTo={to} />
+        ) : (
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{label}</DialogTitle>
+                <DialogDescription>
                 {disabledReason ||
                   "Tính năng này dành cho nhân sự đã được admin xác nhận. Vui lòng liên hệ admin để được cập nhật hồ sơ."}
-              </DialogDescription>
-            </DialogHeader>
-          </DialogContent>
-        </Dialog>
+
+                </DialogDescription>
+              </DialogHeader>
+            </DialogContent>
+          </Dialog>
+        )}
       </>
     );
   }

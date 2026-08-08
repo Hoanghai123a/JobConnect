@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { type ComponentType, type ReactNode } from "react";
-import { ChevronLeft, Download, Home, Info, Settings, Upload, User, Users } from "lucide-react";
+import { useState, type ComponentType, type ReactNode } from "react";
+import { ChevronLeft, Download, Home, Info, LogIn, Settings, Upload, User, Users } from "lucide-react";
+import { LoginRequiredDialog } from "@/components/auth/LoginRequiredDialog";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { InstallFloatingBanner } from "./InstallFloatingBanner";
@@ -10,6 +11,7 @@ export type RoleNavigationItem = {
   label: string;
   icon: ComponentType<{ className?: string }>;
   exact?: boolean;
+  requiresLogin?: boolean;
 };
 
 function isItemActive(item: RoleNavigationItem, pathname: string) {
@@ -21,6 +23,7 @@ function isItemActive(item: RoleNavigationItem, pathname: string) {
 export function BottomNav() {
   const { pathname } = useLocation();
   const { user } = useAuth();
+  const [loginOpen, setLoginOpen] = useState(false);
 
   const items: readonly RoleNavigationItem[] =
     user?.role === "staff"
@@ -39,12 +42,12 @@ export function BottomNav() {
           ]
         : [
             { to: "/", label: "Trang chủ", icon: Home, exact: true },
-            { to: "/account", label: "Tài khoản", icon: User },
+            { to: "/login", label: "Đăng nhập", icon: LogIn, requiresLogin: true },
             { to: "/about", label: "Về chúng tôi", icon: Info },
           ];
 
   const focusMode = pathname === "/gems" || pathname === "/minesweeper";
-  if (!user || focusMode) return null;
+  if (focusMode) return null;
 
   return (
     <>
@@ -63,29 +66,36 @@ export function BottomNav() {
           {items.map((item) => {
             const active = isItemActive(item, pathname);
             const Icon = item.icon;
+            const className = cn(
+              "relative mx-auto flex min-h-[62px] w-full min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-1.5 text-xs font-medium transition-colors",
+              active ? "bg-primary/12 text-primary" : "text-muted-foreground active:bg-muted",
+            );
 
             return (
               <li key={item.to} className="min-w-0">
-                <Link
-                  to={item.to as never}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "relative mx-auto flex min-h-[62px] w-full min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-1.5 text-xs font-medium transition-colors",
-                    active ? "bg-primary/12 text-primary" : "text-muted-foreground active:bg-muted",
-                  )}
-                >
-                  <Icon
-                    className={cn("h-[22px] w-[22px] transition-transform", active && "scale-105")}
-                  />
-                  <span className="line-clamp-2 text-center text-[11px] leading-[1.1]">
-                    {item.label}
-                  </span>
-                </Link>
+                {item.requiresLogin ? (
+                  <button type="button" onClick={() => setLoginOpen(true)} className={className}>
+                    <Icon className="h-[22px] w-[22px]" />
+                    <span className="line-clamp-2 text-center text-[11px] leading-[1.1]">
+                      {item.label}
+                    </span>
+                  </button>
+                ) : (
+                  <Link to={item.to as never} aria-current={active ? "page" : undefined} className={className}>
+                    <Icon
+                      className={cn("h-[22px] w-[22px] transition-transform", active && "scale-105")}
+                    />
+                    <span className="line-clamp-2 text-center text-[11px] leading-[1.1]">
+                      {item.label}
+                    </span>
+                  </Link>
+                )}
               </li>
             );
           })}
         </ul>
       </nav>
+      {!user && <LoginRequiredDialog open={loginOpen} onOpenChange={setLoginOpen} />}
     </>
   );
 }

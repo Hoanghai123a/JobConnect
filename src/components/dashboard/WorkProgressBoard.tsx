@@ -160,6 +160,7 @@ export function WorkProgressBoard({ compact = false }: { compact?: boolean }) {
   const [editor, setEditor] = useState<EditorState>(null);
   const [editorValue, setEditorValue] = useState("");
   const [deleteState, setDeleteState] = useState<DeleteState>(null);
+  const [selectedChartStatusId, setSelectedChartStatusId] = useState("");
   const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async (showLoading = true) => {
@@ -224,6 +225,10 @@ export function WorkProgressBoard({ compact = false }: { compact?: boolean }) {
   const chartConfig = Object.fromEntries(
     chartRows.map((row) => [row.id, { label: row.name, color: row.color }]),
   ) satisfies ChartConfig;
+  const selectedChartStatus = chartRows.find((row) => row.id === selectedChartStatusId) || null;
+  const selectedChartTasks = selectedChartStatus
+    ? tasks.filter((task) => task.status === selectedChartStatus.id)
+    : [];
 
   const openEditor = (next: NonNullable<EditorState>) => {
     setEditor(next);
@@ -446,13 +451,14 @@ export function WorkProgressBoard({ compact = false }: { compact?: boolean }) {
                   </DropdownMenu>
                 </div>
 
-                <div className="grid gap-4 xl:grid-cols-[22rem_minmax(0,1fr)]">
+                <div className="grid min-w-0 gap-4 xl:grid-cols-[22rem_minmax(0,1fr)]">
                   <ProgressSummary
                     rows={chartRows}
                     config={chartConfig}
                     completed={completedCount}
                     total={tasks.length}
                     rate={completionRate}
+                    onSelectStatus={setSelectedChartStatusId}
                   />
                   <StatusManager
                     statuses={statuses}
@@ -502,6 +508,11 @@ export function WorkProgressBoard({ compact = false }: { compact?: boolean }) {
         onOpenChange={(open) => !open && setDeleteState(null)}
         onConfirm={() => void confirmDelete()}
       />
+      <StatusTasksDialog
+        status={selectedChartStatus}
+        tasks={selectedChartTasks}
+        onOpenChange={(open) => !open && setSelectedChartStatusId("")}
+      />
     </>
   );
 }
@@ -539,17 +550,19 @@ function ProgressSummary({
   completed,
   total,
   rate,
+  onSelectStatus,
 }: {
   rows: Array<{ id: string; name: string; value: number; color: string }>;
   config: ChartConfig;
   completed: number;
   total: number;
   rate: number;
+  onSelectStatus: (statusId: string) => void;
 }) {
   return (
-    <section className="rounded-2xl border border-border/70 bg-background p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
+    <section className="min-w-0 max-w-full rounded-2xl border border-border/70 bg-background p-4">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="min-w-0">
           <h4 className="text-sm font-semibold">Tổng quan tiến độ</h4>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {completed}/{total} công việc hoàn thành
@@ -563,8 +576,8 @@ function ProgressSummary({
           Thêm trạng thái để bắt đầu theo dõi.
         </div>
       ) : (
-        <div className="mt-4 grid grid-cols-[9rem_minmax(0,1fr)] items-center gap-3">
-          <ChartContainer config={config} className="h-36 w-36">
+        <div className="mt-4 grid grid-cols-1 justify-items-center gap-4 desktop:grid-cols-[9rem_minmax(0,1fr)] desktop:items-center desktop:justify-items-stretch desktop:gap-3">
+          <ChartContainer config={config} className="h-36 w-36 max-w-full">
             <PieChart>
               <Pie
                 data={rows}
@@ -576,7 +589,18 @@ function ProgressSummary({
                 strokeWidth={0}
               >
                 {rows.map((row) => (
-                  <Cell key={row.id} fill={row.color} />
+                  <Cell
+                    key={row.id}
+                    fill={row.color}
+                    className={row.value ? "cursor-pointer" : undefined}
+                    role={row.value ? "button" : undefined}
+                    aria-label={
+                      row.value
+                        ? `Xem ${row.value} công việc ở trạng thái ${row.name}`
+                        : `${row.name}: chưa có công việc`
+                    }
+                    onClick={() => row.value > 0 && onSelectStatus(row.id)}
+                  />
                 ))}
               </Pie>
               <text
@@ -617,6 +641,53 @@ function ProgressSummary({
   );
 }
 
+function StatusTasksDialog({
+  status,
+  tasks,
+  onOpenChange,
+}: {
+  status: { id: string; name: string; value: number; color: string } | null;
+  tasks: WorkProgressTaskRecord[];
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={Boolean(status)} onOpenChange={onOpenChange}>
+      <DialogContent className="rounded-3xl desktop:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: status?.color }} />
+            Công việc theo tiến độ
+          </DialogTitle>
+          <DialogDescription>
+            {status
+              ? `${status.name}: ${tasks.length} công việc`
+              : "Danh sách công việc theo trạng thái được chọn."}
+          </DialogDescription>
+        </DialogHeader>
+        {status && tasks.length > 0 ? (
+          <div className="max-h-[min(60vh,32rem)] space-y-2 overflow-y-auto pr-1">
+            {tasks.map((task, index) => (
+              <div
+                key={task.id}
+                className="flex min-w-0 items-center gap-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-2.5"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-bold text-muted-foreground">
+                  {index + 1}
+                </span>
+                <span className="min-w-0 flex-1 break-words text-sm font-medium">{task.name}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex min-h-36 items-center justify-center rounded-2xl border border-dashed px-5 text-center text-sm leading-6 text-muted-foreground">
+            Hiện không còn công việc ở trạng thái này.
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function StatusManager({
   statuses,
   tasks,
@@ -635,15 +706,15 @@ function StatusManager({
   onMove: (id: string, direction: -1 | 1) => void;
 }) {
   return (
-    <section className="rounded-2xl border border-border/70 bg-background p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
+    <section className="min-w-0 max-w-full rounded-2xl border border-border/70 bg-background p-4">
+      <div className="flex min-w-0 flex-col gap-3 desktop:flex-row desktop:items-center desktop:justify-between">
+        <div className="min-w-0">
           <h4 className="text-sm font-semibold">Các trạng thái</h4>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Trạng thái cuối cùng luôn được tính là hoàn thành.
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={onAdd}>
+        <Button size="sm" variant="outline" onClick={onAdd} className="w-full desktop:w-auto">
           <Plus /> Thêm trạng thái
         </Button>
       </div>
@@ -658,7 +729,7 @@ function StatusManager({
             return (
               <div
                 key={status.id}
-                className="flex min-h-12 items-center gap-2 rounded-xl border border-border/70 px-3 py-2"
+                className="flex min-h-12 min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border/70 px-3 py-2"
               >
                 <span
                   className="h-3 w-3 shrink-0 rounded-full"
@@ -675,7 +746,7 @@ function StatusManager({
                   </div>
                   <div className="text-[11px] text-muted-foreground">{count} công việc</div>
                 </div>
-                <div className="flex shrink-0 items-center gap-0.5">
+                <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-0.5">
                   <IconButton
                     label="Đưa trạng thái lên"
                     disabled={index === 0 || busyKey === `move-${status.id}`}

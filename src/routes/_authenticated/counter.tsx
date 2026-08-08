@@ -44,7 +44,8 @@ export const Route = createFileRoute("/_authenticated/counter")({
   beforeLoad: () => {
     if (typeof window === "undefined") return;
     const record = pb.authStore.record as { role?: string } | null;
-    if (record?.role !== "user" && record?.role !== "staff") throw redirect({ to: "/" });
+    if (!record) return;
+    if (record.role !== "user" && record.role !== "staff") throw redirect({ to: "/" });
   },
   component: CounterPage,
 });
@@ -264,6 +265,7 @@ function formatTime(timestamp: number) {
 }
 function CounterPage() {
   const { user } = useAuth();
+  const storageUserId = user?.id ?? "guest";
   const [state, setState] = useState<CounterState | null>(null);
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
   const stateRef = useRef<CounterState | null>(null);
@@ -287,17 +289,16 @@ function CounterPage() {
   }, []);
 
   useEffect(() => {
-    if (!user?.id) return;
-    const loaded = loadState(user.id);
+    const loaded = loadState(storageUserId);
     stateRef.current = loaded;
     setState(loaded);
     setDisplayIds(sortPeople(loaded.people, loaded.sort).map((person) => person.id));
-    setLoadedUserId(user.id);
-  }, [user?.id]);
+    setLoadedUserId(storageUserId);
+  }, [storageUserId]);
 
   useEffect(() => {
-    if (state && user?.id && loadedUserId === user.id) saveState(user.id, state);
-  }, [loadedUserId, state, user?.id]);
+    if (state && loadedUserId === storageUserId) saveState(storageUserId, state);
+  }, [loadedUserId, state, storageUserId]);
 
   useEffect(
     () => () => {

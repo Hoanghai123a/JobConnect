@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
@@ -8,12 +8,19 @@ import { StaffRealtimeSyncGate } from "@/components/staff/StaffRealtimeSyncGate"
 import { DesktopAppShell } from "@/components/layout/DesktopAppShell";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
 
+const GUEST_ACCESSIBLE_PATHS = new Set(["/news", "/transport", "/counter"]);
+
+function canGuestAccess(pathname: string) {
+  return GUEST_ACCESSIBLE_PATHS.has(pathname);
+}
+
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: ({ location }) => {
     // Auth lives in localStorage — only enforce on the client to avoid SSR redirect loops.
     if (typeof window === "undefined") return;
     if (!pb.authStore.isValid) {
-      throw redirect({ to: "/login", search: { redirect: location.href } as any });
+      if (canGuestAccess(location.pathname)) return;
+      throw redirect({ to: "/", search: { login: "1", redirect: location.href } as any });
     }
     const u = pb.authStore.record as any;
     if (u?.status === "disabled") {
@@ -36,7 +43,7 @@ function AuthLayout() {
 
   useEffect(() => {
     if (!loading && !user) {
-      nav({ to: "/login" });
+      nav({ to: "/", search: { login: "1", redirect: window.location.pathname } as any });
     }
   }, [loading, nav, user]);
 

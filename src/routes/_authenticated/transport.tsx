@@ -158,6 +158,7 @@ function TransportPage() {
 
   return (
     <PageContainer title="Tìm nhà xe" subtitle="Thông tin do mọi người đóng góp">
+      {user ? (
       <Card className="rounded-2xl border-border/70 p-3 shadow-soft">
         <button
           type="button"
@@ -235,6 +236,7 @@ function TransportPage() {
           </form>
         )}
       </Card>
+      ) : null}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
