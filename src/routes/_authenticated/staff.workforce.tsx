@@ -271,18 +271,26 @@ function StaffWorkforceDashboardPage() {
           <Tabs
             value={tab}
             onValueChange={(value) => setTab(value as ActiveTab)}
-            className="space-y-4"
+            className="grid grid-cols-2 gap-x-1 gap-y-4"
           >
-            <TabsList className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 grid h-10 w-full grid-cols-2 rounded-xl bg-muted shadow-sm">
-              <TabsTrigger value="workforce" className="rounded-lg text-xs">
-                Nhân lực
-              </TabsTrigger>
-              <TabsTrigger value="other" className="rounded-lg text-xs">
-                Khác
-              </TabsTrigger>
+            <TabsList asChild>
+              <span className="contents">
+                <TabsTrigger
+                  value="workforce"
+                  className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
+                >
+                  Nhân lực
+                </TabsTrigger>
+                <TabsTrigger
+                  value="other"
+                  className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
+                >
+                  Khác
+                </TabsTrigger>
+              </span>
             </TabsList>
 
-            <TabsContent value="workforce" className="mt-0">
+            <TabsContent value="workforce" className="col-span-2 mt-0">
               <WorkforceDashboard
                 histories={histories}
                 users={staffUsers}
@@ -294,7 +302,7 @@ function StaffWorkforceDashboardPage() {
               />
             </TabsContent>
 
-            <TabsContent value="other" className="mt-0 space-y-4">
+            <TabsContent value="other" className="col-span-2 mt-0 space-y-4">
               <OtherDashboard
                 histories={histories}
                 users={staffUsers}

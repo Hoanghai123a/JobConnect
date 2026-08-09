@@ -452,20 +452,35 @@ function WorkforcePage() {
           }
         />
       ) : (
-        <Tabs value={tab} onValueChange={(v) => setTab(v as ActiveTab)} className="space-y-3">
-          <TabsList className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 grid h-10 w-full grid-cols-3 overflow-y-hidden rounded-xl bg-muted shadow-sm">
-            <TabsTrigger value="list" className="rounded-lg text-xs">
-              Danh sách
-            </TabsTrigger>
-            <TabsTrigger value="stats" className="rounded-lg text-xs">
-              Thống kê
-            </TabsTrigger>
-            <TabsTrigger value="my-recruited" className="rounded-lg text-xs">
-              Tôi tuyển
-            </TabsTrigger>
+        <Tabs
+          value={tab}
+          onValueChange={(v) => setTab(v as ActiveTab)}
+          className="grid grid-cols-3 gap-x-1 gap-y-3"
+        >
+          <TabsList asChild>
+            <span className="contents">
+              <TabsTrigger
+                value="list"
+                className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
+              >
+                Danh sách
+              </TabsTrigger>
+              <TabsTrigger
+                value="stats"
+                className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
+              >
+                Thống kê
+              </TabsTrigger>
+              <TabsTrigger
+                value="my-recruited"
+                className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
+              >
+                Tôi tuyển
+              </TabsTrigger>
+            </span>
           </TabsList>
 
-          <TabsContent value="list" className="mt-0">
+          <TabsContent value="list" className="col-span-3 mt-0">
             <WorkerList
               histories={histories}
               userById={userById}
@@ -495,7 +510,7 @@ function WorkforcePage() {
             />
           </TabsContent>
 
-          <TabsContent value="stats" className="mt-0 space-y-3">
+          <TabsContent value="stats" className="col-span-3 mt-0 space-y-3">
             <Card className="space-y-2 p-3">
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
@@ -612,7 +627,7 @@ function WorkforcePage() {
             />
           </TabsContent>
 
-          <TabsContent value="my-recruited" className="mt-0 space-y-3">
+          <TabsContent value="my-recruited" className="col-span-3 mt-0 space-y-3">
             <StaffWorkerDirectory
               workers={workspaceWorkers}
               viewer={currentUser}
