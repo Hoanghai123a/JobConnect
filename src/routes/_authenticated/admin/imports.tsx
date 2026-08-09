@@ -44,15 +44,12 @@ import { generateUid } from "@/lib/uid";
 import { resolveBankName } from "@/lib/vn-banks";
 import { getUserErrorMessage } from "@/lib/toast";
 
-const HISTORY_LOOKUP_KEYS = [
-  "history_id",
-  "history_uid",
-  "uid",
-  "ID lịch sử",
-  "UID lịch sử",
-  "Mã lịch sử",
-  "Mã lịch sử (UID)",
-];
+const HISTORY_UID_KEYS = ["history_uid", "uid", "Mã lịch sử (UID)"];
+const CLEAR_VALUE = "[XÓA]";
+
+function isClearValue(value: unknown) {
+  return String(value ?? "").trim() === CLEAR_VALUE;
+}
 
 export const Route = createFileRoute("/_authenticated/admin/imports")({
   beforeLoad: () => {
@@ -77,13 +74,7 @@ function AdminImportsPage() {
       {
         "Cập nhật nhanh": [
           {
-            "Mã lịch sử (UID)": "",
-            "ID NLĐ": "",
-            "Tên đăng nhập": "nguyenvana",
-            "SĐT tìm kiếm": "0900000001",
-            "Tên nhà máy hiện tại": "Nhà máy A",
-            "Mã nhà máy hiện tại": "",
-            "Ngày vào hiện tại": "01/05/2026",
+            "Mã lịch sử (UID)": "LS-202608-0001",
             "Mã NV mới": "NM001-MỚI",
             "Tên nhà máy mới": "",
             "Mã nhà máy mới": "",
@@ -101,7 +92,6 @@ function AdminImportsPage() {
       },
       {
         "Cập nhật nhanh": [
-          "Ngày vào hiện tại",
           "Ngày vào mới",
           "Ngày nghỉ",
           "Ngày sinh",
@@ -171,17 +161,9 @@ function AdminImportsPage() {
       const addFailedRow = (row: Record<string, unknown>, rowNumber: number, reason: string) => {
         failed++;
         failedRows.push({
+          ...row,
           Dòng: rowNumber,
           "Lý do lỗi": reason,
-          history_id: pickValue(row, HISTORY_LOOKUP_KEYS),
-          user_id: pickValue(row, ["user_id", "ID NLĐ"]),
-          username: pickValue(row, ["username", "Tên đăng nhập"]),
-          lookup_phone: pickValue(row, ["lookup_phone", "SĐT tìm kiếm"]),
-          current_factory_name: pickValue(row, ["current_factory_name", "Tên nhà máy hiện tại"]),
-          current_factory_code: pickValue(row, ["current_factory_code", "Mã nhà máy hiện tại"]),
-          current_join_date: formatDateOnly(
-            normalizeExcelDate(row["current_join_date"] ?? row["Ngày vào hiện tại"]),
-          ),
         });
       };
 
@@ -196,128 +178,28 @@ function AdminImportsPage() {
 
       for (const [index, row] of rows.entries()) {
         const rowNumber = index + 2;
-        const historyKey = pickValue(row, HISTORY_LOOKUP_KEYS);
-        const userId = pickValue(row, ["user_id", "ID NLĐ"]);
-        const username = pickValue(row, ["username", "Tên đăng nhập"]);
-        const lookupPhone = pickValue(row, ["lookup_phone", "SĐT tìm kiếm"]);
-        const currentFactoryName = pickValue(row, ["current_factory_name", "Tên nhà máy hiện tại"]);
-        const currentFactoryCode = pickValue(row, ["current_factory_code", "Mã nhà máy hiện tại"]);
-        const currentJoinRaw = row["current_join_date"] ?? row["Ngày vào hiện tại"] ?? "";
-        const currentJoinDate = normalizeExcelDate(currentJoinRaw);
-        const unsupportedPhone = pickValue(row, ["phone", "SĐT mới"]);
+        const historyUid = pickValue(row, HISTORY_UID_KEYS);
+        if (!historyUid) {
+          addFailedRow(row, rowNumber, 'Thiếu "Mã lịch sử (UID)"');
+          continue;
+        }
 
-        if (unsupportedPhone) {
+        const uidMatches = historiesByUid.get(historyUid) || [];
+        if (uidMatches.length === 0) {
+          addFailedRow(row, rowNumber, `Không tìm thấy lịch sử có UID "${historyUid}"`);
+          continue;
+        }
+        if (uidMatches.length > 1) {
           addFailedRow(
             row,
             rowNumber,
-            "Cập nhật nhanh chỉ hỗ trợ collection lịch sử, không hỗ trợ sửa SĐT NLĐ",
+            `Tìm thấy ${uidMatches.length} lịch sử trùng UID "${historyUid}"; không thể xác định bản ghi cần cập nhật`,
           );
           continue;
         }
 
-        let target = historyKey ? historyById.get(historyKey) : undefined;
-        let targetUser: UserRecord | undefined;
-
-        if (historyKey && !target) {
-          const uidMatches = historiesByUid.get(historyKey) || [];
-          if (uidMatches.length > 1) {
-            addFailedRow(
-              row,
-              rowNumber,
-              `Tìm thấy ${uidMatches.length} lịch sử trùng UID "${historyKey}"; không thể xác định bản ghi cần cập nhật`,
-            );
-            continue;
-          }
-          target = uidMatches[0];
-        }
-
-        if (historyKey && !target) {
-          addFailedRow(row, rowNumber, `Không tìm thấy lịch sử có ID/UID "${historyKey}"`);
-          continue;
-        }
-
-        if (!target) {
-          const identityCount = [userId, username, lookupPhone].filter(Boolean).length;
-          if (!identityCount) {
-            addFailedRow(
-              row,
-              rowNumber,
-              "Thiếu dữ liệu định danh: cần ID/UID lịch sử hoặc user_id/username/lookup_phone",
-            );
-            continue;
-          }
-          if (!currentFactoryName && !currentFactoryCode) {
-            addFailedRow(
-              row,
-              rowNumber,
-              "Thiếu current_factory_name hoặc current_factory_code để xác định lịch sử",
-            );
-            continue;
-          }
-          if (String(currentJoinRaw).trim() && !currentJoinDate) {
-            addFailedRow(row, rowNumber, "current_join_date không hợp lệ");
-            continue;
-          }
-          if (!currentJoinDate) {
-            addFailedRow(row, rowNumber, "Thiếu current_join_date để xác định lịch sử");
-            continue;
-          }
-
-          if (userId) targetUser = userById.get(userId);
-          else if (username) targetUser = userByUsername.get(accountIdentityKey(username));
-          else {
-            const phoneMatches = usersByPhone.get(accountIdentityKey(lookupPhone)) || [];
-            if (phoneMatches.length > 1) {
-              addFailedRow(
-                row,
-                rowNumber,
-                `Tìm thấy ${phoneMatches.length} NLĐ trùng lookup_phone; hãy dùng user_id hoặc username`,
-              );
-              continue;
-            }
-            targetUser = phoneMatches[0];
-          }
-          if (!targetUser) {
-            addFailedRow(row, rowNumber, "Không tìm thấy NLĐ theo dữ liệu định danh");
-            continue;
-          }
-
-          const currentFactoryResult = resolveFactory(currentFactoryName, currentFactoryCode);
-          if (currentFactoryResult.error) {
-            addFailedRow(row, rowNumber, currentFactoryResult.error);
-            continue;
-          }
-          if (!currentFactoryResult.factory) {
-            addFailedRow(row, rowNumber, "Không tìm thấy nhà máy hiện tại");
-            continue;
-          }
-          const matches = allHistories.filter(
-            (history) =>
-              history.user === targetUser!.id &&
-              history.factory === currentFactoryResult.factory!.id &&
-              history.join_date === currentJoinDate,
-          );
-          if (matches.length === 0) {
-            addFailedRow(
-              row,
-              rowNumber,
-              "Không tìm thấy lịch sử theo NLĐ, nhà máy hiện tại và ngày vào hiện tại",
-            );
-            continue;
-          }
-          if (matches.length > 1) {
-            addFailedRow(
-              row,
-              rowNumber,
-              `Tìm thấy ${matches.length} lịch sử trùng dữ liệu nhận diện; hãy dùng ID/UID lịch sử`,
-            );
-            continue;
-          }
-          target = matches[0];
-        }
-
-        targetUser = targetUser || userById.get(target.user);
-        if (!targetUser) {
+        const target = uidMatches[0];
+        if (!userById.has(target.user)) {
           addFailedRow(row, rowNumber, "Không tìm thấy NLĐ của lịch sử được chọn");
           continue;
         }
@@ -327,8 +209,12 @@ function AdminImportsPage() {
         const factoryCode = pickValue(row, ["factory_code", "Mã nhà máy mới"]);
         const joinRaw = row["join_date"] ?? row["Ngày vào mới"] ?? "";
         const leaveRaw = row["leave_date"] ?? row["Ngày nghỉ"] ?? "";
-        const joinDate = normalizeExcelDate(joinRaw);
-        const leaveDate = normalizeExcelDate(leaveRaw);
+        const birthRaw = row["worker_date_of_birth_snapshot"] ?? row["Ngày sinh"] ?? "";
+        const issueRaw = row["cccd_issue_date"] ?? row["Ngày cấp CCCD"] ?? "";
+        const joinDate = isClearValue(joinRaw) ? "" : normalizeExcelDate(joinRaw);
+        const leaveDate = isClearValue(leaveRaw) ? "" : normalizeExcelDate(leaveRaw);
+        const workerDateOfBirth = isClearValue(birthRaw) ? "" : normalizeExcelDate(birthRaw);
+        const cccdIssueDate = isClearValue(issueRaw) ? "" : normalizeExcelDate(issueRaw);
         const recruiterUsername = pickValue(row, ["recruiter_username", "Người tuyển"]);
         const note = pickValue(row, ["note", "Ghi chú"]);
         const workerName = pickValue(row, [
@@ -341,45 +227,65 @@ function AdminImportsPage() {
           "CCCD tại thời điểm đi làm",
           "CCCD tại nhà máy",
         ]);
-        const birthRaw = row["worker_date_of_birth_snapshot"] ?? row["Ngày sinh"] ?? "";
-        const workerDateOfBirth = normalizeExcelDate(birthRaw);
         const workerAddress = pickValue(row, [
           "worker_address_snapshot",
           "Địa chỉ thường trú",
           "hometown_snapshot",
         ]);
-        const issueRaw = row["cccd_issue_date"] ?? row["Ngày cấp CCCD"] ?? "";
-        const cccdIssueDate = normalizeExcelDate(issueRaw);
 
-        if (String(birthRaw).trim() && !workerDateOfBirth) {
+        const forbiddenClearField = [
+          [workerName, "Họ tên tại thời điểm đi làm"],
+          [workerCccd, "CCCD tại thời điểm đi làm"],
+          [factoryName, "Tên nhà máy mới"],
+          [factoryCode, "Mã nhà máy mới"],
+          [joinRaw, "Ngày vào mới"],
+          [recruiterUsername, "Người tuyển"],
+        ].find(([value]) => isClearValue(value));
+        if (forbiddenClearField) {
+          addFailedRow(
+            row,
+            rowNumber,
+            `Không thể dùng ${CLEAR_VALUE} để xóa trường bắt buộc hoặc quan hệ "${forbiddenClearField[1]}"`,
+          );
+          continue;
+        }
+
+        if (String(birthRaw).trim() && !isClearValue(birthRaw) && !workerDateOfBirth) {
           addFailedRow(row, rowNumber, "Ngày sinh không hợp lệ");
           continue;
         }
-        if (String(issueRaw).trim() && !cccdIssueDate) {
+        if (String(issueRaw).trim() && !isClearValue(issueRaw) && !cccdIssueDate) {
           addFailedRow(row, rowNumber, "Ngày cấp CCCD không hợp lệ");
           continue;
         }
         if (String(joinRaw).trim() && !joinDate) {
-          addFailedRow(row, rowNumber, "join_date không hợp lệ");
+          addFailedRow(row, rowNumber, "Ngày vào mới không hợp lệ");
           continue;
         }
-        if (String(leaveRaw).trim() && !leaveDate) {
-          addFailedRow(row, rowNumber, "leave_date không hợp lệ");
+        if (String(leaveRaw).trim() && !isClearValue(leaveRaw) && !leaveDate) {
+          addFailedRow(row, rowNumber, "Ngày nghỉ không hợp lệ");
           continue;
         }
 
         const historyPayload: Parameters<typeof updateEmploymentHistory>[1] = {};
         if (workerName) historyPayload.worker_name_snapshot = workerName;
         if (workerCccd) historyPayload.worker_cccd_snapshot = workerCccd;
-        if (workerDateOfBirth) {
-          historyPayload.worker_date_of_birth_snapshot = workerDateOfBirth;
+        if (String(birthRaw).trim()) {
+          historyPayload.worker_date_of_birth_snapshot = isClearValue(birthRaw)
+            ? ""
+            : workerDateOfBirth;
         }
         if (workerAddress) {
-          historyPayload.worker_address_snapshot = workerAddress;
-          historyPayload.hometown_snapshot = workerAddress;
+          const nextAddress = isClearValue(workerAddress) ? "" : workerAddress;
+          historyPayload.worker_address_snapshot = nextAddress;
+          historyPayload.hometown_snapshot = nextAddress;
         }
-        if (cccdIssueDate) historyPayload.cccd_issue_date = cccdIssueDate;
-        if (employeeCode) historyPayload.employee_code = employeeCode;
+        if (String(issueRaw).trim()) {
+          historyPayload.cccd_issue_date = isClearValue(issueRaw) ? "" : cccdIssueDate;
+        }
+        if (employeeCode) {
+          historyPayload.employee_code = isClearValue(employeeCode) ? "" : employeeCode;
+        }
         if (factoryName || factoryCode) {
           const nextFactoryResult = resolveFactory(factoryName, factoryCode);
           if (nextFactoryResult.error) {
@@ -393,7 +299,9 @@ function AdminImportsPage() {
           historyPayload.factory = nextFactoryResult.factory.id;
         }
         if (joinDate) historyPayload.join_date = joinDate;
-        if (leaveDate) historyPayload.leave_date = leaveDate;
+        if (String(leaveRaw).trim()) {
+          historyPayload.leave_date = isClearValue(leaveRaw) ? "" : leaveDate;
+        }
         if (recruiterUsername) {
           const recruiter = staffByUsername.get(accountIdentityKey(recruiterUsername));
           if (!recruiter) {
@@ -402,7 +310,7 @@ function AdminImportsPage() {
           }
           historyPayload.recruiter_staff = recruiter.id;
         }
-        if (note) historyPayload.note = note;
+        if (note) historyPayload.note = isClearValue(note) ? "" : note;
 
         const finalJoinDate = String(historyPayload.join_date ?? target.join_date ?? "");
         const finalLeaveDate = String(historyPayload.leave_date ?? target.leave_date ?? "");
@@ -455,7 +363,7 @@ function AdminImportsPage() {
         exportToExcel(
           `cap_nhat_nhanh_lich_su_loi_${Date.now()}`,
           { "Dòng lỗi": failedRows },
-          { "Dòng lỗi": ["current_join_date"] },
+          { "Dòng lỗi": ["Ngày vào mới", "Ngày nghỉ", "Ngày sinh", "Ngày cấp CCCD"] },
         );
         toast.warning("Đã xuất file các dòng bị lỗi");
       }
@@ -984,15 +892,15 @@ function AdminImportsPage() {
           {lastResult && <ImportResult>{lastResult}</ImportResult>}
         </Card>
 
-        <Card className="hidden space-y-3 rounded-2xl p-4 shadow-soft desktop:block">
+        <Card className="space-y-3 rounded-2xl p-4 shadow-soft">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <FileInput className="h-4 w-4 text-primary" /> Cập nhật nhanh lịch sử/NLĐ
           </div>
           <div className="text-sm text-muted-foreground">
-            Chỉ điền các cột cần sửa. Ưu tiên <code>Mã lịch sử (UID)</code> đang hiển thị trên bản
-            ghi; hệ thống vẫn chấp nhận PocketBase record ID. Nếu không có, dùng thông tin NLĐ kèm
-            nhà máy và ngày vào hiện tại. Ô để trống sẽ giữ nguyên dữ liệu; chỉ collection lịch sử
-            được cập nhật.
+            <code>Mã lịch sử (UID)</code> trong <code>employment_histories</code> là điều kiện đối
+            chiếu duy nhất. Các cột phía sau là thông tin mới cần cập nhật. Ô trống giữ nguyên dữ
+            liệu; nhập <code>{CLEAR_VALUE}</code> để xóa trường tùy chọn. Không hỗ trợ xóa NLĐ, nhà
+            máy, ngày vào hoặc các quan hệ.
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="rounded-full" onClick={downloadBulkEditTemplate}>
@@ -1058,7 +966,8 @@ function AdminImportsPage() {
           </div>
           <ul className="space-y-1 text-sm text-muted-foreground">
             <li>- Dòng lỗi không làm dừng các dòng hợp lệ; hệ thống xuất lại file để sửa.</li>
-            <li>- Cập nhật nhanh không xóa dữ liệu bằng ô trống và không tự tạo lịch sử mới.</li>
+            <li>- Cập nhật nhanh chỉ đối chiếu bằng UID của lịch sử và không tự tạo bản ghi mới.</li>
+            <li>- Ô trống giữ nguyên; dùng [XÓA] để xóa trường tùy chọn được hỗ trợ.</li>
             <li>- Cập nhật nhanh chỉ ghi vào lịch sử; không thay đổi dữ liệu hồ sơ NLĐ.</li>
             <li>
               - Mọi lần import đều ghi Nhật ký thao tác hệ thống cùng tên file và kết quả tổng hợp.
