@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LayoutGrid } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -271,7 +271,7 @@ function StaffWorkforceDashboardPage() {
           <Tabs
             value={tab}
             onValueChange={(value) => setTab(value as ActiveTab)}
-            className="grid grid-cols-2 gap-x-1 gap-y-4"
+            className="grid grid-cols-3 gap-x-1 gap-y-4"
           >
             <TabsList asChild>
               <span className="contents">
@@ -287,10 +287,17 @@ function StaffWorkforceDashboardPage() {
                 >
                   Khác
                 </TabsTrigger>
+                <TabsTrigger
+                  value="hour-stats"
+                  asChild
+                  className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
+                >
+                  <Link to="/staff/hour-stats">Thống kê giờ</Link>
+                </TabsTrigger>
               </span>
             </TabsList>
 
-            <TabsContent value="workforce" className="col-span-2 mt-0">
+            <TabsContent value="workforce" className="col-span-3 mt-0">
               <WorkforceDashboard
                 histories={histories}
                 users={staffUsers}
@@ -302,7 +309,7 @@ function StaffWorkforceDashboardPage() {
               />
             </TabsContent>
 
-            <TabsContent value="other" className="col-span-2 mt-0 space-y-4">
+            <TabsContent value="other" className="col-span-3 mt-0 space-y-4">
               <OtherDashboard
                 histories={histories}
                 users={staffUsers}

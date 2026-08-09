@@ -137,6 +137,36 @@ function StaffDashboardPage() {
         <StatCard label="Lao động trong quyền" value={workersCount} icon={Users} tone="primary" />
       </div>
 
+      <nav
+        role="tablist"
+        aria-label="Chuyển khu vực Dashboard staff"
+        className="flex items-center gap-1 overflow-x-auto rounded-2xl border border-border/60 bg-card p-1 shadow-soft"
+      >
+        <span
+          role="tab"
+          aria-selected="true"
+          className="shrink-0 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
+        >
+          Tổng quan
+        </span>
+        <button
+          type="button"
+          role="tab"
+          aria-selected="false"
+          onClick={() => setUtilOpen(true)}
+          className="shrink-0 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        >
+          Khác
+        </button>
+        <Link
+          to="/staff/hour-stats"
+          role="tab"
+          className="shrink-0 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        >
+          Thống kê giờ
+        </Link>
+      </nav>
+
       <div className="grid grid-cols-2 gap-3">
         <DashboardLink
           to="/staff/workers"
@@ -173,22 +203,6 @@ function StaffDashboardPage() {
           description="Tạo và theo dõi yêu cầu giữ lương cho NLĐ."
           icon={Banknote}
         />
-        <button
-          type="button"
-          onClick={() => setUtilOpen(true)}
-          className="group rounded-2xl border border-border/60 bg-card p-4 text-left shadow-soft transition hover:-translate-y-0.5"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <LayoutGrid className="h-5 w-5" />
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-          </div>
-          <div className="mt-3 text-sm font-semibold">Tiện ích</div>
-          <div className="mt-1 text-xs leading-5 text-muted-foreground">
-            Bảng tin, nhà xe, trò chuyện, hướng dẫn
-          </div>
-        </button>
         <DashboardLink
           to="/staff/export"
           title="Xuất dữ liệu"

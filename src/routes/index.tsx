@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { pb, type UserRecord } from "@/lib/pocketbase";
@@ -538,6 +538,13 @@ function DashboardPage() {
                   variant="accent"
                 />
                 <FeatureTile
+                  to="/staff/hour-stats"
+                  label="Thống kê giờ"
+                  description="Tổng hợp giờ theo người tuyển"
+                  icon={Clock}
+                  variant="accent"
+                />
+                <FeatureTile
                   to="/complaints"
                   label="Khiếu nại"
                   description="Tiếp nhận phản ánh"
@@ -972,6 +979,9 @@ function DesktopAdminDashboard({
               <TabsList aria-label="Nội dung khác">
                 <TabsTrigger value="overview">Tổng quan khác</TabsTrigger>
                 <TabsTrigger value="progress">Tiến độ công việc</TabsTrigger>
+                <TabsTrigger value="hour-stats" asChild>
+                  <Link to="/staff/hour-stats">Thống kê giờ</Link>
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="mt-0 space-y-4">

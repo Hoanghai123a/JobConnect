@@ -107,3 +107,10 @@ Cả ba collection chỉ cho phép tài khoản có `role = "admin"` đọc và 
 Lưu ý: chỉ import file này khi ba collection chưa tồn tại. Nếu đã có dữ liệu thực tế, hãy sao lưu
 PocketBase và đối chiếu field, rule, relation cascade cùng index trước khi cập nhật schema; không
 xóa collection thủ công vì sẽ mất toàn bộ tab, trạng thái và công việc liên quan.
+
+## Thống kê giờ
+
+- Không cần thêm collection hoặc field mới. Trang `/staff/hour-stats` đọc trực tiếp `check_attendance_items`, `check_salary_items` và `employment_histories`.
+- `check_attendance_items` và `check_salary_items` cần giữ `listRule` / `viewRule` cho `admin`, `staff` và chính NLĐ theo luồng check công/lương hiện có.
+- Staff chỉ được hiển thị dữ liệu có `employment_histories.recruiter_staff = @request.auth.id`; ứng dụng kiểm tra phạm vi này trước khi tổng hợp và hiển thị.
+- Trang thống kê chỉ đọc dữ liệu, không yêu cầu thêm quyền tạo, sửa hoặc xóa.
