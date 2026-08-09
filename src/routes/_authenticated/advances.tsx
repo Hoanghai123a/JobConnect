@@ -18,6 +18,7 @@ import {
   type AdvanceStatus,
   type RecoveryStatus,
   type AdminTab,
+  type AdminAdvanceSegment,
   type AdvancePayoutMethod,
   ADVANCE_TAB_FILTERS,
   LEGACY_STAFF_REQUESTED_PENDING_FILTER,
@@ -26,6 +27,7 @@ import {
   PAYOUT_METHOD_META,
   normalizeAdvancePayoutMethod,
   joinPbFilters,
+  buildAdminAdvanceSegmentFilter,
   buildAdvanceFilter,
   formatMoney,
 } from "@/lib/advances";
@@ -248,7 +250,7 @@ export function AdvancesPage() {
   const [advancePolicyError, setAdvancePolicyError] = useState("");
   const [advancePolicyLoading, setAdvancePolicyLoading] = useState(false);
   const [stats, setStats] = useState<Record<AdminTab, AdvanceSummary>>(emptyAdvanceSummaries);
-  const [adminSegment, setAdminSegment] = useState<"workers" | "staff">("workers");
+  const [adminSegment, setAdminSegment] = useState<AdminAdvanceSegment>("workers");
   const [transferDescriptionTemplate, setTransferDescriptionTemplate] = useState(
     DEFAULT_TRANSFER_DESCRIPTION_TEMPLATE,
   );
@@ -371,12 +373,9 @@ export function AdvancesPage() {
         factoryName: isAdmin ? selectedFactoryName : "",
         disbursed: isAdmin ? disbursementFilter : "all",
       });
-      const segmentFilter =
-        isAdmin && adminSegment === "staff"
-          ? joinPbFilters([baseFilter, 'recruiter_id=""', "requested_by=user"])
-          : isAdmin && adminSegment === "workers"
-            ? joinPbFilters([baseFilter, 'recruiter_id!=""'])
-            : baseFilter;
+      const segmentFilter = isAdmin
+        ? joinPbFilters([baseFilter, buildAdminAdvanceSegmentFilter(adminSegment)])
+        : baseFilter;
       const listOptions = {
         filter: segmentFilter,
         sort: "-created",
@@ -425,12 +424,9 @@ export function AdvancesPage() {
       factoryName: isAdmin ? selectedFactoryName : "",
       disbursed: isAdmin ? disbursementFilter : "all",
     });
-    const segmentBase =
-      isAdmin && adminSegment === "staff"
-        ? joinPbFilters([base, 'recruiter_id=""', "requested_by=user"])
-        : isAdmin && adminSegment === "workers"
-          ? joinPbFilters([base, 'recruiter_id!=""'])
-          : base;
+    const segmentBase = isAdmin
+      ? joinPbFilters([base, buildAdminAdvanceSegmentFilter(adminSegment)])
+      : base;
     const withBase = (statusFilter: string) => joinPbFilters([segmentBase, statusFilter]);
     const adminPendingFilter = `(status="recruiter_approved" || ${LEGACY_STAFF_REQUESTED_PENDING_FILTER})`;
     try {

@@ -14,6 +14,8 @@ export type AdminTab =
   | "rejected"
   | "all";
 
+export type AdminAdvanceSegment = "workers" | "staff";
+
 export type AdvanceRecord = {
   id: string;
   user?: string;
@@ -99,6 +101,10 @@ export const RECOVERY_META: Record<
 
 export function joinPbFilters(parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" && ");
+}
+
+export function buildAdminAdvanceSegmentFilter(segment: AdminAdvanceSegment) {
+  return segment === "workers" ? 'user.role="user"' : 'user.role="staff"';
 }
 
 export function containsAny(fields: string[], keyword: string) {
