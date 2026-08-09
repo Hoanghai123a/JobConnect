@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
 import {
+  buildAdminAdvanceSegmentFilter,
   formatMoney,
   type AdvanceRecord,
   type AdvanceStatus,
@@ -236,6 +237,7 @@ export function FinanceDashboard() {
     setError("");
     try {
       const data = await pb.collection("advances").getFullList<FinanceAdvance>({
+        filter: buildAdminAdvanceSegmentFilter("workers"),
         sort: "-created",
         fields:
           "id,full_name,company,employee_code,amount,status,recovery_status,created,resolved_at,disbursed,disbursed_at,recovered_at",
