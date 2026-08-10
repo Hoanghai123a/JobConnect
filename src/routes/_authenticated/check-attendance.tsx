@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { fileUrl, pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
-import { AppHeader } from "@/components/layout/BottomNav";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -861,18 +860,22 @@ function AdminCheckAttendance() {
   };
 
   return (
-    <div>
-      <AppHeader title="Check công/lương" subtitle="Gửi bảng check công từ Excel" back />
-      <div className="p-4">
-        <Tabs defaultValue="attendance" className="space-y-4">
-          <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl">
-            <TabsTrigger value="attendance" className="rounded-lg text-xs">
-              Check công
-            </TabsTrigger>
-            <TabsTrigger value="salary" className="rounded-lg text-xs">
-              Check lương
-            </TabsTrigger>
-          </TabsList>
+    <PageContainer title="Check công/lương" subtitle="Gửi bảng check công từ Excel">
+      <Tabs defaultValue="attendance" className="space-y-4">
+        <TabsList className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 grid w-full grid-cols-2 gap-1">
+          <TabsTrigger
+            value="attendance"
+            className="min-w-0 w-full rounded-lg bg-muted text-xs shadow-sm"
+          >
+            Check công
+          </TabsTrigger>
+          <TabsTrigger
+            value="salary"
+            className="min-w-0 w-full rounded-lg bg-muted text-xs shadow-sm"
+          >
+            Check lương
+          </TabsTrigger>
+        </TabsList>
 
           <TabsContent value="attendance" className="mt-0 space-y-4">
             <Card className="space-y-3 p-4">
@@ -1104,9 +1107,8 @@ function AdminCheckAttendance() {
               )}
             </div>
           </TabsContent>
-        </Tabs>
-      </div>
-    </div>
+      </Tabs>
+    </PageContainer>
   );
 }
 
@@ -1242,27 +1244,24 @@ function UserCheckAttendance() {
   }, [load]);
 
   return (
-    <div>
-      <AppHeader title="Check công/lương" subtitle="Bảng check công admin gửi" back />
-      <div className="space-y-4 p-4">
-        {loading && items.length === 0 && salaryItems.length === 0 ? (
-          <DataLoadingState variant="list" label="Đang tải bảng check công và lương..." rows={3} />
-        ) : (
-          <>
-            {loading && (
-              <DataLoadingState
-                variant="inline"
-                label="Đang cập nhật bảng check công và lương..."
-              />
-            )}
-            <WorkerPayrollView
-              attendanceItems={items}
-              salaryItems={salaryItems}
-              loading={loading}
+    <PageContainer title="Check công/lương" subtitle="Bảng check công admin gửi">
+      {loading && items.length === 0 && salaryItems.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải bảng check công và lương..." rows={3} />
+      ) : (
+        <>
+          {loading && (
+            <DataLoadingState
+              variant="inline"
+              label="Đang cập nhật bảng check công và lương..."
             />
-          </>
-        )}
-      </div>
-    </div>
+          )}
+          <WorkerPayrollView
+            attendanceItems={items}
+            salaryItems={salaryItems}
+            loading={loading}
+          />
+        </>
+      )}
+    </PageContainer>
   );
 }
