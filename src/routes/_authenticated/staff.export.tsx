@@ -61,17 +61,9 @@ function buildTenureDaysByUserId(workers: StaffWorkerRecord[]) {
   return map;
 }
 
-function getBirthYear(value?: string) {
-  const text = String(value ?? "").trim();
-  if (!text) return "";
-
-  const iso = text.match(/^(\d{4})[-/]\d{1,2}[-/]\d{1,2}/);
-  if (iso) return iso[1];
-
-  const local = text.match(/^\d{1,2}[-/]\d{1,2}[-/](\d{4})/);
-  if (local) return local[1];
-
-  return /^(?:19|20)\d{2}$/.test(text) ? text : "";
+function getBirthDate(value?: string) {
+  const formatted = formatDateOnly(value);
+  return formatted ? formatted.replaceAll("/", "-") : "";
 }
 
 function buildBasicRows(
@@ -120,7 +112,7 @@ function buildFullRows(
       "Họ tên tại nhà máy": history.worker_name_snapshot || "",
       "CCCD tại nhà máy": history.worker_cccd_snapshot || "",
       "Số điện thoại": user?.phone || "",
-      "Năm sinh": getBirthYear(user?.date_of_birth),
+      "Ngày sinh": getBirthDate(user?.date_of_birth),
       "Giới tính": user?.gender || "",
       "Quê quán": user?.address || "",
       "Nhà máy": history.expand?.factory?.name || "",
