@@ -27,7 +27,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import { canReportJoin, isRecentRecruiter, type StaffWorkerRecord } from "@/lib/staff-permissions";
+import { canReportJoin, type StaffWorkerRecord } from "@/lib/staff-permissions";
 import {
   createEmploymentHistory,
   fetchEmploymentHistories,
@@ -212,11 +212,7 @@ export function WorkerQuickDrawer({
     setEmployeeCodeForm(latest?.employee_code || "");
   }, [worker, viewer?.id]);
 
-  const joinableFactories = useMemo(() => {
-    if (viewer?.role === "admin") return factories;
-    if (worker && isRecentRecruiter(viewer, worker.histories)) return factories;
-    return factories.filter((factory) => managedFactoryIds.has(factory.id));
-  }, [factories, managedFactoryIds, viewer, worker]);
+  const joinableFactories = useMemo(() => factories, [factories]);
 
   const latest = worker?.latestHistory ?? null;
   const joinCccdVersion = useMemo(() => {

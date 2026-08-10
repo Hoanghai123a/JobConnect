@@ -442,10 +442,7 @@ function StaffWorkerDetailPage() {
     };
   }, [advanceOpen, allowAdvanceAfterLeave, viewer?.role, workerUser?.id]);
 
-  const joinableFactories = useMemo(() => {
-    if (viewer?.role === "admin" || recentRecruiter) return factories;
-    return factories.filter((factory) => managedFactoryIds.has(factory.id));
-  }, [factories, managedFactoryIds, recentRecruiter, viewer?.role]);
+  const joinableFactories = useMemo(() => factories, [factories]);
   const latestLeaveDate = useMemo(() => {
     const dates = allWorkerHistories
       .map((h) => h.leave_date?.slice(0, 10))

@@ -72,7 +72,6 @@ import type { MainHouseRecord } from "@/lib/main-houses";
 import {
   canReportJoin,
   canViewHistoryInStaffScope,
-  isRecentRecruiter,
 } from "@/lib/staff-permissions";
 import {
   createStaffActionLog,
@@ -577,11 +576,7 @@ export function WorkerEmploymentDrawer({
     setActionLogsRefreshKey((current) => current + 1);
   };
 
-  const joinableFactories = useMemo(() => {
-    if (actor?.role === "admin") return factories;
-    if (isRecentRecruiter(actor, histories)) return factories;
-    return factories.filter((factory) => managedIds.has(factory.id));
-  }, [factories, managedIds, actor, histories]);
+  const joinableFactories = useMemo(() => factories, [factories]);
 
   useEffect(() => {
     if (user) {

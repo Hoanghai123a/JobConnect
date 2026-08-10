@@ -215,14 +215,14 @@ export function canReportJoin(
   viewer: Partial<UserRecord> | null | undefined,
   histories: EmploymentHistoryRecord[],
   managedFactoryIds: Set<string>,
-  targetFactoryId?: string,
+  _targetFactoryId?: string,
 ) {
   if (!viewer?.id) return false;
   if (viewer.role === "admin") return true;
   if (isRecentRecruiter(viewer, histories)) return true;
   if (viewer.role !== "staff") return false;
-  if (!targetFactoryId) return managedFactoryIds.size > 0;
-  return managedFactoryIds.has(targetFactoryId);
+  // Staff with an existing management scope may report a join at any factory.
+  return managedFactoryIds.size > 0;
 }
 
 export function canEditHistory(
