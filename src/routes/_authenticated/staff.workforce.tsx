@@ -349,29 +349,27 @@ function StaffWorkforceDashboardPage() {
             <Tabs
               value={tab}
               onValueChange={(value) => setTab(value as ActiveTab)}
-              className="grid grid-cols-3 gap-x-1 gap-y-4"
+              className="min-w-0 space-y-4"
             >
-              <TabsList asChild>
-                <span className="contents">
-                  <TabsTrigger
-                    value="workforce"
-                    className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
-                  >
-                    Nhân lực
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="other"
-                    className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
-                  >
-                    Khác
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="hour-stats"
-                    className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
-                  >
-                    Thống kê giờ
-                  </TabsTrigger>
-                </span>
+              <TabsList className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 grid h-auto w-full min-w-0 grid-cols-3 gap-2 overflow-hidden rounded-xl bg-background/95 p-1 shadow-soft backdrop-blur desktop:grid desktop:overflow-x-hidden">
+                <TabsTrigger
+                  value="workforce"
+                  className="w-full min-w-0 rounded-lg bg-muted px-2 text-xs shadow-sm desktop:min-w-0 desktop:px-2 desktop:text-sm"
+                >
+                  Nhân lực
+                </TabsTrigger>
+                <TabsTrigger
+                  value="other"
+                  className="w-full min-w-0 rounded-lg bg-muted px-2 text-xs shadow-sm desktop:min-w-0 desktop:px-2 desktop:text-sm"
+                >
+                  Khác
+                </TabsTrigger>
+                <TabsTrigger
+                  value="hour-stats"
+                  className="w-full min-w-0 rounded-lg bg-muted px-2 text-xs shadow-sm desktop:min-w-0 desktop:px-2 desktop:text-sm"
+                >
+                  Thống kê giờ
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="workforce" className="col-span-3 mt-0">
