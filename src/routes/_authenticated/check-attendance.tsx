@@ -69,6 +69,7 @@ type CheckItemRecord = {
   user: string;
   month: string;
   round_no: number;
+  full_name?: string;
   rows: CheckAttendanceRow[];
   summary?: Partial<RateBuckets>;
   created?: string;
@@ -78,6 +79,7 @@ type CheckItemRecord = {
 type SalaryPersonalInfo = {
   employee_code: string;
   company: string;
+  full_name?: string;
   start_date: string;
   end_date: string;
   base_salary: number;
@@ -131,6 +133,7 @@ type ParsedRow = CheckAttendanceRow & {
   uid: string;
   employeeCode: string;
   company: string;
+  fullName: string;
   rates: RateBuckets;
 };
 
@@ -314,6 +317,7 @@ async function readAttendanceExcel(file: File): Promise<ParsedRow[]> {
         uid,
         employeeCode,
         company: String(pick(row, ["Nhà máy", "Công ty", "company", "factory"])).trim(),
+        fullName: String(pick(row, ["Họ tên", "Họ và tên", "full_name"])).trim(),
         rates,
         date: parseExcelDate(pick(row, ["Ngày", "date", "Ngày công"])),
         shift: parseShift(pick(row, ["Ca", "shift"])),
@@ -357,6 +361,7 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
         pick(row, ["Mã nhân viên", "Mã NV", "Ma NV", "employee_code"]),
       ).trim();
       const company = String(pick(row, ["Nhà máy", "Công ty", "company", "factory"])).trim();
+      const fullName = String(pick(row, ["Họ tên", "Họ và tên", "full_name"])).trim();
       const baseSalary = parseNumber(pick(row, ["Lương cơ bản", "Luong co ban", "base_salary"]));
       const unit = baseSalary / 26 / 8;
 
@@ -399,6 +404,7 @@ async function readSalaryExcel(file: File): Promise<ParsedSalaryRow[]> {
         personal: {
           employee_code: employeeCode,
           company,
+          full_name: fullName,
           start_date: parseExcelDate(pick(row, ["Ngày vào làm", "Ngay vao lam", "start_date"])),
           end_date: parseExcelDate(pick(row, ["Ngày nghỉ", "Ngay nghi", "end_date"])),
           base_salary: baseSalary,
@@ -578,7 +584,7 @@ function AdminCheckAttendance() {
 
       const grouped = new Map<
         string,
-        { user: UserRecord; rows: CheckAttendanceRow[]; summary: RateBuckets }
+        { user: UserRecord; fullName: string; rows: CheckAttendanceRow[]; summary: RateBuckets }
       >();
       const unmatchedRows: Array<Record<string, unknown>> = [];
 
@@ -596,7 +602,13 @@ function AdminCheckAttendance() {
           });
           continue;
         }
-        const current = grouped.get(user.id) || { user, rows: [], summary: EMPTY_CHECK_BUCKETS() };
+        const current = grouped.get(user.id) || {
+          user,
+          fullName: "",
+          rows: [],
+          summary: EMPTY_CHECK_BUCKETS(),
+        };
+        if (!current.fullName && row.fullName) current.fullName = row.fullName;
         if (!hasRateValues(current.summary) && hasRateValues(row.rates)) {
           current.summary = row.rates;
         }
@@ -629,13 +641,14 @@ function AdminCheckAttendance() {
         .collection("check_attendance_batches")
         .create(formData)) as unknown as BatchRecord;
 
-      for (const { user, rows, summary } of grouped.values()) {
+      for (const { user, fullName, rows, summary } of grouped.values()) {
         rows.sort((a, b) => a.date.localeCompare(b.date));
         await pb.collection("check_attendance_items").create({
           batch: batch.id,
           user: user.id,
           month,
           round_no: nextRound,
+          full_name: fullName,
           rows,
           summary,
         });
@@ -775,6 +788,7 @@ function AdminCheckAttendance() {
         current.personal = {
           employee_code: current.personal.employee_code || row.personal.employee_code,
           company: current.personal.company || row.personal.company,
+          full_name: current.personal.full_name || row.personal.full_name,
           start_date: current.personal.start_date || row.personal.start_date,
           end_date: current.personal.end_date || row.personal.end_date,
           base_salary: current.personal.base_salary || row.personal.base_salary,

@@ -17,6 +17,7 @@ import { FinanceDashboard } from "@/components/dashboard/FinanceDashboard";
 import { OtherDashboard } from "@/components/dashboard/OtherDashboard";
 import { ApprovalDashboard } from "@/components/dashboard/ApprovalDashboard";
 import { WorkProgressBoard } from "@/components/dashboard/WorkProgressBoard";
+import { HourStatsDashboard } from "@/components/dashboard/HourStatsDashboard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +33,7 @@ import { fetchCccdVersionsByIds, type CccdVersionRecord } from "@/lib/cccd-versi
 import { getRecentDateKeys } from "@/lib/workforce-other-stats";
 import {
   Newspaper,
+  BarChart3,
   BriefcaseBusiness,
   Clock,
   BookOpen,
@@ -57,7 +59,6 @@ import {
   RefreshCw,
   NotebookPen,
   ClipboardCheck,
-  ClipboardList,
   LogIn,
 } from "lucide-react";
 import {
@@ -100,6 +101,7 @@ function DashboardPage() {
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
   const [unread, setUnread] = useState({ news: 0, chat: 0, check: 0, advances: 0 });
   const [openUtil, setOpenUtil] = useState<UtilKey>(null);
+  const [adminActionsOpen, setAdminActionsOpen] = useState(false);
   const [reloading, setReloading] = useState(false);
   const [workforceHistories, setWorkforceHistories] = useState<EmploymentHistoryRecord[]>([]);
   const [workforceUsers, setWorkforceUsers] = useState<UserRecord[]>([]);
@@ -278,8 +280,6 @@ function DashboardPage() {
     ) {
       return;
     }
-    if (!window.matchMedia("(min-width: 1024px)").matches) return;
-
     let alive = true;
     setWorkforceLoading(true);
     setWorkforceError("");
@@ -338,8 +338,6 @@ function DashboardPage() {
     if (!isAdmin || !user?.id || desktopSection !== "khac" || typeof window === "undefined") {
       return;
     }
-    if (!window.matchMedia("(min-width: 1024px)").matches) return;
-
     let alive = true;
     const userId = escapePb(user.id);
     const rolePart = `(admins ~ "${userId}" || creator = "${userId}")`;
@@ -501,85 +499,97 @@ function DashboardPage() {
                 <FeatureTile
                   to="/admin/workforce"
                   label="Nhân sự đi làm"
-                  description="Danh sách và tình trạng lao động"
                   icon={Users}
                   variant="accent"
+                  size="compact"
+                  align="start"
                 />
                 <FeatureTile
                   to="/advances"
                   label="Ứng lương"
-                  description="Tiếp nhận và giải ngân"
                   icon={Wallet}
                   variant="accent"
+                  size="compact"
+                  align="start"
                 />
                 <FeatureTile
                   to="/staff/approvals"
                   label="Phê duyệt"
-                  description="Yêu cầu nghiệp vụ"
                   icon={ClipboardCheck}
                   badge={toBadge(pendingApprovalCount)}
+                  size="compact"
+                  align="start"
                 />
                 <FeatureTile
                   to="/staff/salary-holds"
                   label="Giữ lương"
-                  description="Duyệt và giải ngân yêu cầu"
                   icon={ShieldCheck}
+                  size="compact"
+                  align="start"
                 />
               </div>
             </MobileSection>
 
             <MobileSection title="Quản trị" description="Kiểm tra dữ liệu và cấu hình hệ thống">
               <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAdminActionsOpen(true)}
+                  className="group relative flex min-h-[94px] flex-col items-start gap-2 rounded-2xl border border-border/70 bg-card p-3 text-left shadow-soft transition-colors hover:border-primary/40 active:scale-[0.98]"
+                >
+                  <div className="gradient-primary flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground">
+                    <BarChart3 className="h-[18px] w-[18px]" />
+                  </div>
+                  <span className="w-full text-xs font-semibold">Dashboard</span>
+                </button>
                 <FeatureTile
                   to="/check-attendance"
                   label="Check công/lương"
-                  description="Kiểm tra bảng công và lương"
                   icon={CalendarCheck}
                   variant="accent"
+                  size="compact"
+                  align="start"
                 />
                 <FeatureTile
                   to="/staff/hour-stats"
                   label="Thống kê giờ"
-                  description="Tổng hợp giờ theo người tuyển"
                   icon={Clock}
                   variant="accent"
+                  size="compact"
+                  align="start"
                 />
                 <FeatureTile
                   to="/complaints"
                   label="Khiếu nại"
-                  description="Tiếp nhận phản ánh"
                   icon={MessageSquareWarning}
                   variant="accent"
                   badge={toBadge(pendingComplaintCount)}
+                  size="compact"
+                  align="start"
                 />
                 <FeatureTile
                   to="/attendance"
                   label="Tự chấm công"
-                  description="Ghi nhận giờ làm"
                   icon={Clock}
+                  size="compact"
+                  align="start"
                 />
                 <FeatureTile
                   to="/admin/settings"
                   label="Cài đặt"
-                  description="Thiết lập hệ thống"
                   icon={Settings}
-                />
-                <FeatureTile
-                  to="/admin/work-progress"
-                  label="Tiến độ công việc"
-                  description="Theo dõi công việc chung"
-                  icon={ClipboardList}
-                  variant="accent"
+                  size="compact"
+                  align="start"
                 />
               </div>
             </MobileSection>
 
             <MobileSection title="Khác" description="Tiện ích, giải trí và thông tin tài khoản">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setOpenUtil("utilities")}
-                  className="group relative flex min-h-[94px] flex-col items-center gap-2 rounded-2xl border border-border/70 bg-card p-3 text-center shadow-soft transition-colors active:scale-[0.98]"
+                  className="group relative flex min-h-[94px] flex-col items-start gap-2 rounded-2xl border border-border/70 bg-card p-3 text-left shadow-soft transition-colors active:scale-[0.98]"
                 >
                   <div className="gradient-primary flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground">
                     <LayoutGrid className="h-[18px] w-[18px]" />
@@ -589,14 +599,20 @@ function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setOpenUtil("entertainment")}
-                  className="group relative flex min-h-[94px] flex-col items-center gap-2 rounded-2xl border border-border/70 bg-card p-3 text-center shadow-soft transition-colors active:scale-[0.98]"
+                  className="group relative flex min-h-[94px] flex-col items-start gap-2 rounded-2xl border border-border/70 bg-card p-3 text-left shadow-soft transition-colors active:scale-[0.98]"
                 >
                   <div className="gradient-accent flex h-10 w-10 items-center justify-center rounded-xl text-accent-foreground">
                     <Gamepad2 className="h-[18px] w-[18px]" />
                   </div>
                   <span className="w-full text-xs font-semibold">Giải trí</span>
                 </button>
-                <FeatureTile to="/account" label="Tài khoản" icon={User} size="compact" />
+                <FeatureTile
+                  to="/account"
+                  label="Tài khoản"
+                  icon={User}
+                  size="compact"
+                  align="start"
+                />
               </div>
             </MobileSection>
           </>
@@ -723,6 +739,63 @@ function DashboardPage() {
 
       <BottomNav />
 
+      <Dialog open={adminActionsOpen} onOpenChange={setAdminActionsOpen}>
+        <DialogContent
+          className="h-[calc(100dvh-0.5rem)] max-h-[calc(100dvh-0.5rem)] w-[calc(100%-0.5rem)] max-w-none rounded-3xl desktop:hidden"
+          bodyClassName="space-y-3 px-3 py-3"
+        >
+          <DialogHeader className="px-4 py-3 pr-14">
+            <DialogTitle className="flex items-center gap-2">
+              <div className="gradient-primary flex h-8 w-8 items-center justify-center rounded-xl text-primary-foreground">
+                <BarChart3 className="h-4 w-4" />
+              </div>
+              Dashboard quản trị
+            </DialogTitle>
+            <DialogDescription>
+              Tổng hợp nhanh số liệu quản trị trên thiết bị di động.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="sticky -top-3 z-30 flex items-center gap-1 rounded-2xl border border-border/70 bg-background/95 p-1 shadow-soft backdrop-blur">
+            {(
+              [
+                ["nhan-luc", "Nhân lực", Users],
+                ["tai-chinh", "Tài chính", Wallet],
+                ["khac", "Khác", LayoutGrid],
+              ] as const
+            ).map(([key, label, Icon]) => (
+              <Link
+                key={key}
+                to="/"
+                hash={key}
+                aria-current={desktopSection === key ? "page" : undefined}
+                className={`flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-xl px-1.5 text-[11px] font-semibold transition ${
+                  desktopSection === key
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground active:bg-muted"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </Link>
+            ))}
+          </div>
+
+          <DesktopAdminDashboard
+            mobile
+            section={desktopSection}
+            histories={workforceHistories}
+            users={workforceUsers}
+            factories={workforceFactories}
+            cccdVersions={workforceCccdVersions}
+            loading={workforceLoading}
+            error={workforceError}
+            approvalStats={approvalStats}
+            onRetry={() => setWorkforceReloadToken((value) => value + 1)}
+          />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={openUtil !== null} onOpenChange={(open) => !open && setOpenUtil(null)}>
         <DialogContent className="rounded-3xl desktop:hidden">
           <DialogHeader>
@@ -773,7 +846,13 @@ function DashboardPage() {
                     size="compact"
                     badge={toBadge(unread.chat)}
                   />
-                  <FeatureTile to="/transport" label="Tìm nhà xe" icon={BusFront} size="compact" allowGuest />
+                  <FeatureTile
+                    to="/transport"
+                    label="Tìm nhà xe"
+                    icon={BusFront}
+                    size="compact"
+                    allowGuest
+                  />
                   <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
                 </>
               ) : (
@@ -785,7 +864,13 @@ function DashboardPage() {
                     size="compact"
                     badge={toBadge(unread.news)}
                   />
-                  <FeatureTile to="/transport" label="Tìm nhà xe" icon={BusFront} size="compact" allowGuest />
+                  <FeatureTile
+                    to="/transport"
+                    label="Tìm nhà xe"
+                    icon={BusFront}
+                    size="compact"
+                    allowGuest
+                  />
                   <FeatureTile
                     to="/chat"
                     label="Trò chuyện"
@@ -795,7 +880,13 @@ function DashboardPage() {
                   />
                   <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
                   <FeatureTile to="/notebook" label="Sổ tay" icon={NotebookPen} size="compact" />
-                  <FeatureTile to="/counter" label="Bộ đếm" icon={ListOrdered} size="compact" allowGuest />
+                  <FeatureTile
+                    to="/counter"
+                    label="Bộ đếm"
+                    icon={ListOrdered}
+                    size="compact"
+                    allowGuest
+                  />
                 </>
               )}
             </div>
@@ -813,7 +904,6 @@ function DashboardPage() {
     </div>
   );
 }
-
 
 function GuestDashboard({
   settings,
@@ -835,13 +925,27 @@ function GuestDashboard({
         <div className="absolute -bottom-16 -left-8 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
         <div className="relative mx-auto flex max-w-3xl flex-col items-center text-center">
           <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-3xl bg-white/95 shadow-soft">
-            {logoUrl ? <img src={logoUrl} alt={`Logo ${settings.company_name}`} className="logo-fit" /> : <Building2 className="h-8 w-8 text-primary" />}
+            {logoUrl ? (
+              <img src={logoUrl} alt={`Logo ${settings.company_name}`} className="logo-fit" />
+            ) : (
+              <Building2 className="h-8 w-8 text-primary" />
+            )}
           </div>
           <p className="mt-4 text-sm font-medium text-white/80">Chào mừng bạn đến</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight desktop:text-3xl">{settings.company_name}</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight desktop:text-3xl">
+            {settings.company_name}
+          </h1>
           {settings.slogan && <p className="mt-2 text-sm text-white/80">{settings.slogan}</p>}
-          <p className="mt-5 max-w-xl text-sm leading-6 text-white/90">Khám phá các tiện ích dành cho người lao động. Đăng nhập để xem và sử dụng thông tin của bạn.</p>
-          <Button type="button" variant="secondary" className="mt-5 bg-white text-primary hover:bg-white/90" onClick={() => onLoginOpenChange(true)}>
+          <p className="mt-5 max-w-xl text-sm leading-6 text-white/90">
+            Khám phá các tiện ích dành cho người lao động. Đăng nhập để xem và sử dụng thông tin của
+            bạn.
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            className="mt-5 bg-white text-primary hover:bg-white/90"
+            onClick={() => onLoginOpenChange(true)}
+          >
             <LogIn aria-hidden="true" />
             Đăng nhập
           </Button>
@@ -849,17 +953,56 @@ function GuestDashboard({
       </section>
 
       <main className="space-y-6 px-4 py-5 desktop:px-6 desktop:py-8">
-        <GuestSection title="Dành cho người lao động" description="Theo dõi công việc và các quyền lợi của bạn">
-          <FeatureTile to="/attendance" label="Tự chấm công" description="Ghi nhận giờ làm" icon={Clock} variant="accent" />
-          <FeatureTile to="/check-attendance" label="Check công/lương" description="Kiểm tra bảng công" icon={CalendarCheck} variant="accent" />
-          <FeatureTile to="/advances" label="Ứng lương" description="Gửi và theo dõi yêu cầu" icon={Wallet} variant="accent" />
-          <FeatureTile to="/complaints" label="Khiếu nại" description="Gửi phản ánh" icon={MessageSquareWarning} variant="accent" />
-          <FeatureTile to="/work-history" label="Lịch sử đi làm" description="Nhà máy và ngày làm" icon={History} variant="accent" />
+        <GuestSection
+          title="Dành cho người lao động"
+          description="Theo dõi công việc và các quyền lợi của bạn"
+        >
+          <FeatureTile
+            to="/attendance"
+            label="Tự chấm công"
+            description="Ghi nhận giờ làm"
+            icon={Clock}
+            variant="accent"
+          />
+          <FeatureTile
+            to="/check-attendance"
+            label="Check công/lương"
+            description="Kiểm tra bảng công"
+            icon={CalendarCheck}
+            variant="accent"
+          />
+          <FeatureTile
+            to="/advances"
+            label="Ứng lương"
+            description="Gửi và theo dõi yêu cầu"
+            icon={Wallet}
+            variant="accent"
+          />
+          <FeatureTile
+            to="/complaints"
+            label="Khiếu nại"
+            description="Gửi phản ánh"
+            icon={MessageSquareWarning}
+            variant="accent"
+          />
+          <FeatureTile
+            to="/work-history"
+            label="Lịch sử đi làm"
+            description="Nhà máy và ngày làm"
+            icon={History}
+            variant="accent"
+          />
         </GuestSection>
 
         <GuestSection title="Tiện ích" description="Thông tin, kết nối và công cụ hỗ trợ" compact>
           <FeatureTile to="/news" label="Bảng tin" icon={Newspaper} size="compact" allowGuest />
-          <FeatureTile to="/transport" label="Tìm nhà xe" icon={BusFront} size="compact" allowGuest />
+          <FeatureTile
+            to="/transport"
+            label="Tìm nhà xe"
+            icon={BusFront}
+            size="compact"
+            allowGuest
+          />
           <FeatureTile to="/chat" label="Trò chuyện" icon={MessagesSquare} size="compact" />
           <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
           <FeatureTile to="/notebook" label="Sổ tay" icon={NotebookPen} size="compact" />
@@ -874,7 +1017,11 @@ function GuestDashboard({
       </main>
 
       <BottomNav />
-      <LoginRequiredDialog open={loginOpen} onOpenChange={onLoginOpenChange} redirectTo={redirectTo} />
+      <LoginRequiredDialog
+        open={loginOpen}
+        onOpenChange={onLoginOpenChange}
+        redirectTo={redirectTo}
+      />
     </div>
   );
 }
@@ -896,7 +1043,13 @@ function GuestSection({
         <h2 className="text-base font-bold tracking-tight">{title}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       </div>
-      <div className={compact ? "grid grid-cols-3 gap-3 desktop:grid-cols-6" : "grid grid-cols-2 gap-3 desktop:grid-cols-5"}>
+      <div
+        className={
+          compact
+            ? "grid grid-cols-3 gap-3 desktop:grid-cols-6"
+            : "grid grid-cols-2 gap-3 desktop:grid-cols-5"
+        }
+      >
         {children}
       </div>
     </section>
@@ -906,6 +1059,7 @@ function GuestSection({
 type DesktopDashboardSection = "nhan-luc" | "tai-chinh" | "khac";
 
 function DesktopAdminDashboard({
+  mobile = false,
   section,
   histories,
   users,
@@ -916,6 +1070,7 @@ function DesktopAdminDashboard({
   approvalStats,
   onRetry,
 }: {
+  mobile?: boolean;
   section: DesktopDashboardSection;
   histories: EmploymentHistoryRecord[];
   users: UserRecord[];
@@ -948,17 +1103,43 @@ function DesktopAdminDashboard({
   return (
     <main
       data-admin-dashboard-content={section}
-      className="hidden min-h-[calc(100dvh-5rem)] min-w-0 bg-background desktop:block"
+      className={
+        mobile
+          ? "min-w-0 bg-background"
+          : "hidden min-h-[calc(100dvh-5rem)] min-w-0 bg-background desktop:block"
+      }
     >
-      <div className="mx-auto w-full max-w-[110rem] space-y-6 px-8 py-7">
+      <div
+        className={
+          mobile ? "w-full space-y-4 pb-2" : "mx-auto w-full max-w-[110rem] space-y-6 px-8 py-7"
+        }
+      >
         <section id={section} className="space-y-4 scroll-mt-28">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <div className={mobile ? "flex items-center gap-2" : "flex items-center gap-3"}>
+            <div
+              className={`flex shrink-0 items-center justify-center bg-primary/10 text-primary ${
+                mobile ? "h-9 w-9 rounded-xl" : "h-11 w-11 rounded-2xl"
+              }`}
+            >
               <SectionIcon className="h-5 w-5" />
             </div>
-            <div>
-              <h2 className="text-lg font-bold tracking-tight">{sectionMeta.title}</h2>
-              <p className="text-sm text-muted-foreground">{sectionMeta.description}</p>
+            <div className="min-w-0">
+              <h2
+                className={
+                  mobile ? "text-base font-bold tracking-tight" : "text-lg font-bold tracking-tight"
+                }
+              >
+                {sectionMeta.title}
+              </h2>
+              <p
+                className={
+                  mobile
+                    ? "line-clamp-2 text-xs text-muted-foreground"
+                    : "text-sm text-muted-foreground"
+                }
+              >
+                {sectionMeta.description}
+              </p>
             </div>
           </div>
 
@@ -971,17 +1152,19 @@ function DesktopAdminDashboard({
               error={error}
               onRetry={onRetry}
               detailHref="/admin/workforce"
+              presentation={mobile ? "mobile-dialog" : "default"}
             />
           ) : section === "tai-chinh" ? (
-            <FinanceDashboard />
+            <FinanceDashboard presentation={mobile ? "mobile-dialog" : "default"} />
           ) : (
-            <Tabs defaultValue="overview" className="space-y-4">
-              <TabsList aria-label="Nội dung khác">
+            <Tabs defaultValue="overview" className="min-w-0 space-y-4">
+              <TabsList
+                aria-label="Nội dung khác"
+                className={mobile ? "flex w-full justify-start overflow-x-auto" : undefined}
+              >
                 <TabsTrigger value="overview">Tổng quan khác</TabsTrigger>
                 <TabsTrigger value="progress">Tiến độ công việc</TabsTrigger>
-                <TabsTrigger value="hour-stats" asChild>
-                  <Link to="/staff/hour-stats">Thống kê giờ</Link>
-                </TabsTrigger>
+                <TabsTrigger value="hour-stats">Thống kê giờ</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="mt-0 space-y-4">
@@ -993,12 +1176,20 @@ function DesktopAdminDashboard({
                   loading={loading}
                   error={error}
                   onRetry={onRetry}
+                  presentation={mobile ? "mobile-dialog" : "default"}
                 />
-                <ApprovalDashboard stats={approvalStats} />
+                <ApprovalDashboard
+                  stats={approvalStats}
+                  presentation={mobile ? "mobile-dialog" : "default"}
+                />
               </TabsContent>
 
               <TabsContent value="progress" className="mt-0">
                 <WorkProgressBoard />
+              </TabsContent>
+
+              <TabsContent value="hour-stats" className="mt-0">
+                <HourStatsDashboard />
               </TabsContent>
             </Tabs>
           )}

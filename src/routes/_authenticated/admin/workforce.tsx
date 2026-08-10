@@ -226,6 +226,19 @@ function WorkforcePage() {
   const [selectedFactoryIds, setSelectedFactoryIds] = useState<string[]>([]);
   const [selectedRecruiterIds, setSelectedRecruiterIds] = useState<string[]>([]);
 
+  useEffect(() => {
+    const mobileViewport = window.matchMedia("(max-width: 1023px)");
+    const keepVisibleTab = () => {
+      if (mobileViewport.matches) {
+        setTab((current) => (current === "stats" ? "list" : current));
+      }
+    };
+
+    keepVisibleTab();
+    mobileViewport.addEventListener("change", keepVisibleTab);
+    return () => mobileViewport.removeEventListener("change", keepVisibleTab);
+  }, []);
+
   const workspace = workspaceQuery.data;
   const workspaceWorkers = workspace?.workers ?? EMPTY_WORKSPACE_WORKERS;
   const staffAdminUsers = auxQuery.data?.staffUsers ?? EMPTY_USERS;
@@ -452,35 +465,29 @@ function WorkforcePage() {
           }
         />
       ) : (
-        <Tabs
-          value={tab}
-          onValueChange={(v) => setTab(v as ActiveTab)}
-          className="grid grid-cols-3 gap-x-1 gap-y-3"
-        >
-          <TabsList asChild>
-            <span className="contents">
-              <TabsTrigger
-                value="list"
-                className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
-              >
-                Danh sách
-              </TabsTrigger>
-              <TabsTrigger
-                value="stats"
-                className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
-              >
-                Thống kê
-              </TabsTrigger>
-              <TabsTrigger
-                value="my-recruited"
-                className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
-              >
-                Tôi tuyển
-              </TabsTrigger>
-            </span>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as ActiveTab)} className="space-y-3">
+          <TabsList className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 grid w-full grid-cols-2 gap-1 desktop:grid-cols-3">
+            <TabsTrigger
+              value="list"
+              className="min-w-0 w-full rounded-lg bg-muted text-xs shadow-sm"
+            >
+              Danh sách
+            </TabsTrigger>
+            <TabsTrigger
+              value="stats"
+              className="hidden min-w-0 w-full rounded-lg bg-muted text-xs shadow-sm desktop:inline-flex"
+            >
+              Thống kê
+            </TabsTrigger>
+            <TabsTrigger
+              value="my-recruited"
+              className="min-w-0 w-full rounded-lg bg-muted text-xs shadow-sm"
+            >
+              Tôi tuyển
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="list" className="col-span-3 mt-0">
+          <TabsContent value="list" className="mt-0">
             <WorkerList
               histories={histories}
               userById={userById}
@@ -510,7 +517,7 @@ function WorkforcePage() {
             />
           </TabsContent>
 
-          <TabsContent value="stats" className="col-span-3 mt-0 space-y-3">
+          <TabsContent value="stats" className="mt-0 hidden space-y-3 desktop:block">
             <Card className="space-y-2 p-3">
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
@@ -627,7 +634,7 @@ function WorkforcePage() {
             />
           </TabsContent>
 
-          <TabsContent value="my-recruited" className="col-span-3 mt-0 space-y-3">
+          <TabsContent value="my-recruited" className="mt-0 space-y-3">
             <StaffWorkerDirectory
               workers={workspaceWorkers}
               viewer={currentUser}

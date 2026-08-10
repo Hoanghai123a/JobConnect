@@ -1,10 +1,12 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LayoutGrid } from "lucide-react";
+import { PageContainer } from "@/components/layout/PageContainer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WorkforceDashboard } from "@/components/workforce/WorkforceDashboard";
 import { OtherDashboard } from "@/components/dashboard/OtherDashboard";
 import { ApprovalDashboard } from "@/components/dashboard/ApprovalDashboard";
+import { HourStatsDashboard } from "@/components/dashboard/HourStatsDashboard";
 import {
   createEmptyApprovalDashboardStats,
   isApprovalDashboardStatus,
@@ -36,7 +38,7 @@ export const Route = createFileRoute("/_authenticated/staff/workforce")({
   component: StaffWorkforceDashboardPage,
 });
 
-type ActiveTab = "workforce" | "other";
+type ActiveTab = "workforce" | "other" | "hour-stats";
 
 type ApprovalRequestSummary = {
   status?: string;
@@ -127,6 +129,7 @@ function StaffWorkforceDashboardPage() {
   const { user } = useAuth();
   const viewer = user as UserRecord | null;
   const [tab, setTab] = useState<ActiveTab>("workforce");
+  const [desktopViewport, setDesktopViewport] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [histories, setHistories] = useState<EmploymentHistoryRecord[]>([]);
@@ -140,6 +143,13 @@ function StaffWorkforceDashboardPage() {
   const [approvalStats, setApprovalStats] = useState<ApprovalDashboardStats>(
     createEmptyApprovalDashboardStats,
   );
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const syncViewport = () => setDesktopViewport(media.matches);
+    syncViewport();
+    media.addEventListener("change", syncViewport);
+    return () => media.removeEventListener("change", syncViewport);
+  }, []);
 
   const load = useCallback(async () => {
     if (!viewer?.id || viewer.role !== "staff") return;
@@ -250,54 +260,40 @@ function StaffWorkforceDashboardPage() {
   };
 
   return (
-    <main
-      data-staff-dashboard-content="dashboard"
-      className="hidden min-h-[calc(100dvh-5rem)] min-w-0 bg-background desktop:block"
-    >
-      <div className="mx-auto w-full max-w-[110rem] space-y-6 px-8 py-7">
-        <section id="dashboard" className="space-y-4 scroll-mt-28">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <LayoutGrid className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold tracking-tight">Dashboard</h2>
-              <p className="text-sm text-muted-foreground">
-                Theo dõi nhân lực và các thông tin nghiệp vụ trong phạm vi quản lý của bạn.
-              </p>
-            </div>
-          </div>
-
+    <>
+      <div className="desktop:hidden">
+        <PageContainer
+          title="Dashboard Staff"
+          subtitle="Số liệu trong phạm vi quản lý của bạn"
+          desktopWidth="wide"
+        >
           <Tabs
             value={tab}
             onValueChange={(value) => setTab(value as ActiveTab)}
-            className="grid grid-cols-3 gap-x-1 gap-y-4"
+            className="min-w-0 space-y-3"
           >
-            <TabsList asChild>
-              <span className="contents">
-                <TabsTrigger
-                  value="workforce"
-                  className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
-                >
-                  Nhân lực
-                </TabsTrigger>
-                <TabsTrigger
-                  value="other"
-                  className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
-                >
-                  Khác
-                </TabsTrigger>
-                <TabsTrigger
-                  value="hour-stats"
-                  asChild
-                  className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
-                >
-                  <Link to="/staff/hour-stats">Thống kê giờ</Link>
-                </TabsTrigger>
-              </span>
+            <TabsList className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 grid h-auto w-full grid-cols-3 gap-1 rounded-xl bg-background/95 p-1 shadow-soft backdrop-blur">
+              <TabsTrigger
+                value="workforce"
+                className="min-h-10 min-w-0 rounded-lg px-1 text-[11px] font-semibold shadow-sm"
+              >
+                Nhân lực
+              </TabsTrigger>
+              <TabsTrigger
+                value="other"
+                className="min-h-10 min-w-0 rounded-lg px-1 text-[11px] font-semibold shadow-sm"
+              >
+                Khác
+              </TabsTrigger>
+              <TabsTrigger
+                value="hour-stats"
+                className="min-h-10 min-w-0 rounded-lg px-1 text-[11px] font-semibold shadow-sm"
+              >
+                Thống kê giờ
+              </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="workforce" className="col-span-3 mt-0">
+            <TabsContent value="workforce" className="mt-0 min-w-0">
               <WorkforceDashboard
                 histories={histories}
                 users={staffUsers}
@@ -306,10 +302,11 @@ function StaffWorkforceDashboardPage() {
                 error={error}
                 onRetry={() => setReloadToken((value) => value + 1)}
                 detailHref="/staff/workers"
+                presentation="mobile-dialog"
               />
             </TabsContent>
 
-            <TabsContent value="other" className="col-span-3 mt-0 space-y-4">
+            <TabsContent value="other" className="mt-0 min-w-0 space-y-3">
               <OtherDashboard
                 histories={histories}
                 users={staffUsers}
@@ -318,12 +315,97 @@ function StaffWorkforceDashboardPage() {
                 loading={combinedOtherLoading}
                 error={combinedOtherError}
                 onRetry={retryOther}
+                presentation="mobile-dialog"
               />
-              <ApprovalDashboard stats={approvalStats} />
+
+              <ApprovalDashboard stats={approvalStats} presentation="mobile-dialog" />
+            </TabsContent>
+
+            <TabsContent value="hour-stats" className="mt-0 min-w-0">
+              {!desktopViewport && <HourStatsDashboard />}
             </TabsContent>
           </Tabs>
-        </section>
+        </PageContainer>
       </div>
-    </main>
+
+      <main
+        data-staff-dashboard-content="dashboard"
+        className="hidden min-h-[calc(100dvh-5rem)] min-w-0 bg-background desktop:block"
+      >
+        <div className="mx-auto w-full max-w-[110rem] space-y-6 px-8 py-7">
+          <section id="dashboard" className="space-y-4 scroll-mt-28">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <LayoutGrid className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold tracking-tight">Dashboard</h2>
+                <p className="text-sm text-muted-foreground">
+                  Theo dõi nhân lực và các thông tin nghiệp vụ trong phạm vi quản lý của bạn.
+                </p>
+              </div>
+            </div>
+
+            <Tabs
+              value={tab}
+              onValueChange={(value) => setTab(value as ActiveTab)}
+              className="grid grid-cols-3 gap-x-1 gap-y-4"
+            >
+              <TabsList asChild>
+                <span className="contents">
+                  <TabsTrigger
+                    value="workforce"
+                    className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
+                  >
+                    Nhân lực
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="other"
+                    className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
+                  >
+                    Khác
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="hour-stats"
+                    className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-20 rounded-lg bg-muted text-xs shadow-sm"
+                  >
+                    Thống kê giờ
+                  </TabsTrigger>
+                </span>
+              </TabsList>
+
+              <TabsContent value="workforce" className="col-span-3 mt-0">
+                <WorkforceDashboard
+                  histories={histories}
+                  users={staffUsers}
+                  factories={visibleFactories}
+                  loading={loading}
+                  error={error}
+                  onRetry={() => setReloadToken((value) => value + 1)}
+                  detailHref="/staff/workers"
+                />
+              </TabsContent>
+
+              <TabsContent value="other" className="col-span-3 mt-0 space-y-4">
+                <OtherDashboard
+                  histories={histories}
+                  users={staffUsers}
+                  factories={visibleFactories}
+                  cccdVersions={cccdVersions}
+                  loading={combinedOtherLoading}
+                  error={combinedOtherError}
+                  onRetry={retryOther}
+                />
+                <ApprovalDashboard stats={approvalStats} />
+              </TabsContent>
+
+              <TabsContent value="hour-stats" className="col-span-3 mt-0">
+                {desktopViewport && <HourStatsDashboard />}
+              </TabsContent>
+            </Tabs>
+          </section>
+        </div>
+      </main>
+    </>
   );
 }

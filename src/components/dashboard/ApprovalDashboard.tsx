@@ -51,7 +51,14 @@ function formatCompactMoney(value: number) {
   return value.toLocaleString("vi-VN");
 }
 
-export function ApprovalDashboard({ stats }: { stats: ApprovalDashboardStats }) {
+export function ApprovalDashboard({
+  stats,
+  presentation = "default",
+}: {
+  stats: ApprovalDashboardStats;
+  presentation?: "default" | "mobile-dialog";
+}) {
+  const compactMobile = presentation === "mobile-dialog";
   const totalRequests = APPROVAL_DASHBOARD_STATUSES.reduce(
     (total, status) => total + stats[status],
     0,
@@ -70,7 +77,11 @@ export function ApprovalDashboard({ stats }: { stats: ApprovalDashboardStats }) 
 
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
+      <div
+        className={`rounded-3xl border border-border/70 bg-card shadow-soft ${
+          compactMobile ? "p-3" : "p-4 desktop:p-5"
+        }`}
+      >
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold">Thống kê phê duyệt</h3>
@@ -86,7 +97,13 @@ export function ApprovalDashboard({ stats }: { stats: ApprovalDashboardStats }) 
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-6">
+        <div
+          className={
+            compactMobile
+              ? "grid grid-cols-2 gap-2"
+              : "grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6"
+          }
+        >
           <DesktopSummaryCard label="Tổng yêu cầu" value={totalRequests} icon={ClipboardCheck} />
           <DesktopSummaryCard
             label="Tổng số tiền"
@@ -149,7 +166,7 @@ export function ApprovalDashboard({ stats }: { stats: ApprovalDashboardStats }) 
                 <RechartsTooltip
                   cursor={{ fill: "var(--muted)" }}
                   contentStyle={tooltipStyle}
-                  formatter={(value) => [formatApprovalMoney(Number(value || 0)), "S? ti?n"]}
+                  formatter={(value) => [formatApprovalMoney(Number(value || 0)), "Số tiền"]}
                 />
                 <Bar dataKey="amount" radius={[8, 8, 0, 0]} maxBarSize={58}>
                   {chartData.map((item) => (

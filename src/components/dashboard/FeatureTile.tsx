@@ -19,6 +19,7 @@ interface Props {
   icon: LucideIcon;
   variant?: "default" | "accent";
   size?: "default" | "compact";
+  align?: "start" | "center";
   badge?: string;
   disabled?: boolean;
   disabledReason?: string;
@@ -32,6 +33,7 @@ export function FeatureTile({
   icon: Icon,
   variant = "default",
   size = "default",
+  align,
   badge,
   disabled = false,
   disabledReason,
@@ -42,10 +44,12 @@ export function FeatureTile({
   const isLoginRequired = !user && !allowGuest;
   const isLocked = disabled || isLoginRequired;
   const isCompact = size === "compact";
+  const isCentered = isCompact && align !== "start";
 
   const tileClass = cn(
     "group relative flex rounded-2xl border border-border/70 bg-card text-left transition-colors",
-    isCompact ? "min-h-[94px] flex-col items-center gap-2 p-3" : "min-h-[124px] flex-col gap-3 p-4",
+    isCompact ? "min-h-[94px] flex-col gap-2 p-3" : "min-h-[124px] flex-col gap-3 p-4",
+    isCentered ? "items-center" : "items-start",
     disabled
       ? "cursor-pointer opacity-60"
       : "shadow-soft hover:border-primary/40 active:scale-[0.98]",
@@ -82,7 +86,7 @@ export function FeatureTile({
           {badge}
         </span>
       ) : null}
-      <div className={cn("min-w-0", isCompact ? "w-full text-center" : "w-full")}>
+      <div className={cn("min-w-0 w-full", isCentered && "text-center")}>
         <div
           className={cn("truncate font-semibold tracking-tight", isCompact ? "text-xs" : "text-sm")}
         >

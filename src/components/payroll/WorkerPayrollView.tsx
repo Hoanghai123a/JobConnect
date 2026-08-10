@@ -35,6 +35,7 @@ export type WorkerAttendanceCheckItem = {
   user: string;
   month: string;
   round_no: number;
+  full_name?: string;
   rows: AttendanceRow[];
   summary?: Partial<RateBuckets>;
   created?: string;
@@ -47,6 +48,7 @@ export type SalaryTotals = { wage: number; allowance: number; deduction: number;
 export type SalaryPersonalInfo = {
   employee_code: string;
   company: string;
+  full_name?: string;
   start_date: string;
   end_date: string;
   base_salary: number;
@@ -448,6 +450,12 @@ export function WorkerPayrollView({
                           {selectedAttendance.expand?.batch?.note ||
                             `Lần ${selectedAttendance.round_no}`}
                         </div>
+                        <div
+                          className="mt-1 truncate text-sm font-semibold"
+                          title={selectedAttendance.full_name || "—"}
+                        >
+                          Họ tên: {selectedAttendance.full_name || "—"}
+                        </div>
                       </div>
                       <div className="worker-check-rate-grid grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
                         {visibleRateCells.map((cell) => (
@@ -548,6 +556,12 @@ function SalaryCheckPanel({
             <div className="mt-1 text-xs opacity-80">
               {selected.month} · {selected.expand?.batch?.note || `Lần ${selected.round_no}`}
             </div>
+            <div
+              className="mt-1 truncate text-sm font-semibold"
+              title={selected.personal.full_name || "—"}
+            >
+              Họ tên: {selected.personal.full_name || "—"}
+            </div>
           </div>
 
           <div className="worker-salary-layout flex flex-col gap-4 p-3">
@@ -555,20 +569,33 @@ function SalaryCheckPanel({
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Thông tin cá nhân
               </div>
-              <div className="worker-salary-personal-grid grid grid-cols-2 gap-2 text-sm">
-                <InfoCell label="Mã NV" value={selected.personal.employee_code || "—"} />
-                <InfoCell label="Nhà máy" value={selected.personal.company || "—"} />
-                <InfoCell
-                  label="Ngày vào làm"
-                  value={formatDisplayDate(selected.personal.start_date)}
-                />
-                <InfoCell label="Ngày nghỉ" value={formatDisplayDate(selected.personal.end_date)} />
-                <InfoCell label="Lương cơ bản" value={formatVND(selected.personal.base_salary)} />
-                <InfoCell
-                  label="Số công HC"
-                  value={`${selected.personal.standard_workdays || 0}`}
-                />
-              </div>
+              <Card className="worker-salary-personal-card space-y-2 p-3 text-sm">
+                <div className="worker-salary-personal-row worker-salary-personal-row-primary grid grid-cols-[minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,1.25fr)] gap-2">
+                  <CompactInfoItem label="Công ty" value={selected.personal.company || "—"} />
+                  <CompactInfoItem label="Mã NV" value={selected.personal.employee_code || "—"} />
+                  <CompactInfoItem label="Họ tên" value={selected.personal.full_name || "—"} />
+                </div>
+                <div className="worker-salary-personal-row grid grid-cols-2 gap-2 border-t pt-2">
+                  <CompactInfoItem
+                    label="Ngày vào"
+                    value={formatDisplayDate(selected.personal.start_date)}
+                  />
+                  <CompactInfoItem
+                    label="Ngày nghỉ"
+                    value={formatDisplayDate(selected.personal.end_date)}
+                  />
+                </div>
+                <div className="worker-salary-personal-row grid grid-cols-2 gap-2 border-t pt-2">
+                  <CompactInfoItem
+                    label="Lương cơ bản"
+                    value={formatVND(selected.personal.base_salary)}
+                  />
+                  <CompactInfoItem
+                    label="Số công HC"
+                    value={`${selected.personal.standard_workdays || 0}`}
+                  />
+                </div>
+              </Card>
             </aside>
 
             <div className="worker-salary-details space-y-3">
@@ -767,6 +794,17 @@ function CheckMonthCalendar({ rows, period }: { rows: AttendanceRow[]; period: P
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function CompactInfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] leading-tight text-muted-foreground">{label}</div>
+      <div className="mt-0.5 break-words text-xs font-semibold leading-snug" title={value}>
+        {value}
+      </div>
+    </div>
   );
 }
 

@@ -219,12 +219,17 @@ function recoveryBadge(row: FinanceAdvance) {
   );
 }
 
-export function FinanceDashboard() {
+export function FinanceDashboard({
+  presentation = "default",
+}: {
+  presentation?: "default" | "mobile-dialog";
+}) {
   const [period, setPeriod] = useState<PeriodKey>("last30");
   const [range, setRange] = useState<DateRange>(todayRange);
   const [rows, setRows] = useState<FinanceAdvance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const compactMobile = presentation === "mobile-dialog";
 
   const activeRange = useMemo(() => {
     if (period !== "custom") return rangeForPeriod(period);
@@ -344,8 +349,12 @@ export function FinanceDashboard() {
   };
 
   return (
-    <div className="space-y-5">
-      <section className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/70 bg-card p-3">
+    <div className={compactMobile ? "min-w-0 space-y-4" : "space-y-5"}>
+      <section
+        className={`flex flex-wrap items-center gap-2 rounded-2xl border border-border/70 bg-card ${
+          compactMobile ? "p-2.5" : "p-3"
+        }`}
+      >
         {periodOptions.map((option) => (
           <button
             key={option.key}
@@ -363,13 +372,21 @@ export function FinanceDashboard() {
             {option.label}
           </button>
         ))}
-        <div className="ml-auto flex items-center gap-2 text-xs">
+        <div
+          className={
+            compactMobile
+              ? "grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-xs"
+              : "flex w-full items-center gap-2 overflow-x-auto text-xs desktop:ml-auto desktop:w-auto"
+          }
+        >
           <input
             type="date"
             value={range.from}
             aria-label="Từ ngày"
             onChange={(event) => updateCustomRange("from", event.target.value)}
-            className="h-9 rounded-lg border border-input bg-white px-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-ring/50"
+            className={`h-9 rounded-lg border border-input bg-white px-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-ring/50 ${
+              compactMobile ? "min-w-0 w-full" : "min-w-[8.5rem]"
+            }`}
           />
           <span className="text-muted-foreground">đến</span>
           <input
@@ -377,7 +394,9 @@ export function FinanceDashboard() {
             value={range.to}
             aria-label="Đến ngày"
             onChange={(event) => updateCustomRange("to", event.target.value)}
-            className="h-9 rounded-lg border border-input bg-white px-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-ring/50"
+            className={`h-9 rounded-lg border border-input bg-white px-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-ring/50 ${
+              compactMobile ? "min-w-0 w-full" : "min-w-[8.5rem]"
+            }`}
           />
         </div>
       </section>
@@ -397,7 +416,11 @@ export function FinanceDashboard() {
         </div>
       ) : report ? (
         <>
-          <div className="grid grid-cols-2 gap-4 xl:grid-cols-5">
+          <div
+            className={
+              compactMobile ? "grid grid-cols-2 gap-2" : "grid grid-cols-2 gap-4 xl:grid-cols-5"
+            }
+          >
             <FinanceKpi
               label="Yêu cầu trong kỳ"
               value={money(report.requestedTotal)}
@@ -445,8 +468,10 @@ export function FinanceDashboard() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-[minmax(0,1.65fr)_minmax(19rem,0.85fr)] gap-4">
-                <section className="rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(19rem,0.85fr)]">
+                <section
+                  className={`rounded-3xl border border-border/70 bg-card shadow-soft ${compactMobile ? "p-3" : "p-5"}`}
+                >
                   <div className="mb-4">
                     <h3 className="text-base font-semibold">Dòng tiền theo ngày</h3>
                     <p className="text-xs text-muted-foreground">
@@ -513,7 +538,9 @@ export function FinanceDashboard() {
                   </ChartContainer>
                 </section>
 
-                <section className="rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
+                <section
+                  className={`rounded-3xl border border-border/70 bg-card shadow-soft ${compactMobile ? "p-3" : "p-5"}`}
+                >
                   <div className="mb-3">
                     <h3 className="text-base font-semibold">Cơ cấu trạng thái</h3>
                     <p className="text-xs text-muted-foreground">Theo số lượng đơn tạo trong kỳ.</p>
@@ -571,7 +598,11 @@ export function FinanceDashboard() {
               </div>
 
               <section className="overflow-hidden rounded-3xl border border-border/70 bg-card shadow-soft">
-                <div className="flex items-center justify-between gap-4 border-b border-border/70 px-5 py-4">
+                <div
+                  className={`flex flex-wrap items-center justify-between gap-3 border-b border-border/70 ${
+                    compactMobile ? "px-3 py-3" : "px-5 py-4"
+                  }`}
+                >
                   <div>
                     <h3 className="text-base font-semibold">Báo ứng gần nhất</h3>
                     <p className="text-xs text-muted-foreground">
@@ -580,7 +611,7 @@ export function FinanceDashboard() {
                   </div>
                   <Link
                     to="/advances"
-                    className="inline-flex items-center gap-1 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
                   >
                     Xử lý báo ứng
                     <ArrowUpRight className="h-3.5 w-3.5" />
@@ -651,7 +682,7 @@ function FinanceKpi({
   }[tone];
 
   return (
-    <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-soft">
+    <section className="rounded-3xl border border-border/70 bg-card p-3 shadow-soft desktop:p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium text-muted-foreground">{label}</p>

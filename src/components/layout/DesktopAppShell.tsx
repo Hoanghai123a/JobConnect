@@ -91,7 +91,6 @@ const staffNavigation: readonly NavigationSection[] = [
     label: "Lao động",
     items: [
       { to: "/staff/workers", label: "Danh sách lao động", icon: Users },
-      { to: "/staff/workforce", label: "Dashboard", icon: BarChart3 },
       { to: "/staff/recruited", label: "Người tôi tuyển", icon: ClipboardList },
     ],
   },
@@ -156,7 +155,6 @@ const adminNavigation: readonly NavigationSection[] = [
       { to: "/transport", label: "Tìm nhà xe", icon: BusFront },
       { to: "/notebook", label: "Sổ tay", icon: ClipboardList },
       { to: "/guides", label: "Hướng dẫn", icon: BookOpen },
-      { to: "/admin/accounts/stats", label: "Thống kê TK", icon: BarChart3 },
     ],
   },
   {

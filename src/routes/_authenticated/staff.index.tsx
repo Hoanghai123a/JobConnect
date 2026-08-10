@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Banknote,
   BarChart3,
+  CalendarCheck,
   BookOpen,
   Building2,
   BusFront,
@@ -19,7 +20,6 @@ import {
   Users,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
-import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -32,10 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fetchFactoryManagers, type FactoryManagerRecord } from "@/lib/factories";
-import { fetchCachedStaffWorkspace, fetchStaffWorkspace } from "@/lib/staff-permissions";
-import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { useAuth } from "@/lib/auth";
-import type { UserRecord } from "@/lib/pocketbase";
 
 export const Route = createFileRoute("/_authenticated/staff/")({
   component: StaffDashboardPage,
@@ -44,7 +41,6 @@ export const Route = createFileRoute("/_authenticated/staff/")({
 function StaffDashboardPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [workersCount, setWorkersCount] = useState(0);
   const [assignments, setAssignments] = useState<FactoryManagerRecord[]>([]);
   const [utilOpen, setUtilOpen] = useState(false);
   const [reloading, setReloading] = useState(false);
@@ -65,10 +61,9 @@ function StaffDashboardPage() {
     let alive = true;
     setLoading(true);
 
-    Promise.all([fetchStaffWorkspace(user as UserRecord), fetchFactoryManagers(user.id)])
-      .then(([workspace, managerRows]) => {
+    fetchFactoryManagers(user.id)
+      .then((managerRows) => {
         if (!alive) return;
-        setWorkersCount(workspace.workers.length);
         setAssignments(managerRows);
       })
       .finally(() => {
@@ -79,16 +74,6 @@ function StaffDashboardPage() {
       alive = false;
     };
   }, [user?.id]);
-
-  const cacheSignal = useStaffCacheSignal();
-  useEffect(() => {
-    if (!user?.id || cacheSignal === 0) return;
-    const timer = setTimeout(async () => {
-      const ws = await fetchCachedStaffWorkspace(user as UserRecord);
-      if (ws) setWorkersCount(ws.workers.length);
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [cacheSignal, user?.id]);
 
   const activeAssignments = useMemo(
     () => assignments.filter((item) => item.status !== "inactive"),
@@ -127,46 +112,6 @@ function StaffDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5">
-        <StatCard
-          label="Nhà máy phụ trách"
-          value={activeAssignments.length}
-          icon={Building2}
-          tone="info"
-        />
-        <StatCard label="Lao động trong quyền" value={workersCount} icon={Users} tone="primary" />
-      </div>
-
-      <nav
-        role="tablist"
-        aria-label="Chuyển khu vực Dashboard staff"
-        className="flex items-center gap-1 overflow-x-auto rounded-2xl border border-border/60 bg-card p-1 shadow-soft"
-      >
-        <span
-          role="tab"
-          aria-selected="true"
-          className="shrink-0 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
-        >
-          Tổng quan
-        </span>
-        <button
-          type="button"
-          role="tab"
-          aria-selected="false"
-          onClick={() => setUtilOpen(true)}
-          className="shrink-0 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-        >
-          Khác
-        </button>
-        <Link
-          to="/staff/hour-stats"
-          role="tab"
-          className="shrink-0 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-        >
-          Thống kê giờ
-        </Link>
-      </nav>
-
       <div className="grid grid-cols-2 gap-3">
         <DashboardLink
           to="/staff/workers"
@@ -175,16 +120,6 @@ function StaffDashboardPage() {
           description="Tìm kiếm, xem lịch sử và xử lý nghiệp vụ."
           icon={Users}
         />
-        {user?.role === "staff" && (
-          <div className="hidden desktop:block">
-            <DashboardLink
-              to="/staff/workforce"
-              title="Dashboard"
-              description="Theo dõi số liệu tuyển dụng trong phạm vi quyền của bạn."
-              icon={BarChart3}
-            />
-          </div>
-        )}
         <DashboardLink
           to="/staff/recruited"
           title="Người tôi tuyển"
@@ -203,12 +138,30 @@ function StaffDashboardPage() {
           description="Tạo và theo dõi yêu cầu giữ lương cho NLĐ."
           icon={Banknote}
         />
-        <DashboardLink
-          to="/staff/export"
-          title="Xuất dữ liệu"
-          description="Lọc 90 ngày gần đây và xuất Excel nhanh."
-          icon={Download}
-        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Link
+          to="/staff/workforce"
+          className="flex min-h-12 items-center justify-between rounded-2xl border border-primary/20 bg-primary/5 px-3 text-sm font-semibold text-primary shadow-soft active:scale-[0.99]"
+        >
+          <span className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Dashboard
+          </span>
+          <ChevronRight className="h-4 w-4" />
+        </Link>
+        <button
+          type="button"
+          onClick={() => setUtilOpen(true)}
+          className="flex min-h-12 items-center justify-between rounded-2xl border border-border/70 bg-card px-3 text-sm font-semibold shadow-soft active:scale-[0.99]"
+        >
+          <span className="flex items-center gap-2">
+            <LayoutGrid className="h-4 w-4 text-primary" />
+            Tiện ích
+          </span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </button>
       </div>
 
       <Dialog open={utilOpen} onOpenChange={setUtilOpen}>
@@ -228,6 +181,13 @@ function StaffDashboardPage() {
             <FeatureTile to="/chat" label="Trò chuyện" icon={MessagesSquare} size="compact" />
             <FeatureTile to="/notebook" label="Sổ tay" icon={NotebookPen} size="compact" />
             <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
+            <FeatureTile
+              to="/staff/hour-stats"
+              label="Thống kê giờ"
+              icon={CalendarCheck}
+              size="compact"
+            />
+            <FeatureTile to="/staff/export" label="Xuất dữ liệu" icon={Download} size="compact" />
             {user?.role === "staff" && (
               <div className="contents desktop:hidden">
                 <FeatureTile to="/counter" label="Bộ đếm" icon={ListOrdered} size="compact" />

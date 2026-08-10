@@ -56,6 +56,7 @@ export function OtherDashboard({
   loading,
   error,
   onRetry,
+  presentation = "default",
 }: {
   histories: EmploymentHistoryRecord[];
   users: UserRecord[];
@@ -64,10 +65,12 @@ export function OtherDashboard({
   loading: boolean;
   error: string;
   onRetry: () => void;
+  presentation?: "default" | "mobile-dialog";
 }) {
   const [monthScope, setMonthScope] = useState<MonthScope>("current");
   const [selectedDuplicate, setSelectedDuplicate] = useState<CccdDuplicateGroup | null>(null);
   const [selectedDay, setSelectedDay] = useState<CccdCompletionDay | null>(null);
+  const compactMobile = presentation === "mobile-dialog";
 
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const factoriesById = useMemo(
@@ -94,7 +97,11 @@ export function OtherDashboard({
   return (
     <>
       <div className="grid gap-4 2xl:grid-cols-2">
-        <section className="min-w-0 rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
+        <section
+          className={`min-w-0 rounded-3xl border border-border/70 bg-card shadow-soft ${
+            compactMobile ? "p-3" : "p-5"
+          }`}
+        >
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -135,9 +142,31 @@ export function OtherDashboard({
                 Không phát hiện CCCD hợp lệ xuất hiện tại từ hai nhà máy trong kỳ này.
               </p>
             </div>
+          ) : compactMobile ? (
+            <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-0.5">
+              {duplicateGroups.map((group) => (
+                <button
+                  key={group.cccd}
+                  type="button"
+                  onClick={() => setSelectedDuplicate(group)}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-border/70 bg-background p-3 text-left active:bg-muted/50"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">{group.fullName}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="font-mono">{group.cccd}</span>
+                      <span>·</span>
+                      <span>{group.factoryCount} nhà máy</span>
+                    </div>
+                  </div>
+                  <StatusChip tone="warning">{group.count} lượt</StatusChip>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </button>
+              ))}
+            </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-border/70">
-              <div className="grid grid-cols-[minmax(0,1fr)_11rem_8rem] gap-3 bg-muted/55 px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+            <div className="overflow-x-auto rounded-2xl border border-border/70">
+              <div className="grid min-w-[36rem] grid-cols-[minmax(0,1fr)_11rem_8rem] gap-3 bg-muted/55 px-4 py-2.5 text-xs font-semibold text-muted-foreground">
                 <span>Họ tên</span>
                 <span>Số CCCD</span>
                 <span className="text-right">Số lượng trùng</span>
@@ -148,7 +177,7 @@ export function OtherDashboard({
                     key={group.cccd}
                     type="button"
                     onClick={() => setSelectedDuplicate(group)}
-                    className="grid w-full grid-cols-[minmax(0,1fr)_11rem_8rem] items-center gap-3 border-t border-border/60 px-4 py-3 text-left transition hover:bg-muted/45 first:border-t-0"
+                    className="grid min-w-[36rem] w-full grid-cols-[minmax(0,1fr)_11rem_8rem] items-center gap-3 border-t border-border/60 px-4 py-3 text-left transition hover:bg-muted/45 first:border-t-0"
                   >
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold">{group.fullName}</div>
@@ -168,7 +197,11 @@ export function OtherDashboard({
           )}
         </section>
 
-        <section className="min-w-0 rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
+        <section
+          className={`min-w-0 rounded-3xl border border-border/70 bg-card shadow-soft ${
+            compactMobile ? "p-3" : "p-5"
+          }`}
+        >
           <div className="mb-4 flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
               <CheckCircle2 className="h-4 w-4" />
@@ -186,7 +219,13 @@ export function OtherDashboard({
           ) : error ? (
             <ErrorState message={error} onRetry={onRetry} />
           ) : (
-            <div className="grid grid-cols-7 gap-2">
+            <div
+              className={
+                compactMobile
+                  ? "grid grid-cols-2 gap-2"
+                  : "grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7"
+              }
+            >
               {completionDays.map((day) => {
                 const rateLabel = day.rate === null ? "—" : `${Math.round(day.rate)}%`;
                 return (
