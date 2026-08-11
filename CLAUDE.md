@@ -1,6 +1,7 @@
 # Claude Code Mandatory Rules
 
-These rules are mandatory for every task in this repository.
+- Sử dụng tiếng việt để trả lời
+  These rules are mandatory for every task in this repository.
 
 ## Before editing
 
@@ -42,3 +43,4 @@ After editing, Claude should run the smallest useful validation command:
 npm run build
 npm run lint
 npm test
+```

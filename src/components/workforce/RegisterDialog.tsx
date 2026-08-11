@@ -228,17 +228,16 @@ export function RegisterDialog({
 
       const staleWorkingHistories = getStaleWorkingEmploymentHistories(latestHistories);
       for (const history of staleWorkingHistories) {
-        const updated = await updateEmploymentHistory(history.id, { status: "left" });
-        await createStaffActionLog({
+        await updateEmploymentHistory(
+          history.id,
+          { status: "left" },
+          {
           actor,
-          targetUserId: userId,
-          targetCollection: "employment_histories",
-          targetRecord: history.id,
-          action: "update",
-          before: history,
-          after: updated,
+          source: "Đăng ký đi làm",
           note: `${roleLabel} đăng ký đi làm mới: đồng bộ lịch sử đã có ngày nghỉ`,
-        });
+            before: history,
+          },
+        );
       }
 
       let cccdVersionId: string | undefined;

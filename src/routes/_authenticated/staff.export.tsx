@@ -62,11 +62,6 @@ function buildTenureDaysByUserId(workers: StaffWorkerRecord[]) {
   return map;
 }
 
-function getBirthDate(value?: string) {
-  const formatted = formatDateOnly(value);
-  return formatted ? formatted.replaceAll("/", "-") : "";
-}
-
 function buildBasicRows(
   histories: EmploymentHistoryRecord[],
   tenureDaysByUserId: Map<string, number>,
@@ -110,21 +105,19 @@ function buildFullRows(
       "Mã tài khoản (UID)": user?.uid || "",
       "Mã lịch sử": history.uid || "",
       "Mã nhân viên": history.employee_code || "",
-      "Họ tên tại nhà máy": history.worker_name_snapshot || "",
-      "CCCD tại nhà máy": history.worker_cccd_snapshot || "",
+      "Họ tên tại thời điểm đi làm": history.worker_name_snapshot || "",
+      "CCCD tại thời điểm đi làm": history.worker_cccd_snapshot || "",
       "Số điện thoại": user?.phone || "",
-      "Ngày sinh": getBirthDate(user?.date_of_birth),
-      "Giới tính": user?.gender || "",
-      "Quê quán": user?.address || "",
+      "Ngày sinh tại thời điểm đi làm": formatDateOnly(history.worker_date_of_birth_snapshot),
+      "Địa chỉ thường trú tại thời điểm đi làm":
+        history.worker_address_snapshot || history.hometown_snapshot || "",
       "Nhà máy": history.expand?.factory?.name || "",
       "Nhà chính": history.expand?.main_house?.name || "",
       "Ngày vào": formatDateOnly(history.join_date),
       "Ngày nghỉ": formatDateOnly(history.leave_date),
       "Người tuyển": recruiter?.name || "",
       "Loại người tuyển": recruiter?.label || "",
-      "Họ tên gốc": user?.full_name || "",
-      "CCCD gốc": user?.cccd || "",
-      "Ngày cấp CCCD": formatDateOnly(history.cccd_issue_date),
+      "Ngày cấp CCCD tại thời điểm đi làm": formatDateOnly(history.cccd_issue_date),
       "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
       "Mã số thuế": history.worker_tax_code_snapshot || "",
       "Trạng thái lịch sử": isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ",
@@ -233,7 +226,14 @@ function StaffExportPage() {
     exportToExcel(
       `jobconnect_export_day_du_${Date.now()}`,
       { "Lao động đầy đủ": fullRows },
-      { "Lao động đầy đủ": ["Ngày cấp CCCD", "Ngày vào", "Ngày nghỉ"] },
+      {
+        "Lao động đầy đủ": [
+          "Ngày sinh tại thời điểm đi làm",
+          "Ngày cấp CCCD tại thời điểm đi làm",
+          "Ngày vào",
+          "Ngày nghỉ",
+        ],
+      },
     );
     toast.success("Đã xuất Excel đầy đủ");
   };
@@ -254,7 +254,14 @@ function StaffExportPage() {
         {
           "Tất cả lao động": rows,
         },
-        { "Tất cả lao động": ["Ngày cấp CCCD", "Ngày vào", "Ngày nghỉ"] },
+        {
+          "Tất cả lao động": [
+            "Ngày sinh tại thời điểm đi làm",
+            "Ngày cấp CCCD tại thời điểm đi làm",
+            "Ngày vào",
+            "Ngày nghỉ",
+          ],
+        },
       );
       toast.success("Đã xuất tất cả dữ liệu từ PocketBase");
     } catch {

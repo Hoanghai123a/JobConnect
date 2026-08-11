@@ -6,6 +6,7 @@ import { relationInFilter } from "./delegations";
 import { updateCachedHistory, updateCachedUser } from "./staff-cache";
 import { fetchAppSettings } from "./app-settings";
 import { normalizeDate } from "./date-utils";
+import { createStaffActionLog, type StaffActionType } from "./staff-log";
 
 export type EmploymentStatus = "working" | "left";
 
@@ -133,6 +134,84 @@ export interface EmploymentDraft {
   leave_date?: string;
   status?: EmploymentStatus;
   note?: string;
+}
+
+export interface EmploymentHistoryAuditOptions {
+  actor?: Partial<UserRecord> | null;
+  action?: StaffActionType;
+  source: string;
+  note?: string;
+  fileName?: string;
+  before?: EmploymentHistoryRecord | null;
+}
+
+const AUDITED_HISTORY_FIELDS = [
+  "worker_name_snapshot",
+  "worker_cccd_snapshot",
+  "worker_date_of_birth_snapshot",
+  "worker_address_snapshot",
+  "hometown_snapshot",
+  "cccd_issue_date",
+  "employee_code",
+  "join_date",
+  "leave_date",
+  "status",
+  "factory",
+  "main_house",
+  "recruiter_staff",
+  "recruiter_partner",
+  "worker_tax_code_snapshot",
+  "note",
+] as const;
+
+const PERSONAL_HISTORY_FIELDS = new Set([
+  "worker_name_snapshot",
+  "worker_cccd_snapshot",
+  "worker_date_of_birth_snapshot",
+  "worker_address_snapshot",
+  "hometown_snapshot",
+  "cccd_issue_date",
+]);
+
+function historyAuditSnapshot(history: Partial<EmploymentHistoryRecord> | null | undefined) {
+  if (!history) return null;
+  const snapshot: Record<string, unknown> = {
+    id: history.id,
+    uid: history.uid,
+    user: history.user,
+  };
+  for (const field of AUDITED_HISTORY_FIELDS) snapshot[field] = history[field];
+  return snapshot;
+}
+
+function auditValue(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function buildHistoryAuditNote(
+  options: EmploymentHistoryAuditOptions,
+  before: EmploymentHistoryRecord | null | undefined,
+  after: EmploymentHistoryRecord,
+  payload: Record<string, unknown>,
+) {
+  const changedFields = AUDITED_HISTORY_FIELDS.filter(
+    (field) => auditValue(before?.[field]) !== auditValue(after[field]),
+  );
+  const clearedFields = changedFields.filter(
+    (field) =>
+      PERSONAL_HISTORY_FIELDS.has(field) &&
+      auditValue(before?.[field]) &&
+      !auditValue(after[field]),
+  );
+  const parts = [`Nguồn: ${options.source}`, `UID: ${after.uid || "không có"}`];
+  if (options.fileName) parts.push(`File: ${options.fileName}`);
+  if (options.note) parts.push(options.note);
+  parts.push(`Trường gửi lên: ${Object.keys(payload).join(", ") || "không có"}`);
+  parts.push(`Trường thay đổi: ${changedFields.join(", ") || "không có"}`);
+  if (clearedFields.length) {
+    parts.push(`CẢNH BÁO chuyển thành rỗng: ${clearedFields.join(", ")}`);
+  }
+  return { note: parts.join(" | "), clearedFields };
 }
 
 export type EmploymentPersonalSnapshot = Pick<
@@ -408,7 +487,22 @@ export async function createEmploymentHistory(draft: EmploymentDraft, opts?: { u
   return record;
 }
 
-export async function updateEmploymentHistory(id: string, payload: Partial<EmploymentDraft>) {
+export async function updateEmploymentHistory(
+  id: string,
+  payload: Partial<EmploymentDraft>,
+  audit?: EmploymentHistoryAuditOptions,
+) {
+  let before = audit?.before || null;
+  if (audit?.actor?.id && !before) {
+    try {
+      before = (await pb
+        .collection("employment_histories")
+        .getOne(id)) as unknown as EmploymentHistoryRecord;
+    } catch (error) {
+      console.warn("[employment-audit] Không đọc được bản ghi trước khi cập nhật", { id, error });
+    }
+  }
+
   const normalizedPayload = normalizeEmploymentPayload(payload);
   if (Object.prototype.hasOwnProperty.call(payload, "leave_date")) {
     normalizedPayload.leave_date = normalizedPayload.leave_date || "";
@@ -418,16 +512,48 @@ export async function updateEmploymentHistory(id: string, payload: Partial<Emplo
     expand: "user,factory,recruiter_staff,recruiter_partner,cccd_version",
   })) as unknown as EmploymentHistoryRecord;
   await updateCachedHistory(record);
+
+  if (audit?.actor?.id) {
+    const details = buildHistoryAuditNote(audit, before, record, normalizedPayload);
+    if (details.clearedFields.length) {
+      console.warn("[employment-audit] Thông tin cá nhân chuyển thành rỗng", {
+        id,
+        uid: record.uid,
+        fields: details.clearedFields,
+        source: audit.source,
+      });
+    }
+    try {
+      await createStaffActionLog({
+        actor: audit.actor,
+        targetUserId: record.user,
+        targetCollection: "employment_histories",
+        targetRecord: record.id,
+        action: audit.action || "update",
+        before: historyAuditSnapshot(before),
+        after: historyAuditSnapshot(record),
+        note: details.note,
+      });
+    } catch (error) {
+      console.warn("[employment-audit] Không ghi được nhật ký cập nhật", { id, error });
+    }
+  }
+
   return record;
 }
 export async function restoreEmploymentHistoryToWorking(
   id: string,
   payload: Partial<EmploymentDraft> = {},
+  audit?: EmploymentHistoryAuditOptions,
 ) {
-  return updateEmploymentHistory(id, {
-    ...payload,
-    leave_date: "",
-  });
+  return updateEmploymentHistory(
+    id,
+    {
+      ...payload,
+      leave_date: "",
+    },
+    audit,
+  );
 }
 
 export async function updateUserAndCache(id: string, payload: Record<string, unknown> | FormData) {

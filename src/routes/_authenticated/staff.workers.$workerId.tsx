@@ -581,28 +581,19 @@ function StaffWorkerDetailPage() {
       return;
     }
 
-    const before = { ...activeHistory };
-    await updateEmploymentHistory(activeHistory.id, {
-      leave_date: leaveDate,
-      note: leaveNote.trim(),
-    });
+    await updateEmploymentHistory(
+      activeHistory.id,
+      { leave_date: leaveDate, note: leaveNote.trim() },
+      {
+        actor: viewer,
+        action: "report_leave",
+        source: "Trang chi tiết người lao động",
+        note: "Báo nghỉ cho nguoi lao dong",
+        before: activeHistory,
+      },
+    );
 
     await reloadHistories();
-    await createStaffActionLog({
-      actor: viewer,
-      targetUserId: workerId,
-      targetCollection: "employment_histories",
-      targetRecord: activeHistory.id,
-      action: "report_leave",
-      before,
-      after: {
-        leave_date: leaveDate,
-        status: "left",
-        note: leaveNote.trim(),
-      },
-      note: "Báo nghỉ cho người lao động",
-    });
-
     setLeaveOpen(false);
     setLeaveNote("");
     setLeaveDate(todayDate());
@@ -633,7 +624,15 @@ function StaffWorkerDetailPage() {
     }
 
     for (const history of getStaleWorkingEmploymentHistories(latestHistories)) {
-      await updateEmploymentHistory(history.id, { status: "left" });
+      await updateEmploymentHistory(
+          history.id,
+          { status: "left" },
+          {
+        actor: viewer,
+        source: "Trang chi tiết người lao động",
+        note: "Báo đi làm mới: đồng bộ lịch sử đã có ngày nghỉ",
+        before: history,
+      });
     }
 
     if (latestLeaveDate && joinForm.join_date < latestLeaveDate) {
@@ -932,7 +931,7 @@ function StaffWorkerDetailPage() {
       );
       cccdVersionId = version.id;
     }
-    const updated = await updateEmploymentHistory(editingHistory.id, {
+    await updateEmploymentHistory(editingHistory.id, {
       employee_code: historyForm.employee_code.trim(),
       worker_name_snapshot: historyForm.worker_name_snapshot.trim(),
       worker_cccd_snapshot: historyForm.worker_cccd_snapshot.trim(),
@@ -947,22 +946,17 @@ function StaffWorkerDetailPage() {
       join_date: historyForm.join_date,
       leave_date: historyForm.leave_date,
       note: historyForm.note.trim(),
-    });
-
-    await reloadHistories();
-    await createStaffActionLog({
+    }, {
       actor: viewer,
-      targetUserId: workerId,
-      targetCollection: "employment_histories",
-      targetRecord: editingHistory.id,
-      action: "update",
-      before,
-      after: updated,
+      source: "Biểu mẫu sửa lịch sử tại trang chi tiết",
       note:
         viewer.role === "admin"
           ? "Admin chỉnh sửa trực tiếp lịch sử đi làm"
           : "Staff chỉnh sửa lịch sử đi làm gần nhất",
+      before,
     });
+
+    await reloadHistories();
 
     setEditCccdFront(null);
     setEditCccdBack(null);
@@ -1919,9 +1913,16 @@ function StaffWorkerDetailPage() {
                     readOnly={!canEditHistory(detailHistory)}
                     onCreated={async (version) => {
                       setDetailCccdVersion(version);
-                      await updateEmploymentHistory(detailHistory.id, {
-                        cccd_version: version.id,
-                      });
+                      await updateEmploymentHistory(
+                        detailHistory.id,
+                        { cccd_version: version.id },
+                        {
+                          actor: viewer,
+                          source: "Ảnh CCCD trong chi tiết lịch sử",
+                          note: "Liên kết phiên bản ảnh CCCD",
+                          before: detailHistory,
+                        },
+                      );
                       setDetailHistory((current) =>
                         current?.id === detailHistory.id
                           ? { ...current, cccd_version: version.id }

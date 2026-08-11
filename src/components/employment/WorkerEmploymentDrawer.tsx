@@ -736,19 +736,11 @@ export function WorkerEmploymentDrawer({
     }
     setLeaveSaving(true);
     try {
-      await updateEmploymentHistory(active.id, {
-        leave_date: leaveDate,
-        note: leaveNote.trim(),
-      });
-      const updated = await fetchEmploymentHistories([user.id]);
-      await createStaffActionLog({
-        actor,
-        targetUserId: user.id,
-        targetCollection: "employment_histories",
-        targetRecord: active.id,
-        action: "report_leave",
-        note: "Báo nghỉ từ hồ sơ lao động",
-      });
+      await updateEmploymentHistory(
+        active.id,
+        { leave_date: leaveDate, note: leaveNote.trim() },
+        { actor, action: "report_leave", source: "Hồ sơ lao động", note: "Báo nghỉ" },
+      );
       toast.success("Đã cập nhật ngày nghỉ");
       setLeaveOpen(false);
       await notifyDataChanged();
@@ -784,17 +776,16 @@ export function WorkerEmploymentDrawer({
 
       const staleWorkingHistories = getStaleWorkingEmploymentHistories(latestHistories);
       for (const history of staleWorkingHistories) {
-        const updated = await updateEmploymentHistory(history.id, { status: "left" });
-        await createStaffActionLog({
+        await updateEmploymentHistory(
+          history.id,
+          { status: "left" },
+          {
           actor,
-          targetUserId: user.id,
-          targetCollection: "employment_histories",
-          targetRecord: history.id,
-          action: "update",
-          before: history,
-          after: updated,
+          source: "Hồ sơ lao động",
           note: "Báo đi làm mới: đồng bộ lịch sử đã có ngày nghỉ",
-        });
+            before: history,
+          },
+        );
       }
 
       let cccdVersionId: string | undefined;
@@ -886,15 +877,11 @@ export function WorkerEmploymentDrawer({
         toast.error("Người lao động chưa có lịch sử đi làm để cập nhật mã NV");
         return;
       }
-      await updateEmploymentHistory(latest.id, { employee_code: code });
-      await createStaffActionLog({
-        actor,
-        targetUserId: user.id,
-        targetCollection: "employment_histories",
-        targetRecord: latest?.id || user.id,
-        action: "update",
-        note: `Cập nhật mã NV: ${code}`,
-      });
+      await updateEmploymentHistory(
+        latest.id,
+        { employee_code: code },
+        { actor, source: "Hồ sơ lao động", note: `Cập nhật mã NV: ${code}`, before: latest },
+      );
       toast.success("Đã cập nhật mã nhân viên");
       setEmployeeCodeOpen(false);
       await notifyDataChanged();
@@ -1093,21 +1080,17 @@ export function WorkerEmploymentDrawer({
         leave_date: form.leave_date,
         note: form.note.trim(),
       };
-      const updated = isRestoring
-        ? await restoreEmploymentHistoryToWorking(editingId, historyPayload)
-        : await updateEmploymentHistory(editingId, historyPayload);
-      await createStaffActionLog({
+      const audit = {
         actor,
-        targetUserId: user.id,
-        targetCollection: "employment_histories",
-        targetRecord: editingId,
-        action: "update",
+        source: "Biểu mẫu sửa lịch sử đi làm",
+        note: isRestoring ? "Xóa ngày nghỉ, khôi phục trạng thái đang làm" : "Cập nhật lịch sử đi làm",
         before,
-        after: updated,
-        note: isRestoring
-          ? "Xóa ngày nghỉ, khôi phục trạng thái đang làm"
-          : "Cập nhật lịch sử đi làm",
-      });
+      };
+      if (isRestoring) {
+        await restoreEmploymentHistoryToWorking(editingId, historyPayload, audit);
+      } else {
+        await updateEmploymentHistory(editingId, historyPayload, audit);
+      }
       toast.success(isRestoring ? "Đã khôi phục trạng thái đang làm" : "Đã lưu thay đổi");
       setRestoreRequest(null);
       setEditCccdFront(null);
@@ -1137,16 +1120,11 @@ export function WorkerEmploymentDrawer({
     try {
       const latestHistories = await fetchEmploymentHistories([user.id]);
       const before = validateRestoreRequest(latestHistories, restoreRequest.history.id);
-      const updated = await restoreEmploymentHistoryToWorking(restoreRequest.history.id);
-      await createStaffActionLog({
+      await restoreEmploymentHistoryToWorking(restoreRequest.history.id, {}, {
         actor,
-        targetUserId: user.id,
-        targetCollection: "employment_histories",
-        targetRecord: restoreRequest.history.id,
-        action: "update",
-        before,
-        after: updated,
+        source: "Hồ sơ lao động",
         note: "Xóa ngày nghỉ, khôi phục trạng thái đang làm",
+        before,
       });
       toast.success("Đã khôi phục trạng thái đang làm");
       setRestoreRequest(null);

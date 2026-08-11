@@ -314,10 +314,24 @@ function LogDetailDialog({
                 <div className="mt-1 break-words">{log.note}</div>
               </div>
             )}
+            <LogSnapshot label="Dữ liệu trước" value={log.before} />
+            <LogSnapshot label="Dữ liệu sau" value={log.after} />
           </div>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function LogSnapshot({ label, value }: { label: string; value: unknown }) {
+  if (!value || typeof value !== "object") return null;
+  return (
+    <div className="rounded-xl border border-border/60 bg-card p-3">
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <pre className="mt-1 max-h-56 overflow-auto whitespace-pre-wrap break-words text-xs leading-relaxed">
+        {JSON.stringify(value, null, 2)}
+      </pre>
+    </div>
   );
 }
 

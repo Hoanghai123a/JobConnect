@@ -343,7 +343,13 @@ function AdminImportsPage() {
 
         try {
           if (Object.keys(historyPayload).length) {
-            const updatedHistory = await updateEmploymentHistory(target.id, historyPayload);
+            const updatedHistory = await updateEmploymentHistory(target.id, historyPayload, {
+              actor: currentUser,
+              source: "Cập nhật nhanh lịch sử từ Excel",
+              note: "Cập nhật theo dòng Excel",
+              fileName: file.name,
+              before: target,
+            });
             const historyIndex = allHistories.findIndex((history) => history.id === target!.id);
             if (historyIndex >= 0) allHistories[historyIndex] = updatedHistory;
           }
@@ -453,7 +459,17 @@ function AdminImportsPage() {
       );
       const existingHistories = await fetchEmploymentHistories();
       for (const history of getStaleWorkingEmploymentHistories(existingHistories)) {
-        const updatedHistory = await updateEmploymentHistory(history.id, { status: "left" });
+        const updatedHistory = await updateEmploymentHistory(
+          history.id,
+          { status: "left" },
+          {
+          actor: currentUser,
+          source: "Import lịch sử từ Excel",
+          note: "Đồng bộ lịch sử quá hạn",
+          fileName: file.name,
+            before: history,
+          },
+        );
         Object.assign(history, updatedHistory);
       }
       const appSettings = await fetchAppSettings();
@@ -646,7 +662,14 @@ function AdminImportsPage() {
 
         try {
           if (sameHistory) {
-            await updateEmploymentHistory(sameHistory.id, payload);
+            await updateEmploymentHistory(sameHistory.id, payload, {
+              actor: currentUser,
+              action: "import",
+              source: "Import lịch sử từ Excel",
+              note: "Cập nhật lịch sử trùng người, nhà máy và ngày vào",
+              fileName: file.name,
+              before: sameHistory,
+            });
             updated++;
           } else {
             nextHistoryUidSeq++;

@@ -256,20 +256,19 @@ export function WorkerQuickDrawer({
     }
     setSubmitting(true);
     try {
-      await updateEmploymentHistory(activeHistory.id, {
-        leave_date: leaveDate,
-        note: leaveNote.trim(),
-      });
+      await updateEmploymentHistory(
+        activeHistory.id,
+        { leave_date: leaveDate, note: leaveNote.trim() },
+        {
+          actor: viewer,
+          action: "report_leave",
+          source: "Danh sách lao động",
+          note: "Báo nghỉ",
+          before: activeHistory,
+        },
+      );
       const updated = await fetchEmploymentHistories([worker.user.id]);
       const newLatest = getLatestEmploymentHistory(updated);
-      await createStaffActionLog({
-        actor: viewer,
-        targetUserId: worker.user.id,
-        targetCollection: "employment_histories",
-        targetRecord: activeHistory.id,
-        action: "report_leave",
-        note: "Báo nghỉ từ danh sách lao động",
-      });
       toast.success("Đã cập nhật ngày nghỉ");
       onClose();
       onDataChanged();
@@ -318,7 +317,16 @@ export function WorkerQuickDrawer({
       }
 
       for (const history of getStaleWorkingEmploymentHistories(latestHistories)) {
-        await updateEmploymentHistory(history.id, { status: "left" });
+        await updateEmploymentHistory(
+          history.id,
+          { status: "left" },
+          {
+          actor: viewer,
+          source: "Danh sách lao động",
+          note: "Báo đi làm mới: đồng bộ lịch sử đã có ngày nghỉ",
+            before: history,
+          },
+        );
       }
 
       let cccdVersionId: string | undefined;
@@ -513,15 +521,16 @@ export function WorkerQuickDrawer({
         toast.error("Người lao động chưa có lịch sử đi làm để cập nhật mã NV");
         return;
       }
-      await updateEmploymentHistory(latest.id, { employee_code: code });
-      await createStaffActionLog({
-        actor: viewer,
-        targetUserId: worker.user.id,
-        targetCollection: "employment_histories",
-        targetRecord: latest?.id || worker.user.id,
-        action: "update",
-        note: `Cập nhật mã NV: ${code}`,
-      });
+      await updateEmploymentHistory(
+        latest.id,
+        { employee_code: code },
+        {
+          actor: viewer,
+          source: "Danh sách lao động",
+          note: `Cập nhật mã NV: ${code}`,
+          before: latest,
+        },
+      );
       toast.success("Đã cập nhật mã nhân viên");
       onClose();
       onDataChanged();
