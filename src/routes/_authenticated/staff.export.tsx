@@ -30,6 +30,7 @@ import { isCurrentlyWorking, type EmploymentHistoryRecord } from "@/lib/employme
 import type { UserRecord } from "@/lib/pocketbase";
 import { getApprovalStatus } from "@/lib/user-approval";
 import { getRecruiterDisplay } from "@/lib/recruiters";
+import { resolveBankCode } from "@/lib/vn-banks";
 import { toast } from "@/lib/toast";
 
 const APPROVAL_STATUS_LABELS = {
@@ -128,7 +129,7 @@ function buildFullRows(
       "Mã số thuế": history.worker_tax_code_snapshot || "",
       "Trạng thái lịch sử": isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ",
       "Ghi chú": history.note || "",
-      "Ngân hàng": user?.bank_name || "",
+      "Ngân hàng": resolveBankCode(user?.bank_name || ""),
       "Số tài khoản": user?.bank_account_number || "",
       "Tên chủ tài khoản": user?.bank_account_name || "",
       "Ghi chú STK": user?.bank_account_note || "",

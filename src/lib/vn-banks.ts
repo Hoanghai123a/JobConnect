@@ -64,6 +64,18 @@ export function resolveBankName(input: string): string {
   return findExactBank(value)?.name || value;
 }
 
+/**
+ * Chuyển tên đầy đủ hoặc mã ngân hàng đang lưu về mã chuẩn (VD: "STB").
+ * - Nhận cả tên đầy đủ hoặc mã (không phân biệt hoa/thường với mã).
+ * - Giá trị trống trả về trống.
+ * - Giá trị không khớp danh mục giữ nguyên để tránh mất thông tin.
+ */
+export function resolveBankCode(input: string): string {
+  const value = input.trim();
+  if (!value) return "";
+  return findExactBank(value)?.code || value;
+}
+
 export function buildVietQrUrl(opts: {
   bankName: string;
   accountNumber: string;

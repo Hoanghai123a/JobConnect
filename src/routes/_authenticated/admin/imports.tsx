@@ -13,6 +13,7 @@ import {
 import { toast } from "@/lib/toast";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { BulkWorkerHistoryImportCard } from "@/components/imports/BulkWorkerHistoryImportDialog";
+import { BulkUserUpdateImportCard } from "@/components/imports/BulkUserUpdateImportCard";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
@@ -862,6 +863,8 @@ function AdminImportsPage() {
       subtitle="Tạo mới, nhập và cập nhật dữ liệu Excel tập trung cho quản trị viên"
     >
       <div className="space-y-4 desktop:grid desktop:grid-cols-2 desktop:items-start desktop:gap-5 desktop:space-y-0">
+        <BulkUserUpdateImportCard actor={currentUser} />
+
         <BulkWorkerHistoryImportCard actor={currentUser} />
 
         <Card className="space-y-3 rounded-2xl p-4 shadow-soft">
