@@ -22,6 +22,7 @@ import {
   normalizeAccountNumber,
   normalizeTransferDescription,
   parseQrExcel,
+  QR_DESCRIPTION_MAX_BYTES,
   type QrImportError,
   type QrImportResult,
   type QrTransferData,
@@ -75,7 +76,7 @@ function SingleQr() {
       <Field label="Số tài khoản"><Input className="h-12 rounded-xl" inputMode="numeric" value={form.accountNumber} onChange={(e) => setField("accountNumber", e.target.value)} placeholder="Ví dụ: 0012 345 678" /><Hint value={normalized.accountNumber} /></Field>
       <Field label="Chủ tài khoản"><Input className="h-12 rounded-xl" value={form.accountName} onChange={(e) => setField("accountName", e.target.value)} placeholder="Nguyễn Văn Ánh" /><Hint value={normalized.accountName} /></Field>
       <Field label="Số tiền"><Input className="h-12 rounded-xl" inputMode="numeric" value={form.amount} onChange={(e) => setField("amount", e.target.value)} placeholder="Để trống nếu không cố định" /></Field>
-      <Field label="Nội dung chuyển khoản"><Textarea value={form.description} onChange={(e) => setField("description", e.target.value)} placeholder="Thanh toán tháng 8" /><Hint value={normalized.description} /></Field>
+      <Field label="Nội dung chuyển khoản"><Textarea value={form.description} onChange={(e) => setField("description", e.target.value)} placeholder="Thanh toán tháng 8" /><div className={`text-right text-xs ${new TextEncoder().encode(normalized.description).length > QR_DESCRIPTION_MAX_BYTES ? "text-destructive" : "text-muted-foreground"}`}>{new TextEncoder().encode(normalized.description).length}/{QR_DESCRIPTION_MAX_BYTES} byte VietQR</div><Hint value={normalized.description} />{new TextEncoder().encode(normalized.description).length > QR_DESCRIPTION_MAX_BYTES && <p className="text-xs text-destructive">Nội dung quá dài để đóng gói theo cấu trúc VietQR. Hãy rút gọn nội dung.</p>}</Field>
       <Button className="h-12 w-full rounded-xl" onClick={create} disabled={!form.bankCode || !normalized.accountNumber}><QrCode className="h-4 w-4" /> Tạo mã QR</Button>
     </CardContent></Card>
     <Card className="rounded-3xl"><CardHeader><CardTitle>Kết quả</CardTitle><CardDescription>Mã QR chỉ xuất hiện sau khi bạn nhấn tạo.</CardDescription></CardHeader><CardContent>

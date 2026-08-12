@@ -1,9 +1,11 @@
 ﻿import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import { buildVietQrUrl, findBankByCode, getQrBankLabel, type VnBank } from "@/lib/vn-banks";
+import { renderSVG } from "uqr";
+import { findBankByCode, getQrBankLabel, type VnBank } from "@/lib/vn-banks";
 
 export const QR_BULK_LIMIT = 200;
+export const QR_DESCRIPTION_MAX_BYTES = 95;
 export const QR_EXCEL_HEADERS = [
   "Mã ngân hàng",
   "Số tài khoản",
@@ -65,9 +67,13 @@ export function buildQrTransferData(input: {
   const bank = findBankByCode(bankCode);
   const accountNumber = normalizeAccountNumber(input.accountNumber);
   const parsedAmount = parseQrAmount(input.amount);
+  const description = normalizeTransferDescription(input.description);
   if (!bank) errors.push(bankCode ? `Mã ngân hàng “${bankCode}” không tồn tại` : "Thiếu mã ngân hàng");
   if (!accountNumber) errors.push("Thiếu số tài khoản");
   if (parsedAmount.error) errors.push(parsedAmount.error);
+  if (new TextEncoder().encode(description).length > QR_DESCRIPTION_MAX_BYTES) {
+    errors.push(`Nội dung chuyển khoản tối đa ${QR_DESCRIPTION_MAX_BYTES} byte theo cấu trúc VietQR`);
+  }
   if (errors.length || !bank) return { errors };
   return {
     errors,
@@ -76,7 +82,7 @@ export function buildQrTransferData(input: {
       accountNumber,
       accountName: normalizeAccountName(input.accountName),
       amount: parsedAmount.amount,
-      description: normalizeTransferDescription(input.description),
+      description,
     },
   };
 }
@@ -121,14 +127,38 @@ export function downloadQrExcelTemplate() {
   XLSX.writeFile(workbook, "Mau_tao_ma_QR_ngan_hang.xlsx");
 }
 
+function vietQrField(id: string, value: string) {
+  const length = new TextEncoder().encode(value).length;
+  if (length > 99) throw new Error(`Trường VietQR ${id} vượt quá độ dài cho phép.`);
+  return `${id}${String(length).padStart(2, "0")}${value}`;
+}
+
+function crc16Ccitt(value: string) {
+  let crc = 0xffff;
+  for (const byte of new TextEncoder().encode(value)) {
+    crc ^= byte << 8;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc & 0x8000) !== 0 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, "0");
+}
+
+export function buildVietQrPayload(data: QrTransferData) {
+  const accountInfo = vietQrField("00", data.bank.bin) + vietQrField("01", data.accountNumber);
+  const merchantInfo = vietQrField("00", "A000000727") + vietQrField("01", accountInfo) + vietQrField("02", "QRIBFTTA");
+  let payload = vietQrField("00", "01") + vietQrField("01", data.amount ? "12" : "11") + vietQrField("38", merchantInfo);
+  payload += vietQrField("53", "704");
+  if (data.amount) payload += vietQrField("54", String(data.amount));
+  payload += vietQrField("58", "VN");
+  if (data.description) payload += vietQrField("62", vietQrField("08", data.description));
+  payload += "6304";
+  return payload + crc16Ccitt(payload);
+}
+
 export function getQrImageUrl(data: QrTransferData) {
-  return buildVietQrUrl({
-    bankName: data.bank.code,
-    accountNumber: data.accountNumber,
-    accountName: data.accountName,
-    amount: data.amount,
-    description: data.description,
-  });
+  const svg = renderSVG(buildVietQrPayload(data), { ecc: "M", border: 4, pixelSize: 8 });
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
 async function loadImage(url: string) {
