@@ -41,7 +41,9 @@ import {
   Settings,
   Building2,
   CalendarCheck,
+  CalendarClock,
   Wallet,
+  BadgeDollarSign,
   MessagesSquare,
   BusFront,
   Bell,
@@ -854,6 +856,18 @@ function DashboardPage() {
                     allowGuest
                   />
                   <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
+                  <FeatureTile
+                    to="/staff/money-to-text"
+                    label="Đọc số tiền"
+                    icon={BadgeDollarSign}
+                    size="compact"
+                  />
+                  <FeatureTile
+                    to="/last-working-day"
+                    label="Ngày Công Cuối"
+                    icon={CalendarClock}
+                    size="compact"
+                  />
                 </>
               ) : (
                 <>

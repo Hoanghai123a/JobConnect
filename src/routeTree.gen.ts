@@ -22,6 +22,7 @@ import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedNotebookRouteImport } from './routes/_authenticated/notebook'
 import { Route as AuthenticatedNewsRouteImport } from './routes/_authenticated/news'
 import { Route as AuthenticatedMinesweeperRouteImport } from './routes/_authenticated/minesweeper'
+import { Route as AuthenticatedLastWorkingDayRouteImport } from './routes/_authenticated/last-working-day'
 import { Route as AuthenticatedGuidesRouteImport } from './routes/_authenticated/guides'
 import { Route as AuthenticatedGemsRouteImport } from './routes/_authenticated/gems'
 import { Route as AuthenticatedGardenRouteImport } from './routes/_authenticated/garden'
@@ -47,6 +48,7 @@ import { Route as AuthenticatedStaffWorkforceRouteImport } from './routes/_authe
 import { Route as AuthenticatedStaffToolsRouteImport } from './routes/_authenticated/staff.tools'
 import { Route as AuthenticatedStaffSalaryHoldsRouteImport } from './routes/_authenticated/staff.salary-holds'
 import { Route as AuthenticatedStaffRecruitedRouteImport } from './routes/_authenticated/staff.recruited'
+import { Route as AuthenticatedStaffMoneyToTextRouteImport } from './routes/_authenticated/staff.money-to-text'
 import { Route as AuthenticatedStaffHourStatsRouteImport } from './routes/_authenticated/staff.hour-stats'
 import { Route as AuthenticatedStaffExportRouteImport } from './routes/_authenticated/staff.export'
 import { Route as AuthenticatedStaffApprovalsRouteImport } from './routes/_authenticated/staff.approvals'
@@ -61,11 +63,13 @@ import { Route as AuthenticatedAdminImportsRouteImport } from './routes/_authent
 import { Route as AuthenticatedAdminApprovalsRouteImport } from './routes/_authenticated/admin/approvals'
 import { Route as AuthenticatedAdminAccountsRouteImport } from './routes/_authenticated/admin/accounts'
 import { Route as AuthenticatedStaffWorkersIndexRouteImport } from './routes/_authenticated/staff.workers.index'
+import { Route as AuthenticatedStaffToolsIndexRouteImport } from './routes/_authenticated/staff.tools.index'
 import { Route as AuthenticatedAdminStaffIndexRouteImport } from './routes/_authenticated/admin/staff.index'
 import { Route as AuthenticatedAdminAccountsIndexRouteImport } from './routes/_authenticated/admin/accounts.index'
 import { Route as ApiPublicPbSplatRouteImport } from './routes/api/public/pb.$'
 import { Route as ApiPublicManifestWebmanifestRouteImport } from './routes/api/public/manifest.webmanifest'
 import { Route as AuthenticatedStaffWorkersWorkerIdRouteImport } from './routes/_authenticated/staff.workers.$workerId'
+import { Route as AuthenticatedStaffToolsQrRouteImport } from './routes/_authenticated/staff.tools.qr'
 import { Route as AuthenticatedAdminAccountsStatsRouteImport } from './routes/_authenticated/admin/accounts.stats'
 import { Route as AuthenticatedAdminAccountsLogsRouteImport } from './routes/_authenticated/admin/accounts.logs'
 import { Route as AuthenticatedAdminAccountsFactoriesRouteImport } from './routes/_authenticated/admin/accounts.factories'
@@ -136,6 +140,12 @@ const AuthenticatedMinesweeperRoute =
   AuthenticatedMinesweeperRouteImport.update({
     id: '/minesweeper',
     path: '/minesweeper',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedLastWorkingDayRoute =
+  AuthenticatedLastWorkingDayRouteImport.update({
+    id: '/last-working-day',
+    path: '/last-working-day',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedGuidesRoute = AuthenticatedGuidesRouteImport.update({
@@ -268,6 +278,12 @@ const AuthenticatedStaffRecruitedRoute =
     path: '/recruited',
     getParentRoute: () => AuthenticatedStaffRoute,
   } as any)
+const AuthenticatedStaffMoneyToTextRoute =
+  AuthenticatedStaffMoneyToTextRouteImport.update({
+    id: '/money-to-text',
+    path: '/money-to-text',
+    getParentRoute: () => AuthenticatedStaffRoute,
+  } as any)
 const AuthenticatedStaffHourStatsRoute =
   AuthenticatedStaffHourStatsRouteImport.update({
     id: '/hour-stats',
@@ -350,6 +366,12 @@ const AuthenticatedStaffWorkersIndexRoute =
     path: '/workers/',
     getParentRoute: () => AuthenticatedStaffRoute,
   } as any)
+const AuthenticatedStaffToolsIndexRoute =
+  AuthenticatedStaffToolsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedStaffToolsRoute,
+  } as any)
 const AuthenticatedAdminStaffIndexRoute =
   AuthenticatedAdminStaffIndexRouteImport.update({
     id: '/',
@@ -378,6 +400,12 @@ const AuthenticatedStaffWorkersWorkerIdRoute =
     id: '/workers/$workerId',
     path: '/workers/$workerId',
     getParentRoute: () => AuthenticatedStaffRoute,
+  } as any)
+const AuthenticatedStaffToolsQrRoute =
+  AuthenticatedStaffToolsQrRouteImport.update({
+    id: '/qr',
+    path: '/qr',
+    getParentRoute: () => AuthenticatedStaffToolsRoute,
   } as any)
 const AuthenticatedAdminAccountsStatsRoute =
   AuthenticatedAdminAccountsStatsRouteImport.update({
@@ -428,6 +456,7 @@ export interface FileRoutesByFullPath {
   '/garden': typeof AuthenticatedGardenRoute
   '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
+  '/last-working-day': typeof AuthenticatedLastWorkingDayRoute
   '/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/news': typeof AuthenticatedNewsRoute
   '/notebook': typeof AuthenticatedNotebookRoute
@@ -448,9 +477,10 @@ export interface FileRoutesByFullPath {
   '/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/hour-stats': typeof AuthenticatedStaffHourStatsRoute
+  '/staff/money-to-text': typeof AuthenticatedStaffMoneyToTextRoute
   '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/staff/salary-holds': typeof AuthenticatedStaffSalaryHoldsRoute
-  '/staff/tools': typeof AuthenticatedStaffToolsRoute
+  '/staff/tools': typeof AuthenticatedStaffToolsRouteWithChildren
   '/staff/workforce': typeof AuthenticatedStaffWorkforceRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
@@ -464,11 +494,13 @@ export interface FileRoutesByFullPath {
   '/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
   '/admin/accounts/stats': typeof AuthenticatedAdminAccountsStatsRoute
+  '/staff/tools/qr': typeof AuthenticatedStaffToolsQrRoute
   '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
   '/admin/accounts/': typeof AuthenticatedAdminAccountsIndexRoute
   '/admin/staff/': typeof AuthenticatedAdminStaffIndexRoute
+  '/staff/tools/': typeof AuthenticatedStaffToolsIndexRoute
   '/staff/workers/': typeof AuthenticatedStaffWorkersIndexRoute
   '/staff/workers/$workerId/payroll': typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
   '/api/admin/workers/$workerId/delete': typeof ApiAdminWorkersWorkerIdDeleteRoute
@@ -491,6 +523,7 @@ export interface FileRoutesByTo {
   '/garden': typeof AuthenticatedGardenRoute
   '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
+  '/last-working-day': typeof AuthenticatedLastWorkingDayRoute
   '/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/news': typeof AuthenticatedNewsRoute
   '/notebook': typeof AuthenticatedNotebookRoute
@@ -508,9 +541,9 @@ export interface FileRoutesByTo {
   '/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
   '/staff/export': typeof AuthenticatedStaffExportRoute
   '/staff/hour-stats': typeof AuthenticatedStaffHourStatsRoute
+  '/staff/money-to-text': typeof AuthenticatedStaffMoneyToTextRoute
   '/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/staff/salary-holds': typeof AuthenticatedStaffSalaryHoldsRoute
-  '/staff/tools': typeof AuthenticatedStaffToolsRoute
   '/staff/workforce': typeof AuthenticatedStaffWorkforceRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
@@ -524,11 +557,13 @@ export interface FileRoutesByTo {
   '/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
   '/admin/accounts/stats': typeof AuthenticatedAdminAccountsStatsRoute
+  '/staff/tools/qr': typeof AuthenticatedStaffToolsQrRoute
   '/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
   '/admin/accounts': typeof AuthenticatedAdminAccountsIndexRoute
   '/admin/staff': typeof AuthenticatedAdminStaffIndexRoute
+  '/staff/tools': typeof AuthenticatedStaffToolsIndexRoute
   '/staff/workers': typeof AuthenticatedStaffWorkersIndexRoute
   '/staff/workers/$workerId/payroll': typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
   '/api/admin/workers/$workerId/delete': typeof ApiAdminWorkersWorkerIdDeleteRoute
@@ -553,6 +588,7 @@ export interface FileRoutesById {
   '/_authenticated/garden': typeof AuthenticatedGardenRoute
   '/_authenticated/gems': typeof AuthenticatedGemsRoute
   '/_authenticated/guides': typeof AuthenticatedGuidesRoute
+  '/_authenticated/last-working-day': typeof AuthenticatedLastWorkingDayRoute
   '/_authenticated/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/_authenticated/news': typeof AuthenticatedNewsRoute
   '/_authenticated/notebook': typeof AuthenticatedNotebookRoute
@@ -573,9 +609,10 @@ export interface FileRoutesById {
   '/_authenticated/staff/approvals': typeof AuthenticatedStaffApprovalsRoute
   '/_authenticated/staff/export': typeof AuthenticatedStaffExportRoute
   '/_authenticated/staff/hour-stats': typeof AuthenticatedStaffHourStatsRoute
+  '/_authenticated/staff/money-to-text': typeof AuthenticatedStaffMoneyToTextRoute
   '/_authenticated/staff/recruited': typeof AuthenticatedStaffRecruitedRoute
   '/_authenticated/staff/salary-holds': typeof AuthenticatedStaffSalaryHoldsRoute
-  '/_authenticated/staff/tools': typeof AuthenticatedStaffToolsRoute
+  '/_authenticated/staff/tools': typeof AuthenticatedStaffToolsRouteWithChildren
   '/_authenticated/staff/workforce': typeof AuthenticatedStaffWorkforceRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
@@ -589,11 +626,13 @@ export interface FileRoutesById {
   '/_authenticated/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/_authenticated/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
   '/_authenticated/admin/accounts/stats': typeof AuthenticatedAdminAccountsStatsRoute
+  '/_authenticated/staff/tools/qr': typeof AuthenticatedStaffToolsQrRoute
   '/_authenticated/staff/workers/$workerId': typeof AuthenticatedStaffWorkersWorkerIdRoute
   '/api/public/manifest/webmanifest': typeof ApiPublicManifestWebmanifestRoute
   '/api/public/pb/$': typeof ApiPublicPbSplatRoute
   '/_authenticated/admin/accounts/': typeof AuthenticatedAdminAccountsIndexRoute
   '/_authenticated/admin/staff/': typeof AuthenticatedAdminStaffIndexRoute
+  '/_authenticated/staff/tools/': typeof AuthenticatedStaffToolsIndexRoute
   '/_authenticated/staff/workers/': typeof AuthenticatedStaffWorkersIndexRoute
   '/_authenticated/staff/workers/$workerId_/payroll': typeof AuthenticatedStaffWorkersWorkerIdPayrollRoute
   '/api/admin/workers/$workerId/delete': typeof ApiAdminWorkersWorkerIdDeleteRoute
@@ -618,6 +657,7 @@ export interface FileRouteTypes {
     | '/garden'
     | '/gems'
     | '/guides'
+    | '/last-working-day'
     | '/minesweeper'
     | '/news'
     | '/notebook'
@@ -638,6 +678,7 @@ export interface FileRouteTypes {
     | '/staff/approvals'
     | '/staff/export'
     | '/staff/hour-stats'
+    | '/staff/money-to-text'
     | '/staff/recruited'
     | '/staff/salary-holds'
     | '/staff/tools'
@@ -654,11 +695,13 @@ export interface FileRouteTypes {
     | '/admin/accounts/factories'
     | '/admin/accounts/logs'
     | '/admin/accounts/stats'
+    | '/staff/tools/qr'
     | '/staff/workers/$workerId'
     | '/api/public/manifest/webmanifest'
     | '/api/public/pb/$'
     | '/admin/accounts/'
     | '/admin/staff/'
+    | '/staff/tools/'
     | '/staff/workers/'
     | '/staff/workers/$workerId/payroll'
     | '/api/admin/workers/$workerId/delete'
@@ -681,6 +724,7 @@ export interface FileRouteTypes {
     | '/garden'
     | '/gems'
     | '/guides'
+    | '/last-working-day'
     | '/minesweeper'
     | '/news'
     | '/notebook'
@@ -698,9 +742,9 @@ export interface FileRouteTypes {
     | '/staff/approvals'
     | '/staff/export'
     | '/staff/hour-stats'
+    | '/staff/money-to-text'
     | '/staff/recruited'
     | '/staff/salary-holds'
-    | '/staff/tools'
     | '/staff/workforce'
     | '/api/public/app-icon'
     | '/api/public/app-icon-192'
@@ -714,11 +758,13 @@ export interface FileRouteTypes {
     | '/admin/accounts/factories'
     | '/admin/accounts/logs'
     | '/admin/accounts/stats'
+    | '/staff/tools/qr'
     | '/staff/workers/$workerId'
     | '/api/public/manifest/webmanifest'
     | '/api/public/pb/$'
     | '/admin/accounts'
     | '/admin/staff'
+    | '/staff/tools'
     | '/staff/workers'
     | '/staff/workers/$workerId/payroll'
     | '/api/admin/workers/$workerId/delete'
@@ -742,6 +788,7 @@ export interface FileRouteTypes {
     | '/_authenticated/garden'
     | '/_authenticated/gems'
     | '/_authenticated/guides'
+    | '/_authenticated/last-working-day'
     | '/_authenticated/minesweeper'
     | '/_authenticated/news'
     | '/_authenticated/notebook'
@@ -762,6 +809,7 @@ export interface FileRouteTypes {
     | '/_authenticated/staff/approvals'
     | '/_authenticated/staff/export'
     | '/_authenticated/staff/hour-stats'
+    | '/_authenticated/staff/money-to-text'
     | '/_authenticated/staff/recruited'
     | '/_authenticated/staff/salary-holds'
     | '/_authenticated/staff/tools'
@@ -778,11 +826,13 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/accounts/factories'
     | '/_authenticated/admin/accounts/logs'
     | '/_authenticated/admin/accounts/stats'
+    | '/_authenticated/staff/tools/qr'
     | '/_authenticated/staff/workers/$workerId'
     | '/api/public/manifest/webmanifest'
     | '/api/public/pb/$'
     | '/_authenticated/admin/accounts/'
     | '/_authenticated/admin/staff/'
+    | '/_authenticated/staff/tools/'
     | '/_authenticated/staff/workers/'
     | '/_authenticated/staff/workers/$workerId_/payroll'
     | '/api/admin/workers/$workerId/delete'
@@ -899,6 +949,13 @@ declare module '@tanstack/react-router' {
       path: '/minesweeper'
       fullPath: '/minesweeper'
       preLoaderRoute: typeof AuthenticatedMinesweeperRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/last-working-day': {
+      id: '/_authenticated/last-working-day'
+      path: '/last-working-day'
+      fullPath: '/last-working-day'
+      preLoaderRoute: typeof AuthenticatedLastWorkingDayRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/guides': {
@@ -1076,6 +1133,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStaffRecruitedRouteImport
       parentRoute: typeof AuthenticatedStaffRoute
     }
+    '/_authenticated/staff/money-to-text': {
+      id: '/_authenticated/staff/money-to-text'
+      path: '/money-to-text'
+      fullPath: '/staff/money-to-text'
+      preLoaderRoute: typeof AuthenticatedStaffMoneyToTextRouteImport
+      parentRoute: typeof AuthenticatedStaffRoute
+    }
     '/_authenticated/staff/hour-stats': {
       id: '/_authenticated/staff/hour-stats'
       path: '/hour-stats'
@@ -1174,6 +1238,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStaffWorkersIndexRouteImport
       parentRoute: typeof AuthenticatedStaffRoute
     }
+    '/_authenticated/staff/tools/': {
+      id: '/_authenticated/staff/tools/'
+      path: '/'
+      fullPath: '/staff/tools/'
+      preLoaderRoute: typeof AuthenticatedStaffToolsIndexRouteImport
+      parentRoute: typeof AuthenticatedStaffToolsRoute
+    }
     '/_authenticated/admin/staff/': {
       id: '/_authenticated/admin/staff/'
       path: '/'
@@ -1208,6 +1279,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/staff/workers/$workerId'
       preLoaderRoute: typeof AuthenticatedStaffWorkersWorkerIdRouteImport
       parentRoute: typeof AuthenticatedStaffRoute
+    }
+    '/_authenticated/staff/tools/qr': {
+      id: '/_authenticated/staff/tools/qr'
+      path: '/qr'
+      fullPath: '/staff/tools/qr'
+      preLoaderRoute: typeof AuthenticatedStaffToolsQrRouteImport
+      parentRoute: typeof AuthenticatedStaffToolsRoute
     }
     '/_authenticated/admin/accounts/stats': {
       id: '/_authenticated/admin/accounts/stats'
@@ -1247,14 +1325,31 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedStaffToolsRouteChildren {
+  AuthenticatedStaffToolsQrRoute: typeof AuthenticatedStaffToolsQrRoute
+  AuthenticatedStaffToolsIndexRoute: typeof AuthenticatedStaffToolsIndexRoute
+}
+
+const AuthenticatedStaffToolsRouteChildren: AuthenticatedStaffToolsRouteChildren =
+  {
+    AuthenticatedStaffToolsQrRoute: AuthenticatedStaffToolsQrRoute,
+    AuthenticatedStaffToolsIndexRoute: AuthenticatedStaffToolsIndexRoute,
+  }
+
+const AuthenticatedStaffToolsRouteWithChildren =
+  AuthenticatedStaffToolsRoute._addFileChildren(
+    AuthenticatedStaffToolsRouteChildren,
+  )
+
 interface AuthenticatedStaffRouteChildren {
   AuthenticatedStaffAdvancesRoute: typeof AuthenticatedStaffAdvancesRoute
   AuthenticatedStaffApprovalsRoute: typeof AuthenticatedStaffApprovalsRoute
   AuthenticatedStaffExportRoute: typeof AuthenticatedStaffExportRoute
   AuthenticatedStaffHourStatsRoute: typeof AuthenticatedStaffHourStatsRoute
+  AuthenticatedStaffMoneyToTextRoute: typeof AuthenticatedStaffMoneyToTextRoute
   AuthenticatedStaffRecruitedRoute: typeof AuthenticatedStaffRecruitedRoute
   AuthenticatedStaffSalaryHoldsRoute: typeof AuthenticatedStaffSalaryHoldsRoute
-  AuthenticatedStaffToolsRoute: typeof AuthenticatedStaffToolsRoute
+  AuthenticatedStaffToolsRoute: typeof AuthenticatedStaffToolsRouteWithChildren
   AuthenticatedStaffWorkforceRoute: typeof AuthenticatedStaffWorkforceRoute
   AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
   AuthenticatedStaffWorkersWorkerIdRoute: typeof AuthenticatedStaffWorkersWorkerIdRoute
@@ -1267,9 +1362,10 @@ const AuthenticatedStaffRouteChildren: AuthenticatedStaffRouteChildren = {
   AuthenticatedStaffApprovalsRoute: AuthenticatedStaffApprovalsRoute,
   AuthenticatedStaffExportRoute: AuthenticatedStaffExportRoute,
   AuthenticatedStaffHourStatsRoute: AuthenticatedStaffHourStatsRoute,
+  AuthenticatedStaffMoneyToTextRoute: AuthenticatedStaffMoneyToTextRoute,
   AuthenticatedStaffRecruitedRoute: AuthenticatedStaffRecruitedRoute,
   AuthenticatedStaffSalaryHoldsRoute: AuthenticatedStaffSalaryHoldsRoute,
-  AuthenticatedStaffToolsRoute: AuthenticatedStaffToolsRoute,
+  AuthenticatedStaffToolsRoute: AuthenticatedStaffToolsRouteWithChildren,
   AuthenticatedStaffWorkforceRoute: AuthenticatedStaffWorkforceRoute,
   AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
   AuthenticatedStaffWorkersWorkerIdRoute:
@@ -1330,6 +1426,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedGardenRoute: typeof AuthenticatedGardenRoute
   AuthenticatedGemsRoute: typeof AuthenticatedGemsRoute
   AuthenticatedGuidesRoute: typeof AuthenticatedGuidesRoute
+  AuthenticatedLastWorkingDayRoute: typeof AuthenticatedLastWorkingDayRoute
   AuthenticatedMinesweeperRoute: typeof AuthenticatedMinesweeperRoute
   AuthenticatedNewsRoute: typeof AuthenticatedNewsRoute
   AuthenticatedNotebookRoute: typeof AuthenticatedNotebookRoute
@@ -1361,6 +1458,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedGardenRoute: AuthenticatedGardenRoute,
   AuthenticatedGemsRoute: AuthenticatedGemsRoute,
   AuthenticatedGuidesRoute: AuthenticatedGuidesRoute,
+  AuthenticatedLastWorkingDayRoute: AuthenticatedLastWorkingDayRoute,
   AuthenticatedMinesweeperRoute: AuthenticatedMinesweeperRoute,
   AuthenticatedNewsRoute: AuthenticatedNewsRoute,
   AuthenticatedNotebookRoute: AuthenticatedNotebookRoute,

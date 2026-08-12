@@ -9,10 +9,12 @@ import {
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   Banknote,
+  BadgeDollarSign,
   BarChart3,
   BookOpen,
   BusFront,
   CalendarCheck,
+  CalendarClock,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -27,6 +29,7 @@ import {
   LogOut,
   MessageCircle,
   Newspaper,
+  QrCode,
   Settings,
   ScrollText,
   ShieldCheck,
@@ -109,6 +112,9 @@ const staffNavigation: readonly NavigationSection[] = [
       { to: "/transport", label: "Tìm nhà xe", icon: BusFront },
       { to: "/notebook", label: "Sổ tay", icon: ClipboardList },
       { to: "/guides", label: "Hướng dẫn", icon: BookOpen },
+      { to: "/staff/tools/qr", label: "Tạo mã QR", icon: QrCode },
+      { to: "/staff/money-to-text", label: "Đọc số tiền", icon: BadgeDollarSign },
+      { to: "/last-working-day", label: "Ngày Công Cuối", icon: CalendarClock },
     ],
   },
   {
@@ -156,6 +162,9 @@ const adminNavigation: readonly NavigationSection[] = [
       { to: "/transport", label: "Tìm nhà xe", icon: BusFront },
       { to: "/notebook", label: "Sổ tay", icon: ClipboardList },
       { to: "/guides", label: "Hướng dẫn", icon: BookOpen },
+      { to: "/staff/tools/qr", label: "Tạo mã QR", icon: QrCode },
+      { to: "/staff/money-to-text", label: "Đọc số tiền", icon: BadgeDollarSign },
+      { to: "/last-working-day", label: "Ngày Công Cuối", icon: CalendarClock },
     ],
   },
   {

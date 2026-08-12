@@ -1,5 +1,7 @@
 // Common Vietnamese banks (short name — full name)
-export const VN_BANKS: { code: string; name: string; bin: string }[] = [
+export type VnBank = { code: string; name: string; bin: string; qrName?: string };
+
+export const VN_BANKS: VnBank[] = [
   { code: "VCB", name: "Vietcombank - NH TMCP Ngoại thương Việt Nam", bin: "970436" },
   { code: "ICB", name: "VietinBank - NH TMCP Công thương Việt Nam", bin: "970415" },
   { code: "BIDV", name: "BIDV - NH TMCP Đầu tư và Phát triển Việt Nam", bin: "970418" },
@@ -45,6 +47,37 @@ export const VN_BANKS: { code: string; name: string; bin: string }[] = [
   { code: "IVB", name: "Indovina Bank", bin: "970434" },
   { code: "VRB", name: "Vietnam-Russia Joint Venture Bank (VRB)", bin: "970421" },
 ];
+
+
+const QR_BANK_NAMES: Record<string, string> = {
+  ABB: "Ngân hàng TMCP An Bình",
+  ACB: "Ngân hàng TMCP Á Châu",
+  AGR: "Ngân hàng Nông nghiệp và Phát triển Nông thôn Việt Nam",
+  BAB: "Ngân hàng TMCP Bắc Á",
+  BIDV: "Ngân hàng TMCP Đầu tư và Phát triển Việt Nam",
+  BVB: "Ngân hàng TMCP Bảo Việt",
+  DAB: "Ngân hàng TMCP Đông Á",
+  EIB: "Ngân hàng TMCP Xuất nhập khẩu Việt Nam",
+  HDB: "Ngân hàng TMCP Phát triển Thành phố Hồ Chí Minh",
+  ICB: "Ngân hàng TMCP Công thương Việt Nam",
+  MB: "Ngân hàng TMCP Quân đội",
+  SHBVN: "Ngân hàng TNHH MTV Shinhan Việt Nam",
+  VCB: "Ngân hàng TMCP Ngoại thương Việt Nam",
+  VPB: "Ngân hàng TMCP Việt Nam Thịnh Vượng",
+};
+
+export function getQrBankName(bank: VnBank): string {
+  return bank.qrName || QR_BANK_NAMES[bank.code] || bank.name.replace(/^[^-]+-\s*/, "");
+}
+
+export function getQrBankLabel(bank: VnBank): string {
+  return `${bank.code} - ${getQrBankName(bank)}`;
+}
+
+export function findBankByCode(input: string): VnBank | undefined {
+  const code = input.trim().toUpperCase();
+  return VN_BANKS.find((bank) => bank.code.toUpperCase() === code);
+}
 
 function findExactBank(input: string) {
   const value = input.trim();

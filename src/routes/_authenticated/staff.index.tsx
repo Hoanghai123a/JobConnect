@@ -2,8 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Banknote,
+  BadgeDollarSign,
   BarChart3,
   CalendarCheck,
+  CalendarClock,
   BookOpen,
   Building2,
   BusFront,
@@ -15,6 +17,7 @@ import {
   MessagesSquare,
   Newspaper,
   NotebookPen,
+  QrCode,
   RefreshCw,
   UserCheck,
   Users,
@@ -182,9 +185,27 @@ function StaffDashboardPage() {
             <FeatureTile to="/notebook" label="Sổ tay" icon={NotebookPen} size="compact" />
             <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
             <FeatureTile
+              to="/staff/tools/qr"
+              label="Tạo mã QR"
+              icon={QrCode}
+              size="compact"
+            />
+            <FeatureTile
+              to="/staff/money-to-text"
+              label="Đọc số tiền"
+              icon={BadgeDollarSign}
+              size="compact"
+            />
+            <FeatureTile
               to="/staff/hour-stats"
               label="Thống kê giờ"
               icon={CalendarCheck}
+              size="compact"
+            />
+            <FeatureTile
+              to="/last-working-day"
+              label="Ngày Công Cuối"
+              icon={CalendarClock}
               size="compact"
             />
             <FeatureTile to="/staff/export" label="Xuất dữ liệu" icon={Download} size="compact" />
