@@ -2,7 +2,16 @@
 
 ## Mục đích
 
-Luồng xóa NLĐ của Admin yêu cầu xác thực lại mật khẩu. Hệ thống cho phép xóa khi tài khoản chỉ còn lịch sử đi làm hoặc dữ liệu hồ sơ không liên quan tới tiền. Nếu còn nghiệp vụ tiền, ứng dụng phải chặn xóa và hướng dẫn Admin xử lý nghiệp vụ hoặc vô hiệu hóa tài khoản.
+Luồng xóa NLĐ của Admin yêu cầu xem trước dữ liệu, xác nhận đã nắm rõ thông tin và xác thực lại mật khẩu. Hệ thống chỉ cho phép xóa tài khoản được tạo trong vòng **72 giờ** tính từ trường hệ thống `created` của PocketBase. Nếu còn nghiệp vụ tiền, ứng dụng phải chặn xóa và hướng dẫn Admin xử lý nghiệp vụ hoặc vô hiệu hóa tài khoản.
+
+Kiểm tra 72 giờ được thực hiện ở backend bằng thời điểm hiện tại của server. Giao diện chỉ là lớp hỗ trợ; không thể vượt qua giới hạn bằng cách gọi API trực tiếp hoặc thay đổi dữ liệu trên client.
+
+## Luồng xác nhận
+
+- Popup gọi API `preview` để kiểm tra `created` và hiển thị thời điểm tạo, thời hạn xóa cùng dữ liệu liên quan.
+- Admin phải tick xác nhận đã đọc và hiểu hậu quả.
+- Sau khi tick, popup mới hiển thị ô nhập mật khẩu và nút xóa.
+- API `delete` kiểm tra lại tài khoản và cửa sổ 72 giờ ngay trước khi tạo batch xóa để tránh trường hợp popup mở quá lâu.
 
 ## Cấu hình PocketBase
 
@@ -10,6 +19,9 @@ Luồng xóa NLĐ của Admin yêu cầu xác thực lại mật khẩu. Hệ th
 
 - `deleteRule`: `@request.auth.role = "admin"`
 - Không mở quyền xóa cho `staff` hoặc `user`.
+- Backend phải đọc được trường hệ thống `created`.
+- Chỉ cho phép xóa nếu `created + 72 giờ > thời điểm hiện tại của server`.
+- Không cần thêm field mới hoặc thay thế kiểm tra này chỉ bằng PocketBase rule.
 
 ### Collection `staff_action_logs`
 

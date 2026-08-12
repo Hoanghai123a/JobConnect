@@ -15,13 +15,8 @@ export interface ColumnMapping {
   employeeNameColumn?: number;
   dateColumn?: number;
   hoursColumn?: number;
-}
-
-export interface DetectionResult {
-  mapping: ColumnMapping;
-  confident: boolean;
-  issues: string[];
-  headers: string[];
+  dateStartColumn?: number;
+  dateEndColumn?: number;
 }
 
 export interface LastWorkingDayResult {
@@ -36,31 +31,7 @@ export interface ProcessingSummary {
   empty: number;
 }
 
-const CODE_ALIASES = ["ma nv", "ma nhan vien", "manv", "employee code", "ma nld"];
-const NAME_ALIASES = ["ho ten", "ten nhan vien", "name", "ho va ten", "ten nld"];
-const DATE_ALIASES = ["ngay thang", "ngay", "date", "ngay lam", "ngay cong"];
-const HOURS_ALIASES = ["so gio", "gio", "gio lam", "hours", "tong gio", "cong"];
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-function normalizeText(value: unknown) {
-  return String(value ?? "")
-    .trim()
-    .toLocaleLowerCase("vi-VN")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-function matchesAlias(value: unknown, aliases: string[]) {
-  const normalized = normalizeText(value);
-  return aliases.some((alias) => normalized === alias || normalized.includes(alias));
-}
-
-function findColumn(headers: ExcelCell[], aliases: string[]) {
-  return headers.findIndex((header) => matchesAlias(header, aliases));
-}
 
 export function readSheetRows(workbook: XLSX.WorkBook, sheetName: string): SheetRows {
   const sheet = workbook.Sheets[sheetName];
@@ -68,14 +39,13 @@ export function readSheetRows(workbook: XLSX.WorkBook, sheetName: string): Sheet
   return XLSX.utils.sheet_to_json<ExcelCell[]>(sheet, {
     header: 1,
     defval: "",
-    raw: false,
-    dateNF: "dd-mm-yyyy",
+    raw: true,
   });
 }
 
 export async function readWorkbook(file: File): Promise<WorkbookData> {
   const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: false });
   return { workbook, sheetNames: workbook.SheetNames };
 }
 
@@ -97,9 +67,10 @@ function validDate(year: number, month: number, day: number) {
 
 export function parseExcelDate(value: unknown): Date | null {
   if (value instanceof Date) {
-    return Number.isNaN(value.getTime())
-      ? null
-      : validDate(value.getFullYear(), value.getMonth() + 1, value.getDate());
+    if (Number.isNaN(value.getTime())) return null;
+
+    // SheetJS creates Excel date cells at local midnight; keep the local calendar date.
+    return validDate(value.getFullYear(), value.getMonth() + 1, value.getDate());
   }
   if (typeof value === "number" && Number.isFinite(value)) {
     const utc = new Date(Date.UTC(1899, 11, 30) + Math.floor(value) * DAY_MS);
@@ -112,56 +83,6 @@ export function parseExcelDate(value: unknown): Date | null {
   const iso = text.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T\s].*)?$/);
   if (iso) return validDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
   return null;
-}
-
-function headerCandidates(rows: SheetRows, layout: LastWorkingDayLayout) {
-  return rows.slice(0, Math.min(rows.length, 20)).map((row, index) => {
-    const code = findColumn(row, CODE_ALIASES);
-    const name = findColumn(row, NAME_ALIASES);
-    const date = findColumn(row, DATE_ALIASES);
-    const hours = findColumn(row, HOURS_ALIASES);
-    const dateCount = row.filter((cell) => Boolean(parseExcelDate(cell))).length;
-    const score =
-      (code >= 0 ? 4 : 0) +
-      (name >= 0 ? 2 : 0) +
-      (layout === "vertical"
-        ? (date >= 0 ? 3 : 0) + (hours >= 0 ? 3 : 0)
-        : Math.min(dateCount, 4) * 2);
-    return { index, row, code, name, date, hours, dateCount, score };
-  });
-}
-
-export function detectMapping(rows: SheetRows, layout: LastWorkingDayLayout): DetectionResult {
-  const best = headerCandidates(rows, layout).sort((a, b) => b.score - a.score)[0];
-  const fallback = best ?? {
-    index: 0,
-    row: [],
-    code: -1,
-    name: -1,
-    date: -1,
-    hours: -1,
-    dateCount: 0,
-  };
-  const issues: string[] = [];
-  if (fallback.code < 0) issues.push("Chưa nhận diện được cột Mã NV.");
-  if (layout === "vertical" && fallback.date < 0)
-    issues.push("Chưa nhận diện được cột Ngày/tháng.");
-  if (layout === "vertical" && fallback.hours < 0) issues.push("Chưa nhận diện được cột Số giờ.");
-  if (layout !== "vertical" && fallback.dateCount === 0)
-    issues.push("Chưa nhận diện được các cột ngày.");
-
-  return {
-    mapping: {
-      headerRow: fallback.index,
-      employeeCodeColumn: Math.max(0, fallback.code),
-      employeeNameColumn: fallback.name >= 0 ? fallback.name : undefined,
-      dateColumn: fallback.date >= 0 ? fallback.date : undefined,
-      hoursColumn: fallback.hours >= 0 ? fallback.hours : undefined,
-    },
-    confident: issues.length === 0,
-    issues,
-    headers: fallback.row.map((cell, index) => String(cell || `Cột ${index + 1}`)),
-  };
 }
 
 function employeeCode(value: unknown) {
@@ -181,15 +102,25 @@ export function processLastWorkingDays(
 ): LastWorkingDayResult[] {
   if (mapping.employeeCodeColumn < 0) throw new Error("Vui lòng chọn cột Mã NV.");
   const header = rows[mapping.headerRow] ?? [];
-  const dateColumns =
-    layout === "vertical"
-      ? []
-      : header.flatMap((cell, index) => (parseExcelDate(cell) ? [index] : []));
-  if (layout === "vertical" && (mapping.dateColumn == null || mapping.hoursColumn == null)) {
-    throw new Error("Vui lòng chọn đủ cột Ngày/tháng và Số giờ.");
-  }
-  if (layout !== "vertical" && dateColumns.length === 0) {
-    throw new Error("Dòng tiêu đề đã chọn không có cột ngày hợp lệ.");
+  let dateColumns: number[] = [];
+  if (layout === "vertical") {
+    if (mapping.dateColumn == null || mapping.hoursColumn == null) {
+      throw new Error("Vui lòng chọn đủ cột Ngày/tháng và Số giờ.");
+    }
+  } else {
+    if (mapping.dateStartColumn == null || mapping.dateEndColumn == null) {
+      throw new Error("Vui lòng chọn cột ngày bắt đầu và cột ngày kết thúc.");
+    }
+    if (mapping.dateEndColumn < mapping.dateStartColumn) {
+      throw new Error("Cột ngày kết thúc không thể đứng trước cột ngày bắt đầu.");
+    }
+    dateColumns = Array.from(
+      { length: mapping.dateEndColumn - mapping.dateStartColumn + 1 },
+      (_, index) => mapping.dateStartColumn! + index,
+    ).filter((column) => Boolean(parseExcelDate(header[column])));
+    if (dateColumns.length === 0) {
+      throw new Error("Khoảng cột đã chọn không có ngày hợp lệ trên dòng tiêu đề.");
+    }
   }
 
   const results = new Map<string, LastWorkingDayResult>();

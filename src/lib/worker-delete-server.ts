@@ -14,6 +14,7 @@ type WorkerRecord = AuthUser & {
   status?: string;
   approved?: boolean | string;
   approvalStatus?: string;
+  created?: string;
 };
 
 type DependencyDefinition = {
@@ -27,6 +28,16 @@ export type WorkerDeleteDependency = {
   label: string;
   count: number;
 };
+
+export type WorkerDeletePreview = {
+  workerId: string;
+  createdAt: string;
+  deleteWindowExpiresAt: string;
+  dependencies: WorkerDeleteDependency[];
+  employmentHistoryCount: number;
+};
+
+const DELETE_WINDOW_MS = 72 * 60 * 60 * 1000;
 
 const DEPENDENCIES: DependencyDefinition[] = [
   {
@@ -84,6 +95,18 @@ async function readJson(response: Response) {
 
 function errorResponse(message: string, status: number, code: string, extra?: object) {
   return Response.json({ message, code, ...extra }, { status });
+}
+
+function getDeleteWindow(worker: WorkerRecord) {
+  const createdAtMs = Date.parse(worker.created || "");
+  if (!Number.isFinite(createdAtMs)) return null;
+
+  const deleteWindowExpiresAtMs = createdAtMs + DELETE_WINDOW_MS;
+  return {
+    createdAt: new Date(createdAtMs).toISOString(),
+    deleteWindowExpiresAt: new Date(deleteWindowExpiresAtMs).toISOString(),
+    expired: Date.now() >= deleteWindowExpiresAtMs,
+  };
 }
 
 async function getAuthenticatedAdmin(request: Request) {
@@ -225,6 +248,29 @@ async function deleteWorkerWithLog(
   }
 }
 
+async function getWorkerDeletePreview(
+  worker: WorkerRecord,
+  token: string,
+): Promise<WorkerDeletePreview> {
+  const deleteWindow = getDeleteWindow(worker);
+  if (!deleteWindow) {
+    throw new Error("Không xác định được thời điểm tạo tài khoản từ PocketBase.");
+  }
+
+  const [dependencies, employmentHistoryCount] = await Promise.all([
+    findDependencies(worker.id, token),
+    countDependency(EMPLOYMENT_HISTORY_DEPENDENCY, worker.id, token),
+  ]);
+
+  return {
+    workerId: worker.id,
+    createdAt: deleteWindow.createdAt,
+    deleteWindowExpiresAt: deleteWindow.deleteWindowExpiresAt,
+    dependencies,
+    employmentHistoryCount,
+  };
+}
+
 export async function deleteWorkerAccount(request: Request, workerId: string) {
   const auth = await getAuthenticatedAdmin(request);
   if (!auth) {
@@ -232,22 +278,16 @@ export async function deleteWorkerAccount(request: Request, workerId: string) {
   }
 
   const body = await request.json().catch(() => null);
+  const action = body?.action === "preview" ? "preview" : "delete";
   const password = typeof body?.password === "string" ? body.password : "";
-  if (!password) {
-    return errorResponse("Vui lòng nhập mật khẩu Admin.", 400, "PASSWORD_REQUIRED");
-  }
+  const confirmed = body?.confirmed === true;
 
   if (!workerId || workerId === auth.user.id) {
     return errorResponse("Admin không thể tự xóa tài khoản đang đăng nhập.", 400, "INVALID_TARGET");
   }
 
   try {
-    const verifiedToken = await verifyAdminPassword(auth.user, password);
-    if (!verifiedToken) {
-      return errorResponse("Mật khẩu Admin không đúng.", 403, "INVALID_PASSWORD");
-    }
-
-    const worker = await getWorker(workerId, verifiedToken);
+    const worker = await getWorker(workerId, auth.token);
     if (!worker) {
       return errorResponse("Tài khoản NLĐ không còn tồn tại.", 404, "WORKER_NOT_FOUND");
     }
@@ -259,24 +299,92 @@ export async function deleteWorkerAccount(request: Request, workerId: string) {
       );
     }
 
-    const [dependencies, employmentHistoryCount] = await Promise.all([
-      findDependencies(workerId, verifiedToken),
-      countDependency(EMPLOYMENT_HISTORY_DEPENDENCY, workerId, verifiedToken),
-    ]);
-    if (dependencies.length > 0) {
+    const deleteWindow = getDeleteWindow(worker);
+    if (!deleteWindow) {
+      return errorResponse(
+        "Không xác định được thời điểm tạo tài khoản từ PocketBase.",
+        502,
+        "ACCOUNT_CREATED_AT_UNAVAILABLE",
+      );
+    }
+    if (deleteWindow.expired) {
+      return errorResponse(
+        "Tài khoản đã quá thời hạn 72 giờ kể từ khi được tạo nên không thể xóa.",
+        409,
+        "ACCOUNT_DELETE_WINDOW_EXPIRED",
+        {
+          createdAt: deleteWindow.createdAt,
+          deleteWindowExpiresAt: deleteWindow.deleteWindowExpiresAt,
+        },
+      );
+    }
+
+    const preview = await getWorkerDeletePreview(worker, auth.token);
+    if (action === "preview") {
+      return Response.json({ preview });
+    }
+
+    if (!password) {
+      return errorResponse("Vui lòng nhập mật khẩu Admin.", 400, "PASSWORD_REQUIRED");
+    }
+    if (!confirmed) {
+      return errorResponse(
+        "Vui lòng xác nhận đã đọc và nắm rõ thông tin trước khi xóa.",
+        400,
+        "CONFIRMATION_REQUIRED",
+      );
+    }
+
+    const verifiedToken = await verifyAdminPassword(auth.user, password);
+    if (!verifiedToken) {
+      return errorResponse("Mật khẩu Admin không đúng.", 403, "INVALID_PASSWORD");
+    }
+
+    // Re-read immediately before deletion so leaving the dialog open cannot bypass the window.
+    const currentWorker = await getWorker(workerId, verifiedToken);
+    if (!currentWorker) {
+      return errorResponse("Tài khoản NLĐ không còn tồn tại.", 404, "WORKER_NOT_FOUND");
+    }
+    const currentDeleteWindow = getDeleteWindow(currentWorker);
+    if (!currentDeleteWindow) {
+      return errorResponse(
+        "Không xác định được thời điểm tạo tài khoản từ PocketBase.",
+        502,
+        "ACCOUNT_CREATED_AT_UNAVAILABLE",
+      );
+    }
+    if (currentDeleteWindow.expired) {
+      return errorResponse(
+        "Tài khoản đã quá thời hạn 72 giờ kể từ khi được tạo nên không thể xóa.",
+        409,
+        "ACCOUNT_DELETE_WINDOW_EXPIRED",
+        {
+          createdAt: currentDeleteWindow.createdAt,
+          deleteWindowExpiresAt: currentDeleteWindow.deleteWindowExpiresAt,
+        },
+      );
+    }
+
+    const currentPreview = await getWorkerDeletePreview(currentWorker, verifiedToken);
+    if (currentPreview.dependencies.length > 0) {
       return errorResponse(
         "Không thể xóa vì NLĐ đang có nghiệp vụ liên quan tới tiền. Hãy xử lý các nghiệp vụ này trước hoặc vô hiệu hóa tài khoản.",
         409,
         "WORKER_HAS_DEPENDENCIES",
-        { dependencies },
+        { dependencies: currentPreview.dependencies },
       );
     }
 
-    await deleteWorkerWithLog(auth.user, worker, employmentHistoryCount, verifiedToken);
+    await deleteWorkerWithLog(
+      auth.user,
+      currentWorker,
+      currentPreview.employmentHistoryCount,
+      verifiedToken,
+    );
     return Response.json({
       deleted: true,
       workerId,
-      deletedEmploymentHistoryCount: employmentHistoryCount,
+      deletedEmploymentHistoryCount: currentPreview.employmentHistoryCount,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Không thể xóa tài khoản NLĐ.";

@@ -328,21 +328,44 @@ export function getWorkerActionLabel(log: StaffActionLogRecord) {
   return labels[getWorkerActionKind(log)];
 }
 
+function summarizeChangedFields(log: StaffActionLogRecord) {
+  const fields = changedFieldNames(log).map(getStaffActionFieldLabel);
+
+  if (!fields.length) return "";
+
+  if (fields.length <= 2) return `Đã cập nhật ${fields.join(" và ")}`;
+
+  return `Đã cập nhật ${fields.slice(0, 2).join(", ")} và ${fields.length - 2} trường khác`;
+}
+
 export function getWorkerActionSummary(log: StaffActionLogRecord) {
   const kind = getWorkerActionKind(log);
-  if (kind !== "advance_report" && kind !== "advance_withdraw") {
-    return log.note || getStaffActionCollectionLabel(log.target_collection);
+
+  if (kind === "advance_report" || kind === "advance_withdraw") {
+    const snapshot = toRecord(kind === "advance_withdraw" ? log.before : log.after);
+
+    const amount = numericValue(snapshot?.amount);
+
+    const reason = textValue(snapshot?.reason);
+
+    const payoutMethod = textValue(snapshot?.payout_method);
+
+    const parts: string[] = [];
+
+    if (amount > 0) parts.push(`${new Intl.NumberFormat("vi-VN").format(amount)} đ`);
+
+    if (payoutMethod) parts.push(PAYOUT_METHOD_LABELS[payoutMethod] || payoutMethod);
+
+    if (reason) parts.push(`Lý do: ${reason}`);
+
+    return parts.join(" · ") || log.note || getStaffActionCollectionLabel(log.target_collection);
   }
 
-  const snapshot = toRecord(kind === "advance_withdraw" ? log.before : log.after);
-  const amount = numericValue(snapshot?.amount);
-  const reason = textValue(snapshot?.reason);
-  const payoutMethod = textValue(snapshot?.payout_method);
-  const parts: string[] = [];
-  if (amount > 0) parts.push(`${new Intl.NumberFormat("vi-VN").format(amount)} đ`);
-  if (payoutMethod) parts.push(PAYOUT_METHOD_LABELS[payoutMethod] || payoutMethod);
-  if (reason) parts.push(`Lý do: ${reason}`);
-  return parts.join(" · ") || log.note || getStaffActionCollectionLabel(log.target_collection);
+  const changedSummary = summarizeChangedFields(log);
+
+  if (log.action === "update" && changedSummary) return changedSummary;
+
+  return log.note || changedSummary || getStaffActionCollectionLabel(log.target_collection);
 }
 
 function timestamp(value?: string) {

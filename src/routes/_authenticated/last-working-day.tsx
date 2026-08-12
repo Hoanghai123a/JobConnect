@@ -1,5 +1,5 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, CheckCircle2, FileSpreadsheet, Loader2, Upload } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
@@ -21,10 +21,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { pb, type UserRecord } from "@/lib/pocketbase";
+import { useAuth } from "@/lib/auth";
 import { toast } from "@/lib/toast";
 import {
-  detectMapping,
   downloadLastWorkingDayResults,
   parseExcelDate,
   processLastWorkingDays,
@@ -38,11 +37,6 @@ import {
 } from "@/lib/last-working-day";
 
 export const Route = createFileRoute("/_authenticated/last-working-day")({
-  beforeLoad: () => {
-    if (typeof window === "undefined") return;
-    const user = pb.authStore.record as UserRecord | null;
-    if (user?.role !== "admin" && user?.role !== "staff") throw redirect({ to: "/" });
-  },
   component: LastWorkingDayPage,
 });
 
@@ -60,11 +54,26 @@ const LAYOUTS: Array<{ value: LastWorkingDayLayout; label: string; description: 
   {
     value: "horizontal-multi",
     label: "Dạng ngang nhiều dòng",
-    description: "Các dòng trống mã NV tiếp nối nhân viên gần nhất phía trên.",
+    description:
+      "Các dòng trống mã NV tiếp nối mã gần nhất phía trên; mã NV lặp lại vẫn được gộp chung.",
   },
 ];
 
+function createEmptyMapping(headerRow = 0): ColumnMapping {
+  return {
+    headerRow,
+    employeeCodeColumn: -1,
+    employeeNameColumn: undefined,
+    dateColumn: undefined,
+    hoursColumn: undefined,
+    dateStartColumn: undefined,
+    dateEndColumn: undefined,
+  };
+}
+
 function LastWorkingDayPage() {
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [layout, setLayout] = useState<LastWorkingDayLayout>("vertical");
   const [file, setFile] = useState<File | null>(null);
@@ -73,25 +82,35 @@ function LastWorkingDayPage() {
   const [rows, setRows] = useState<SheetRows>([]);
   const [mapping, setMapping] = useState<ColumnMapping | null>(null);
   const [mappingOpen, setMappingOpen] = useState(false);
+  const [mappingConfirmed, setMappingConfirmed] = useState(false);
   const [issues, setIssues] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("Chưa chọn file Excel");
+
+  useEffect(() => {
+    if (!authLoading && user?.role !== "admin" && user?.role !== "staff") {
+      void navigate({ to: "/", replace: true });
+    }
+  }, [authLoading, navigate, user?.role]);
 
   const headers = useMemo(() => {
     const row = mapping ? (rows[mapping.headerRow] ?? []) : [];
     return row.map((cell, index) => String(cell || `Cột ${index + 1}`));
   }, [mapping, rows]);
 
-  const detect = (nextRows: SheetRows, nextLayout = layout) => {
-    const detected = detectMapping(nextRows, nextLayout);
-    setMapping(detected.mapping);
-    setIssues(detected.issues);
-    setStatus(
-      detected.confident
-        ? "Đã nhận diện cấu trúc file. Sẵn sàng xử lý."
-        : "Cần chọn lại cột trước khi xử lý.",
-    );
-    if (!detected.confident) setMappingOpen(true);
+  if (authLoading || (user?.role !== "admin" && user?.role !== "staff")) return null;
+
+  const columnLabel = (column?: number) => {
+    if (column == null || column < 0) return "Chưa chọn";
+    return headers[column] || `Cột ${column + 1}`;
+  };
+
+  const requireManualMapping = (nextRows: SheetRows) => {
+    setMapping(createEmptyMapping(nextRows.length ? 0 : -1));
+    setMappingConfirmed(false);
+    setIssues([]);
+    setStatus("Vui lòng gán cấu trúc Excel trước khi xử lý.");
+    setMappingOpen(true);
   };
 
   const handleFile = async (selectedFile?: File) => {
@@ -107,7 +126,7 @@ function LastWorkingDayPage() {
       setWorkbookData(loaded);
       setSheetName(firstSheet);
       setRows(nextRows);
-      detect(nextRows);
+      requireManualMapping(nextRows);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Không thể đọc file Excel.";
       setStatus(message);
@@ -123,20 +142,16 @@ function LastWorkingDayPage() {
     const nextRows = readSheetRows(workbookData.workbook, nextSheet);
     setSheetName(nextSheet);
     setRows(nextRows);
-    detect(nextRows);
+    requireManualMapping(nextRows);
   };
 
   const changeLayout = (nextLayout: LastWorkingDayLayout) => {
     setLayout(nextLayout);
-    if (rows.length) detect(rows, nextLayout);
+    if (rows.length) requireManualMapping(rows);
   };
 
   const handleProcess = () => {
-    if (!file || !mapping) return;
-    if (issues.length) {
-      setMappingOpen(true);
-      return;
-    }
+    if (!file || !mapping || !mappingConfirmed) return;
     setBusy(true);
     setStatus("Đang xử lý và tạo file kết quả...");
     try {
@@ -157,27 +172,54 @@ function LastWorkingDayPage() {
   };
 
   const updateHeaderRow = (value: string) => {
-    const headerRow = Number(value);
-    const next = detectMapping([rows[headerRow] ?? []], layout).mapping;
-    setMapping({ ...next, headerRow });
+    setMapping(createEmptyMapping(Number(value)));
+    setMappingConfirmed(false);
+    setIssues([]);
   };
 
   const confirmMapping = () => {
     if (!mapping) return;
     const nextIssues: string[] = [];
+    const header = rows[mapping.headerRow] ?? [];
+    if (mapping.headerRow < 0 || !header.length) nextIssues.push("Vui lòng chọn dòng tiêu đề.");
     if (mapping.employeeCodeColumn < 0) nextIssues.push("Vui lòng chọn cột Mã NV.");
-    if (layout === "vertical" && mapping.dateColumn == null)
-      nextIssues.push("Vui lòng chọn cột Ngày/tháng.");
-    if (layout === "vertical" && mapping.hoursColumn == null)
-      nextIssues.push("Vui lòng chọn cột Số giờ.");
-    if (layout !== "vertical") {
-      const hasDates = (rows[mapping.headerRow] ?? []).some((cell) =>
-        Boolean(parseExcelDate(cell)),
-      );
-      if (!hasDates) nextIssues.push("Dòng tiêu đề không có cột ngày hợp lệ.");
+
+    if (layout === "vertical") {
+      if (mapping.dateColumn == null) nextIssues.push("Vui lòng chọn cột Ngày/tháng.");
+      if (mapping.hoursColumn == null) nextIssues.push("Vui lòng chọn cột Số giờ.");
+      if (mapping.employeeCodeColumn === mapping.dateColumn)
+        nextIssues.push("Cột Mã NV không được trùng với cột Ngày/tháng.");
+      if (mapping.employeeCodeColumn === mapping.hoursColumn)
+        nextIssues.push("Cột Mã NV không được trùng với cột Số giờ.");
+    } else {
+      if (mapping.dateStartColumn == null) nextIssues.push("Vui lòng chọn cột ngày bắt đầu.");
+      if (mapping.dateEndColumn == null) nextIssues.push("Vui lòng chọn cột ngày kết thúc.");
+      if (
+        mapping.dateStartColumn != null &&
+        mapping.dateEndColumn != null &&
+        mapping.dateEndColumn < mapping.dateStartColumn
+      ) {
+        nextIssues.push("Cột ngày kết thúc không thể đứng trước cột ngày bắt đầu.");
+      }
+      if (mapping.employeeCodeColumn === mapping.dateStartColumn)
+        nextIssues.push("Cột Mã NV không được trùng với cột ngày bắt đầu.");
+      if (mapping.employeeCodeColumn === mapping.dateEndColumn)
+        nextIssues.push("Cột Mã NV không được trùng với cột ngày kết thúc.");
+      if (
+        mapping.dateStartColumn != null &&
+        mapping.dateEndColumn != null &&
+        mapping.dateEndColumn >= mapping.dateStartColumn
+      ) {
+        const hasDates = header
+          .slice(mapping.dateStartColumn, mapping.dateEndColumn + 1)
+          .some((cell) => Boolean(parseExcelDate(cell)));
+        if (!hasDates) nextIssues.push("Khoảng cột đã chọn không có ngày hợp lệ.");
+      }
     }
+
     setIssues(nextIssues);
     if (nextIssues.length) return;
+    setMappingConfirmed(true);
     setStatus("Đã xác nhận cấu trúc file. Sẵn sàng xử lý.");
     setMappingOpen(false);
   };
@@ -197,7 +239,7 @@ function LastWorkingDayPage() {
           <div>
             <div className="font-semibold">Xử lý an toàn ngay trên thiết bị</div>
             <p className="mt-1 text-sm leading-5 text-muted-foreground">
-              File không được tải lên hệ thống. Kết quả sẽ tự động tải về dưới dạng Excel.
+              File không được tải lên hệ thống. Mỗi file cần gán cột thủ công trước khi xử lý.
             </p>
           </div>
         </div>
@@ -274,9 +316,49 @@ function LastWorkingDayPage() {
             </div>
           </div>
 
+          {mappingConfirmed && mapping && (
+            <div className="grid gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm desktop:grid-cols-2">
+              <div>
+                <span className="text-muted-foreground">Mã NV:</span>{" "}
+                <strong>{columnLabel(mapping.employeeCodeColumn)}</strong>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Họ tên:</span>{" "}
+                <strong>
+                  {mapping.employeeNameColumn == null
+                    ? "Không có"
+                    : columnLabel(mapping.employeeNameColumn)}
+                </strong>
+              </div>
+              {layout === "vertical" ? (
+                <>
+                  <div>
+                    <span className="text-muted-foreground">Ngày:</span>{" "}
+                    <strong>{columnLabel(mapping.dateColumn)}</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Số giờ:</span>{" "}
+                    <strong>{columnLabel(mapping.hoursColumn)}</strong>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <span className="text-muted-foreground">Ngày bắt đầu:</span>{" "}
+                    <strong>{columnLabel(mapping.dateStartColumn)}</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Ngày kết thúc:</span>{" "}
+                    <strong>{columnLabel(mapping.dateEndColumn)}</strong>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/30 p-4 desktop:flex-row desktop:items-center desktop:justify-between">
             <div className="flex items-start gap-3 text-sm">
-              {file && issues.length === 0 ? (
+              {file && mappingConfirmed ? (
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
               ) : (
                 <FileSpreadsheet className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
@@ -291,13 +373,13 @@ function LastWorkingDayPage() {
             <div className="flex flex-col gap-2 sm:flex-row">
               {file && (
                 <Button type="button" variant="outline" onClick={() => setMappingOpen(true)}>
-                  Kiểm tra cột
+                  Gán lại cột
                 </Button>
               )}
               <Button
                 type="button"
                 onClick={handleProcess}
-                disabled={!file || !mapping || busy}
+                disabled={!file || !mapping || !mappingConfirmed || busy}
                 className="bg-emerald-600 hover:bg-emerald-700"
               >
                 {busy ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />}
@@ -308,12 +390,18 @@ function LastWorkingDayPage() {
         </div>
       </Card>
 
-      <Dialog open={mappingOpen} onOpenChange={setMappingOpen}>
+      <Dialog
+        open={mappingOpen}
+        onOpenChange={(open) => {
+          setMappingOpen(open);
+          if (!open && !mappingConfirmed) setStatus("Vui lòng gán cấu trúc Excel trước khi xử lý.");
+        }}
+      >
         <DialogContent className="desktop:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Kiểm tra cấu trúc Excel</DialogTitle>
+            <DialogTitle>Gán cấu trúc Excel</DialogTitle>
             <DialogDescription>
-              Chọn dòng tiêu đề và các cột tương ứng nếu hệ thống chưa nhận diện đúng.
+              Chọn chính xác dòng tiêu đề và các cột cần dùng cho file Excel này.
             </DialogDescription>
           </DialogHeader>
           {mapping && (
@@ -329,13 +417,18 @@ function LastWorkingDayPage() {
               />
               <MappingSelect
                 label="Cột Mã NV"
-                value={String(mapping.employeeCodeColumn)}
+                value={mapping.employeeCodeColumn < 0 ? "none" : String(mapping.employeeCodeColumn)}
                 onChange={(value) =>
                   setMapping((current) =>
-                    current ? { ...current, employeeCodeColumn: Number(value) } : current,
+                    current
+                      ? { ...current, employeeCodeColumn: value === "none" ? -1 : Number(value) }
+                      : current,
                   )
                 }
-                options={headers.map((label, index) => ({ value: String(index), label }))}
+                options={[
+                  { value: "none", label: "Chưa chọn cột Mã NV" },
+                  ...headers.map((label, index) => ({ value: String(index), label })),
+                ]}
               />
               <MappingSelect
                 label="Cột Họ tên (không bắt buộc)"
@@ -357,7 +450,7 @@ function LastWorkingDayPage() {
                   ...headers.map((label, index) => ({ value: String(index), label })),
                 ]}
               />
-              {layout === "vertical" && (
+              {layout === "vertical" ? (
                 <>
                   <MappingSelect
                     label="Cột Ngày/tháng"
@@ -393,11 +486,50 @@ function LastWorkingDayPage() {
                     ]}
                   />
                 </>
-              )}
-              {layout !== "vertical" && (
-                <div className="rounded-2xl bg-muted p-3 text-xs leading-5 text-muted-foreground">
-                  Các cột ngày được lấy tự động từ dòng tiêu đề đã chọn.
-                </div>
+              ) : (
+                <>
+                  <MappingSelect
+                    label="Cột ngày bắt đầu"
+                    value={
+                      mapping.dateStartColumn == null ? "none" : String(mapping.dateStartColumn)
+                    }
+                    onChange={(value) =>
+                      setMapping((current) =>
+                        current
+                          ? {
+                              ...current,
+                              dateStartColumn: value === "none" ? undefined : Number(value),
+                            }
+                          : current,
+                      )
+                    }
+                    options={[
+                      { value: "none", label: "Chưa chọn cột ngày bắt đầu" },
+                      ...headers.map((label, index) => ({ value: String(index), label })),
+                    ]}
+                  />
+                  <MappingSelect
+                    label="Cột ngày kết thúc"
+                    value={mapping.dateEndColumn == null ? "none" : String(mapping.dateEndColumn)}
+                    onChange={(value) =>
+                      setMapping((current) =>
+                        current
+                          ? {
+                              ...current,
+                              dateEndColumn: value === "none" ? undefined : Number(value),
+                            }
+                          : current,
+                      )
+                    }
+                    options={[
+                      { value: "none", label: "Chưa chọn cột ngày kết thúc" },
+                      ...headers.map((label, index) => ({ value: String(index), label })),
+                    ]}
+                  />
+                  <div className="rounded-2xl bg-muted p-3 text-xs leading-5 text-muted-foreground">
+                    Hệ thống chỉ đọc các cột trong khoảng đã chọn và bỏ qua tiêu đề không phải ngày.
+                  </div>
+                </>
               )}
               {issues.length > 0 && (
                 <div className="text-sm text-amber-700">{issues.join(" ")}</div>
