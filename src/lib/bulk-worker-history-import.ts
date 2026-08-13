@@ -500,13 +500,7 @@ export async function inspectBulkWorkerImportReferences(
   );
   const recruiterByUsername = new Map(
     users
-      .filter(
-        (user) =>
-          (user.role === "staff" || user.role === "admin") &&
-          !String(user.username || "")
-            .toLowerCase()
-            .startsWith("vd_"),
-      )
+      .filter((user) => user.role === "staff" || user.role === "admin")
       .filter((user) => user.username)
       .map((user) => [accountIdentityKey(user.username), user]),
   );
@@ -783,13 +777,7 @@ export async function prepareBulkWorkerImport(file: File): Promise<PreparedBulkW
   const mainHouseByName = new Map(refs.mainHouses.map((item) => [referenceKey(item.name), item]));
   const recruiterByUsername = new Map(
     refs.users
-      .filter(
-        (user) =>
-          (user.role === "staff" || user.role === "admin") &&
-          !String(user.username || "")
-            .toLowerCase()
-            .startsWith("vd_"),
-      )
+      .filter((user) => user.role === "staff" || user.role === "admin")
       .filter((user) => user.username)
       .map((user) => [accountIdentityKey(user.username), user]),
   );

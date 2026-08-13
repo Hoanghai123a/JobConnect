@@ -67,7 +67,7 @@ function staffSearchFilter(search: string) {
   const searchFilter = q
     ? `(${["full_name", "username", "phone"].map((field) => `${field}~"${q}"`).join(" || ")})`
     : "";
-  return ['role="staff" && username!~"vd_"', searchFilter].filter(Boolean).join(" && ");
+  return ['role="staff"', searchFilter].filter(Boolean).join(" && ");
 }
 
 function formatDateRange(record: FactoryManagerRecord) {

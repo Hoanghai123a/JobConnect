@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -88,7 +88,7 @@ function CombinedRankingChart({
       <ComposedChart data={rows} margin={{ top: 22, right: 10, bottom: 0, left: -16 }}>
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
         <XAxis
-          dataKey="name"
+          dataKey="displayName"
           interval={0}
           height={58}
           tick={{ fontSize: 10 }}
@@ -151,7 +151,7 @@ function RetentionChart({
       <BarChart data={rows} margin={{ top: 22, right: 10, bottom: 0, left: -16 }}>
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
         <XAxis
-          dataKey="name"
+          dataKey="displayName"
           interval={0}
           height={58}
           tick={{ fontSize: 10 }}
@@ -174,7 +174,7 @@ const detailMeta: Record<
   { title: string; description: string; retention?: boolean }
 > = {
   "staff-recruitment": {
-    title: "Toàn bộ Staff tuyển mới",
+    title: "Toàn bộ người tuyển mới",
     description: "Xếp hạng theo số lượt tuyển mới trong khoảng ngày.",
   },
   "factory-recruitment": {
@@ -182,7 +182,7 @@ const detailMeta: Record<
     description: "Xếp hạng theo số lượt tuyển mới trong khoảng ngày.",
   },
   "staff-retention": {
-    title: "Toàn bộ Staff duy trì",
+    title: "Toàn bộ người tuyển duy trì",
     description: "Xếp hạng theo số NLĐ còn đi làm tại ngày kết thúc.",
     retention: true,
   },
@@ -192,8 +192,8 @@ const detailMeta: Record<
     retention: true,
   },
   "unique-staff": {
-    title: "Toàn bộ Staff tuyển mới duy nhất",
-    description: "Mỗi NLĐ chỉ được ghi nhận cho Staff tuyển đầu tiên.",
+    title: "Toàn bộ người tuyển mới duy nhất",
+    description: "Mỗi NLĐ chỉ được ghi nhận cho người tuyển đầu tiên.",
   },
 };
 
@@ -248,8 +248,15 @@ function DetailDialog({
                         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
                           {index + 1}
                         </span>
-                        <span className="min-w-0 truncate font-medium" title={row.name}>
-                          {row.name}
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium" title={row.name}>
+                            {row.name}
+                          </span>
+                          {row.sourceLabel && (
+                            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                              {row.sourceLabel}
+                            </span>
+                          )}
                         </span>
                         {!meta.retention && (
                           <span className="text-right font-semibold tabular-nums text-primary">
@@ -345,7 +352,7 @@ export function WorkforceInsightsCharts({
     <>
       <div className="grid grid-cols-1 items-start gap-4 desktop:grid-cols-2">
         <ChartCard
-          title="Top 5 Staff tuyển mới"
+          title="Top 5 người tuyển mới"
           description="Cột tuyển mới, điểm đã nghỉ và còn đi làm."
           onViewAll={() => setDetail("staff-recruitment")}
         >
@@ -353,7 +360,7 @@ export function WorkforceInsightsCharts({
             rows={rankings.staffRecruitment.slice(0, 5)}
             config={recruitmentConfig}
             minHeight={250}
-            emptyMessage="Chưa có dữ liệu Staff tuyển mới."
+            emptyMessage="Chưa có dữ liệu người tuyển mới."
           />
         </ChartCard>
 
@@ -371,14 +378,14 @@ export function WorkforceInsightsCharts({
         </ChartCard>
 
         <ChartCard
-          title="Top 5 Staff duy trì"
+          title="Top 5 người tuyển duy trì"
           description={`Số NLĐ còn đi làm tại ngày ${formatDate(to)}.`}
           onViewAll={() => setDetail("staff-retention")}
         >
           <RetentionChart
             rows={rankings.staffRetention.slice(0, 5)}
             minHeight={240}
-            emptyMessage="Chưa có dữ liệu Staff duy trì."
+            emptyMessage="Chưa có dữ liệu người tuyển duy trì."
           />
         </ChartCard>
 
@@ -395,8 +402,8 @@ export function WorkforceInsightsCharts({
         </ChartCard>
 
         <ChartCard
-          title="Top 5 Staff tuyển mới duy nhất"
-          description="Mỗi NLĐ chỉ tính một lần cho Staff tuyển đầu tiên."
+          title="Top 5 người tuyển mới duy nhất"
+          description="Mỗi NLĐ chỉ tính một lần cho người tuyển đầu tiên."
           onViewAll={() => setDetail("unique-staff")}
         >
           <CombinedRankingChart

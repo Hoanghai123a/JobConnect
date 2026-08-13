@@ -429,13 +429,7 @@ function AdminImportsPage() {
         pb.collection("users").getFullList<UserRecord>({ sort: "full_name,username" }),
         fetchMainHouses().catch(() => [] as MainHouseRecord[]),
       ]);
-      const staffUsers = allUsers.filter(
-        (item) =>
-          (item.role === "staff" || item.role === "admin") &&
-          !String(item.username || "")
-            .toLowerCase()
-            .startsWith("vd_"),
-      );
+      const staffUsers = allUsers.filter((item) => item.role === "staff" || item.role === "admin");
       const factoryByName = new Map(factoryRows.map((item) => [item.name.toLowerCase(), item]));
       const factoryByCode = new Map(
         factoryRows.map((item) => [(item.code || "").toLowerCase(), item]),

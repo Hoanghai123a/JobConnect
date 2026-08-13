@@ -5,10 +5,6 @@ import type { RecruitmentEntityRecord } from "./recruitment-entities";
 export type RecruiterType = "internal" | "partner";
 export type RecruiterSelectionValue = "" | `${RecruiterType}:${string}`;
 
-export function isLegacyPartnerAccount(user: Partial<UserRecord>) {
-  return user.username?.toLowerCase().startsWith("vd_") ?? false;
-}
-
 export function encodeInternalRecruiter(id?: string): RecruiterSelectionValue {
   return id ? `internal:${id}` : "";
 }
@@ -69,10 +65,7 @@ export function getRecruiterDisplay(history?: EmploymentHistoryRecord | null) {
 
 export function filterInternalRecruiters(users: UserRecord[]) {
   return users.filter(
-    (user) =>
-      (user.role === "staff" || user.role === "admin") &&
-      user.status !== "disabled" &&
-      !isLegacyPartnerAccount(user),
+    (user) => (user.role === "staff" || user.role === "admin") && user.status !== "disabled",
   );
 }
 

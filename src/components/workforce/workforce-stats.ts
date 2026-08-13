@@ -1,10 +1,15 @@
-﻿import type { EmploymentHistoryRecord } from "@/lib/employment";
+import type { EmploymentHistoryRecord } from "@/lib/employment";
 import type { FactoryRecord } from "@/lib/factories";
 import type { UserRecord } from "@/lib/pocketbase";
+
+export type WorkforceMetricSource = "internal" | "partner";
 
 export type WorkforceMetricRow = {
   id: string;
   name: string;
+  displayName: string;
+  source?: WorkforceMetricSource;
+  sourceLabel?: "Nội bộ" | "Đối tác";
   joined: number;
   left: number;
   working: number;
@@ -146,28 +151,51 @@ export function buildWorkforceRankings(
 ) {
   const userById = new Map(users.map((user) => [user.id, user]));
   const factoryById = new Map(factories.map((factory) => [factory.id, factory]));
-  const staffRows = new Map<string, WorkforceMetricRow>();
+  const recruiterRows = new Map<string, WorkforceMetricRow>();
   const factoryRows = new Map<string, WorkforceMetricRow>();
 
-  const ensureStaff = (id: string) => {
-    const user = userById.get(id);
-    if (user?.role && user.role !== "staff") return null;
-    const current = staffRows.get(id) || {
-      id,
-      name: user?.full_name || user?.username || "Staff chưa xác định",
+  const recruiterInfo = (history: EmploymentHistoryRecord) => {
+    if (history.recruiter_partner) {
+      const partner = history.expand?.recruiter_partner;
+      return {
+        id: `partner:${history.recruiter_partner}`,
+        name: partner?.name || "Đối tác chưa xác định",
+        source: "partner" as const,
+        sourceLabel: "Đối tác" as const,
+      };
+    }
+    if (!history.recruiter_staff) return null;
+    const staff = userById.get(history.recruiter_staff) || history.expand?.recruiter_staff;
+    if (staff?.role && staff.role !== "staff" && staff.role !== "admin") return null;
+    return {
+      id: `internal:${history.recruiter_staff}`,
+      name: staff?.full_name || staff?.username || "Nhân sự chưa xác định",
+      source: "internal" as const,
+      sourceLabel: "Nội bộ" as const,
+    };
+  };
+
+  const ensureRecruiter = (history: EmploymentHistoryRecord) => {
+    const info = recruiterInfo(history);
+    if (!info) return null;
+    const current = recruiterRows.get(info.id) || {
+      ...info,
+      displayName: `${info.name} (${info.sourceLabel})`,
       joined: 0,
       left: 0,
       working: 0,
     };
-    staffRows.set(id, current);
+    recruiterRows.set(info.id, current);
     return current;
   };
 
   const ensureFactory = (id: string) => {
     const factory = factoryById.get(id);
+    const name = factory?.name || "Chưa gắn nhà máy";
     const current = factoryRows.get(id) || {
       id,
-      name: factory?.name || "Chưa gắn nhà máy",
+      name,
+      displayName: name,
       joined: 0,
       left: 0,
       working: 0,
@@ -177,36 +205,34 @@ export function buildWorkforceRankings(
   };
 
   for (const history of histories) {
-    const staff = history.recruiter_staff ? ensureStaff(history.recruiter_staff) : null;
+    const recruiter = ensureRecruiter(history);
     const factory = ensureFactory(history.factory || "__unassigned__");
     if (isDateInRange(history.join_date, from, to)) {
-      if (staff) staff.joined++;
+      if (recruiter) recruiter.joined++;
       factory.joined++;
     }
     if (isDateInRange(history.leave_date, from, to)) {
-      if (staff) staff.left++;
+      if (recruiter) recruiter.left++;
       factory.left++;
     }
   }
 
   for (const history of getActiveHistoriesAtDate(histories, to)) {
-    if (history.recruiter_staff) {
-      const staff = ensureStaff(history.recruiter_staff);
-      if (staff) staff.working++;
-    }
+    const recruiter = ensureRecruiter(history);
+    if (recruiter) recruiter.working++;
     ensureFactory(history.factory || "__unassigned__").working++;
   }
 
-  const uniqueStaffRows = new Map<string, WorkforceMetricRow>();
+  const uniqueRecruiterRows = new Map<string, WorkforceMetricRow>();
   const byUser = groupHistoriesByUser(histories);
   for (const rows of byUser.values()) {
     const first = rows[0];
-    if (!first || !isDateInRange(first.join_date, from, to) || !first.recruiter_staff) continue;
-    const staffUser = userById.get(first.recruiter_staff);
-    if (staffUser?.role && staffUser.role !== "staff") continue;
-    const row = uniqueStaffRows.get(first.recruiter_staff) || {
-      id: first.recruiter_staff,
-      name: staffUser?.full_name || staffUser?.username || "Staff chưa xác định",
+    if (!first || !isDateInRange(first.join_date, from, to)) continue;
+    const info = recruiterInfo(first);
+    if (!info) continue;
+    const row = uniqueRecruiterRows.get(info.id) || {
+      ...info,
+      displayName: `${info.name} (${info.sourceLabel})`,
       joined: 0,
       left: 0,
       working: 0,
@@ -214,25 +240,27 @@ export function buildWorkforceRankings(
     row.joined++;
     if (getActiveHistoryAtDate(rows, to)) row.working++;
     else row.left++;
-    uniqueStaffRows.set(row.id, row);
+    uniqueRecruiterRows.set(row.id, row);
   }
 
-  const staff = [...staffRows.values()].filter((row) => row.joined || row.left || row.working);
+  const recruiters = [...recruiterRows.values()].filter(
+    (row) => row.joined || row.left || row.working,
+  );
   const factory = [...factoryRows.values()].filter((row) => row.joined || row.left || row.working);
-  const uniqueStaff = [...uniqueStaffRows.values()];
+  const uniqueRecruiters = [...uniqueRecruiterRows.values()];
 
   return {
-    staffRecruitment: sortRows([...staff], "joined"),
+    staffRecruitment: sortRows([...recruiters], "joined"),
     factoryRecruitment: sortRows([...factory], "joined"),
     staffRetention: sortRows(
-      [...staff].filter((row) => row.working > 0),
+      [...recruiters].filter((row) => row.working > 0),
       "working",
     ),
     factoryRetention: sortRows(
       [...factory].filter((row) => row.working > 0),
       "working",
     ),
-    uniqueStaffRecruitment: sortRows(uniqueStaff, "joined"),
+    uniqueStaffRecruitment: sortRows(uniqueRecruiters, "joined"),
   };
 }
 

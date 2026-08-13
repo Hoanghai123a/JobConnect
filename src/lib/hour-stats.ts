@@ -1,4 +1,4 @@
-﻿import type { EmploymentHistoryRecord } from "./employment";
+import type { EmploymentHistoryRecord } from "./employment";
 import { aggregate, type AttendanceRow, type RateBuckets } from "./salary";
 
 export type HourStatSource = "attendance" | "salary";
@@ -37,6 +37,7 @@ export interface WorkerHourStat {
   factoryName: string;
   recruiterId: string;
   recruiterName: string;
+  recruiterType: "internal" | "partner" | "unassigned";
   source: HourStatSource;
   hours: number;
   roundNo: number;
@@ -45,6 +46,7 @@ export interface WorkerHourStat {
 export interface RecruiterHourGroup {
   recruiterId: string;
   recruiterName: string;
+  recruiterType: "internal" | "partner" | "unassigned";
   hours: number;
   workers: WorkerHourStat[];
 }
@@ -171,7 +173,18 @@ export function buildWorkerHourStats({
 
     const history = selectHistory(historiesByWorker.get(userId) || [], month, salaryItem);
     const user = history?.expand?.user;
+    const partner = history?.expand?.recruiter_partner;
     const recruiter = history?.expand?.recruiter_staff;
+    const recruiterType = history?.recruiter_partner
+      ? "partner"
+      : history?.recruiter_staff
+        ? "internal"
+        : "unassigned";
+    const recruiterId = history?.recruiter_partner
+      ? `partner:${history.recruiter_partner}`
+      : history?.recruiter_staff
+        ? `internal:${history.recruiter_staff}`
+        : "";
     stats.push({
       userId,
       fullName: user?.full_name?.trim() || user?.username?.trim() || "NLĐ chưa xác định",
@@ -182,9 +195,13 @@ export function buildWorkerHourStats({
         history?.expand?.factory?.name?.trim() ||
         salaryItem?.personal?.company?.trim() ||
         "Chưa có nhà máy",
-      recruiterId: history?.recruiter_staff || "",
+      recruiterId,
       recruiterName:
-        recruiter?.full_name?.trim() || recruiter?.username?.trim() || "Chưa gán người tuyển",
+        partner?.name?.trim() ||
+        recruiter?.full_name?.trim() ||
+        recruiter?.username?.trim() ||
+        "Ch?a g?n ng??i tuy?n",
+      recruiterType,
       source,
       hours: source === "attendance" ? attendanceHours(attendanceItem!) : salaryHours(salaryItem!),
       roundNo: Number(sourceItem.round_no || 0),
@@ -205,6 +222,7 @@ export function groupWorkerHourStats(rows: WorkerHourStat[]) {
     const group = groups.get(key) || {
       recruiterId: row.recruiterId,
       recruiterName: row.recruiterName,
+      recruiterType: row.recruiterType,
       hours: 0,
       workers: [],
     };

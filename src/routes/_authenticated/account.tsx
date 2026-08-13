@@ -2309,7 +2309,7 @@ const STAFF_DEFAULT_PASSWORD = "nv123456";
 
 function staffSearchFilter(search: string) {
   const q = escapePb(search.trim());
-  const roleFilter = '((role="staff" || role="admin") && username!~"vd_")';
+  const roleFilter = '(role="staff" || role="admin")';
   if (!q) return roleFilter;
   const searchFilter = `(${["full_name", "username", "phone", "address"]
     .map((field) => `${field}~"${q}"`)
@@ -2870,7 +2870,7 @@ function FactoryAssignmentsPanel() {
         pb
           .collection("users")
           .getList<UserRecord>(1, 200, {
-            filter: buildUserSearchFilter(debouncedSearch, `role="staff" && username!~"vd_"`),
+            filter: buildUserSearchFilter(debouncedSearch, `role="staff"`),
             sort: "full_name,username",
           })
           .then((res) => res.items),

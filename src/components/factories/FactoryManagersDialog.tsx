@@ -47,7 +47,7 @@ export function FactoryManagersDialog({
         pb
           .collection("users")
           .getList<UserRecord>(1, 200, {
-            filter: 'role = "staff" && username !~ "vd_"',
+            filter: 'role = "staff"',
             sort: "full_name,username",
           })
           .then((res) => res.items),

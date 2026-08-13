@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
   BarChart3,
   Building2,
@@ -80,7 +80,7 @@ export function HourStatsDashboard({ presentation = "embedded" }: HourStatsDashb
         : ((await pb.collection("employment_histories").getFullList({
             filter: `recruiter_staff="${escapePb(viewer.id)}"`,
             sort: "-join_date,-created",
-            expand: "user,factory,recruiter_staff",
+            expand: "user,factory,recruiter_staff,recruiter_partner",
           })) as unknown as EmploymentHistoryRecord[]);
       const staffWorkerFilter = isAdmin
         ? ""
@@ -116,7 +116,8 @@ export function HourStatsDashboard({ presentation = "embedded" }: HourStatsDashb
   );
 
   const scopedRows = useMemo(
-    () => (isAdmin ? allRows : allRows.filter((row) => row.recruiterId === viewer?.id)),
+    () =>
+      isAdmin ? allRows : allRows.filter((row) => row.recruiterId === `internal:${viewer?.id}`),
     [allRows, isAdmin, viewer?.id],
   );
 
@@ -154,6 +155,12 @@ export function HourStatsDashboard({ presentation = "embedded" }: HourStatsDashb
     exportToExcel(`thong_ke_gio_${month}`, {
       "Thống kê giờ": filteredRows.map((row) => ({
         "Người tuyển": row.recruiterName,
+        "Nguồn tuyển":
+          row.recruiterType === "partner"
+            ? "Đối tác"
+            : row.recruiterType === "internal"
+              ? "Nội bộ"
+              : "Chưa gắn",
         "Họ tên NLĐ": row.fullName,
         "Mã NV": row.employeeCode,
         "Nhà máy": row.factoryName,
@@ -290,8 +297,17 @@ export function HourStatsDashboard({ presentation = "embedded" }: HourStatsDashb
                   <Users className="h-5 w-5" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold">
-                    {group.recruiterName}
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="min-w-0 truncate text-sm font-semibold">
+                      {group.recruiterName}
+                    </span>
+                    <StatusChip tone={group.recruiterType === "partner" ? "info" : "neutral"}>
+                      {group.recruiterType === "partner"
+                        ? "Đối tác"
+                        : group.recruiterType === "internal"
+                          ? "Nội bộ"
+                          : "Chưa gắn"}
+                    </StatusChip>
                   </span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">
                     {group.workers.length} NLĐ · {formatHours(group.hours)} giờ

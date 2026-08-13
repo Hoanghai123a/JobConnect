@@ -1,4 +1,4 @@
-﻿import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchFactories, type FactoryRecord } from "./factories";
 import { fetchRecruitmentEntities, type RecruitmentEntityRecord } from "./recruitment-entities";
 import { pb, type UserRecord } from "./pocketbase";
@@ -74,7 +74,7 @@ export function useStaffDirectoryAuxQuery(viewer: UserRecord | null) {
           fetchFactories(),
           fetchRecruitmentEntities(),
           pb.collection("users").getFullList<UserRecord>({
-            filter: `(role="staff" || role="admin") && username!~"vd_"`,
+            filter: `(role="staff" || role="admin")`,
             sort: "full_name,username",
           }),
         ]);
