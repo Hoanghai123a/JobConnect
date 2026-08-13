@@ -65,7 +65,7 @@ async function ensureUidCounterCollection() {
       ],
       indexes: [counterIndex],
     });
-    console.log("?? t?o collection uid_counters.");
+    console.log("Đã tạo collection uid_counters.");
   } else {
     const desiredByName = new Map(desiredFields.map((field) => [field.name, field]));
     const fields = collection.fields.map((field) => {
@@ -80,26 +80,10 @@ async function ensureUidCounterCollection() {
       fields,
       indexes: [...new Set([...(collection.indexes || []), counterIndex])],
     });
-    console.log("?? ki?m tra collection uid_counters.");
+    console.log("Đã kiểm tra collection uid_counters.");
   }
 
-  for (const [name, indexName, indexSql] of [
-    [
-      "users",
-      "idx_users_uid_unique",
-      "CREATE UNIQUE INDEX `idx_users_uid_unique` ON `users` (`uid`) WHERE `uid` != ''",
-    ],
-    [
-      "employment_histories",
-      "idx_employment_histories_uid_unique",
-      "CREATE UNIQUE INDEX `idx_employment_histories_uid_unique` ON `employment_histories` (`uid`) WHERE `uid` != ''",
-    ],
-  ]) {
-    const target = await pb.collections.getOne(name);
-    if ((target.indexes || []).some((index) => index.includes(indexName))) continue;
-    await pb.collections.update(target.id, { indexes: [...(target.indexes || []), indexSql] });
-    console.log(`?? th?m unique index UID cho ${name}.`);
-  }
+  return true;
 }
 
 await ensureUidCounterCollection();
@@ -159,6 +143,31 @@ for (const history of histories)
     sequence: Number(m[4]),
   }));
 
+async function ensureUniqueUidIndex(collectionName, indexName, indexSql, duplicateGroups) {
+  const target = await pb.collections.getOne(collectionName);
+  if ((target.indexes || []).some((index) => index.includes(indexName))) {
+    console.log(`Unique index UID của ${collectionName} đã tồn tại.`);
+    return true;
+  }
+  if (duplicateGroups.length) {
+    console.warn(
+      `Bỏ qua unique index ${indexName}: collection ${collectionName} đang có ${duplicateGroups.length} nhóm UID trùng.`,
+    );
+    return false;
+  }
+  try {
+    await pb.collections.update(target.id, {
+      indexes: [...(target.indexes || []), indexSql],
+    });
+    console.log(`Đã thêm unique index UID cho ${collectionName}.`);
+    return true;
+  } catch (error) {
+    console.warn(`Không thể tạo unique index ${indexName}; bộ đếm UID vẫn đã được khởi tạo.`);
+    console.warn(JSON.stringify(error?.response?.data || error?.response || {}, null, 2));
+    return false;
+  }
+}
+
 for (const item of maxima.values()) {
   const existing = counterByKey.get(item.counter_key);
   if (existing && Number(existing.current_value || 0) >= item.current_value) continue;
@@ -167,7 +176,36 @@ for (const item of maxima.values()) {
   else await pb.collection("uid_counters").create(payload);
 }
 
-console.log(
-  JSON.stringify({ configuredPrefix, countersChecked: maxima.size, invalid, duplicates }, null, 2),
+const duplicateUsers = duplicates.filter((item) => item.collection === "users");
+const duplicateHistories = duplicates.filter((item) => item.collection === "employment_histories");
+const userUidIndexReady = await ensureUniqueUidIndex(
+  "users",
+  "idx_users_uid_unique",
+  "CREATE UNIQUE INDEX `idx_users_uid_unique` ON `users` (`uid`) WHERE `uid` != ''",
+  duplicateUsers,
 );
-if (duplicates.length) process.exitCode = 2;
+const historyUidIndexReady = await ensureUniqueUidIndex(
+  "employment_histories",
+  "idx_employment_histories_uid_unique",
+  "CREATE UNIQUE INDEX `idx_employment_histories_uid_unique` ON `employment_histories` (`uid`) WHERE `uid` != ''",
+  duplicateHistories,
+);
+
+console.log(
+  JSON.stringify(
+    {
+      configuredPrefix,
+      countersChecked: maxima.size,
+      invalid,
+      duplicates,
+      uniqueIndexes: { users: userUidIndexReady, employmentHistories: historyUidIndexReady },
+    },
+    null,
+    2,
+  ),
+);
+if (duplicates.length) {
+  console.warn(
+    "Đã khởi tạo bộ đếm nhưng cần xử lý UID trùng rồi chạy lại script để tạo unique index.",
+  );
+}
