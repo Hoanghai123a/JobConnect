@@ -24,7 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import {
   exportCccdHistoryArchive,
-  filterCccdHistoriesByJoinDate,
+  filterCccdHistoriesByLeaveDate,
   matchCccdHistoriesFromExcelRows,
   prepareCccdHistoryExport,
   type CccdHistoryExcelMatchResult,
@@ -77,8 +77,7 @@ export function CccdHistoryExportDialog({
   const [source, setSource] = useState<CccdHistorySelectionSource>("date-range");
   const [mode, setMode] = useState<CccdHistoryExportMode>("folders");
   const [factoryIds, setFactoryIds] = useState<string[]>([]);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [excelFileName, setExcelFileName] = useState("");
   const [excelResult, setExcelResult] = useState<CccdHistoryExcelMatchResult | null>(null);
   const [excelReading, setExcelReading] = useState(false);
@@ -92,17 +91,15 @@ export function CccdHistoryExportDialog({
     message: "",
   });
   const busy = excelReading || preparing || exporting;
-  const hasPartialDate = Boolean(fromDate) !== Boolean(toDate);
-  const dateOrderInvalid = Boolean(fromDate && toDate && fromDate > toDate);
-  const dateRangeValid = factoryIds.length > 0 && !hasPartialDate && !dateOrderInvalid;
+  const dateSelectionValid = factoryIds.length > 0 && Boolean(endDate);
 
   const selectedHistories = useMemo(() => {
     if (source === "excel") return excelResult?.histories ?? [];
-    return filterCccdHistoriesByJoinDate(histories, factoryIds, fromDate, toDate);
-  }, [excelResult, factoryIds, fromDate, histories, source, toDate]);
+    return filterCccdHistoriesByLeaveDate(histories, factoryIds, endDate);
+  }, [endDate, excelResult, factoryIds, histories, source]);
 
   const selectionReady =
-    source === "date-range" ? dateRangeValid : Boolean(excelResult && !excelResult.blockingError);
+    source === "date-range" ? dateSelectionValid : Boolean(excelResult && !excelResult.blockingError);
   const largeSelection = selectedHistories.length > LARGE_EXPORT_THRESHOLD;
 
   useEffect(() => {
@@ -110,8 +107,7 @@ export function CccdHistoryExportDialog({
     setSource("date-range");
     setMode("folders");
     setFactoryIds([]);
-    setFromDate("");
-    setToDate("");
+    setEndDate("");
     setExcelFileName("");
     setExcelResult(null);
     setLargeExportConfirmed(false);
@@ -266,40 +262,19 @@ export function CccdHistoryExportDialog({
                 disabled={busy}
               />
               <div className="rounded-xl bg-background/70 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
-                Để trống cả hai ngày để xuất toàn bộ lịch sử của các nhà máy đã chọn.
+                Xuất NLĐ chưa có ngày nghỉ hoặc có ngày nghỉ không muộn hơn ngày kết thúc.
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Từ ngày vào</Label>
-                  <DateInput
-                    value={fromDate}
-                    onChange={setFromDate}
-                    max={toDate || undefined}
-                    disabled={busy}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Đến ngày vào</Label>
-                  <DateInput
-                    value={toDate}
-                    onChange={setToDate}
-                    min={fromDate || undefined}
-                    disabled={busy}
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Ngày kết thúc</Label>
+                <DateInput value={endDate} onChange={setEndDate} disabled={busy} />
               </div>
-              {hasPartialDate && (
-                <div className="text-xs text-destructive">
-                  Vui lòng nhập đủ Từ ngày và Đến ngày hoặc để trống cả hai.
-                </div>
+              {!endDate && (
+                <div className="text-xs text-destructive">Vui lòng chọn ngày kết thúc.</div>
               )}
               {!factoryIds.length && (
                 <div className="text-xs text-destructive">Vui lòng chọn ít nhất một nhà máy.</div>
               )}
-              {dateOrderInvalid && (
-                <div className="text-xs text-destructive">Từ ngày không được lớn hơn Đến ngày.</div>
-              )}
-              {dateRangeValid && !preparing && (
+              {dateSelectionValid && !preparing && (
                 <div className="text-xs text-muted-foreground">
                   Đã chọn <strong className="text-foreground">{selectedHistories.length}</strong>{" "}
                   lịch sử đi làm.
