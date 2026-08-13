@@ -664,9 +664,10 @@ function WorkforcePage() {
         factories={factories}
         mainHouses={mainHouses}
         staffUsers={users.filter((item) => item.role === "staff" || item.role === "admin")}
-        onCreated={async (userId) => {
-          await refreshWorkforce();
-          setSelectedUserId(userId);
+        onCreated={(results) => {
+          void refreshWorkforce().then(() => {
+            if (results.length === 1) setSelectedUserId(results[0].user.id);
+          });
         }}
       />
 

@@ -43,18 +43,7 @@ export async function findUserByUsernameInsensitive(username: string) {
   const exactMatch = exact.items.find((user) => accountIdentityKey(user.username) === key);
   if (exactMatch) return exactMatch;
 
-  const loose = await pb
-    .collection("users")
-    .getList<UserRecord>(1, 25, { filter: `username~"${escapePb(key)}"` })
-    .catch(() => ({ items: [] as UserRecord[] }));
-  const looseMatch = loose.items.find((user) => accountIdentityKey(user.username) === key);
-  if (looseMatch) return looseMatch;
-
-  const allUsers = await pb
-    .collection("users")
-    .getFullList<UserRecord>({ fields: "id,username" })
-    .catch(() => [] as UserRecord[]);
-  return allUsers.find((user) => accountIdentityKey(user.username) === key) || null;
+  return null;
 }
 
 export async function findUserByUidInsensitive(uid: string) {

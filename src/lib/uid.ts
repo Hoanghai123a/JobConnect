@@ -1,31 +1,15 @@
+﻿import { allocateUserUids, observeManualUid } from "./uid-counter";
 import { pb, type UserRecord } from "./pocketbase";
-import { fetchAppSettings } from "./app-settings";
 
 export async function generateUid(manualUid?: string): Promise<string> {
-  if (manualUid?.trim()) return manualUid.trim();
-
-  const settings = await fetchAppSettings();
-  const prefix = (settings.account_code_prefix || "").trim();
-
-  const userRes = await pb.collection("users").getList<UserRecord>(1, 1000, {
-    fields: "uid",
-  });
-  const allUsers = userRes.items;
-
-  let maxNum = 0;
-  const regex = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\d{6})$`);
-
-  for (const u of allUsers) {
-    if (!u.uid) continue;
-    const match = u.uid.match(regex);
-    if (match) {
-      const num = parseInt(match[1], 10);
-      if (num > maxNum) maxNum = num;
-    }
+  if (manualUid?.trim()) {
+    const uid = manualUid.trim().toUpperCase();
+    await observeManualUid("user", uid);
+    return uid;
   }
-
-  const next = maxNum + 1;
-  return `${prefix}${String(next).padStart(6, "0")}`;
+  const [uid] = await allocateUserUids(1);
+  if (!uid) throw new Error("Không cấp được UID tài khoản.");
+  return uid;
 }
 
 export async function assignUidIfMissing(userId: string, manualUid?: string): Promise<string> {

@@ -15,6 +15,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiUidCounterRouteImport } from './routes/api/uid-counter'
 import { Route as AuthenticatedWorkHistoryRouteImport } from './routes/_authenticated/work-history'
 import { Route as AuthenticatedWorkRouteImport } from './routes/_authenticated/work'
 import { Route as AuthenticatedTransportRouteImport } from './routes/_authenticated/transport'
@@ -103,6 +104,11 @@ const AuthenticatedRoute = AuthenticatedRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUidCounterRoute = ApiUidCounterRouteImport.update({
+  id: '/api/uid-counter',
+  path: '/api/uid-counter',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedWorkHistoryRoute =
@@ -464,6 +470,7 @@ export interface FileRoutesByFullPath {
   '/transport': typeof AuthenticatedTransportRoute
   '/work': typeof AuthenticatedWorkRoute
   '/work-history': typeof AuthenticatedWorkHistoryRoute
+  '/api/uid-counter': typeof ApiUidCounterRoute
   '/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
@@ -530,6 +537,7 @@ export interface FileRoutesByTo {
   '/transport': typeof AuthenticatedTransportRoute
   '/work': typeof AuthenticatedWorkRoute
   '/work-history': typeof AuthenticatedWorkHistoryRoute
+  '/api/uid-counter': typeof ApiUidCounterRoute
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
   '/admin/logs': typeof AuthenticatedAdminLogsRoute
@@ -596,6 +604,7 @@ export interface FileRoutesById {
   '/_authenticated/transport': typeof AuthenticatedTransportRoute
   '/_authenticated/work': typeof AuthenticatedWorkRoute
   '/_authenticated/work-history': typeof AuthenticatedWorkHistoryRoute
+  '/api/uid-counter': typeof ApiUidCounterRoute
   '/_authenticated/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/_authenticated/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/_authenticated/admin/imports': typeof AuthenticatedAdminImportsRoute
@@ -665,6 +674,7 @@ export interface FileRouteTypes {
     | '/transport'
     | '/work'
     | '/work-history'
+    | '/api/uid-counter'
     | '/admin/accounts'
     | '/admin/approvals'
     | '/admin/imports'
@@ -731,6 +741,7 @@ export interface FileRouteTypes {
     | '/transport'
     | '/work'
     | '/work-history'
+    | '/api/uid-counter'
     | '/admin/approvals'
     | '/admin/imports'
     | '/admin/logs'
@@ -796,6 +807,7 @@ export interface FileRouteTypes {
     | '/_authenticated/transport'
     | '/_authenticated/work'
     | '/_authenticated/work-history'
+    | '/api/uid-counter'
     | '/_authenticated/admin/accounts'
     | '/_authenticated/admin/approvals'
     | '/_authenticated/admin/imports'
@@ -845,6 +857,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PendingRoute: typeof PendingRoute
   RegisterRoute: typeof RegisterRoute
+  ApiUidCounterRoute: typeof ApiUidCounterRoute
   ApiPublicAppIconRoute: typeof ApiPublicAppIconRoute
   ApiPublicAppIcon192Route: typeof ApiPublicAppIcon192Route
   ApiPublicAppIcon512Route: typeof ApiPublicAppIcon512Route
@@ -900,6 +913,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/uid-counter': {
+      id: '/api/uid-counter'
+      path: '/api/uid-counter'
+      fullPath: '/api/uid-counter'
+      preLoaderRoute: typeof ApiUidCounterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/work-history': {
@@ -1488,6 +1508,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PendingRoute: PendingRoute,
   RegisterRoute: RegisterRoute,
+  ApiUidCounterRoute: ApiUidCounterRoute,
   ApiPublicAppIconRoute: ApiPublicAppIconRoute,
   ApiPublicAppIcon192Route: ApiPublicAppIcon192Route,
   ApiPublicAppIcon512Route: ApiPublicAppIcon512Route,

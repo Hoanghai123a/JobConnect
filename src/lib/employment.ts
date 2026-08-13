@@ -4,7 +4,7 @@ import type { RecruitmentEntityRecord } from "./recruitment-entities";
 import type { CccdVersionRecord } from "./cccd-versions";
 import { relationInFilter } from "./delegations";
 import { updateCachedHistory, updateCachedUser } from "./staff-cache";
-import { fetchAppSettings } from "./app-settings";
+import { allocateEmploymentHistoryUids } from "./uid-counter";
 import { normalizeDate } from "./date-utils";
 import { createStaffActionLog, type StaffActionType } from "./staff-log";
 
@@ -344,20 +344,9 @@ export function computeMaxHistoryUidSeq(
 }
 
 export async function generateEmploymentHistoryUid(referenceDate = new Date()): Promise<string> {
-  const settings = await fetchAppSettings();
-  const prefix = (settings.account_code_prefix || "").trim();
-  const year = referenceDate.getFullYear();
-  const month = referenceDate.getMonth() + 1;
-
-  const res = await pb.collection("employment_histories").getFullList<{ uid?: string }>({
-    fields: "uid",
-  });
-  return buildHistoryUid(
-    prefix,
-    year,
-    month,
-    computeMaxHistoryUidSeq(res, prefix, year, month) + 1,
-  );
+  const [uid] = await allocateEmploymentHistoryUids(1, referenceDate);
+  if (!uid) throw new Error("Không cấp được UID lịch sử đi làm.");
+  return uid;
 }
 
 export async function fetchEmploymentHistories(userIds?: string[]) {

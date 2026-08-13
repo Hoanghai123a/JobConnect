@@ -47,7 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { findOrCreateCccdVersion } from "@/lib/cccd-versions";
+import { findOrCreateCccdVersion, type CccdVersionRecord } from "@/lib/cccd-versions";
 import {
   displayDateToPocketBase,
   scanCccdQrFromFileDetailed,
@@ -56,14 +56,14 @@ import {
   type CccdQrScanMode,
 } from "@/lib/cccd-qr";
 import { findUserByUsernameInsensitive, normalizeAccountUsername } from "@/lib/account-identity";
-import { createEmploymentHistory } from "@/lib/employment";
+import { createEmploymentHistory, type EmploymentHistoryRecord } from "@/lib/employment";
 import type { FactoryRecord } from "@/lib/factories";
 import { compressImage } from "@/lib/image-compress";
 import type { MainHouseRecord } from "@/lib/main-houses";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { updateCachedUser } from "@/lib/staff-cache";
 import { createStaffActionLog } from "@/lib/staff-log";
-import { generateUid } from "@/lib/uid";
+import { allocateEmploymentHistoryUids, allocateUserUids } from "@/lib/uid-counter";
 import { cn } from "@/lib/utils";
 import { FactoryPicker, MainHousePicker } from "@/components/workforce/UserPicker";
 import { RecruiterPicker } from "@/components/employment/RecruiterPicker";
@@ -71,6 +71,13 @@ import { buildRecruiterPayload, type RecruiterSelectionValue } from "@/lib/recru
 import { resolveBankName } from "@/lib/vn-banks";
 import { BankPicker } from "@/components/staff/BankNameInput";
 import { getUserErrorMessage } from "@/lib/toast";
+
+export interface QuickWorkerCreatedResult {
+  user: UserRecord;
+  history?: EmploymentHistoryRecord;
+  cccdVersion?: CccdVersionRecord;
+  warnings: string[];
+}
 
 type QuickWorkerForm = {
   real_name: string;
@@ -224,7 +231,7 @@ export function QuickWorkerAccountDialog({
   factories: FactoryRecord[];
   mainHouses: MainHouseRecord[];
   staffUsers: UserRecord[];
-  onCreated: (userId: string) => void | Promise<void>;
+  onCreated: (results: QuickWorkerCreatedResult[]) => void | Promise<void>;
 }) {
   const [entries, setEntries] = useState<QuickWorkerEntry[]>(() => [createQuickWorkerEntry()]);
   const [scanningEntrySide, setScanningEntrySide] = useState<string | null>(null);
@@ -570,7 +577,7 @@ export function QuickWorkerAccountDialog({
     return { errors, username };
   };
 
-  const createWorker = async (entry: QuickWorkerEntry) => {
+  const createWorker = async (entry: QuickWorkerEntry, uid: string, historyUid: string) => {
     const { form } = entry;
     const realName = form.real_name.trim();
     const workerName = form.worker_name_snapshot.trim() || realName;
@@ -581,13 +588,10 @@ export function QuickWorkerAccountDialog({
     const username = buildUsername(phoneRaw, cccdRaw);
     const birthForPb = displayDateToPocketBase(form.date_of_birth);
     const issueDateForPb = displayDateToPocketBase(form.cccd_issue_date);
-    const selectedFactory = factories.find((factory) => factory.id === form.factory);
-
     const existing = await findUserByUsernameInsensitive(username);
     if (existing) throw new Error("Tên đăng nhập đã tồn tại. Hãy đổi SĐT hoặc CCCD.");
 
-    const [uid, compressedFront, compressedBack] = await Promise.all([
-      generateUid(),
+    const [compressedFront, compressedBack] = await Promise.all([
       entry.frontFile ? compressImage(entry.frontFile) : Promise.resolve(null),
       entry.backFile ? compressImage(entry.backFile) : Promise.resolve(null),
     ]);
@@ -613,8 +617,6 @@ export function QuickWorkerAccountDialog({
     fd.append("bank_account_number", form.bank_account_number.replace(/\D/g, ""));
     fd.append("bank_account_name", form.bank_account_name.trim());
     fd.append("bank_account_note", form.bank_account_note.trim());
-    if (compressedFront) fd.append("cccd_front", compressedFront);
-    if (compressedBack) fd.append("cccd_back", compressedBack);
 
     const createdUser = await pb.collection("users").create<UserRecord>(fd);
     const secondaryWarnings: string[] = [];
@@ -632,6 +634,7 @@ export function QuickWorkerAccountDialog({
       secondaryWarnings.push("chưa cập nhật được cache tài khoản");
     }
 
+    let cccdVersion: CccdVersionRecord | undefined;
     let cccdVersionId: string | undefined;
     if (cccd && (compressedFront || compressedBack)) {
       try {
@@ -641,6 +644,7 @@ export function QuickWorkerAccountDialog({
           compressedFront,
           compressedBack,
         );
+        cccdVersion = version;
         cccdVersionId = version.id;
       } catch (error) {
         secondaryWarnings.push(
@@ -649,24 +653,28 @@ export function QuickWorkerAccountDialog({
       }
     }
 
+    let history: EmploymentHistoryRecord | undefined;
     let historyId: string | undefined;
     try {
-      const history = await createEmploymentHistory({
-        user: createdUser.id,
-        factory: form.factory,
-        main_house: form.main_house,
-        employee_code: form.employee_code.trim(),
-        worker_name_snapshot: workerName,
-        worker_cccd_snapshot: cccd,
-        worker_date_of_birth_snapshot: birthForPb,
-        worker_address_snapshot: form.address.trim(),
-        hometown_snapshot: form.address.trim(),
-        cccd_issue_date: issueDateForPb,
-        ...buildRecruiterPayload(form.recruiter_staff),
-        cccd_version: cccdVersionId,
-        join_date: form.join_date,
-        note: form.note.trim(),
-      });
+      history = await createEmploymentHistory(
+        {
+          user: createdUser.id,
+          factory: form.factory,
+          main_house: form.main_house,
+          employee_code: form.employee_code.trim(),
+          worker_name_snapshot: workerName,
+          worker_cccd_snapshot: cccd,
+          worker_date_of_birth_snapshot: birthForPb,
+          worker_address_snapshot: form.address.trim(),
+          hometown_snapshot: form.address.trim(),
+          cccd_issue_date: issueDateForPb,
+          ...buildRecruiterPayload(form.recruiter_staff),
+          cccd_version: cccdVersionId,
+          join_date: form.join_date,
+          note: form.note.trim(),
+        },
+        { uid: historyUid },
+      );
       historyId = history.id;
     } catch (error) {
       secondaryWarnings.push(
@@ -699,7 +707,12 @@ export function QuickWorkerAccountDialog({
       secondaryWarnings.push("chưa ghi được nhật ký thao tác");
     }
 
-    return { userId: createdUser.id, secondaryWarnings };
+    return {
+      user: cacheUser,
+      history,
+      cccdVersion,
+      warnings: secondaryWarnings,
+    } satisfies QuickWorkerCreatedResult;
   };
 
   const submit = async (event: FormEvent) => {
@@ -740,13 +753,26 @@ export function QuickWorkerAccountDialog({
 
     setSubmitting(true);
     setRecordErrors({});
-    const created: Array<{ entry: QuickWorkerEntry; userId: string; warnings: string[] }> = [];
+    const created: Array<{ entry: QuickWorkerEntry; result: QuickWorkerCreatedResult }> = [];
     const failed: Record<string, string[]> = {};
 
-    for (const entry of entries) {
+    let userUids: string[] = [];
+    let historyUids: string[] = [];
+    try {
+      [userUids, historyUids] = await Promise.all([
+        allocateUserUids(entries.length),
+        allocateEmploymentHistoryUids(entries.length),
+      ]);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Không cấp được dải UID để tạo NLĐ"));
+      setSubmitting(false);
+      return;
+    }
+
+    for (const [index, entry] of entries.entries()) {
       try {
-        const result = await createWorker(entry);
-        created.push({ entry, userId: result.userId, warnings: result.secondaryWarnings });
+        const result = await createWorker(entry, userUids[index], historyUids[index]);
+        created.push({ entry, result });
       } catch (error) {
         const message =
           getPocketBaseFieldErrors(error) ||
@@ -758,9 +784,9 @@ export function QuickWorkerAccountDialog({
     let refreshWarning = "";
     if (created.length > 0) {
       try {
-        await Promise.all(created.map(({ userId }) => onCreated(userId)));
+        await onCreated(created.map(({ result }) => result));
       } catch {
-        refreshWarning = "Đã tạo tài khoản nhưng chưa tải lại được danh sách";
+        refreshWarning = "Đã tạo tài khoản nhưng chưa cập nhật được danh sách cục bộ";
       }
     }
 
@@ -784,8 +810,8 @@ export function QuickWorkerAccountDialog({
       );
       if (refreshWarning) toast.warning(refreshWarning);
     } else {
-      const warnings = created.flatMap(({ entry, warnings: entryWarnings }, index) =>
-        entryWarnings.map(
+      const warnings = created.flatMap(({ entry, result }) =>
+        result.warnings.map(
           (warning) => `NLĐ #${entries.findIndex((item) => item.id === entry.id) + 1}: ${warning}`,
         ),
       );

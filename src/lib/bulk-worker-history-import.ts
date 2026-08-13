@@ -1,14 +1,9 @@
 import * as XLSX from "xlsx";
 
 import { accountIdentityKey, normalizeAccountUsername } from "./account-identity";
-import { fetchAppSettings } from "./app-settings";
 import { normalizeDate } from "./date-utils";
-import {
-  buildHistoryUid,
-  computeMaxHistoryUidSeq,
-  deriveEmploymentStatus,
-  type EmploymentStatus,
-} from "./employment";
+import { deriveEmploymentStatus, type EmploymentStatus } from "./employment";
+import { allocateEmploymentHistoryUids, allocateUserUids } from "./uid-counter";
 import { exportToExcel } from "./excel";
 import { fetchFactories, type FactoryRecord } from "./factories";
 import { fetchMainHouses, type MainHouseRecord } from "./main-houses";
@@ -156,8 +151,6 @@ type ImportReferenceData = {
   factories: FactoryRecord[];
   mainHouses: MainHouseRecord[];
   users: UserRecord[];
-  historyUids: Array<{ uid?: string }>;
-  accountCodePrefix: string;
 };
 
 type ParsedHistoryEntry = {
@@ -455,23 +448,6 @@ function workbookRows(sheet: XLSX.WorkSheet) {
   return XLSX.utils.sheet_to_json<RawExcelRow>(sheet, { defval: "", raw: true });
 }
 
-function computeMaxUserUidSeq(users: Array<{ uid?: string }>, prefix: string) {
-  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`^${escaped}(\\d{6})$`);
-  let max = 0;
-  for (const user of users) {
-    const match = String(user.uid || "").match(pattern);
-    if (match) max = Math.max(max, Number(match[1]));
-  }
-  return max;
-}
-
-function allocateUserUid(prefix: string, sequence: number) {
-  if (sequence < 1 || sequence > 999_999)
-    throw new Error("Đã vượt giới hạn 999999 mã tài khoản theo prefix hiện tại.");
-  return `${prefix}${String(sequence).padStart(6, "0")}`;
-}
-
 function addWorkerError(
   errors: WorkerImportError[],
   input: Omit<WorkerImportError, "historyRows"> & { historyRows?: HistorySheetRow[] },
@@ -697,21 +673,17 @@ export async function applyBulkWorkerImportReferences(
 }
 
 async function fetchReferenceData(): Promise<ImportReferenceData> {
-  const [factories, mainHouses, users, historyUids, settings] = await Promise.all([
+  const [factories, mainHouses, users] = await Promise.all([
     fetchFactories(),
     fetchMainHouses(),
     pb
       .collection("users")
       .getFullList<UserRecord>({ fields: "id,username,uid,role", sort: "username" }),
-    pb.collection("employment_histories").getFullList<{ uid?: string }>({ fields: "uid" }),
-    fetchAppSettings(),
   ]);
   return {
     factories,
     mainHouses,
     users,
-    historyUids,
-    accountCodePrefix: (settings.account_code_prefix || "").trim(),
   };
 }
 
@@ -866,16 +838,6 @@ export async function prepareBulkWorkerImport(file: File): Promise<PreparedBulkW
   }
 
   const usedRecordIds = new Set<string>();
-  let nextUserUidSeq = computeMaxUserUidSeq(refs.users, refs.accountCodePrefix);
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  let nextHistoryUidSeq = computeMaxHistoryUidSeq(
-    refs.historyUids,
-    refs.accountCodePrefix,
-    year,
-    month,
-  );
   const preparedWorkers: PreparedWorkerImport[] = [];
 
   for (const worker of parsedWorkers) {
@@ -942,14 +904,12 @@ export async function prepareBulkWorkerImport(file: File): Promise<PreparedBulkW
       continue;
     }
 
-    nextUserUidSeq += 1;
-    const uid = allocateUserUid(refs.accountCodePrefix, nextUserUidSeq);
+    const uid = "";
     const userId = createRecordId(usedRecordIds);
     const latestEntry = historyEntries[historyEntries.length - 1];
     const histories: PreparedEmploymentHistory[] = [];
     for (const entry of historyEntries) {
-      nextHistoryUidSeq += 1;
-      const historyUid = buildHistoryUid(refs.accountCodePrefix, year, month, nextHistoryUidSeq);
+      const historyUid = "";
       const historyId = createRecordId(usedRecordIds);
       histories.push({
         recordId: historyId,
@@ -1025,6 +985,26 @@ export async function prepareBulkWorkerImport(file: File): Promise<PreparedBulkW
         historyRows: [makeFallbackHistoryRow(item.raw, item.rowNumber)],
       });
     }
+  }
+
+  if (preparedWorkers.length) {
+    const historyCount = preparedWorkers.reduce(
+      (total, worker) => total + worker.histories.length,
+      0,
+    );
+    const [userUids, historyUids] = await Promise.all([
+      allocateUserUids(preparedWorkers.length),
+      allocateEmploymentHistoryUids(historyCount),
+    ]);
+    let historyIndex = 0;
+    preparedWorkers.forEach((worker, workerIndex) => {
+      worker.uid = userUids[workerIndex];
+      worker.userPayload.uid = worker.uid;
+      worker.histories.forEach((history) => {
+        history.uid = historyUids[historyIndex++];
+        history.payload.uid = history.uid;
+      });
+    });
   }
 
   return { totalWorkers: rawWorkerRows.length, workers: preparedWorkers, errors };

@@ -665,9 +665,14 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
             factories={factories}
             mainHouses={mainHouses}
             staffUsers={staffUsers}
-            onCreated={async (userId) => {
-              await refreshDirectory();
-              navigate({ to: "/staff/workers/$workerId", params: { workerId: userId } });
+            onCreated={(results) => {
+              void refreshDirectory();
+              if (results.length === 1) {
+                navigate({
+                  to: "/staff/workers/$workerId",
+                  params: { workerId: results[0].user.id },
+                });
+              }
             }}
           />
 

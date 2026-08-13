@@ -29,10 +29,7 @@ import {
   isCurrentlyWorking,
   updateEmploymentHistory,
   updateUserAndCache,
-  buildHistoryUid,
-  computeMaxHistoryUidSeq,
 } from "@/lib/employment";
-import { fetchAppSettings } from "@/lib/app-settings";
 import { fetchMainHouses, type MainHouseRecord } from "@/lib/main-houses";
 import { createStaffActionLog } from "@/lib/staff-log";
 import { pb, type UserRecord } from "@/lib/pocketbase";
@@ -42,6 +39,7 @@ import {
   normalizeAccountUsername,
 } from "@/lib/account-identity";
 import { generateUid } from "@/lib/uid";
+import { allocateEmploymentHistoryUids } from "@/lib/uid-counter";
 import { resolveBankName } from "@/lib/vn-banks";
 import { getUserErrorMessage } from "@/lib/toast";
 
@@ -92,12 +90,7 @@ function AdminImportsPage() {
         ],
       },
       {
-        "Cập nhật nhanh": [
-          "Ngày vào mới",
-          "Ngày nghỉ",
-          "Ngày sinh",
-          "Ngày cấp CCCD",
-        ],
+        "Cập nhật nhanh": ["Ngày vào mới", "Ngày nghỉ", "Ngày sinh", "Ngày cấp CCCD"],
       },
     );
   };
@@ -463,31 +456,21 @@ function AdminImportsPage() {
           history.id,
           { status: "left" },
           {
-          actor: currentUser,
-          source: "Import lịch sử từ Excel",
-          note: "Đồng bộ lịch sử quá hạn",
-          fileName: file.name,
+            actor: currentUser,
+            source: "Import lịch sử từ Excel",
+            note: "Đồng bộ lịch sử quá hạn",
+            fileName: file.name,
             before: history,
           },
         );
         Object.assign(history, updatedHistory);
       }
-      const appSettings = await fetchAppSettings();
-      const historyUidPrefix = (appSettings.account_code_prefix || "").trim();
-      const importNow = new Date();
-      const importYear = importNow.getFullYear();
-      const importMonth = importNow.getMonth() + 1;
-      let nextHistoryUidSeq = computeMaxHistoryUidSeq(
-        existingHistories,
-        historyUidPrefix,
-        importYear,
-        importMonth,
-      );
-
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer);
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+      const reservedHistoryUids = await allocateEmploymentHistoryUids(rows.length);
+      let historyUidIndex = 0;
 
       let created = 0;
       let updated = 0;
@@ -672,9 +655,8 @@ function AdminImportsPage() {
             });
             updated++;
           } else {
-            nextHistoryUidSeq++;
             const createdHistory = await createEmploymentHistory(payload, {
-              uid: buildHistoryUid(historyUidPrefix, importYear, importMonth, nextHistoryUidSeq),
+              uid: reservedHistoryUids[historyUidIndex++],
             });
             created++;
             existingHistories.push(createdHistory);
@@ -992,7 +974,9 @@ function AdminImportsPage() {
           </div>
           <ul className="space-y-1 text-sm text-muted-foreground">
             <li>- Dòng lỗi không làm dừng các dòng hợp lệ; hệ thống xuất lại file để sửa.</li>
-            <li>- Cập nhật nhanh chỉ đối chiếu bằng UID của lịch sử và không tự tạo bản ghi mới.</li>
+            <li>
+              - Cập nhật nhanh chỉ đối chiếu bằng UID của lịch sử và không tự tạo bản ghi mới.
+            </li>
             <li>- Ô trống giữ nguyên; dùng [XÓA] để xóa trường tùy chọn được hỗ trợ.</li>
             <li>- Cập nhật nhanh chỉ ghi vào lịch sử; không thay đổi dữ liệu hồ sơ NLĐ.</li>
             <li>
