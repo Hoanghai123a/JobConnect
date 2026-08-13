@@ -5,6 +5,7 @@ module.exports = {
       cwd: "/var/www/chamcong-main",
       script: ".output/server/index.mjs",
       interpreter: "node",
+      node_args: "--env-file=.env",
       exec_mode: "fork",
       instances: 1,
       env: {
@@ -16,8 +17,6 @@ module.exports = {
           "BEiIUjiehZiA8d2XuMZ47dhYL92idx2K-CkYUHG-647Jgg4wJR3_fcHh4O7zi8phO31GLp96ZDM7Z8BP8CEl9qE",
         VAPID_PRIVATE_KEY: "-URBdxX96WlXTMBi3fvOWX8GaAk9dcXVMUxhHHQW87M",
         VAPID_SUBJECT: "mailto:admin@chamcongchua.com",
-        PB_ADMIN_EMAIL: "admin@ccc.com",
-        PB_ADMIN_PASSWORD: "Admin12!",
       },
     },
   ],

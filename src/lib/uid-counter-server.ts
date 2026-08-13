@@ -24,6 +24,10 @@ type AllocateBody = {
 const locks = new Map<string, Promise<void>>();
 let cachedAdminToken = "";
 
+type AdminAuthResult =
+  | { ok: true; token: string }
+  | { ok: false; reason: "missing_config" | "unreachable" | "invalid_credentials" };
+
 function env(name: string) {
   const value = typeof process !== "undefined" ? process.env[name] || "" : "";
   return value || (import.meta.env as Record<string, string | undefined>)?.[name] || "";
@@ -61,26 +65,49 @@ async function getAuthUser(request: Request): Promise<AuthUser | null> {
   return body?.record?.id ? (body.record as AuthUser) : null;
 }
 
-async function getAdminToken() {
-  if (cachedAdminToken) return cachedAdminToken;
+async function getAdminToken(): Promise<AdminAuthResult> {
+  if (cachedAdminToken) return { ok: true, token: cachedAdminToken };
   const direct = env("PB_ADMIN_TOKEN");
-  if (direct) return (cachedAdminToken = direct);
+  if (direct) {
+    cachedAdminToken = direct;
+    return { ok: true, token: cachedAdminToken };
+  }
+
   const identity = env("PB_ADMIN_EMAIL");
   const password = env("PB_ADMIN_PASSWORD");
-  if (!identity || !password) return "";
+  if (!identity || !password) return { ok: false, reason: "missing_config" };
+
   for (const path of [
     "/api/collections/_superusers/auth-with-password",
     "/api/admins/auth-with-password",
   ]) {
-    const response = await pbFetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identity, password }),
-    });
-    const body = await readJson(response);
-    if (response.ok && body?.token) return (cachedAdminToken = body.token);
+    try {
+      const response = await pbFetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identity, password }),
+      });
+      const body = await readJson(response);
+      if (response.ok && body?.token) {
+        cachedAdminToken = body.token;
+        return { ok: true, token: cachedAdminToken };
+      }
+    } catch {
+      return { ok: false, reason: "unreachable" };
+    }
   }
-  return "";
+
+  return { ok: false, reason: "invalid_credentials" };
+}
+
+function adminAuthError(reason: Exclude<AdminAuthResult, { ok: true }>["reason"]) {
+  if (reason === "missing_config") {
+    return jsonError("Máy chủ thiếu cấu hình quản trị PocketBase.", 424);
+  }
+  if (reason === "unreachable") {
+    return jsonError("Máy chủ không kết nối được PocketBase.", 503);
+  }
+  return jsonError("Thông tin đăng nhập quản trị PocketBase không hợp lệ.", 424);
 }
 
 async function withCounterLock<T>(key: string, task: () => Promise<T>): Promise<T> {
@@ -304,12 +331,12 @@ export async function handleUidCounterRequest(request: Request) {
   try {
     const body = (await request.json().catch(() => null)) as AllocateBody | null;
     if (!body) return jsonError("Dữ liệu yêu cầu không hợp lệ.");
-    const adminToken = await getAdminToken();
-    if (!adminToken) return jsonError("Máy chủ chưa cấu hình quyền quản trị PocketBase.", 424);
+    const adminAuth = await getAdminToken();
+    if (!adminAuth.ok) return adminAuthError(adminAuth.reason);
     const actor = await getAuthUser(request);
     return body.action === "observe"
-      ? observe(body, actor, adminToken)
-      : allocate(body, actor, adminToken);
+      ? observe(body, actor, adminAuth.token)
+      : allocate(body, actor, adminAuth.token);
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Không cấp được UID.", 500);
   }
