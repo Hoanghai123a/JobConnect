@@ -33,3 +33,6 @@ dist-ssr
 *.sw?
 .codegraph/
 .codegraph-*/
+
+# Local UID audit exports may contain personal data
+uid-audit-output/

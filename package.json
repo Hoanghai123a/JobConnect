@@ -21,7 +21,8 @@
     "pb:setup-guide-documents": "node --env-file=.env scripts/setup-guide-documents.mjs",
     "pb:init-uid-counters": "node --env-file=.env scripts/init-uid-counters.mjs",
     "pb:audit-duplicate-user-uids": "node --env-file=.env scripts/audit-duplicate-user-uids.mjs",
-    "pb:repair-duplicate-user-uids": "node --env-file=.env scripts/repair-duplicate-user-uids.mjs"
+    "pb:repair-duplicate-user-uids": "node --env-file=.env scripts/repair-duplicate-user-uids.mjs",
+    "test:uid-tools": "node --test scripts/uid-duplicate-tools.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
