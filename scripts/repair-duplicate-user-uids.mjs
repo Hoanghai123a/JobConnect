@@ -14,6 +14,7 @@ import {
   safeFullList,
   scoreDuplicateUser,
   timestampName,
+  isBatchRequestsNotAllowed,
   writeCsv,
 } from "./uid-duplicate-tools.mjs";
 
@@ -452,8 +453,17 @@ async function updateUsersInBatches(pb, planned, applied = []) {
     const batch = pb.createBatch();
     const chunk = planned.slice(offset, offset + MAX_BATCH_REQUESTS);
     for (const item of chunk) batch.collection("users").update(item.user_id, { uid: item.new_uid });
-    await batch.send();
-    applied.push(...chunk);
+    try {
+      await batch.send();
+      applied.push(...chunk);
+    } catch (error) {
+      if (!isBatchRequestsNotAllowed(error)) throw error;
+      console.warn("PocketBase không hỗ trợ batch; chuyển sang cập nhật tuần tự lô hiện tại.");
+      for (const item of chunk) {
+        await pb.collection("users").update(item.user_id, { uid: item.new_uid });
+        applied.push(item);
+      }
+    }
     console.log(
       `Đã cập nhật lô ${Math.floor(offset / MAX_BATCH_REQUESTS) + 1}: ${chunk.length} tài khoản.`,
     );
@@ -473,7 +483,16 @@ async function rollbackUsers(pb, planned) {
     for (const item of chunk) {
       batch.collection("users").update(item.user_id, { uid: item.original_uid ?? item.old_uid });
     }
-    await batch.send();
+    try {
+      await batch.send();
+    } catch (error) {
+      if (!isBatchRequestsNotAllowed(error)) throw error;
+      for (const item of chunk) {
+        await pb
+          .collection("users")
+          .update(item.user_id, { uid: item.original_uid ?? item.old_uid });
+      }
+    }
   }
   return candidates.length;
 }

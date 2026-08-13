@@ -151,6 +151,11 @@ export function buildRollbackRows(planned) {
   }));
 }
 
+export function isBatchRequestsNotAllowed(error) {
+  const message = String(error?.message || error || "");
+  return /batch requests are not allowed/i.test(message);
+}
+
 function csvEscape(value) {
   const text = String(value ?? "");
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;

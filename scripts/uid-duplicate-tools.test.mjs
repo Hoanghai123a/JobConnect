@@ -5,6 +5,7 @@ import {
   allocateUidPlan,
   buildRollbackRows,
   duplicateGroups,
+  isBatchRequestsNotAllowed,
   normalizeUid,
   parseArgs,
   rankDuplicateUsers,
@@ -120,4 +121,9 @@ test("parseArgs hỗ trợ auto, apply, reference list và output dir", () => {
       referenceList: "accounts.txt",
     },
   );
+});
+
+test("isBatchRequestsNotAllowed nhận diện lỗi PocketBase không hỗ trợ batch", () => {
+  assert.equal(isBatchRequestsNotAllowed(new Error("Batch requests are not allowed.")), true);
+  assert.equal(isBatchRequestsNotAllowed(new Error("validation failed")), false);
 });
