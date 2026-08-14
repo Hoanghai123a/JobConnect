@@ -72,15 +72,32 @@ import {
 } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/")({
-  beforeLoad: () => {
+  beforeLoad: async () => {
     if (typeof window === "undefined") return;
     if (!pb.authStore.isValid) return;
     const u = pb.authStore.record as UserRecord | null;
     if (u && !isUserApproved(u)) throw redirect({ to: "/pending" });
     if (u?.role === "staff") throw redirect({ to: "/staff" });
-    if (u?.role === "user" && getClientDeviceProfile() === "desktop") {
+    if (u?.role !== "user") return;
+    if (getClientDeviceProfile() === "desktop") {
       throw redirect({ to: "/attendance" });
     }
+
+    const today = localDateKey(new Date());
+    const tomorrow = localDateKey(addLocalDays(new Date(), 1));
+    let hasTodayAttendance: boolean;
+    try {
+      const result = await pb.collection("attendance").getList(1, 1, {
+        filter: `user="${u.id}" && date>="${today}" && date<"${tomorrow}"`,
+        fields: "id",
+      });
+      hasTodayAttendance = result.totalItems > 0;
+    } catch {
+      // Keep the dashboard available if PocketBase cannot verify today's attendance.
+      return;
+    }
+
+    if (!hasTodayAttendance) throw redirect({ to: "/attendance" });
   },
   component: DashboardPage,
 });
@@ -95,6 +112,15 @@ type ApprovalRequestSummary = {
   status?: string;
   amount?: number | string;
 };
+
+function localDateKey(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function addLocalDays(date: Date, days: number) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
 
 function DashboardPage() {
   const { loading, user, isAdmin } = useAuth();
@@ -620,6 +646,16 @@ function DashboardPage() {
           </>
         ) : (
           <>
+            <section aria-label="Chấm công hôm nay">
+              <FeatureTile
+                to="/attendance"
+                label="Tự chấm công"
+                description="Ghi nhận giờ làm hôm nay"
+                icon={Clock}
+                variant="accent"
+              />
+            </section>
+
             <section aria-label="Tiện ích và giải trí">
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -704,15 +740,6 @@ function DashboardPage() {
                   badge={workDisabled ? undefined : toBadge(unread.check)}
                 />
                 <FeatureTile
-                  to="/attendance"
-                  label="Tự chấm công"
-                  description="Ghi nhận giờ làm"
-                  icon={Clock}
-                  variant="accent"
-                  disabled={workDisabled}
-                  disabledReason={workDisabledReason}
-                />
-                <FeatureTile
                   to="/work-history"
                   label="Lịch sử đi làm"
                   description="Nhà máy, ngày vào/nghỉ"
@@ -730,7 +757,7 @@ function DashboardPage() {
                 <div>
                   <div className="font-semibold">Hoàn thiện hồ sơ để mở chức năng</div>
                   <div className="mt-1">
-                    Admin cần gắn mã nhân viên và nhà máy trước khi bạn chấm công hoặc ứng lương.
+                    Admin cần gắn mã nhân viên và nhà máy trước khi bạn dùng các nghiệp vụ đi làm như ứng lương hoặc kiểm tra công/lương.
                   </div>
                 </div>
               </div>

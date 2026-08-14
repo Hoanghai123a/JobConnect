@@ -94,6 +94,7 @@ import {
   Clock,
   FileDown,
   History,
+  Loader2,
   Pencil,
   Send,
   ShieldCheck,
@@ -117,6 +118,7 @@ const DEFAULT_TRANSFER_DESCRIPTION_TEMPLATE = "Giải ngân ứng + tên";
 
 type DisbursementFilter = "all" | "yes" | "no";
 type AdvanceUndoKind = "recovery" | "rejection";
+type BulkAction = "accepted" | "rejected" | "recovered" | "unrecoverable";
 type AdvanceUndoRequest = {
   row: AdvanceRecord;
   kind: AdvanceUndoKind;
@@ -232,6 +234,7 @@ export function AdvancesPage() {
     bank_account_name: "",
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<BulkAction | null>(null);
   const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
   const [editAmountText, setEditAmountText] = useState("");
   const [dateFrom, setDateFrom] = useState(storedFilters.dateFrom || "");
@@ -637,6 +640,16 @@ export function AdvancesPage() {
     await pb.collection("advances").update(id, payload);
   };
 
+  const runBulkAction = async (action: BulkAction, operation: () => Promise<void>) => {
+    if (bulkAction) return;
+    setBulkAction(action);
+    try {
+      await operation();
+    } finally {
+      setBulkAction(null);
+    }
+  };
+
   const bulkUpdate = async (status: Exclude<AdvanceStatus, "pending" | "recruiter_approved">) => {
     const rows = filtered.filter(
       (row) =>
@@ -645,32 +658,35 @@ export function AdvancesPage() {
           ? (row.status || "pending") === "pending" || row.status === "recruiter_approved"
           : (row.status || "pending") === "pending"),
     );
-    if (!rows.length) return;
-    try {
-      for (const row of rows) {
-        const after = {
-          status,
-          resolved_at: new Date().toISOString(),
-          admin_note: row.admin_note || "",
-        };
-        await updateRow(row.id, after);
-        await createStaffActionLog({
-          actor: user,
-          targetUserId: row.user,
-          targetCollection: "advances",
-          targetRecord: row.id,
-          action: "update",
-          before: { status: row.status || "pending" },
-          after,
-          note: status === "accepted" ? "Admin duyệt báo ứng" : "Admin từ chối báo ứng",
-        });
+    if (!rows.length || bulkAction) return;
+    await runBulkAction(status, async () => {
+      try {
+        for (const row of rows) {
+          const after = {
+            status,
+            resolved_at: new Date().toISOString(),
+            admin_note: row.admin_note || "",
+          };
+          await updateRow(row.id, after);
+          await createStaffActionLog({
+            actor: user,
+            targetUserId: row.user,
+            targetCollection: "advances",
+            targetRecord: row.id,
+            action: "update",
+            before: { status: row.status || "pending" },
+            after,
+            note: status === "accepted" ? "Admin duyệt báo ứng" : "Admin từ chối báo ứng",
+          });
+        }
+        toast.success(status === "accepted" ? "Đã duyệt" : "Đã từ chối");
+        setSelectedIds(new Set());
+        await load();
+        loadStats().catch(() => {});
+      } catch (error: unknown) {
+        toast.error((error as any)?.message || "Lỗi xử lý hàng loạt");
       }
-      toast.success(status === "accepted" ? "Đã duyệt" : "Đã từ chối");
-      setSelectedIds(new Set());
-      load();
-    } catch (error: unknown) {
-      toast.error((error as any)?.message || "Lỗi xử lý hàng loạt");
-    }
+    });
   };
 
   const bulkResolveRecovery = async (recoveryStatus: Exclude<RecoveryStatus, "none">) => {
@@ -680,36 +696,39 @@ export function AdvancesPage() {
         row.status === "accepted" &&
         (row.recovery_status || "none") === "none",
     );
-    if (!rows.length) return;
-    try {
-      for (const row of rows) {
-        const after = {
-          recovery_status: recoveryStatus,
-          recovered_at: recoveryStatus === "recovered" ? new Date().toISOString() : "",
-        };
-        await updateRow(row.id, after);
-        await createStaffActionLog({
-          actor: user,
-          targetUserId: row.user,
-          targetCollection: "advances",
-          targetRecord: row.id,
-          action: "update",
-          before: { recovery_status: row.recovery_status || "none" },
-          after,
-          note:
-            recoveryStatus === "recovered"
-              ? "Admin đánh dấu đã thu hồi"
-              : "Admin đánh dấu không thu hồi",
-        });
+    if (!rows.length || bulkAction) return;
+    await runBulkAction(recoveryStatus, async () => {
+      try {
+        for (const row of rows) {
+          const after = {
+            recovery_status: recoveryStatus,
+            recovered_at: recoveryStatus === "recovered" ? new Date().toISOString() : "",
+          };
+          await updateRow(row.id, after);
+          await createStaffActionLog({
+            actor: user,
+            targetUserId: row.user,
+            targetCollection: "advances",
+            targetRecord: row.id,
+            action: "update",
+            before: { recovery_status: row.recovery_status || "none" },
+            after,
+            note:
+              recoveryStatus === "recovered"
+                ? "Admin đánh dấu đã thu hồi"
+                : "Admin đánh dấu không thu hồi",
+          });
+        }
+        toast.success(
+          recoveryStatus === "recovered" ? "Đã đánh dấu thu hồi" : "Đã đánh dấu không thu hồi",
+        );
+        setSelectedIds(new Set());
+        await load();
+        loadStats().catch(() => {});
+      } catch (error: unknown) {
+        toast.error((error as any)?.message || "Lỗi xử lý hàng loạt");
       }
-      toast.success(
-        recoveryStatus === "recovered" ? "Đã đánh dấu thu hồi" : "Đã đánh dấu không thu hồi",
-      );
-      setSelectedIds(new Set());
-      load();
-    } catch (error: unknown) {
-      toast.error((error as any)?.message || "Lỗi xử lý hàng loạt");
-    }
+    });
   };
 
   const resolveRecovery = async (
@@ -1395,32 +1414,67 @@ export function AdvancesPage() {
       </div>
 
       {selectedActionableCount > 0 && (
-        <div className="sticky top-[var(--header-h,3.25rem)] z-20 -mx-4 flex items-center justify-between gap-2 bg-primary/10 px-4 py-2 backdrop-blur">
+        <div
+          aria-busy={Boolean(bulkAction)}
+          className="sticky top-[var(--header-h,3.25rem)] z-20 -mx-4 flex items-center justify-between gap-2 bg-primary/10 px-4 py-2 backdrop-blur"
+        >
           <span className="text-xs font-medium text-primary">
             {selectedActionableCount} đã chọn
           </span>
           <div className="flex flex-wrap justify-end gap-2">
             {selectedPendingCount > 0 && (
               <>
-                <Button size="sm" onClick={() => bulkUpdate("accepted")}>
-                  <Check className="h-3.5 w-3.5" /> Duyệt
+                <Button
+                  size="sm"
+                  disabled={Boolean(bulkAction)}
+                  onClick={() => bulkUpdate("accepted")}
+                >
+                  {bulkAction === "accepted" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Check className="h-3.5 w-3.5" />
+                  )}
+                  {bulkAction === "accepted" ? "Đang duyệt..." : "Duyệt"}
                 </Button>
-                <Button size="sm" variant="destructive" onClick={() => bulkUpdate("rejected")}>
-                  <X className="h-3.5 w-3.5" /> Từ chối
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={Boolean(bulkAction)}
+                  onClick={() => bulkUpdate("rejected")}
+                >
+                  {bulkAction === "rejected" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <X className="h-3.5 w-3.5" />
+                  )}
+                  {bulkAction === "rejected" ? "Đang từ chối..." : "Từ chối"}
                 </Button>
               </>
             )}
             {selectedRecoverableCount > 0 && (
               <>
-                <Button size="sm" onClick={() => bulkResolveRecovery("recovered")}>
-                  <ShieldCheck className="h-3.5 w-3.5" /> Thu hồi
+                <Button
+                  size="sm"
+                  disabled={Boolean(bulkAction)}
+                  onClick={() => bulkResolveRecovery("recovered")}
+                >
+                  {bulkAction === "recovered" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                  )}
+                  {bulkAction === "recovered" ? "Đang thu hồi..." : "Thu hồi"}
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
+                  disabled={Boolean(bulkAction)}
                   onClick={() => bulkResolveRecovery("unrecoverable")}
                 >
-                  Không thu hồi
+                  {bulkAction === "unrecoverable" && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  )}
+                  {bulkAction === "unrecoverable" ? "Đang xử lý..." : "Không thu hồi"}
                 </Button>
               </>
             )}
@@ -1432,6 +1486,7 @@ export function AdvancesPage() {
         <label className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
           <Checkbox
             checked={selectableFiltered.every((row) => selectedIds.has(row.id))}
+            disabled={Boolean(bulkAction)}
             onCheckedChange={(checked) =>
               setSelectedIds((current) => {
                 if (!checked) return new Set();
@@ -1491,6 +1546,7 @@ export function AdvancesPage() {
               {selectable && (
                 <Checkbox
                   checked={selectedIds.has(row.id)}
+                  disabled={Boolean(bulkAction)}
                   onCheckedChange={(checked) =>
                     setSelectedIds((current) => {
                       const next = new Set(current);
@@ -1499,7 +1555,7 @@ export function AdvancesPage() {
                       return next;
                     })
                   }
-                  className="shrink-0"
+                  className="h-8 w-8 shrink-0 [&_svg]:h-6 [&_svg]:w-6"
                   onClick={(event) => event.stopPropagation()}
                 />
               )}
