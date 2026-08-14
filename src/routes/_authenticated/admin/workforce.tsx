@@ -25,6 +25,7 @@ import { toast } from "@/lib/toast";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { normalizeUserPickerSearch } from "@/components/workforce/UserPicker";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { WorkforceDashboard } from "@/components/workforce/WorkforceDashboard";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -518,120 +519,7 @@ function WorkforcePage() {
           </TabsContent>
 
           <TabsContent value="stats" className="mt-0 hidden space-y-3 desktop:block">
-            <Card className="space-y-2 p-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Từ ngày</Label>
-                  <DateInput value={from} max={to} onChange={(v) => setFrom(v)} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Đến ngày</Label>
-                  <DateInput value={to} min={from} max={todayIso()} onChange={(v) => setTo(v)} />
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFrom(todayIso());
-                      setTo(todayIso());
-                    }}
-                    className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-                  >
-                    1 ngày
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFrom(daysAgoIso(2));
-                      setTo(todayIso());
-                    }}
-                    className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-                  >
-                    2 ngày
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFrom(daysAgoIso(7));
-                      setTo(todayIso());
-                    }}
-                    className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-                  >
-                    7 ngày
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFrom(daysAgoIso(30));
-                      setTo(todayIso());
-                    }}
-                    className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-                  >
-                    30 ngày
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFrom(daysAgoIso(90));
-                      setTo(todayIso());
-                    }}
-                    className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-                  >
-                    90 ngày
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setChartOpen(true)}
-                  className="ml-auto flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground shadow-sm active:scale-[0.96]"
-                  aria-label="Biểu đồ tuyển dụng"
-                >
-                  <BarChart3 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </Card>
-
-            <div className="grid grid-cols-2 gap-2">
-              <MultiSelectFactoryPicker
-                factories={factories}
-                selected={selectedFactoryIds}
-                onChange={setSelectedFactoryIds}
-              />
-              <MultiSelectRecruiterPicker
-                users={users.filter((u) => u.role === "staff" || u.role === "admin")}
-                selected={selectedRecruiterIds}
-                onChange={setSelectedRecruiterIds}
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <StatCard
-                label="Còn đi làm"
-                value={filteredStats.working}
-                icon={UserRoundCheck}
-                tone="success"
-              />
-              <StatCard label="Tuyển mới" value={filteredStats.joined} icon={Plus} tone="primary" />
-              <StatCard
-                label="Đã nghỉ"
-                value={filteredStats.left}
-                icon={UserRoundMinus}
-                tone="warning"
-              />
-            </div>
-
-            <RecruitGroups
-              histories={filteredHistoriesForStats}
-              factories={filteredFactoriesForStats}
-              users={users}
-              from={from}
-              to={to}
-              latestByUser={latestByUserForStats}
-              loading={loading}
-              onSelectWorker={setSelectedUserId}
-            />
+            <WorkforceDashboard viewer={currentUser} detailHref="/admin/workforce" />
           </TabsContent>
 
           <TabsContent value="my-recruited" className="mt-0 space-y-3">

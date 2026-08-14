@@ -1,12 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { Download, FileDown, ImageDown } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FileDown, ImageDown, Loader2, Server } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CccdHistoryExportDialog } from "@/components/cccd/CccdHistoryExportDialog";
 import { FactoryMultiSelect } from "@/components/factories/FactoryMultiSelect";
-import { EmptyState } from "@/components/ui/empty-state";
-import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -15,273 +14,146 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { exportToExcel, formatDateOnly } from "@/lib/excel";
-import { fetchFactories } from "@/lib/factories";
-import {
-  fetchCachedStaffWorkspace,
-  fetchStaffWorkspace,
-  fetchFreshStaffWorkspace,
-} from "@/lib/staff-permissions";
-import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
+import { fetchFactories, type FactoryRecord } from "@/lib/factories";
+import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
-import type { FactoryRecord } from "@/lib/factories";
-import type { StaffWorkerRecord } from "@/lib/staff-permissions";
-import { isCurrentlyWorking, type EmploymentHistoryRecord } from "@/lib/employment";
-import type { UserRecord } from "@/lib/pocketbase";
-import { getApprovalStatus } from "@/lib/user-approval";
-import { getRecruiterDisplay } from "@/lib/recruiters";
-import { resolveBankCode } from "@/lib/vn-banks";
+import { fetchStaffWorkspace, type StaffWorkerRecord } from "@/lib/staff-permissions";
 import { toast } from "@/lib/toast";
 
-const APPROVAL_STATUS_LABELS = {
-  pending: "Chờ duyệt",
-  approved: "Đã duyệt",
-  rejected: "Từ chối",
-} as const;
-
-function computeTenureDays(histories: EmploymentHistoryRecord[], referenceDate = new Date()) {
-  const refTime = referenceDate.getTime();
-  let totalMs = 0;
-  for (const h of histories) {
-    if (!h.join_date) continue;
-    const joinTime = new Date(h.join_date).getTime();
-    if (Number.isNaN(joinTime)) continue;
-    const endSource = h.leave_date && new Date(h.leave_date).getTime();
-    const endTime = endSource && !Number.isNaN(endSource) ? endSource : refTime;
-    if (endTime <= joinTime) continue;
-    totalMs += endTime - joinTime;
-  }
-  return Math.floor(totalMs / (1000 * 60 * 60 * 24));
-}
-
-function buildTenureDaysByUserId(workers: StaffWorkerRecord[]) {
-  const map = new Map<string, number>();
-  for (const worker of workers) {
-    map.set(worker.user.id, computeTenureDays(worker.histories));
-  }
-  return map;
-}
-
-function buildBasicRows(
-  histories: EmploymentHistoryRecord[],
-  tenureDaysByUserId: Map<string, number>,
-) {
-  return histories.map((history, index) => {
-    const recruiter = getRecruiterDisplay(history);
-    return {
-      STT: index + 1,
-      "Mã lịch sử": history.uid || "",
-      "Mã nhân viên": history.employee_code || "",
-      "Họ tên tại thời điểm đi làm": history.worker_name_snapshot,
-      "CCCD tại thời điểm đi làm": history.worker_cccd_snapshot,
-      "Ngày sinh tại thời điểm đi làm": formatDateOnly(history.worker_date_of_birth_snapshot),
-      "Địa chỉ thường trú tại thời điểm đi làm":
-        history.worker_address_snapshot || history.hometown_snapshot || "",
-      "Ngày cấp CCCD tại thời điểm đi làm": formatDateOnly(history.cccd_issue_date),
-      "Mã số thuế": history.worker_tax_code_snapshot || "",
-      "Người tuyển": recruiter?.name || "",
-      "Loại người tuyển": recruiter?.label || "",
-      "Nhà máy": history.expand?.factory?.name || "",
-      "Nhà chính": history.expand?.main_house?.name || "",
-      "Ngày vào": formatDateOnly(history.join_date),
-      "Ngày nghỉ": formatDateOnly(history.leave_date),
-      "Trạng thái": isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ",
-      "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
-      "Tài khoản gốc": history.expand?.user?.full_name || history.expand?.user?.username || "",
-      "Số điện thoại": history.expand?.user?.phone || "",
-    };
-  });
-}
-
-function buildFullRows(
-  histories: EmploymentHistoryRecord[],
-  tenureDaysByUserId: Map<string, number>,
-) {
-  return histories.map((history, index) => {
-    const user = history.expand?.user;
-    const recruiter = getRecruiterDisplay(history);
-    return {
-      STT: index + 1,
-      "Mã tài khoản (UID)": user?.uid || "",
-      "Mã lịch sử": history.uid || "",
-      "Mã nhân viên": history.employee_code || "",
-      "Họ tên tại thời điểm đi làm": history.worker_name_snapshot || "",
-      "CCCD tại thời điểm đi làm": history.worker_cccd_snapshot || "",
-      "Số điện thoại": user?.phone || "",
-      "Ngày sinh tại thời điểm đi làm": formatDateOnly(history.worker_date_of_birth_snapshot),
-      "Địa chỉ thường trú tại thời điểm đi làm":
-        history.worker_address_snapshot || history.hometown_snapshot || "",
-      "Nhà máy": history.expand?.factory?.name || "",
-      "Nhà chính": history.expand?.main_house?.name || "",
-      "Ngày vào": formatDateOnly(history.join_date),
-      "Ngày nghỉ": formatDateOnly(history.leave_date),
-      "Người tuyển": recruiter?.name || "",
-      "Loại người tuyển": recruiter?.label || "",
-      "Ngày cấp CCCD tại thời điểm đi làm": formatDateOnly(history.cccd_issue_date),
-      "Thâm niên tích luỹ (ngày)": tenureDaysByUserId.get(history.user) ?? 0,
-      "Mã số thuế": history.worker_tax_code_snapshot || "",
-      "Trạng thái lịch sử": isCurrentlyWorking(history) ? "Đang làm" : "Đã nghỉ",
-      "Ghi chú": history.note || "",
-      "Ngân hàng": resolveBankCode(user?.bank_name || ""),
-      "Số tài khoản": user?.bank_account_number || "",
-      "Tên chủ tài khoản": user?.bank_account_name || "",
-      "Ghi chú STK": user?.bank_account_note || "",
-      "Tên đăng nhập": user?.username || "",
-      "Vai trò": user?.role || "",
-      "Trạng thái tài khoản": user?.status || "",
-      "Trạng thái duyệt": user ? APPROVAL_STATUS_LABELS[getApprovalStatus(user)] : "",
-    };
-  });
-}
+type ExportMode = "basic" | "full";
 
 export const Route = createFileRoute("/_authenticated/staff/export")({
   component: StaffExportPage,
 });
 
+function filenameFromResponse(response: Response, fallback: string) {
+  const disposition = response.headers.get("content-disposition") || "";
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  return match?.[1] || fallback;
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function StaffExportPage() {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [workers, setWorkers] = useState<StaffWorkerRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
   const [factoryFilters, setFactoryFilters] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState("all");
-  const [exportingAll, setExportingAll] = useState(false);
+  const [historyFromDate, setHistoryFromDate] = useState("");
+  const [exportingMode, setExportingMode] = useState<ExportMode | null>(null);
+  const [cccdWorkers, setCccdWorkers] = useState<StaffWorkerRecord[]>([]);
   const [cccdExportOpen, setCccdExportOpen] = useState(false);
+  const [loadingCccd, setLoadingCccd] = useState(false);
 
   useEffect(() => {
-    if (!user?.id) return;
     let alive = true;
-
-    setLoading(true);
-    Promise.all([fetchStaffWorkspace(user as UserRecord), fetchFactories()])
-      .then(([workspace, factoryRows]) => {
-        if (!alive) return;
-        setWorkers(workspace.workers ?? []);
-        setFactories(factoryRows);
+    fetchFactories()
+      .then((rows) => {
+        if (alive) setFactories(rows);
       })
-      .finally(() => {
-        if (alive) setLoading(false);
+      .catch(() => {
+        if (alive) toast.error("Không thể tải danh sách nhà máy");
       });
-
     return () => {
       alive = false;
     };
-  }, [user]);
+  }, []);
 
-  const cacheSignal = useStaffCacheSignal();
-  useEffect(() => {
-    if (!user?.id || cacheSignal === 0) return;
-    const timer = setTimeout(async () => {
-      const ws = await fetchCachedStaffWorkspace(user as UserRecord);
-      if (ws) setWorkers(ws.workers ?? []);
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [cacheSignal, user?.id]);
-
-  const allHistories = useMemo(() => workers.flatMap((worker) => worker.histories), [workers]);
-
-  const filteredHistories = useMemo(() => {
-    return allHistories.filter((history) => {
-      if (factoryFilters.length > 0 && !factoryFilters.includes(history.factory)) return false;
-      if (
-        statusFilter !== "all" &&
-        (isCurrentlyWorking(history) ? "working" : "left") !== statusFilter
-      ) {
-        return false;
-      }
-      return true;
-    });
-  }, [allHistories, factoryFilters, statusFilter]);
-
-  const tenureDaysByUserId = useMemo(() => {
-    return buildTenureDaysByUserId(workers);
-  }, [workers]);
-
-  const basicRows = useMemo(() => {
-    return buildBasicRows(filteredHistories, tenureDaysByUserId);
-  }, [filteredHistories, tenureDaysByUserId]);
-
-  const fullRows = useMemo(() => {
-    return buildFullRows(filteredHistories, tenureDaysByUserId);
-  }, [filteredHistories, tenureDaysByUserId]);
-
-  const doExportBasic = async () => {
-    if (!basicRows.length) {
-      toast.warning("Không có dữ liệu để xuất");
-      return;
-    }
-    exportToExcel(
-      `jobconnect_export_co_ban_${Date.now()}`,
-      { "Lao động cơ bản": basicRows },
-      { "Lao động cơ bản": ["Ngày sinh", "Ngày cấp CCCD", "Ngày vào", "Ngày nghỉ"] },
-    );
-    toast.success("Đã xuất Excel cơ bản");
-  };
-
-  const doExportFull = async () => {
-    if (!fullRows.length) {
-      toast.warning("Không có dữ liệu để xuất");
-      return;
-    }
-    exportToExcel(
-      `jobconnect_export_day_du_${Date.now()}`,
-      { "Lao động đầy đủ": fullRows },
-      {
-        "Lao động đầy đủ": [
-          "Ngày sinh tại thời điểm đi làm",
-          "Ngày cấp CCCD tại thời điểm đi làm",
-          "Ngày vào",
-          "Ngày nghỉ",
-        ],
-      },
-    );
-    toast.success("Đã xuất Excel đầy đủ");
-  };
-
-  const doExportAllFromPocketBase = async () => {
-    if (!user?.id || exportingAll) return;
-    setExportingAll(true);
+  const exportFromServer = async (mode: ExportMode) => {
+    if (!factoryFilters.length || exportingMode) return;
+    setExportingMode(mode);
     try {
-      const workspace = await fetchFreshStaffWorkspace(user as UserRecord, { bypassScope: true });
-      const histories = workspace.workers.flatMap((worker) => worker.histories);
-      const rows = buildFullRows(histories, buildTenureDaysByUserId(workspace.workers));
-      if (!rows.length) {
-        toast.warning("Không có dữ liệu từ PocketBase để xuất");
-        return;
+      const response = await fetch("/api/staff/export", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(pb.authStore.token ? { Authorization: `Bearer ${pb.authStore.token}` } : {}),
+        },
+        body: JSON.stringify({
+          factoryIds: factoryFilters,
+          mode,
+          status: statusFilter,
+          historyFromDate,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.message || "Không thể xuất dữ liệu Excel");
       }
-      exportToExcel(
-        `jobconnect_export_tat_ca_pocketbase_${Date.now()}`,
-        {
-          "Tất cả lao động": rows,
-        },
-        {
-          "Tất cả lao động": [
-            "Ngày sinh tại thời điểm đi làm",
-            "Ngày cấp CCCD tại thời điểm đi làm",
-            "Ngày vào",
-            "Ngày nghỉ",
-          ],
-        },
-      );
-      toast.success("Đã xuất tất cả dữ liệu từ PocketBase");
-    } catch {
-      toast.error("Không thể xuất tất cả dữ liệu từ PocketBase");
+
+      const blob = await response.blob();
+      const fallback = `jobconnect_${mode === "basic" ? "co_ban" : "day_du"}.xlsx`;
+      downloadBlob(blob, filenameFromResponse(response, fallback));
+      const rowCount = response.headers.get("x-export-row-count");
+      toast.success(rowCount ? `Đã xuất ${rowCount} dòng dữ liệu` : "Đã xuất file Excel");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể xuất dữ liệu Excel");
     } finally {
-      setExportingAll(false);
+      setExportingMode(null);
     }
   };
+
+  const openCccdExport = async () => {
+    if (!user?.id || !factoryFilters.length || loadingCccd) return;
+    setLoadingCccd(true);
+    try {
+      const workspace = await fetchStaffWorkspace(user as UserRecord);
+      const selectedFactories = new Set(factoryFilters);
+      const scopedWorkers = workspace.workers
+        .map((worker) => ({
+          ...worker,
+          histories: worker.histories.filter((history) => selectedFactories.has(history.factory)),
+        }))
+        .filter((worker) => worker.histories.length > 0);
+      setCccdWorkers(scopedWorkers);
+      setCccdExportOpen(true);
+    } catch {
+      toast.error("Không thể tải dữ liệu để xuất ảnh CCCD");
+    } finally {
+      setLoadingCccd(false);
+    }
+  };
+
+  const disabled = factoryFilters.length === 0 || !historyFromDate || exportingMode !== null;
+  const cccdHistories = cccdWorkers.flatMap((worker) => worker.histories);
 
   return (
-    <PageContainer title="Xuất dữ liệu" subtitle="Lọc nhanh hồ sơ được phép xem rồi xuất Excel">
-      <div className="grid gap-3 rounded-2xl border border-border/60 bg-card p-4 shadow-soft">
+    <PageContainer
+      title="Xuất dữ liệu"
+      subtitle="Chọn nhà máy, máy chủ sẽ tạo file Excel để tải xuống"
+    >
+      <div className="grid gap-4 rounded-2xl border border-border/60 bg-card p-4 shadow-soft">
         <FactoryMultiSelect
           factories={factories}
           selectedIds={factoryFilters}
           onChange={setFactoryFilters}
-          emptyMeansAll
+          label="Nhà máy (bắt buộc)"
         />
 
-        <div className="space-y-1">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Giữ lịch sử từ ngày (bắt buộc)</Label>
+          <DateInput
+            value={historyFromDate}
+            onChange={setHistoryFromDate}
+            placeholder="dd/mm/yyyy"
+            aria-required="true"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Lịch sử có ngày nghỉ trước ngày này sẽ không được đưa vào file Excel.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
           <Label className="text-xs">Trạng thái</Label>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="rounded-xl">
@@ -295,32 +167,56 @@ function StaffExportPage() {
           </Select>
         </div>
 
-        <div className="rounded-2xl bg-muted/40 p-3 text-sm">
-          Sẵn sàng xuất <strong>{basicRows.length}</strong> dòng dữ liệu.
-          <div className="mt-1 text-[11px] text-muted-foreground">
-            Dữ liệu đang xem lấy từ IndexedDB. Nút xuất tất cả sẽ tải trực tiếp từ PocketBase.
+        <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3">
+          <div className="flex items-start gap-2.5">
+            <Server className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <div>
+              <div className="text-sm font-semibold">
+                {factoryFilters.length
+                  ? `Đã chọn ${factoryFilters.length} nhà máy`
+                  : "Chưa chọn nhà máy"}
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                Không tải hồ sơ và không tạo bản xem trước trên thiết bị. Dữ liệu được lọc theo nhà
+                máy và tạo file trực tiếp trên máy chủ khi bạn bấm xuất.
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Button onClick={doExportBasic} variant="outline" className="w-full rounded-xl">
-            <FileDown className="h-4 w-4" /> Xuất cơ bản
-          </Button>
-          <Button onClick={doExportFull} className="w-full rounded-xl">
-            <FileDown className="h-4 w-4" /> Xuất đầy đủ
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full rounded-xl"
+            disabled={disabled}
+            onClick={() => exportFromServer("basic")}
+          >
+            {exportingMode === "basic" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileDown className="h-4 w-4" />
+            )}
+            {exportingMode === "basic" ? "Máy chủ đang tạo file..." : "Xuất cơ bản"}
           </Button>
           <Button
-            onClick={doExportAllFromPocketBase}
-            disabled={exportingAll}
-            variant="secondary"
+            type="button"
             className="w-full rounded-xl"
+            disabled={disabled}
+            onClick={() => exportFromServer("full")}
           >
-            <FileDown className="h-4 w-4" /> {exportingAll ? "Đang xuất..." : "Xuất tất cả"}
+            {exportingMode === "full" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileDown className="h-4 w-4" />
+            )}
+            {exportingMode === "full" ? "Máy chủ đang tạo file..." : "Xuất đầy đủ"}
           </Button>
         </div>
-        <p className="text-[11px] text-muted-foreground">
+
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
           Bản đầy đủ gồm thông tin nhân sự, lịch sử làm việc, tài khoản ngân hàng và trạng thái tài
-          khoản.
+          khoản. Dữ liệu xuất tuân theo phạm vi quyền của tài khoản hiện tại.
         </p>
       </div>
 
@@ -332,8 +228,8 @@ function StaffExportPage() {
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold">Xuất ảnh CCCD theo lịch sử đi làm</div>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Chọn khoảng ngày và nhà máy hoặc tải danh sách Excel; hỗ trợ thư mục ảnh và file Word
-              sẵn sàng in.
+              Dữ liệu CCCD chỉ được tải khi bạn mở chức năng này và được giới hạn theo nhà máy đã
+              chọn.
             </p>
           </div>
         </div>
@@ -341,44 +237,25 @@ function StaffExportPage() {
           type="button"
           variant="secondary"
           className="mt-3 w-full rounded-xl"
-          onClick={() => setCccdExportOpen(true)}
+          disabled={!factoryFilters.length || loadingCccd || exportingMode !== null}
+          onClick={openCccdExport}
         >
-          <ImageDown className="h-4 w-4" />
-          Xuất ảnh CCCD
+          {loadingCccd ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <ImageDown className="h-4 w-4" />
+          )}
+          {loadingCccd ? "Đang tải dữ liệu CCCD..." : "Xuất ảnh CCCD"}
         </Button>
       </div>
 
       <CccdHistoryExportDialog
         open={cccdExportOpen}
         onClose={() => setCccdExportOpen(false)}
-        histories={allHistories}
-        users={workers.map((worker) => worker.user)}
-        factories={factories}
+        histories={cccdHistories}
+        users={cccdWorkers.map((worker) => worker.user)}
+        factories={factories.filter((factory) => factoryFilters.includes(factory.id))}
       />
-
-      {loading ? (
-        <DataLoadingState variant="list" label="Đang tải dữ liệu để xuất..." rows={3} />
-      ) : basicRows.length === 0 ? (
-        <EmptyState
-          icon={Download}
-          title="Chưa có dữ liệu phù hợp"
-          description="Đổi bộ lọc hoặc chờ admin import thêm lịch sử đi làm."
-        />
-      ) : (
-        <div className="space-y-2">
-          {basicRows.slice(0, 12).map((row) => (
-            <div
-              key={`${row.STT}-${row["Mã nhân viên"]}-${row["Ngày vào"]}`}
-              className="list-card border-l-[color:var(--status-info)]"
-            >
-              <div className="text-sm font-semibold">{row["Họ tên tại thời điểm đi làm"]}</div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">
-                {row["Nhà máy"]} · {row["Mã nhân viên"] || "Chưa có mã"} · {row["Trạng thái"]}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </PageContainer>
   );
 }

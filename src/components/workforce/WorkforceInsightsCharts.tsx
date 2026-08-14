@@ -22,15 +22,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { EmploymentHistoryRecord } from "@/lib/employment";
-import type { FactoryRecord } from "@/lib/factories";
-import type { UserRecord } from "@/lib/pocketbase";
-import { buildWorkforceRankings, type WorkforceMetricRow } from "./workforce-stats";
+import type { WorkforceDashboardDay, WorkforceLookups } from "@/lib/workforce-dashboard";
+import type { WorkforceMetricRow } from "./workforce-stats";
 
 type WorkforceInsightsChartsProps = {
-  histories: EmploymentHistoryRecord[];
-  users: UserRecord[];
-  factories: FactoryRecord[];
+  days: WorkforceDashboardDay[];
+  lookups: WorkforceLookups | null;
   from: string;
   to: string;
 };
@@ -322,18 +319,94 @@ function ChartCard({
   );
 }
 
-export function WorkforceInsightsCharts({
-  histories,
-  users,
-  factories,
-  from,
-  to,
-}: WorkforceInsightsChartsProps) {
-  const [detail, setDetail] = useState<DetailKind>(null);
-  const rankings = useMemo(
-    () => buildWorkforceRankings(histories, users, factories, from, to),
-    [factories, from, histories, to, users],
+function buildRankings(days: WorkforceDashboardDay[], lookups: WorkforceLookups | null) {
+  const factoryNames = new Map((lookups?.factories || []).map((item) => [item.id, item.name]));
+  const recruiterNames = new Map(
+    (lookups?.recruiters || []).map((item) => [`${item.source}:${item.id}`, item.name]),
   );
+  const factories = new Map<string, WorkforceMetricRow>();
+  const recruiters = new Map<string, WorkforceMetricRow>();
+  const uniqueRecruiters = new Map<string, WorkforceMetricRow>();
+  const finalDay = days.at(-1);
+
+  const ensureFactory = (id: string) => {
+    const name = factoryNames.get(id) || "Chưa gắn nhà máy";
+    const row = factories.get(id) || {
+      id,
+      name,
+      displayName: name,
+      joined: 0,
+      left: 0,
+      working: 0,
+    };
+    factories.set(id, row);
+    return row;
+  };
+  const ensureRecruiter = (id: string, source: "internal" | "partner") => {
+    const key = `${source}:${id}`;
+    const name =
+      recruiterNames.get(key) ||
+      (source === "partner" ? "Đối tác chưa xác định" : "Nhân sự chưa xác định");
+    const sourceLabel = source === "partner" ? ("Đối tác" as const) : ("Nội bộ" as const);
+    const row = recruiters.get(key) || {
+      id: key,
+      name,
+      displayName: `${name} (${sourceLabel})`,
+      source,
+      sourceLabel,
+      joined: 0,
+      left: 0,
+      working: 0,
+    };
+    recruiters.set(key, row);
+    return row;
+  };
+
+  for (const day of days) {
+    for (const item of day.factories) {
+      const row = ensureFactory(item.id);
+      row.joined += item.joined;
+      row.left += item.left;
+    }
+    for (const item of day.recruiters) {
+      if (!item.source) continue;
+      const row = ensureRecruiter(item.id, item.source);
+      row.joined += item.joined;
+      row.left += item.left;
+      if (item.uniqueJoined) {
+        const unique = uniqueRecruiters.get(row.id) || { ...row, joined: 0, left: 0, working: 0 };
+        unique.joined += item.uniqueJoined;
+        uniqueRecruiters.set(row.id, unique);
+      }
+    }
+  }
+  for (const item of finalDay?.factories || []) ensureFactory(item.id).working = item.working;
+  for (const item of finalDay?.recruiters || []) {
+    if (item.source) ensureRecruiter(item.id, item.source).working = item.working;
+  }
+
+  const sort = (rows: WorkforceMetricRow[], key: "joined" | "working" = "joined") =>
+    rows.sort(
+      (a, b) => b[key] - a[key] || b.joined - a.joined || a.name.localeCompare(b.name, "vi"),
+    );
+  return {
+    staffRecruitment: sort([...recruiters.values()]),
+    factoryRecruitment: sort([...factories.values()]),
+    staffRetention: sort(
+      [...recruiters.values()].filter((row) => row.working > 0),
+      "working",
+    ),
+    factoryRetention: sort(
+      [...factories.values()].filter((row) => row.working > 0),
+      "working",
+    ),
+    uniqueStaffRecruitment: sort([...uniqueRecruiters.values()]),
+  };
+}
+
+export function WorkforceInsightsCharts({ days, lookups, from, to }: WorkforceInsightsChartsProps) {
+  const [detail, setDetail] = useState<DetailKind>(null);
+  const rankings = useMemo(() => buildRankings(days, lookups), [days, lookups]);
 
   const detailRows =
     detail === "staff-recruitment"
@@ -403,7 +476,7 @@ export function WorkforceInsightsCharts({
 
         <ChartCard
           title="Top 5 người tuyển mới duy nhất"
-          description="Mỗi NLĐ chỉ tính một lần cho người tuyển đầu tiên."
+          description="Số NLĐ được ghi nhận lần đầu cho từng người tuyển."
           onViewAll={() => setDetail("unique-staff")}
         >
           <CombinedRankingChart

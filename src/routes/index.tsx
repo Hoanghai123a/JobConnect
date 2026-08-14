@@ -300,12 +300,7 @@ function DashboardPage() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (
-      !isAdmin ||
-      !user?.id ||
-      (desktopSection !== "nhan-luc" && desktopSection !== "khac") ||
-      typeof window === "undefined"
-    ) {
+    if (!isAdmin || !user?.id || desktopSection !== "khac" || typeof window === "undefined") {
       return;
     }
     let alive = true;
@@ -757,7 +752,8 @@ function DashboardPage() {
                 <div>
                   <div className="font-semibold">Hoàn thiện hồ sơ để mở chức năng</div>
                   <div className="mt-1">
-                    Admin cần gắn mã nhân viên và nhà máy trước khi bạn dùng các nghiệp vụ đi làm như ứng lương hoặc kiểm tra công/lương.
+                    Admin cần gắn mã nhân viên và nhà máy trước khi bạn dùng các nghiệp vụ đi làm
+                    như ứng lương hoặc kiểm tra công/lương.
                   </div>
                 </div>
               </div>
@@ -1186,12 +1182,7 @@ function DesktopAdminDashboard({
 
           {section === "nhan-luc" ? (
             <WorkforceDashboard
-              histories={histories}
-              users={users}
-              factories={factories}
-              loading={loading}
-              error={error}
-              onRetry={onRetry}
+              viewer={pb.authStore.record as UserRecord | null}
               detailHref="/admin/workforce"
               presentation={mobile ? "mobile-dialog" : "default"}
             />

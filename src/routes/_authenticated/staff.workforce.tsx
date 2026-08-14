@@ -130,7 +130,7 @@ function StaffWorkforceDashboardPage() {
   const viewer = user as UserRecord | null;
   const [tab, setTab] = useState<ActiveTab>("workforce");
   const [desktopViewport, setDesktopViewport] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [histories, setHistories] = useState<EmploymentHistoryRecord[]>([]);
   const [factories, setFactories] = useState<FactoryRecord[]>([]);
@@ -185,12 +185,12 @@ function StaffWorkforceDashboardPage() {
   }, [viewer]);
 
   useEffect(() => {
-    load();
-  }, [load, reloadToken]);
+    if (tab === "other") load();
+  }, [load, reloadToken, tab]);
 
   const cacheSignal = useStaffCacheSignal();
   useEffect(() => {
-    if (!viewer?.id || viewer.role !== "staff" || cacheSignal === 0) return;
+    if (!viewer?.id || viewer.role !== "staff" || cacheSignal === 0 || tab !== "other") return;
 
     const timer = setTimeout(async () => {
       const workspace = await fetchCachedStaffWorkspace(viewer);
@@ -203,7 +203,7 @@ function StaffWorkforceDashboardPage() {
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [cacheSignal, viewer]);
+  }, [cacheSignal, tab, viewer]);
 
   useEffect(() => {
     if (tab !== "other" || loading || !viewer?.id || viewer.role !== "staff") return;
@@ -295,12 +295,7 @@ function StaffWorkforceDashboardPage() {
 
             <TabsContent value="workforce" className="mt-0 min-w-0">
               <WorkforceDashboard
-                histories={histories}
-                users={staffUsers}
-                factories={visibleFactories}
-                loading={loading}
-                error={error}
-                onRetry={() => setReloadToken((value) => value + 1)}
+                viewer={viewer}
                 detailHref="/staff/workers"
                 presentation="mobile-dialog"
               />
@@ -373,15 +368,7 @@ function StaffWorkforceDashboardPage() {
               </TabsList>
 
               <TabsContent value="workforce" className="col-span-3 mt-0">
-                <WorkforceDashboard
-                  histories={histories}
-                  users={staffUsers}
-                  factories={visibleFactories}
-                  loading={loading}
-                  error={error}
-                  onRetry={() => setReloadToken((value) => value + 1)}
-                  detailHref="/staff/workers"
-                />
+                <WorkforceDashboard viewer={viewer} detailHref="/staff/workers" />
               </TabsContent>
 
               <TabsContent value="other" className="col-span-3 mt-0 space-y-4">

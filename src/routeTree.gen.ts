@@ -37,6 +37,9 @@ import { Route as AuthenticatedAttendanceRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdvancesRouteImport } from './routes/_authenticated/advances'
 import { Route as AuthenticatedAccountRouteImport } from './routes/_authenticated/account'
 import { Route as AuthenticatedStaffIndexRouteImport } from './routes/_authenticated/staff.index'
+import { Route as ApiWorkforceLookupsRouteImport } from './routes/api/workforce/lookups'
+import { Route as ApiWorkforceDashboardRouteImport } from './routes/api/workforce/dashboard'
+import { Route as ApiStaffExportRouteImport } from './routes/api/staff/export'
 import { Route as ApiPushSubscriptionRouteImport } from './routes/api/push/subscription'
 import { Route as ApiPushPublicKeyRouteImport } from './routes/api/push/public-key'
 import { Route as ApiPushApprovalRouteImport } from './routes/api/push/approval'
@@ -220,6 +223,21 @@ const AuthenticatedStaffIndexRoute = AuthenticatedStaffIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedStaffRoute,
+} as any)
+const ApiWorkforceLookupsRoute = ApiWorkforceLookupsRouteImport.update({
+  id: '/api/workforce/lookups',
+  path: '/api/workforce/lookups',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiWorkforceDashboardRoute = ApiWorkforceDashboardRouteImport.update({
+  id: '/api/workforce/dashboard',
+  path: '/api/workforce/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiStaffExportRoute = ApiStaffExportRouteImport.update({
+  id: '/api/staff/export',
+  path: '/api/staff/export',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPushSubscriptionRoute = ApiPushSubscriptionRouteImport.update({
   id: '/api/push/subscription',
@@ -497,6 +515,9 @@ export interface FileRoutesByFullPath {
   '/api/push/approval': typeof ApiPushApprovalRoute
   '/api/push/public-key': typeof ApiPushPublicKeyRoute
   '/api/push/subscription': typeof ApiPushSubscriptionRoute
+  '/api/staff/export': typeof ApiStaffExportRoute
+  '/api/workforce/dashboard': typeof ApiWorkforceDashboardRoute
+  '/api/workforce/lookups': typeof ApiWorkforceLookupsRoute
   '/staff/': typeof AuthenticatedStaffIndexRoute
   '/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
@@ -561,6 +582,9 @@ export interface FileRoutesByTo {
   '/api/push/approval': typeof ApiPushApprovalRoute
   '/api/push/public-key': typeof ApiPushPublicKeyRoute
   '/api/push/subscription': typeof ApiPushSubscriptionRoute
+  '/api/staff/export': typeof ApiStaffExportRoute
+  '/api/workforce/dashboard': typeof ApiWorkforceDashboardRoute
+  '/api/workforce/lookups': typeof ApiWorkforceLookupsRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
   '/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
@@ -631,6 +655,9 @@ export interface FileRoutesById {
   '/api/push/approval': typeof ApiPushApprovalRoute
   '/api/push/public-key': typeof ApiPushPublicKeyRoute
   '/api/push/subscription': typeof ApiPushSubscriptionRoute
+  '/api/staff/export': typeof ApiStaffExportRoute
+  '/api/workforce/dashboard': typeof ApiWorkforceDashboardRoute
+  '/api/workforce/lookups': typeof ApiWorkforceLookupsRoute
   '/_authenticated/staff/': typeof AuthenticatedStaffIndexRoute
   '/_authenticated/admin/accounts/factories': typeof AuthenticatedAdminAccountsFactoriesRoute
   '/_authenticated/admin/accounts/logs': typeof AuthenticatedAdminAccountsLogsRoute
@@ -701,6 +728,9 @@ export interface FileRouteTypes {
     | '/api/push/approval'
     | '/api/push/public-key'
     | '/api/push/subscription'
+    | '/api/staff/export'
+    | '/api/workforce/dashboard'
+    | '/api/workforce/lookups'
     | '/staff/'
     | '/admin/accounts/factories'
     | '/admin/accounts/logs'
@@ -765,6 +795,9 @@ export interface FileRouteTypes {
     | '/api/push/approval'
     | '/api/push/public-key'
     | '/api/push/subscription'
+    | '/api/staff/export'
+    | '/api/workforce/dashboard'
+    | '/api/workforce/lookups'
     | '/staff'
     | '/admin/accounts/factories'
     | '/admin/accounts/logs'
@@ -834,6 +867,9 @@ export interface FileRouteTypes {
     | '/api/push/approval'
     | '/api/push/public-key'
     | '/api/push/subscription'
+    | '/api/staff/export'
+    | '/api/workforce/dashboard'
+    | '/api/workforce/lookups'
     | '/_authenticated/staff/'
     | '/_authenticated/admin/accounts/factories'
     | '/_authenticated/admin/accounts/logs'
@@ -866,6 +902,9 @@ export interface RootRouteChildren {
   ApiPushApprovalRoute: typeof ApiPushApprovalRoute
   ApiPushPublicKeyRoute: typeof ApiPushPublicKeyRoute
   ApiPushSubscriptionRoute: typeof ApiPushSubscriptionRoute
+  ApiStaffExportRoute: typeof ApiStaffExportRoute
+  ApiWorkforceDashboardRoute: typeof ApiWorkforceDashboardRoute
+  ApiWorkforceLookupsRoute: typeof ApiWorkforceLookupsRoute
   ApiPublicManifestWebmanifestRoute: typeof ApiPublicManifestWebmanifestRoute
   ApiPublicPbSplatRoute: typeof ApiPublicPbSplatRoute
   ApiAdminWorkersWorkerIdDeleteRoute: typeof ApiAdminWorkersWorkerIdDeleteRoute
@@ -1068,6 +1107,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/staff/'
       preLoaderRoute: typeof AuthenticatedStaffIndexRouteImport
       parentRoute: typeof AuthenticatedStaffRoute
+    }
+    '/api/workforce/lookups': {
+      id: '/api/workforce/lookups'
+      path: '/api/workforce/lookups'
+      fullPath: '/api/workforce/lookups'
+      preLoaderRoute: typeof ApiWorkforceLookupsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/workforce/dashboard': {
+      id: '/api/workforce/dashboard'
+      path: '/api/workforce/dashboard'
+      fullPath: '/api/workforce/dashboard'
+      preLoaderRoute: typeof ApiWorkforceDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/staff/export': {
+      id: '/api/staff/export'
+      path: '/api/staff/export'
+      fullPath: '/api/staff/export'
+      preLoaderRoute: typeof ApiStaffExportRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/push/subscription': {
       id: '/api/push/subscription'
@@ -1517,6 +1577,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPushApprovalRoute: ApiPushApprovalRoute,
   ApiPushPublicKeyRoute: ApiPushPublicKeyRoute,
   ApiPushSubscriptionRoute: ApiPushSubscriptionRoute,
+  ApiStaffExportRoute: ApiStaffExportRoute,
+  ApiWorkforceDashboardRoute: ApiWorkforceDashboardRoute,
+  ApiWorkforceLookupsRoute: ApiWorkforceLookupsRoute,
   ApiPublicManifestWebmanifestRoute: ApiPublicManifestWebmanifestRoute,
   ApiPublicPbSplatRoute: ApiPublicPbSplatRoute,
   ApiAdminWorkersWorkerIdDeleteRoute: ApiAdminWorkersWorkerIdDeleteRoute,

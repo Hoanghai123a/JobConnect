@@ -1,5 +1,11 @@
-﻿import { useEffect, useMemo, useState } from "react";
-import { CalendarCheck, ClipboardCheck, SlidersHorizontal, UserRoundMinus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  CalendarCheck,
+  ClipboardCheck,
+  RefreshCw,
+  SlidersHorizontal,
+  UserRoundMinus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DateInput } from "@/components/ui/date-input";
 import {
@@ -12,48 +18,31 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
-import type { EmploymentHistoryRecord } from "@/lib/employment";
-import type { FactoryRecord } from "@/lib/factories";
 import type { UserRecord } from "@/lib/pocketbase";
-import { RecruitmentChart } from "./RecruitmentChart";
-import { WorkforceInsightsCharts } from "./WorkforceInsightsCharts";
 import {
-  filterWorkforceHistoriesByRecruitmentScope,
-  getWorkforceSummary,
-  isIsoDate,
-  localIsoDate,
-  shiftIsoDate,
-  type RecruitmentSourceScope,
-} from "./workforce-stats";
+  localWorkforceDate,
+  shiftWorkforceDate,
+  validateWorkforceRange,
+  type WorkforceRecruitmentScope,
+} from "@/lib/workforce-dashboard";
+import { useWorkforceDashboardData } from "@/lib/use-workforce-dashboard";
+import { WorkforceDailyChart } from "./WorkforceDailyChart";
+import { WorkforceInsightsCharts } from "./WorkforceInsightsCharts";
 
 const STORAGE_KEY = "jobconnect:workforce-dashboard-date-range";
-const RECRUITMENT_SCOPE_STORAGE_KEY = "jobconnect:workforce-dashboard-recruitment-scope";
-
+const SCOPE_STORAGE_KEY = "jobconnect:workforce-dashboard-recruitment-scope";
 type DateRange = { from: string; to: string };
-type StoredDateRange = DateRange & { savedOn?: string };
 
 function defaultRange(): DateRange {
-  const to = localIsoDate();
-  return { from: shiftIsoDate(to, -6), to };
+  const to = localWorkforceDate();
+  return { from: shiftWorkforceDate(to, -6), to };
 }
-
-function validRange(value: unknown): value is DateRange {
-  if (!value || typeof value !== "object") return false;
-  const range = value as DateRange;
-  const today = localIsoDate();
-  return (
-    isIsoDate(range.from) && isIsoDate(range.to) && range.from <= range.to && range.to <= today
-  );
-}
-
-function validRecruitmentScope(value: unknown): value is RecruitmentSourceScope {
+function validScope(value: unknown): value is WorkforceRecruitmentScope {
   return value === "all" || value === "internal" || value === "partner";
 }
-
 function formatDate(value: string) {
   return new Date(`${value}T12:00:00`).toLocaleDateString("vi-VN");
 }
-
 function SummaryCard({
   label,
   value,
@@ -90,126 +79,117 @@ function SummaryCard({
 }
 
 export function WorkforceDashboard({
-  histories,
-  users,
-  factories,
-  loading,
-  error,
-  onRetry,
+  viewer,
   detailHref,
   presentation = "default",
 }: {
-  histories: EmploymentHistoryRecord[];
-  users: UserRecord[];
-  factories: FactoryRecord[];
-  loading: boolean;
-  error: string;
-  onRetry: () => void;
+  viewer: UserRecord | null;
   detailHref: string;
   presentation?: "default" | "mobile-dialog";
 }) {
   const [range, setRange] = useState<DateRange>(defaultRange);
-  const [recruitmentScope, setRecruitmentScope] = useState<RecruitmentSourceScope>("all");
-  const [storageReady, setStorageReady] = useState(false);
-  const [filterOpen, setFilterOpen] = useState(false);
+  const [scope, setScope] = useState<WorkforceRecruitmentScope>("all");
   const [draftRange, setDraftRange] = useState<DateRange>(range);
-  const [draftRecruitmentScope, setDraftRecruitmentScope] =
-    useState<RecruitmentSourceScope>(recruitmentScope);
-  const today = localIsoDate();
-  const compactMobile = presentation === "mobile-dialog";
-
-  useEffect(() => {
-    try {
-      const savedRange = JSON.parse(
-        window.localStorage.getItem(STORAGE_KEY) || "null",
-      ) as StoredDateRange | null;
-      if (validRange(savedRange)) {
-        const nextRange = savedRange.savedOn === today ? savedRange : { ...savedRange, to: today };
-        if (validRange(nextRange)) setRange(nextRange);
-      }
-
-      const savedScope = JSON.parse(
-        window.localStorage.getItem(RECRUITMENT_SCOPE_STORAGE_KEY) || "null",
-      );
-      if (validRecruitmentScope(savedScope)) setRecruitmentScope(savedScope);
-    } catch {
-      // Keep the default values when saved data is invalid or unavailable.
-    } finally {
-      setStorageReady(true);
-    }
-  }, [today]);
-
-  useEffect(() => {
-    if (!storageReady) return;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...range, savedOn: today }));
-      window.localStorage.setItem(RECRUITMENT_SCOPE_STORAGE_KEY, JSON.stringify(recruitmentScope));
-    } catch {
-      // The dashboard remains usable when local storage is unavailable.
-    }
-  }, [range, recruitmentScope, storageReady, today]);
-
-  const filteredHistories = useMemo(
-    () => filterWorkforceHistoriesByRecruitmentScope(histories, users, recruitmentScope),
-    [histories, recruitmentScope, users],
-  );
-
+  const [draftScope, setDraftScope] = useState<WorkforceRecruitmentScope>(scope);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
+  const today = localWorkforceDate();
+  const compact = presentation === "mobile-dialog";
+  const rangeError = validateWorkforceRange(range.from, range.to);
+  const query = useWorkforceDashboardData({
+    viewer,
+    from: range.from,
+    to: range.to,
+    scope,
+    reloadToken,
+  });
+  const days = useMemo(() => query.data?.days || [], [query.data?.days]);
   const summary = useMemo(
-    () => getWorkforceSummary(filteredHistories, range.from, range.to),
-    [filteredHistories, range],
+    () => ({
+      joined: days.reduce((sum, day) => sum + day.joined, 0),
+      left: days.reduce((sum, day) => sum + day.left, 0),
+      working: days.at(-1)?.working || 0,
+    }),
+    [days],
   );
 
-  const setPreset = (days: number) =>
-    setRange({ from: shiftIsoDate(today, -(days - 1)), to: today });
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") as DateRange | null;
+      if (stored && !validateWorkforceRange(stored.from, stored.to)) setRange(stored);
+      const storedScope = JSON.parse(localStorage.getItem(SCOPE_STORAGE_KEY) || "null");
+      if (validScope(storedScope)) setScope(storedScope);
+    } catch {
+      /* dùng giá trị mặc định */
+    }
+  }, []);
+  useEffect(() => {
+    if (rangeError) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(range));
+      localStorage.setItem(SCOPE_STORAGE_KEY, JSON.stringify(scope));
+    } catch {
+      /* cache trình duyệt không bắt buộc */
+    }
+  }, [range, rangeError, scope]);
 
-  const openMobileFilter = () => {
+  const setPreset = (kind: "today" | "yesterday" | 7 | 30, draft = false) => {
+    const to = kind === "yesterday" ? shiftWorkforceDate(today, -1) : today;
+    const from = typeof kind === "number" ? shiftWorkforceDate(to, -(kind - 1)) : to;
+    if (draft) setDraftRange({ from, to });
+    else setRange({ from, to });
+  };
+  const presets = [
+    { key: "today" as const, label: "Hôm nay" },
+    { key: "yesterday" as const, label: "Hôm qua" },
+    { key: 7 as const, label: "7 ngày" },
+    { key: 30 as const, label: "30 ngày" },
+  ];
+  const openFilter = () => {
     setDraftRange(range);
-    setDraftRecruitmentScope(recruitmentScope);
+    setDraftScope(scope);
     setFilterOpen(true);
   };
-
-  const setDraftPreset = (days: number) =>
-    setDraftRange({ from: shiftIsoDate(today, -(days - 1)), to: today });
-
-  const applyMobileFilter = () => {
-    if (!validRange(draftRange)) return;
+  const applyFilter = () => {
+    if (validateWorkforceRange(draftRange.from, draftRange.to)) return;
     setRange(draftRange);
-    setRecruitmentScope(draftRecruitmentScope);
+    setScope(draftScope);
     setFilterOpen(false);
   };
-
-  const resetMobileFilter = () => {
-    setDraftRange(defaultRange());
-    setDraftRecruitmentScope("all");
-  };
+  const updatedLabel = query.data?.generatedAt
+    ? new Date(query.data.generatedAt).toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "";
+  const empty =
+    !query.loading &&
+    !query.error &&
+    days.every((day) => day.joined === 0 && day.left === 0 && day.working === 0);
 
   return (
     <div className="space-y-4">
       <section
         className={
-          compactMobile
+          compact
             ? "space-y-3"
             : "sticky top-[calc(env(safe-area-inset-top)+4.5rem)] z-20 -mx-2 space-y-3 bg-background/95 px-2 py-2 backdrop-blur desktop:top-20"
         }
       >
-        {compactMobile ? (
+        {compact ? (
           <button
             type="button"
-            onClick={openMobileFilter}
+            onClick={openFilter}
             className="flex w-full items-center gap-3 rounded-2xl border border-border/70 bg-card p-3 text-left shadow-soft active:scale-[0.99]"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <SlidersHorizontal className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-xs font-semibold text-foreground">Bộ lọc nhân lực</span>
+              <span className="block text-xs font-semibold">Bộ lọc nhân lực</span>
               <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
                 {formatDate(range.from)} – {formatDate(range.to)} ·{" "}
-                {recruitmentScope === "all"
-                  ? "Toàn bộ"
-                  : recruitmentScope === "internal"
-                    ? "Nội bộ"
-                    : "Đối tác"}
+                {scope === "all" ? "Toàn bộ" : scope === "internal" ? "Nội bộ" : "Đối tác"}
               </span>
             </span>
             <span className="rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
@@ -220,80 +200,45 @@ export function WorkforceDashboard({
           <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-soft desktop:flex-row desktop:items-end">
             <div className="grid min-w-0 flex-1 grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="workforce-from">Từ ngày</Label>
+                <Label>Từ ngày</Label>
                 <DateInput
-                  id="workforce-from"
                   value={range.from}
                   max={range.to}
-                  onChange={(from) =>
-                    isIsoDate(from) && setRange((current) => ({ ...current, from }))
-                  }
+                  onChange={(from) => setRange((current) => ({ ...current, from }))}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="workforce-to">Đến ngày</Label>
+                <Label>Đến ngày</Label>
                 <DateInput
-                  id="workforce-to"
                   value={range.to}
                   min={range.from}
                   max={today}
-                  onChange={(to) => isIsoDate(to) && setRange((current) => ({ ...current, to }))}
+                  onChange={(to) => setRange((current) => ({ ...current, to }))}
                 />
               </div>
             </div>
             <div className="space-y-1.5">
               <Label>Nguồn tuyển</Label>
-              <div className="inline-flex rounded-xl border border-border bg-background p-1">
-                <button
-                  type="button"
-                  aria-pressed={recruitmentScope === "all"}
-                  onClick={() => setRecruitmentScope("all")}
-                  className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
-                    recruitmentScope === "all"
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  Toàn bộ
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={recruitmentScope === "internal"}
-                  onClick={() => setRecruitmentScope("internal")}
-                  className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
-                    recruitmentScope === "internal"
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  Nội bộ
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={recruitmentScope === "partner"}
-                  onClick={() => setRecruitmentScope("partner")}
-                  className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
-                    recruitmentScope === "partner"
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  Đối tác
-                </button>
+              <div className="inline-flex rounded-xl border bg-background p-1">
+                {(["all", "internal", "partner"] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setScope(value)}
+                    className={`rounded-lg px-3 py-2 text-xs font-medium ${scope === value ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted"}`}
+                  >
+                    {value === "all" ? "Toàn bộ" : value === "internal" ? "Nội bộ" : "Đối tác"}
+                  </button>
+                ))}
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              {[
-                { label: "Hôm nay", days: 1 },
-                { label: "7 ngày", days: 7 },
-                { label: "30 ngày", days: 30 },
-                { label: "90 ngày", days: 90 },
-              ].map((preset) => (
+              {presets.map((preset) => (
                 <button
-                  key={preset.days}
+                  key={preset.key}
                   type="button"
-                  onClick={() => setPreset(preset.days)}
-                  className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  onClick={() => setPreset(preset.key)}
+                  className="rounded-xl border bg-background px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
                 >
                   {preset.label}
                 </button>
@@ -301,194 +246,171 @@ export function WorkforceDashboard({
             </div>
           </div>
         )}
+        {rangeError && (
+          <p className="rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {rangeError}
+          </p>
+        )}
         <div
-          className={
-            compactMobile ? "grid grid-cols-3 gap-2" : "grid grid-cols-2 gap-3 sm:grid-cols-3"
-          }
+          className={compact ? "grid grid-cols-3 gap-2" : "grid grid-cols-2 gap-3 sm:grid-cols-3"}
         >
           <SummaryCard
             label="Còn đi làm"
             value={summary.working}
             icon={CalendarCheck}
             tone="success"
-            compact={compactMobile}
+            compact={compact}
           />
           <SummaryCard
             label="Tuyển mới"
             value={summary.joined}
             icon={ClipboardCheck}
             tone="primary"
-            compact={compactMobile}
+            compact={compact}
           />
           <SummaryCard
             label="Đã nghỉ"
             value={summary.left}
             icon={UserRoundMinus}
             tone="warning"
-            compact={compactMobile}
+            compact={compact}
           />
         </div>
       </section>
 
-      {compactMobile && (
-        <Dialog open={filterOpen} onOpenChange={setFilterOpen}>
-          <DialogContent
-            className="max-h-[90dvh] w-[calc(100%-1rem)] rounded-3xl"
-            bodyClassName="space-y-4 px-4 py-4"
-          >
-            <DialogHeader className="px-4">
-              <DialogTitle>Bộ lọc nhân lực</DialogTitle>
-              <DialogDescription>
-                Chọn khoảng thời gian và nguồn tuyển rồi nhấn Áp dụng.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="workforce-mobile-from">Từ ngày</Label>
-                <DateInput
-                  id="workforce-mobile-from"
-                  value={draftRange.from}
-                  max={draftRange.to}
-                  onChange={(from) =>
-                    isIsoDate(from) && setDraftRange((current) => ({ ...current, from }))
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="workforce-mobile-to">Đến ngày</Label>
-                <DateInput
-                  id="workforce-mobile-to"
-                  value={draftRange.to}
-                  min={draftRange.from}
-                  max={today}
-                  onChange={(to) =>
-                    isIsoDate(to) && setDraftRange((current) => ({ ...current, to }))
-                  }
-                />
-              </div>
+      <Dialog open={filterOpen} onOpenChange={setFilterOpen}>
+        <DialogContent
+          className="max-h-[90dvh] w-[calc(100%-1rem)] rounded-3xl"
+          bodyClassName="space-y-4 px-4 py-4"
+        >
+          <DialogHeader className="px-4">
+            <DialogTitle>Bộ lọc nhân lực</DialogTitle>
+            <DialogDescription>
+              Chọn khoảng thời gian tối đa 180 ngày và nguồn tuyển.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Từ ngày</Label>
+              <DateInput
+                value={draftRange.from}
+                max={draftRange.to}
+                onChange={(from) => setDraftRange((current) => ({ ...current, from }))}
+              />
             </div>
-
-            <div className="space-y-2">
-              <Label>Mốc thời gian nhanh</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "Hôm nay", days: 1 },
-                  { label: "7 ngày", days: 7 },
-                  { label: "30 ngày", days: 30 },
-                  { label: "90 ngày", days: 90 },
-                ].map((preset) => (
-                  <button
-                    key={preset.days}
-                    type="button"
-                    onClick={() => setDraftPreset(preset.days)}
-                    className="min-h-10 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground active:bg-muted"
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
+            <div className="space-y-1.5">
+              <Label>Đến ngày</Label>
+              <DateInput
+                value={draftRange.to}
+                min={draftRange.from}
+                max={today}
+                onChange={(to) => setDraftRange((current) => ({ ...current, to }))}
+              />
             </div>
-
-            <div className="space-y-2">
-              <Label>Nguồn tuyển</Label>
-              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted/60 p-1.5">
-                {(
-                  [
-                    { key: "all", label: "Toàn bộ" },
-                    { key: "internal", label: "Nội bộ" },
-                    { key: "partner", label: "Đối tác" },
-                  ] as const
-                ).map((option) => (
-                  <button
-                    key={option.key}
-                    type="button"
-                    aria-pressed={draftRecruitmentScope === option.key}
-                    onClick={() => setDraftRecruitmentScope(option.key)}
-                    className={`min-h-10 rounded-xl px-2 text-xs font-semibold transition ${
-                      draftRecruitmentScope === option.key
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <DialogFooter className="grid grid-cols-2 px-4 sm:grid-cols-2">
-              <Button type="button" variant="outline" onClick={resetMobileFilter}>
-                Đặt lại
-              </Button>
-              <Button type="button" onClick={applyMobileFilter} disabled={!validRange(draftRange)}>
-                Áp dụng
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {presets.map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                onClick={() => setPreset(preset.key, true)}
+                className="min-h-10 rounded-xl border bg-background px-3 py-2 text-xs font-medium text-muted-foreground active:bg-muted"
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted/60 p-1.5">
+            {(["all", "internal", "partner"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setDraftScope(value)}
+                className={`min-h-10 rounded-xl px-2 text-xs font-semibold ${draftScope === value ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground"}`}
+              >
+                {value === "all" ? "Toàn bộ" : value === "internal" ? "Nội bộ" : "Đối tác"}
+              </button>
+            ))}
+          </div>
+          {validateWorkforceRange(draftRange.from, draftRange.to) && (
+            <p className="text-xs text-destructive">
+              {validateWorkforceRange(draftRange.from, draftRange.to)}
+            </p>
+          )}
+          <DialogFooter className="grid grid-cols-2 px-4 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setDraftRange(defaultRange());
+                setDraftScope("all");
+              }}
+            >
+              Đặt lại
+            </Button>
+            <Button
+              type="button"
+              onClick={applyFilter}
+              disabled={Boolean(validateWorkforceRange(draftRange.from, draftRange.to))}
+            >
+              Áp dụng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <section
-        className={`rounded-3xl border border-border/70 bg-card shadow-soft ${
-          compactMobile ? "p-3" : "p-5"
-        }`}
+        className={`relative rounded-3xl border border-border/70 bg-card shadow-soft ${compact ? "p-3" : "p-5"}`}
       >
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold">Biểu đồ nhân lực theo ngày</h3>
             <p className="text-xs text-muted-foreground">
-              Từ {formatDate(range.from)} đến {formatDate(range.to)} · Tuyển mới, còn đi làm và phát
-              sinh nghỉ.
+              Từ {formatDate(range.from)} đến {formatDate(range.to)} ·{" "}
+              {updatedLabel ? `Cập nhật lúc ${updatedLabel}` : "Đang chuẩn bị dữ liệu"}
             </p>
           </div>
           <a
             href={detailHref}
-            className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="rounded-xl border bg-background px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
           >
             Xem chi tiết
           </a>
         </div>
-
-        {loading ? (
-          <DataLoadingState variant="grid" label="Đang tải dữ liệu nhân lực..." rows={4} />
-        ) : error ? (
-          <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-destructive/40 bg-destructive/5 text-center">
-            <p className="text-sm text-destructive">{error}</p>
-            <button
-              type="button"
-              onClick={onRetry}
-              className="rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
-            >
-              Thử lại
-            </button>
+        {query.updating && days.length > 0 && (
+          <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+            <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
+            Đang cập nhật dữ liệu nền...
           </div>
-        ) : filteredHistories.length === 0 ? (
+        )}
+        {query.loading ? (
+          <DataLoadingState variant="grid" label="Đang tải dữ liệu nhân lực..." rows={4} />
+        ) : query.error && days.length === 0 ? (
+          <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-destructive/40 bg-destructive/5 text-center">
+            <p className="text-sm text-destructive">{query.error}</p>
+            <Button onClick={() => setReloadToken((value) => value + 1)}>Thử lại</Button>
+          </div>
+        ) : empty ? (
           <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">
-            {recruitmentScope === "internal"
-              ? "Chưa có dữ liệu nhân lực nội bộ."
-              : "Chưa có dữ liệu nhân lực."}
+            Chưa có dữ liệu nhân lực trong khoảng đã chọn.
           </div>
         ) : (
-          <RecruitmentChart
-            histories={filteredHistories}
-            users={users}
-            factories={factories}
-            from={range.from}
-            to={range.to}
-            dayDetailPresentation="dialog"
-          />
+          <div
+            className={query.staleView ? "pointer-events-none opacity-45" : "transition-opacity"}
+          >
+            <WorkforceDailyChart days={days} lookups={query.data?.lookups || null} />
+          </div>
         )}
       </section>
-
-      {!loading && !error && (
-        <WorkforceInsightsCharts
-          histories={filteredHistories}
-          users={users}
-          factories={factories}
-          from={range.from}
-          to={range.to}
-        />
+      {days.length > 0 && (
+        <div className={query.staleView ? "pointer-events-none opacity-45" : "transition-opacity"}>
+          <WorkforceInsightsCharts
+            days={days}
+            lookups={query.data?.lookups || null}
+            from={range.from}
+            to={range.to}
+          />
+        </div>
       )}
     </div>
   );
