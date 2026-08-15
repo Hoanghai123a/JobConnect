@@ -8,7 +8,7 @@ export interface WorkerDesktopCardProps {
   uid?: string;
   employeeCode?: string;
   cccd?: string;
-  taxCode?: string;
+  cccdImageProgress: string;
   phone?: string;
   dateOfBirth?: string;
   gender?: string;
@@ -37,7 +37,7 @@ export function WorkerDesktopCard({
   uid,
   employeeCode,
   cccd,
-  taxCode,
+  cccdImageProgress,
   phone,
   dateOfBirth,
   gender,
@@ -113,7 +113,7 @@ export function WorkerDesktopCard({
         <InfoLine label="Người tuyển" value={recruiterName} valueClassName="text-primary" />
         <InfoLine label="Nhà chính" value={mainHouseName} />
         <InfoLine label="Số điện thoại" value={phone} />
-        <InfoLine label="Mã số thuế" value={taxCode} />
+        <InfoLine label="Ảnh CCCD" value={cccdImageProgress} />
       </div>
 
       <ChevronRight className="h-5 w-5 justify-self-end text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />

@@ -65,6 +65,7 @@ import { useAppSettings } from "@/lib/app-settings";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import {
   fetchEmploymentHistories,
+  getHistoryCccdImageProgress,
   getLatestEmploymentHistory,
   isCurrentlyWorking,
   maskCccd,
@@ -1127,6 +1128,7 @@ function WorkerList({
               const mainHouseName = latest?.expand?.main_house?.name;
               const workerName = getWorkerDisplayName(user);
               const snapshotCccd = latest?.worker_cccd_snapshot || "";
+              const cccdImageProgress = getHistoryCccdImageProgress(latest);
 
               return (
                 <Fragment key={user.id}>
@@ -1136,7 +1138,7 @@ function WorkerList({
                     uid={latest?.uid || user.uid}
                     employeeCode={latest?.employee_code || ""}
                     cccd={maskCccd(snapshotCccd)}
-                    taxCode={latest?.worker_tax_code_snapshot}
+                    cccdImageProgress={cccdImageProgress}
                     phone={user.phone}
                     dateOfBirth={
                       latest?.worker_date_of_birth_snapshot
@@ -1169,8 +1171,7 @@ function WorkerList({
                           </>
                         )}
                         Mã NV: {latest?.employee_code || "" || "—"} · CCCD: {maskCccd(snapshotCccd)}
-                        {latest?.worker_tax_code_snapshot &&
-                          ` · MST: ${latest.worker_tax_code_snapshot}`}
+                        {` · Ảnh CCCD: ${cccdImageProgress}`}
                       </div>
                       <div className="mt-0.5 text-[11px] text-muted-foreground">
                         {factoryName || "Chưa có nhà máy"} · Vào {formatDate(latest?.join_date)}

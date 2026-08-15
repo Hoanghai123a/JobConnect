@@ -115,6 +115,14 @@ export interface EmploymentHistoryRecord {
   };
 }
 
+export function getHistoryCccdImageProgress(
+  history: EmploymentHistoryRecord | null | undefined,
+): string {
+  const version = history?.expand?.cccd_version;
+  const imageCount = Number(Boolean(version?.front_image)) + Number(Boolean(version?.back_image));
+  return `${imageCount}/2`;
+}
+
 export interface EmploymentDraft {
   user: string;
   factory: string;

@@ -200,7 +200,7 @@ export function buildWorkerHourStats({
         partner?.name?.trim() ||
         recruiter?.full_name?.trim() ||
         recruiter?.username?.trim() ||
-        "Ch?a g?n ng??i tuy?n",
+        "Chưa gắn người tuyển",
       recruiterType,
       source,
       hours: source === "attendance" ? attendanceHours(attendanceItem!) : salaryHours(salaryItem!),

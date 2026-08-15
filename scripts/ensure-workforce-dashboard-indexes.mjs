@@ -11,6 +11,14 @@ const INDEXES = {
     "CREATE INDEX `idx_emphist_factory` ON `employment_histories` (`factory`)",
     "CREATE INDEX `idx_emphist_recruiter_staff` ON `employment_histories` (`recruiter_staff`)",
     "CREATE INDEX `idx_emphist_recruiter_partner` ON `employment_histories` (`recruiter_partner`)",
+    "CREATE INDEX `idx_emphist_user_join_leave` ON `employment_histories` (`user`, `join_date`, `leave_date`)",
+    "CREATE INDEX `idx_emphist_recruiter_user` ON `employment_histories` (`recruiter_staff`, `user`)",
+  ],
+  check_attendance_items: [
+    "CREATE INDEX `idx_check_attendance_month_user_round` ON `check_attendance_items` (`month`, `user`, `round_no`)",
+  ],
+  check_salary_items: [
+    "CREATE INDEX `idx_check_salary_month_user_round` ON `check_salary_items` (`month`, `user`, `round_no`)",
   ],
   factory_managers: ["CREATE INDEX `idx_factory_managers_staff` ON `factory_managers` (`staff`)"],
 };

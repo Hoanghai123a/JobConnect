@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
 import { escapePb, relationInFilter } from "@/lib/delegations";
-import { fetchEmploymentHistories, type EmploymentHistoryRecord } from "@/lib/employment";
+import type { EmploymentHistoryRecord } from "@/lib/employment";
 import { exportToExcel } from "@/lib/excel";
 import {
   buildWorkerHourStats,
@@ -52,6 +52,75 @@ function formatHours(value: number) {
   return Number(value.toFixed(2)).toLocaleString("vi-VN", { maximumFractionDigits: 2 });
 }
 
+type HourStatsPayload = {
+  attendance: AttendanceHourItem[];
+  salary: SalaryHourItem[];
+  histories: EmploymentHistoryRecord[];
+};
+
+const HOUR_STATS_CACHE_TTL = 60_000;
+const HOUR_STATS_QUERY_CHUNK = 40;
+const hourStatsCache = new Map<string, { expiresAt: number; payload: HourStatsPayload }>();
+
+async function fetchRecordsByIds<T>(collection: string, ids: string[], fields: string) {
+  const chunks: string[][] = [];
+  for (let index = 0; index < ids.length; index += HOUR_STATS_QUERY_CHUNK) {
+    chunks.push(ids.slice(index, index + HOUR_STATS_QUERY_CHUNK));
+  }
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      pb.collection(collection).getFullList<T>({
+        filter: `(${relationInFilter("id", chunk)})`,
+        fields,
+      }),
+    ),
+  );
+  return results.flat();
+}
+
+function latestItemsByWorker<T extends { user: string; round_no?: number }>(items: T[]) {
+  const latest = new Map<string, T>();
+  for (const item of items) {
+    const current = latest.get(item.user);
+    if (item.user && (!current || Number(item.round_no || 0) > Number(current.round_no || 0))) {
+      latest.set(item.user, item);
+    }
+  }
+  return [...latest.values()];
+}
+
+const HOUR_HISTORY_FIELDS =
+  "id,user,factory,employee_code,recruiter_staff,recruiter_partner,join_date,leave_date,created,expand.user.id,expand.user.full_name,expand.user.username,expand.factory.id,expand.factory.name,expand.recruiter_staff.id,expand.recruiter_staff.full_name,expand.recruiter_staff.username,expand.recruiter_partner.id,expand.recruiter_partner.name";
+
+async function fetchHourHistoriesForRecruiter(recruiterId: string) {
+  return (await pb.collection("employment_histories").getFullList({
+    filter: `recruiter_staff="${escapePb(recruiterId)}"`,
+    sort: "-join_date,-created",
+    expand: "user,factory,recruiter_staff,recruiter_partner",
+    fields: HOUR_HISTORY_FIELDS,
+  })) as unknown as EmploymentHistoryRecord[];
+}
+
+async function fetchHourHistories(userIds: string[]) {
+  if (!userIds.length) return [];
+  const histories: EmploymentHistoryRecord[] = [];
+  for (let index = 0; index < userIds.length; index += HOUR_STATS_QUERY_CHUNK) {
+    const userFilter = relationInFilter(
+      "user",
+      userIds.slice(index, index + HOUR_STATS_QUERY_CHUNK),
+    );
+    histories.push(
+      ...((await pb.collection("employment_histories").getFullList({
+        filter: `(${userFilter})`,
+        sort: "-join_date,-created",
+        expand: "user,factory,recruiter_staff,recruiter_partner",
+        fields: HOUR_HISTORY_FIELDS,
+      })) as unknown as EmploymentHistoryRecord[]),
+    );
+  }
+  return histories;
+}
+
 export function HourStatsDashboard({ presentation = "embedded" }: HourStatsDashboardProps) {
   const { user, isAdmin } = useAuth();
   const viewer = user as UserRecord | null;
@@ -60,9 +129,7 @@ export function HourStatsDashboard({ presentation = "embedded" }: HourStatsDashb
   const [month, setMonth] = useState(currentMonth());
   const [attendanceItems, setAttendanceItems] = useState<AttendanceHourItem[]>([]);
   const [salaryItems, setSalaryItems] = useState<SalaryHourItem[]>([]);
-  const [histories, setHistories] = useState<Awaited<ReturnType<typeof fetchEmploymentHistories>>>(
-    [],
-  );
+  const [histories, setHistories] = useState<EmploymentHistoryRecord[]>([]);
   const [search, setSearch] = useState("");
   const [factoryId, setFactoryId] = useState("all");
   const [recruiterId, setRecruiterId] = useState("all");
@@ -75,24 +142,61 @@ export function HourStatsDashboard({ presentation = "embedded" }: HourStatsDashb
     setLoading(true);
     try {
       void refreshToken;
-      const historyRows = isAdmin
-        ? await fetchEmploymentHistories()
-        : ((await pb.collection("employment_histories").getFullList({
-            filter: `recruiter_staff="${escapePb(viewer.id)}"`,
-            sort: "-join_date,-created",
-            expand: "user,factory,recruiter_staff,recruiter_partner",
-          })) as unknown as EmploymentHistoryRecord[]);
+      const cacheKey = `${viewer.id}:${isAdmin ? "admin" : "staff"}:${month}`;
+      const cached = hourStatsCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        setAttendanceItems(cached.payload.attendance);
+        setSalaryItems(cached.payload.salary);
+        setHistories(cached.payload.histories);
+        return;
+      }
+
+      const staffHistories = isAdmin ? [] : await fetchHourHistoriesForRecruiter(viewer.id);
       const staffWorkerFilter = isAdmin
         ? ""
         : `(${relationInFilter(
             "user",
-            historyRows.map((history) => history.user),
+            staffHistories.map((history) => history.user),
           )})`;
       const filter = [`month="${escapePb(month)}"`, staffWorkerFilter].filter(Boolean).join(" && ");
-      const [attendance, salary] = await Promise.all([
-        pb.collection("check_attendance_items").getFullList<AttendanceHourItem>({ filter }),
-        pb.collection("check_salary_items").getFullList<SalaryHourItem>({ filter }),
+      const [attendanceRows, salaryRows] = await Promise.all([
+        pb.collection("check_attendance_items").getFullList<AttendanceHourItem>({
+          filter,
+          fields: "id,user,month,round_no,summary",
+        }),
+        pb.collection("check_salary_items").getFullList<SalaryHourItem>({
+          filter,
+          fields: "id,user,month,round_no,personal",
+        }),
       ]);
+      let attendance = latestItemsByWorker(attendanceRows);
+      let salary = latestItemsByWorker(salaryRows);
+      const attendanceIds = new Set(attendance.map((item) => item.user));
+      const [attendanceDetails, salaryDetails] = await Promise.all([
+        fetchRecordsByIds<Pick<AttendanceHourItem, "id" | "rows">>(
+          "check_attendance_items",
+          attendance
+            .filter((item) => !Object.keys(item.summary || {}).length)
+            .map((item) => item.id),
+          "id,rows",
+        ),
+        fetchRecordsByIds<Pick<SalaryHourItem, "id" | "wage_lines">>(
+          "check_salary_items",
+          salary.filter((item) => !attendanceIds.has(item.user)).map((item) => item.id),
+          "id,wage_lines",
+        ),
+      ]);
+      const attendanceDetailsById = new Map(attendanceDetails.map((item) => [item.id, item]));
+      const salaryDetailsById = new Map(salaryDetails.map((item) => [item.id, item]));
+      attendance = attendance.map((item) => ({ ...item, ...attendanceDetailsById.get(item.id) }));
+      salary = salary.map((item) => ({ ...item, ...salaryDetailsById.get(item.id) }));
+      const workerIds = [...new Set([...attendance, ...salary].map((item) => item.user))];
+      const workerIdSet = new Set(workerIds);
+      const historyRows = isAdmin
+        ? await fetchHourHistories(workerIds)
+        : staffHistories.filter((history) => workerIdSet.has(history.user));
+      const payload = { attendance, salary, histories: historyRows };
+      hourStatsCache.set(cacheKey, { expiresAt: Date.now() + HOUR_STATS_CACHE_TTL, payload });
       setAttendanceItems(attendance);
       setSalaryItems(salary);
       setHistories(historyRows);
@@ -211,7 +315,10 @@ export function HourStatsDashboard({ presentation = "embedded" }: HourStatsDashb
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() => setRefreshToken((value) => value + 1)}
+                onClick={() => {
+                  hourStatsCache.delete(`${viewer?.id}:${isAdmin ? "admin" : "staff"}:${month}`);
+                  setRefreshToken((value) => value + 1);
+                }}
                 disabled={loading}
                 aria-label="Tải lại thống kê"
                 className="shrink-0"
@@ -376,7 +483,10 @@ export function HourStatsDashboard({ presentation = "embedded" }: HourStatsDashb
       right={
         <button
           type="button"
-          onClick={() => setRefreshToken((value) => value + 1)}
+          onClick={() => {
+            hourStatsCache.delete(`${viewer?.id}:${isAdmin ? "admin" : "staff"}:${month}`);
+            setRefreshToken((value) => value + 1);
+          }}
           disabled={loading}
           aria-label="Tải lại thống kê"
           className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-primary shadow-sm disabled:opacity-60"

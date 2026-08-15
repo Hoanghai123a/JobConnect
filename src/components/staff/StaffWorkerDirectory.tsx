@@ -24,7 +24,11 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { RegisterDialog } from "@/components/workforce/RegisterDialog";
 import { useAuth } from "@/lib/auth";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
-import { isCurrentlyWorking, maskCccd } from "@/lib/employment";
+import {
+  getHistoryCccdImageProgress,
+  isCurrentlyWorking,
+  maskCccd,
+} from "@/lib/employment";
 import type { UserRecord } from "@/lib/pocketbase";
 import { readCachedAuxData } from "@/lib/staff-cache";
 import {
@@ -354,6 +358,7 @@ export function StaffWorkerDirectory({
             const snapshotCccd = latest?.worker_cccd_snapshot || "";
             const snapshotDateOfBirth = latest?.worker_date_of_birth_snapshot;
             const snapshotAddress = latest?.worker_address_snapshot || latest?.hometown_snapshot;
+            const cccdImageProgress = getHistoryCccdImageProgress(latest);
 
             return (
               <Fragment key={worker.user.id}>
@@ -363,7 +368,7 @@ export function StaffWorkerDirectory({
                   uid={latest?.uid || worker.user.uid}
                   employeeCode={latest?.employee_code || ""}
                   cccd={maskCccd(snapshotCccd)}
-                  taxCode={latest?.worker_tax_code_snapshot}
+                  cccdImageProgress={cccdImageProgress}
                   phone={worker.user.phone}
                   dateOfBirth={snapshotDateOfBirth ? formatDate(snapshotDateOfBirth) : undefined}
                   gender={worker.user.gender}
@@ -387,8 +392,7 @@ export function StaffWorkerDirectory({
                       <div className="truncate text-sm font-semibold">{workerName}</div>
                       <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
                         Mã NV: {latest?.employee_code || "Chưa có"} · CCCD: {maskCccd(snapshotCccd)}
-                        {latest?.worker_tax_code_snapshot &&
-                          ` · MST: ${latest.worker_tax_code_snapshot}`}
+                        {` · Ảnh CCCD: ${cccdImageProgress}`}
                       </div>
                       <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
                         {latest?.expand?.factory?.name || "Chưa có nhà máy"} · Người tuyển:{" "}
