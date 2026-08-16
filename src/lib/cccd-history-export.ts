@@ -327,30 +327,41 @@ function imageUrlFromVersion(version: CccdVersionRecord | undefined, side: Image
   return exportFileUrl(version, filename);
 }
 
+function imageUrlFromUser(user: UserRecord | undefined, side: ImageSide) {
+  if (!user) return "";
+  const filename = side === "front" ? user.cccd_front : user.cccd_back;
+  return exportFileUrl(user, filename);
+}
+
 function resolveImageUrl(
   history: EmploymentHistoryRecord,
   versions: CccdVersionRecord[],
   versionById: Map<string, CccdVersionRecord>,
+  user: UserRecord | undefined,
   side: ImageSide,
 ) {
   const historyCccd = normalizeCccd(history.worker_cccd_snapshot);
   const directVersion = history.cccd_version ? versionById.get(history.cccd_version) : undefined;
+  const expandedVersion = history.expand?.cccd_version;
   const matchingVersions = historyCccd
     ? versions.filter((version) => normalizeCccd(version.cccd_number) === historyCccd)
     : [];
 
-  const candidates = [directVersion, ...matchingVersions].filter(
-    (version, index, all): version is CccdVersionRecord =>
-      Boolean(version) && all.findIndex((item) => item?.id === version?.id) === index,
+  const candidates = [directVersion, expandedVersion, ...matchingVersions].filter(
+    (version): version is CccdVersionRecord => Boolean(version),
   );
   for (const version of candidates) {
     const url = imageUrlFromVersion(version, side);
     if (url) return url;
   }
 
+  const userCccd = normalizeCccd(user?.cccd);
+  if (historyCccd && historyCccd === userCccd) {
+    return imageUrlFromUser(user, side);
+  }
+
   return "";
 }
-
 export async function prepareCccdHistoryExport(
   histories: EmploymentHistoryRecord[],
   users: UserRecord[],
@@ -361,10 +372,12 @@ export async function prepareCccdHistoryExport(
   const versions = await fetchCccdVersionsByUsers(userIds);
   const groupedVersions = versionsByUserId(versions);
   const versionById = new Map(versions.map((version) => [version.id, version]));
+  const userById = new Map(users.map((user) => [user.id, user]));
   const factoryById = new Map(factories.map((factory) => [factory.id, factory]));
 
   const records = histories.map((history) => {
     const userVersions = groupedVersions.get(history.user) || [];
+    const user = userById.get(history.user) || history.expand?.user;
     return {
       historyId: history.id,
       factoryId: history.factory,
@@ -375,8 +388,8 @@ export async function prepareCccdHistoryExport(
       joinDate: safeJoinDate(history.join_date),
       workerName: history.worker_name_snapshot || "thieu-thong-tin",
       cccdNumber: history.worker_cccd_snapshot || "khong-co-cccd",
-      frontUrl: resolveImageUrl(history, userVersions, versionById, "front") || undefined,
-      backUrl: resolveImageUrl(history, userVersions, versionById, "back") || undefined,
+      frontUrl: resolveImageUrl(history, userVersions, versionById, user, "front") || undefined,
+      backUrl: resolveImageUrl(history, userVersions, versionById, user, "back") || undefined,
     } satisfies PreparedCccdHistoryRecord;
   });
 
