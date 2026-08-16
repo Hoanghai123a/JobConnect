@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { useNavigate } from "@tanstack/react-router";
+import { WorkerPayrollDialog } from "@/components/payroll/WorkerPayrollView";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
@@ -147,6 +148,7 @@ export function WorkerQuickDrawer({
   const navigate = useNavigate();
   const { data: settings } = useAppSettings();
   const [view, setView] = useState<DrawerView>("summary");
+  const [payrollOpen, setPayrollOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [leaveDate, setLeaveDate] = useState(todayDate());
   const [leaveNote, setLeaveNote] = useState("");
@@ -583,18 +585,7 @@ export function WorkerQuickDrawer({
                   <ActionButton
                     icon={CalendarRange}
                     label="Check công lương"
-                    onClick={() => {
-                      const id = worker.user.id;
-                      onClose();
-                      setTimeout(
-                        () =>
-                          navigate({
-                            to: "/staff/workers/$workerId/payroll",
-                            params: { workerId: id },
-                          }),
-                        150,
-                      );
-                    }}
+                    onClick={() => setPayrollOpen(true)}
                   />
                 )}
                 {worker.canUpdateBank && (
@@ -960,6 +951,7 @@ export function WorkerQuickDrawer({
           </Button>
         </DrawerFooter>
       </DrawerContent>
+      <WorkerPayrollDialog open={payrollOpen} onOpenChange={setPayrollOpen} viewer={viewer} workerId={worker?.user.id || ""} />
     </Drawer>
   );
 }
@@ -1205,3 +1197,10 @@ function AdvanceForm({
     </form>
   );
 }
+
+
+
+
+
+
+

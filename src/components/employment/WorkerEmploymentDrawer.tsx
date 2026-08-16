@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { WorkerPayrollDialog } from "@/components/payroll/WorkerPayrollView";
 import {
   CalendarRange,
   ChevronDown,
@@ -391,7 +391,7 @@ export function WorkerEmploymentDrawer({
   onClose: () => void;
   onDataChanged: () => void | Promise<void>;
 }) {
-  const navigate = useNavigate();
+  const [payrollOpen, setPayrollOpen] = useState(false);
   const { data: settings } = useAppSettings();
   const [infoOpen, setInfoOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
@@ -1347,6 +1347,8 @@ export function WorkerEmploymentDrawer({
 
   return (
     <>
+      <WorkerPayrollDialog open={payrollOpen} onOpenChange={setPayrollOpen} viewer={actor as UserRecord} workerId={user?.id || ""} />
+
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
         <DialogContent
           layout="raw"
@@ -1413,18 +1415,7 @@ export function WorkerEmploymentDrawer({
                         icon={CalendarRange}
                         label="Check công lương"
                         tone="info"
-                        onClick={() => {
-                          const id = user.id;
-                          onClose();
-                          setTimeout(
-                            () =>
-                              navigate({
-                                to: "/staff/workers/$workerId/payroll",
-                                params: { workerId: id },
-                              }),
-                            150,
-                          );
-                        }}
+                        onClick={() => setPayrollOpen(true)}
                       />
                     )}
                     {permissions.canUpdateBank && (
@@ -2831,3 +2822,5 @@ export function WorkerEmploymentDrawer({
     </>
   );
 }
+
+

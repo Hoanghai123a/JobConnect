@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Camera, CalendarCheck, Loader2, Moon, Sun, Wallet } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -20,7 +20,37 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import { getUserErrorMessage } from "@/lib/toast";
+import { escapePb } from "@/lib/delegations";
+import { pb, type UserRecord } from "@/lib/pocketbase";
+import { fetchStaffWorkerWorkspace } from "@/lib/staff-permissions";
 
+export function WorkerPayrollDialog({ open, onOpenChange, viewer, workerId }: { open: boolean; onOpenChange: (open: boolean) => void; viewer: UserRecord; workerId: string }) {
+  const [workerName, setWorkerName] = useState("");
+  const [workerCompany, setWorkerCompany] = useState("");
+  const [attendanceItems, setAttendanceItems] = useState<WorkerAttendanceCheckItem[]>([]);
+  const [salaryItems, setSalaryItems] = useState<WorkerSalaryCheckItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [authorized, setAuthorized] = useState(true);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    try {
+      const workspace = await fetchStaffWorkerWorkspace(viewer, workerId);
+      const worker = workspace.worker;
+      if (!worker || !worker.canViewPayroll) { setAuthorized(false); return; }
+      setAuthorized(true); setWorkerName(worker.user.full_name || worker.user.username || ""); setWorkerCompany(worker.latestHistory?.expand?.factory?.name || "");
+      const filter = `user="${escapePb(workerId)}"`;
+      const [attendanceRes, salaryRes] = await Promise.all([
+        pb.collection("check_attendance_items").getList(1, 100, { filter, sort: "-created", expand: "batch" }),
+        pb.collection("check_salary_items").getList(1, 100, { filter, sort: "-created", expand: "batch" }).catch(() => ({ items: [] })),
+      ]);
+      setAttendanceItems((attendanceRes.items as unknown as WorkerAttendanceCheckItem[]).map((item) => ({ ...item, rows: Array.isArray(item.rows) ? item.rows : [] })));
+      setSalaryItems((salaryRes.items as unknown as WorkerSalaryCheckItem[]).map((item) => ({ ...item, wage_lines: Array.isArray(item.wage_lines) ? item.wage_lines : [], allowance_lines: Array.isArray(item.allowance_lines) ? item.allowance_lines : [], deduction_lines: Array.isArray(item.deduction_lines) ? item.deduction_lines : [], totals: item.totals || { wage: 0, allowance: 0, deduction: 0, net: 0 } })));
+    } catch (cause) { setError(getUserErrorMessage(cause, "Không tải được dữ liệu công/lương")); } finally { setLoading(false); }
+  }, [viewer, workerId]);
+  useEffect(() => { if (open) void load(); }, [load, open]);
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[92dvh] max-w-5xl p-0"><DialogHeader><DialogTitle>Check công/lương</DialogTitle><DialogDescription>{workerName || "Người lao động"}{workerCompany ? ` · ${workerCompany}` : ""}</DialogDescription></DialogHeader>{error ? <div className="px-4 py-3 text-sm text-destructive">{error}</div> : !authorized ? <div className="p-4"><EmptyState icon={CalendarCheck} title="Không có quyền" description="Bạn không có quyền xem check công/lương của người lao động này." /></div> : <WorkerPayrollView attendanceItems={attendanceItems} salaryItems={salaryItems} loading={loading} fallbackFactoryName={workerCompany} />}</DialogContent></Dialog>;
+}
 export type PayrollBatchRecord = {
   id: string;
   month: string;
@@ -836,3 +866,6 @@ function RateCell({
     </div>
   );
 }
+
+
+
