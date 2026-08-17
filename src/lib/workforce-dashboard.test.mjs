@@ -48,6 +48,21 @@ test("tổng hợp tuyển, nghỉ, đang làm và tuyển lần đầu", () => 
   ]);
 });
 
+test("tính tuyển mới khi join_date có giờ trong ngày kết thúc", () => {
+  const histories = [
+    { id: "h1", user: "u1", recruiter_staff: "s1", join_date: "2026-08-14T08:30:00.000Z" },
+    { id: "h2", user: "u2", recruiter_staff: "s1", join_date: "2026-08-15T23:59:59.000Z" },
+    { id: "h3", user: "u3", recruiter_staff: "s1", join_date: "2026-08-16T00:00:00.000Z" },
+  ];
+  const days = aggregateWorkforceDays({
+    histories,
+    from: "2026-08-14",
+    to: "2026-08-15",
+    scope: "all",
+  });
+  assert.deepEqual(days.map((day) => day.joined), [1, 1]);
+});
+
 test("lọc nguồn tuyển trước khi tính số đang làm", () => {
   const histories = [
     { id: "h1", user: "u1", factory: "f1", recruiter_staff: "s1", join_date: "2026-08-01" },

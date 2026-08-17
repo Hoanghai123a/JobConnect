@@ -3,6 +3,7 @@ import { getPBUpstream } from "./pocketbase-config";
 import type { UserRecord } from "./pocketbase";
 import {
   aggregateWorkforceDays,
+  shiftWorkforceDate,
   validateWorkforceRange,
   type WorkforceDashboardResponse,
   type WorkforceHistoryInput,
@@ -114,7 +115,8 @@ function sourceFilter(scope: WorkforceRecruitmentScope) {
       : "";
 }
 function historyFilter(from: string, to: string, permission: string, source: string) {
-  return [`join_date<="${to}"`, `(leave_date="" || leave_date>="${from}")`, permission, source]
+  const exclusiveTo = shiftWorkforceDate(to, 1);
+  return [`join_date<"${exclusiveTo}"`, `(leave_date="" || leave_date>="${from}")`, permission, source]
     .filter(Boolean)
     .map((p) => `(${p})`)
     .join(" && ");
