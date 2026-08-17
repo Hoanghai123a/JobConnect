@@ -241,7 +241,7 @@ export function StaffActionHistoryPanel({
                     <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
                       {actorName(log)} · {formatStaffActionDateTime(log.created)}
                     </span>
-                    <span className="mt-1 block line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                    <span className="mt-1 block truncate text-[11px] leading-relaxed text-muted-foreground">
                       {getWorkerActionSummary(log)}
                     </span>
                   </span>

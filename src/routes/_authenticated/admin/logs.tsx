@@ -24,7 +24,7 @@ import {
 import { StatusChip } from "@/components/ui/status-chip";
 import { escapePb } from "@/lib/delegations";
 import { pb, type UserRecord } from "@/lib/pocketbase";
-import type { StaffActionLogRecord } from "@/lib/staff-log";
+import { formatStaffActionDateTime, getWorkerActionSummary, type StaffActionLogRecord } from "@/lib/staff-log";
 
 export const Route = createFileRoute("/_authenticated/admin/logs")({
   beforeLoad: () => {
@@ -226,7 +226,7 @@ function SystemActionLogsPage() {
                 type="button"
                 key={item.id}
                 onClick={() => setSelectedLog(item)}
-                className="w-full rounded-xl border border-border/60 bg-card px-3 py-2.5 text-left shadow-sm active:scale-[0.99]"
+                className="flex w-full min-w-0 items-start gap-2 rounded-xl border border-border/60 bg-card p-2.5 text-left shadow-sm transition-colors hover:bg-muted/40 active:scale-[0.99]"
               >
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 flex-1">
@@ -245,12 +245,12 @@ function SystemActionLogsPage() {
                     </div>
                   </div>
                   <span className="shrink-0 text-[11px] text-muted-foreground sm:text-right">
-                    {formatDateTime(item.created)}
+                    {formatStaffActionDateTime(item.created)}
                   </span>
                 </div>
                 {item.note && (
-                  <div className="mt-1.5 line-clamp-1 text-[12px] leading-relaxed text-muted-foreground">
-                    {item.note}
+                  <div className="mt-1 truncate text-[11px] leading-relaxed text-muted-foreground">
+                    {getWorkerActionSummary(item)}
                   </div>
                 )}
               </button>

@@ -338,6 +338,11 @@ function summarizeChangedFields(log: StaffActionLogRecord) {
   return `Đã cập nhật ${fields.slice(0, 2).join(", ")} và ${fields.length - 2} trường khác`;
 }
 
+function compactText(value: string, maxLength = 96) {
+  const text = value.replace(/\s+/g, " ").trim();
+  return text.length <= maxLength ? text : `${text.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
 export function getWorkerActionSummary(log: StaffActionLogRecord) {
   const kind = getWorkerActionKind(log);
 
@@ -358,14 +363,14 @@ export function getWorkerActionSummary(log: StaffActionLogRecord) {
 
     if (reason) parts.push(`Lý do: ${reason}`);
 
-    return parts.join(" · ") || log.note || getStaffActionCollectionLabel(log.target_collection);
+    return compactText(parts.join(" · ") || log.note || "") || getStaffActionCollectionLabel(log.target_collection);
   }
 
   const changedSummary = summarizeChangedFields(log);
 
   if (log.action === "update" && changedSummary) return changedSummary;
 
-  return log.note || changedSummary || getStaffActionCollectionLabel(log.target_collection);
+  return compactText(log.note || changedSummary || getStaffActionCollectionLabel(log.target_collection));
 }
 
 function timestamp(value?: string) {
