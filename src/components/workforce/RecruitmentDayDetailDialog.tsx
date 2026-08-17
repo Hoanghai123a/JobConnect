@@ -118,7 +118,7 @@ function DesktopWorkerTable({ workers }: { workers: RecruitmentDayWorkerRow[] })
       <table className="w-full min-w-[64rem] border-collapse text-left text-sm">
         <thead className="sticky top-0 z-10 bg-muted/95 text-xs font-semibold text-muted-foreground backdrop-blur">
           <tr>
-            <th className="px-4 py-3">Nhà máy</th>
+            <th className="px-4 py-3">Công ty</th>
             <th className="px-4 py-3">Mã NV</th>
             <th className="px-4 py-3">Họ và tên</th>
             <th className="px-4 py-3">Nhà chính</th>

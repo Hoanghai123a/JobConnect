@@ -368,7 +368,13 @@ function StaffWorkforceDashboardPage() {
               </TabsList>
 
               <TabsContent value="workforce" className="col-span-3 mt-0">
-                <WorkforceDashboard viewer={viewer} detailHref="/staff/workers" />
+                <WorkforceDashboard
+                  viewer={viewer}
+                  detailHref="/staff/workers"
+                  detailHistories={histories}
+                  detailUsers={staffUsers}
+                  detailFactories={visibleFactories}
+                />
               </TabsContent>
 
               <TabsContent value="other" className="col-span-3 mt-0 space-y-4">
