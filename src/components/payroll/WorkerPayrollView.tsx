@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Camera, CalendarCheck, Loader2, Moon, Sun, Wallet } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +23,7 @@ import { toast } from "@/lib/toast";
 import { getUserErrorMessage } from "@/lib/toast";
 import { type UserRecord } from "@/lib/pocketbase";
 import { fetchStaffWorkerWorkspace } from "@/lib/staff-permissions";
-import { fetchWorkerCheckPayroll, invalidateCheckPayrollCache } from "@/lib/check-payroll-cache";
+import { fetchWorkerCheckPayroll } from "@/lib/check-payroll-cache";
 
 export function WorkerPayrollDialog({
   open,
@@ -489,97 +490,112 @@ export function WorkerPayrollView({
     [selectedAttendance?.month, factoryCutoffDay],
   );
 
+  if (loading && attendanceItems.length === 0 && salaryItems.length === 0) {
+    return (
+      <div className="space-y-4 p-4">
+        <DataLoadingState variant="inline" label="Đang tải dữ liệu công/lương..." />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <DataLoadingState variant="list" label="Đang tải bảng check công..." rows={2} />
+          <DataLoadingState variant="list" label="Đang tải bảng check lương..." rows={2} />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <Tabs defaultValue="attendance" className="worker-payroll-view space-y-4">
-      <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl">
-        <TabsTrigger value="attendance" className="rounded-lg text-xs">
-          Check công
-        </TabsTrigger>
-        <TabsTrigger value="salary" className="rounded-lg text-xs">
-          Check lương
-        </TabsTrigger>
-      </TabsList>
+    <div className="space-y-3">
+      {loading && <DataLoadingState variant="inline" label="Đang cập nhật dữ liệu công/lương..." />}
+      <Tabs defaultValue="attendance" className="worker-payroll-view space-y-4">
+        <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl">
+          <TabsTrigger value="attendance" className="rounded-lg text-xs">
+            Check công
+          </TabsTrigger>
+          <TabsTrigger value="salary" className="rounded-lg text-xs">
+            Check lương
+          </TabsTrigger>
+        </TabsList>
 
-      <TabsContent value="attendance" className="mt-0 space-y-4">
-        {attendanceItems.length === 0 && !loading ? (
-          <EmptyState
-            icon={CalendarCheck}
-            title="Chưa có bảng check công"
-            description="Khi admin gửi bảng check công, dữ liệu sẽ hiển thị tại đây."
-          />
-        ) : (
-          <>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {attendanceItems.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setSelectedAttendance(item)}
-                  className={cn(
-                    "flex-none rounded-full border px-3 py-1.5 text-xs font-medium transition",
-                    selectedAttendance?.id === item.id
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-card text-muted-foreground",
-                  )}
-                >
-                  {item.month} · {item.expand?.batch?.note || `Lần ${item.round_no}`}
-                </button>
-              ))}
-            </div>
+        <TabsContent value="attendance" className="mt-0 space-y-4">
+          {attendanceItems.length === 0 && !loading ? (
+            <EmptyState
+              icon={CalendarCheck}
+              title="Chưa có bảng check công"
+              description="Khi admin gửi bảng check công, dữ liệu sẽ hiển thị tại đây."
+            />
+          ) : (
+            <>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {attendanceItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedAttendance(item)}
+                    className={cn(
+                      "flex-none rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                      selectedAttendance?.id === item.id
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-card text-muted-foreground",
+                    )}
+                  >
+                    {item.month} · {item.expand?.batch?.note || `Lần ${item.round_no}`}
+                  </button>
+                ))}
+              </div>
 
-            {selectedAttendance && (
-              <>
-                <div className="flex justify-end">
-                  <CopyImageButton
-                    targetSelector=".worker-check-attendance-layout"
-                    label={"b\u1ea3ng check c\u00f4ng"}
-                  />
-                </div>
-                <div className="worker-check-attendance-layout">
-                  <aside className="worker-check-attendance-summary">
-                    <Card className="worker-check-attendance-card overflow-hidden">
-                      <div className="gradient-accent p-4 text-accent-foreground">
-                        <div className="text-xs uppercase opacity-80">Bảng check công</div>
-                        <div className="mt-0.5 text-xl font-bold">
-                          {selectedAttendance.month} ·{" "}
-                          {selectedAttendance.expand?.batch?.note ||
-                            `Lần ${selectedAttendance.round_no}`}
-                        </div>
-                        <div
-                          className="mt-1 truncate text-sm font-semibold"
-                          title={selectedAttendance.full_name || "—"}
-                        >
-                          Họ tên: {selectedAttendance.full_name || "—"}
-                        </div>
-                      </div>
-                      <div className="worker-check-rate-grid grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
-                        {visibleRateCells.map((cell) => (
-                          <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
-                        ))}
-                        <RateCell label="Ngày" hours={selectedAttendance.rows.length} suffix="" />
-                      </div>
-                    </Card>
-                  </aside>
-
-                  <div className="worker-check-attendance-calendar">
-                    <CheckMonthCalendar rows={selectedAttendance.rows} period={selectedPeriod} />
+              {selectedAttendance && (
+                <>
+                  <div className="flex justify-end">
+                    <CopyImageButton
+                      targetSelector=".worker-check-attendance-layout"
+                      label={"b\u1ea3ng check c\u00f4ng"}
+                    />
                   </div>
-                </div>
-              </>
-            )}
-          </>
-        )}
-      </TabsContent>
+                  <div className="worker-check-attendance-layout">
+                    <aside className="worker-check-attendance-summary">
+                      <Card className="worker-check-attendance-card overflow-hidden">
+                        <div className="gradient-accent p-4 text-accent-foreground">
+                          <div className="text-xs uppercase opacity-80">Bảng check công</div>
+                          <div className="mt-0.5 text-xl font-bold">
+                            {selectedAttendance.month} ·{" "}
+                            {selectedAttendance.expand?.batch?.note ||
+                              `Lần ${selectedAttendance.round_no}`}
+                          </div>
+                          <div
+                            className="mt-1 truncate text-sm font-semibold"
+                            title={selectedAttendance.full_name || "—"}
+                          >
+                            Họ tên: {selectedAttendance.full_name || "—"}
+                          </div>
+                        </div>
+                        <div className="worker-check-rate-grid grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
+                          {visibleRateCells.map((cell) => (
+                            <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
+                          ))}
+                          <RateCell label="Ngày" hours={selectedAttendance.rows.length} suffix="" />
+                        </div>
+                      </Card>
+                    </aside>
 
-      <TabsContent value="salary" className="mt-0">
-        <SalaryCheckPanel
-          items={salaryItems}
-          selected={selectedSalary}
-          onSelect={setSelectedSalary}
-          loading={loading}
-        />
-      </TabsContent>
-    </Tabs>
+                    <div className="worker-check-attendance-calendar">
+                      <CheckMonthCalendar rows={selectedAttendance.rows} period={selectedPeriod} />
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="salary" className="mt-0">
+          <SalaryCheckPanel
+            items={salaryItems}
+            selected={selectedSalary}
+            onSelect={setSelectedSalary}
+            loading={loading}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
 

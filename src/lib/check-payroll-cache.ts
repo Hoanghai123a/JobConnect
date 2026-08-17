@@ -13,6 +13,8 @@ type CacheEntry = {
   expiresAt: number;
   attendance: WorkerAttendanceCheckItem[];
   salary: WorkerSalaryCheckItem[];
+  attendanceError?: string;
+  salaryError?: string;
 };
 const memoryCache = new Map<string, CacheEntry>();
 
@@ -93,6 +95,8 @@ export function invalidateCheckPayrollCache(workerId?: string) {
   } catch {}
 }
 
+export type CheckPayrollLoadResult = CacheEntry & { isStale: boolean };
+
 export async function fetchWorkerCheckPayroll(
   viewerId: string,
   scope: string,
@@ -103,25 +107,53 @@ export async function fetchWorkerCheckPayroll(
   const cached = memoryCache.get(key) || readSession(key);
   if (cached) {
     memoryCache.set(key, cached);
-    if (!force && cached.expiresAt > Date.now()) return { ...cached, stale: false };
+    if (!force && cached.expiresAt > Date.now()) return { ...cached, isStale: false };
+    void refreshWorkerCheckPayroll(key, workerId, cached).catch(() => undefined);
+    return { ...cached, isStale: true };
   }
+  return refreshWorkerCheckPayroll(key, workerId);
+}
+
+async function refreshWorkerCheckPayroll(
+  key: string,
+  workerId: string,
+  previous?: CacheEntry,
+): Promise<CheckPayrollLoadResult> {
   const filter = `user="${escapePb(workerId)}"`;
-  const [attendanceRows, salaryRows] = await Promise.all([
-    pb
-      .collection("check_attendance_items")
-      .getFullList({ filter, sort: "-month,-round_no,-created", expand: "batch" }),
-    pb
-      .collection("check_salary_items")
-      .getFullList({ filter, sort: "-month,-round_no,-created", expand: "batch" })
-      .catch(() => []),
+  const metadataFields = "id,user,month,round_no,created,summary,personal,batch,expand.batch";
+  const detailFields = "id,rows";
+  const salaryDetailFields = "id,wage_lines,allowance_lines,deduction_lines,totals";
+  const [attendanceResult, salaryResult] = await Promise.allSettled([
+    pb.collection("check_attendance_items").getFullList({
+      filter,
+      sort: "-month,-round_no,-created",
+      expand: "batch",
+      fields: `${metadataFields},rows`,
+    }),
+    pb.collection("check_salary_items").getFullList({
+      filter,
+      sort: "-month,-round_no,-created",
+      expand: "batch",
+      fields: `${metadataFields},${salaryDetailFields.replace("id,", "")}`,
+    }),
   ]);
+  const attendanceRows = attendanceResult.status === "fulfilled" ? attendanceResult.value : [];
+  const salaryRows = salaryResult.status === "fulfilled" ? salaryResult.value : [];
   const value: CacheEntry = {
     cachedAt: Date.now(),
     expiresAt: Date.now() + CHECK_PAYROLL_CACHE_TTL,
     attendance: attendanceRows.map(normalizeAttendance),
     salary: salaryRows.map(normalizeSalary),
+    ...(attendanceResult.status === "rejected"
+      ? { attendanceError: "Không tải được bảng check công" }
+      : {}),
+    ...(salaryResult.status === "rejected"
+      ? { salaryError: "Không tải được bảng check lương" }
+      : {}),
   };
+  if (!attendanceRows.length && !salaryRows.length && previous)
+    return { ...previous, isStale: true };
   memoryCache.set(key, value);
   writeSession(key, value);
-  return { ...value, stale: false };
+  return { ...value, isStale: false };
 }
