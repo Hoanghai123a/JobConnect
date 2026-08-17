@@ -10,11 +10,11 @@ import { AppHeader } from "@/components/layout/BottomNav";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { useAuth } from "@/lib/auth";
-import { escapePb } from "@/lib/delegations";
-import { pb, type UserRecord } from "@/lib/pocketbase";
+import { type UserRecord } from "@/lib/pocketbase";
 import { fetchStaffWorkerWorkspace } from "@/lib/staff-permissions";
 import { CalendarCheck } from "lucide-react";
 import { getUserErrorMessage } from "@/lib/toast";
+import { fetchWorkerCheckPayroll } from "@/lib/check-payroll-cache";
 
 export const Route = createFileRoute("/_authenticated/staff/workers/$workerId_/payroll")({
   component: StaffWorkerPayrollPage,
@@ -52,37 +52,9 @@ function StaffWorkerPayrollPage() {
       setWorkerName(worker.user.full_name || worker.user.username || "");
       setWorkerCompany(worker.latestHistory?.expand?.factory?.name || "");
 
-      const [attendanceRes, salaryRes] = await Promise.all([
-        pb.collection("check_attendance_items").getList(1, 100, {
-          filter: `user="${escapePb(workerId)}"`,
-          sort: "-created",
-          expand: "batch",
-        }),
-        pb
-          .collection("check_salary_items")
-          .getList(1, 100, {
-            filter: `user="${escapePb(workerId)}"`,
-            sort: "-created",
-            expand: "batch",
-          })
-          .catch(() => ({ items: [] })),
-      ]);
-
-      setAttendanceItems(
-        (attendanceRes.items as unknown as WorkerAttendanceCheckItem[]).map((item) => ({
-          ...item,
-          rows: Array.isArray(item.rows) ? item.rows : [],
-        })),
-      );
-      setSalaryItems(
-        (salaryRes.items as unknown as WorkerSalaryCheckItem[]).map((item) => ({
-          ...item,
-          wage_lines: Array.isArray(item.wage_lines) ? item.wage_lines : [],
-          allowance_lines: Array.isArray(item.allowance_lines) ? item.allowance_lines : [],
-          deduction_lines: Array.isArray(item.deduction_lines) ? item.deduction_lines : [],
-          totals: item.totals || { wage: 0, allowance: 0, deduction: 0, net: 0 },
-        })),
-      );
+      const payload = await fetchWorkerCheckPayroll(user.id, user.role || "staff", worker.user.id);
+      setAttendanceItems(payload.attendance);
+      setSalaryItems(payload.salary);
     } catch (error: unknown) {
       toast.error(getUserErrorMessage(error, "Không tải Được check công/lương"));
     } finally {

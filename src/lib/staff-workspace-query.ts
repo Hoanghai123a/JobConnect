@@ -5,7 +5,7 @@ import { pb, type UserRecord } from "./pocketbase";
 import { readCachedAuxData, writeCachedAuxData } from "./staff-cache";
 import { fetchStaffWorkspace, type StaffWorkspaceResult } from "./staff-permissions";
 
-const WORKSPACE_STALE_TIME = 30_000;
+const WORKSPACE_STALE_TIME = 15_000;
 const AUX_STALE_TIME = 5 * 60_000;
 const CACHE_GC_TIME = 30 * 60_000;
 
@@ -110,3 +110,4 @@ export function useStaffDirectoryAuxQuery(viewer: UserRecord | null) {
     retry: 1,
   });
 }
+

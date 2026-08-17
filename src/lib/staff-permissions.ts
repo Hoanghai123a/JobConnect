@@ -238,17 +238,15 @@ export function canEditHistory(
 }
 
 function hasRecentEmployment(userHistories: EmploymentHistoryRecord[]): boolean {
+  const latest = getLatestEmploymentHistory(userHistories);
+  if (!latest) return false;
+  if (isCurrentlyWorking(latest)) return true;
+  if (!latest.leave_date) return false;
+
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180);
-
-  for (const h of userHistories) {
-    if (isCurrentlyWorking(h)) return true;
-    if (h.leave_date) {
-      const leaveDate = new Date(h.leave_date);
-      if (!Number.isNaN(leaveDate.getTime()) && leaveDate >= sixMonthsAgo) return true;
-    }
-  }
-  return false;
+  const leaveDate = new Date(latest.leave_date);
+  return !Number.isNaN(leaveDate.getTime()) && leaveDate >= sixMonthsAgo;
 }
 
 function isWorkerInStaffScope(
@@ -477,29 +475,6 @@ export async function fetchStaffWorkspace(
     includeCccdVersions: useCache,
   });
 
-  // Fetch all remaining histories for users found in scope (first sync only)
-  if (useCache && !cacheValid && (viewer.role === "staff" || viewer.role === "admin")) {
-    const scopeUserIds = [...new Set(synced.histories.map((h) => h.user).filter(Boolean))];
-    if (scopeUserIds.length) {
-      const cachedHistoryIds = new Set(synced.histories.map((h) => h.id));
-      const extraHistories: EmploymentHistoryRecord[] = [];
-      for (let i = 0; i < scopeUserIds.length; i += 30) {
-        const batch = scopeUserIds.slice(i, i + 30);
-        const items = (await pb.collection("employment_histories").getFullList({
-          filter: relationInFilter("user", batch),
-          sort: "-join_date,-created",
-          expand: "user,factory,recruiter_staff,recruiter_partner,main_house",
-        })) as unknown as EmploymentHistoryRecord[];
-        extraHistories.push(...items);
-      }
-      const newHistories = extraHistories.filter((h) => !cachedHistoryIds.has(h.id));
-      if (newHistories.length) {
-        synced.histories.push(...newHistories);
-        await idbPutManyHistories(newHistories);
-      }
-    }
-  }
-
   if (useCache) {
     await saveScopeFingerprint(buildScopeFingerprint(viewer.id, managedFactoryIds, viewer.role));
   }
@@ -536,3 +511,5 @@ export async function fetchStaffWorkerWorkspace(viewer: UserRecord, workerId: st
 }
 
 export type StaffWorkspaceResult = ReturnType<typeof buildWorkspace>;
+
+
