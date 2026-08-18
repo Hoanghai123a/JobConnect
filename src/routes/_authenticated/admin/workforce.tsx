@@ -96,6 +96,7 @@ import { StaffWorkerDirectory } from "@/components/staff/StaffWorkerDirectory";
 import { RecruitChartDialog } from "@/components/workforce/RecruitChartDialog";
 import { RegisterDialog as SharedRegisterDialog } from "@/components/workforce/RegisterDialog";
 import { getUserErrorMessage } from "@/lib/toast";
+import { useStaffExcelExport } from "@/components/staff/staff-excel-export-context";
 
 export const Route = createFileRoute("/_authenticated/admin/workforce")({
   beforeLoad: () => {
@@ -214,6 +215,7 @@ function getPocketBaseFieldErrors(error: unknown) {
 
 function WorkforcePage() {
   const currentUser = pb.authStore.record as UserRecord | null;
+  const { openStaffExcelExport } = useStaffExcelExport();
   const queryClient = useQueryClient();
   const workspaceQuery = useStaffWorkspaceQuery(currentUser);
   const auxQuery = useStaffDirectoryAuxQuery(currentUser);
@@ -401,14 +403,15 @@ function WorkforcePage() {
             <BriefcaseBusiness className="h-4 w-4" />
             Đăng ký
           </button>
-          <Link
-            to="/staff/export"
+          <button
+            type="button"
+            onClick={openStaffExcelExport}
             className="hidden h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted active:scale-[0.98] desktop:flex"
             aria-label="Xuất Excel"
           >
             <FileDown className="h-4 w-4" />
             Xuất Excel
-          </Link>
+          </button>
           <button
             type="button"
             onClick={() => setCccdExportOpen(true)}
@@ -499,13 +502,14 @@ function WorkforcePage() {
               onSelectWorker={setSelectedUserId}
               headerSlot={
                 <div className="grid grid-cols-2 gap-2 desktop:hidden">
-                  <Link
-                    to="/staff/export"
+                  <button
+                    type="button"
+                    onClick={openStaffExcelExport}
                     className="flex items-center justify-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-medium text-foreground"
                   >
                     <FileDown className="h-4 w-4" />
                     Xuất Excel
-                  </Link>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setCccdExportOpen(true)}
@@ -1128,7 +1132,10 @@ function WorkerList({
               const mainHouseName = latest?.expand?.main_house?.name;
               const workerName = getWorkerDisplayName(user);
               const snapshotCccd = latest?.worker_cccd_snapshot || "";
-              const cccdImageProgress = getHistoryCccdImageProgress(latest);
+              const cccdImageProgress = getHistoryCccdImageProgress(
+                latest,
+                histories.filter((history) => history.user === user.id),
+              );
 
               return (
                 <Fragment key={user.id}>

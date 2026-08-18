@@ -688,6 +688,7 @@ export function WorkerEmploymentDrawer({
   const editingCccdVersion = editingHistory?.expand?.cccd_version;
   const editCccdFrontUrl = versionedCccdUrl(editingCccdVersion, editingCccdVersion?.front_image);
   const editCccdBackUrl = versionedCccdUrl(editingCccdVersion, editingCccdVersion?.back_image);
+  const isEditingOldHistory = Boolean(editingHistory && editingHistory.id !== latestHistory?.id);
   const canEditHistoryRecord = (history: EmploymentHistoryRecord) =>
     actor?.role === "admin" ||
     (actor?.role === "staff" &&
@@ -891,7 +892,6 @@ export function WorkerEmploymentDrawer({
       setEmployeeCodeSaving(false);
     }
   };
-
   const openOldHistory = () => {
     if (!user || !permissions.canAddOldHistory) return;
     const latest = getLatestEmploymentHistory(histories);
@@ -1035,6 +1035,14 @@ export function WorkerEmploymentDrawer({
         return;
       }
 
+      const isOldHistory = latest?.id !== editingId;
+      const originalLeaveDate = before.leave_date || "";
+      if (isOldHistory && form.leave_date !== originalLeaveDate) {
+        toast.error("Không được sửa ngày nghỉ của lịch sử cũ để tránh chồng chéo thời gian làm việc");
+        setForm((current) => ({ ...current, leave_date: originalLeaveDate }));
+        return;
+      }
+
       const isRestoring = Boolean(before.leave_date && !form.leave_date);
       if (isRestoring && !restoreConfirmed) {
         setRestoreRequest({ history: before, source: "edit" });
@@ -1077,7 +1085,7 @@ export function WorkerEmploymentDrawer({
         ...buildRecruiterPayload(form.recruiter_staff),
         main_house: form.main_house || undefined,
         join_date: form.join_date || undefined,
-        leave_date: form.leave_date,
+        leave_date: isOldHistory ? originalLeaveDate : form.leave_date,
         note: form.note.trim(),
       };
       const audit = {
@@ -1320,6 +1328,11 @@ export function WorkerEmploymentDrawer({
     setLeaveOpen(true);
   };
 
+  const openEmployeeCodeDialog = () => {
+    const latest = getLatestEmploymentHistory(histories);
+    setEmployeeCodeForm(latest?.employee_code || "");
+    setEmployeeCodeOpen(true);
+  };
   const openJoinDialog = () => {
     const latest = getLatestEmploymentHistory(histories);
     const personalSnapshot = getEmploymentPersonalSnapshot(latest, user);
@@ -1337,12 +1350,6 @@ export function WorkerEmploymentDrawer({
       note: "",
     });
     setJoinOpen(true);
-  };
-
-  const openEmployeeCodeDialog = () => {
-    const latest = getLatestEmploymentHistory(histories);
-    setEmployeeCodeForm(latest?.employee_code || "");
-    setEmployeeCodeOpen(true);
   };
 
   return (
@@ -1429,6 +1436,7 @@ export function WorkerEmploymentDrawer({
                         }}
                       />
                     )}
+
                     {((isWorking && permissions.canReportLeave) || canOpenAdvance) && (
                       <ActionButton
                         icon={Hash}
@@ -1436,8 +1444,7 @@ export function WorkerEmploymentDrawer({
                         tone="primary"
                         onClick={openEmployeeCodeDialog}
                       />
-                    )}
-                    {permissions.canAddOldHistory && (
+                    )}                    {permissions.canAddOldHistory && (
                       <ActionButton
                         icon={Plus}
                         label="Bổ sung lịch sử"
@@ -2367,11 +2374,17 @@ export function WorkerEmploymentDrawer({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Ngày nghỉ</Label>
+                  <Label className="text-xs">Ngày nghỉ{isEditingOldHistory ? " (không được sửa)" : ""}</Label>
                   <DateInput
                     value={form.leave_date}
                     onChange={(leave_date) => setForm((current) => ({ ...current, leave_date }))}
+                    disabled={isEditingOldHistory}
                   />
+                  {isEditingOldHistory && (
+                    <div className="text-[11px] text-muted-foreground">
+                      Lịch sử cũ giữ nguyên ngày nghỉ để không làm chồng chéo thời gian đi làm.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2791,7 +2804,6 @@ export function WorkerEmploymentDrawer({
           </form>
         </DialogContent>
       </Dialog>
-
       <AlertDialog
         open={bankDeleteOpen}
         onOpenChange={(nextOpen) => !bankDeleting && setBankDeleteOpen(nextOpen)}
@@ -2822,5 +2834,3 @@ export function WorkerEmploymentDrawer({
     </>
   );
 }
-
-

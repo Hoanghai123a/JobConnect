@@ -511,5 +511,3 @@ export async function fetchStaffWorkerWorkspace(viewer: UserRecord, workerId: st
 }
 
 export type StaffWorkspaceResult = ReturnType<typeof buildWorkspace>;
-
-

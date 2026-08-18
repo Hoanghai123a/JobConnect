@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   to: string;
+  onClick?: () => void;
   label: string;
   description?: string;
   icon: LucideIcon;
@@ -28,6 +29,7 @@ interface Props {
 
 export function FeatureTile({
   to,
+  onClick,
   label,
   description,
   icon: Icon,
@@ -124,6 +126,14 @@ export function FeatureTile({
           </Dialog>
         )}
       </>
+    );
+  }
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={tileClass}>
+        {content}
+      </button>
     );
   }
 

@@ -73,6 +73,12 @@ export async function resolveAdvancePolicy(
     throw new Error("Người lao động chưa có lịch sử đi làm, không thể báo ứng");
   }
 
+  if (!String(employment.employee_code || "").trim()) {
+    throw new Error(
+      "Người lao động chưa có mã nhân viên tại nhà máy gần nhất, không thể báo ứng.",
+    );
+  }
+
   if (employment.recruiter_partner && options.actorRole !== "admin") {
     throw new Error(PARTNER_RECRUITED_ADVANCE_DISABLED_MESSAGE);
   }

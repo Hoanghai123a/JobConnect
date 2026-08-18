@@ -12,12 +12,15 @@ import {
 import { PageContainer } from "@/components/layout/PageContainer";
 import { MobileSection } from "@/components/layout/MobileSection";
 import { FeatureTile } from "@/components/dashboard/FeatureTile";
+import { useStaffExcelExport } from "@/components/staff/staff-excel-export-context";
 
 export const Route = createFileRoute("/_authenticated/staff/tools/")({
   component: StaffToolsPage,
 });
 
 function StaffToolsPage() {
+  const { openStaffExcelExport } = useStaffExcelExport();
+
   return (
     <PageContainer title="Công cụ" subtitle="Các tiện ích nghiệp vụ của staff" back={false}>
       <MobileSection title="Quản lý người lao động">
@@ -54,6 +57,7 @@ function StaffToolsPage() {
         <div className="grid grid-cols-2 gap-3">
           <FeatureTile
             to="/staff/export"
+            onClick={openStaffExcelExport}
             label="Xuất file"
             description="Tải dữ liệu báo cáo"
             icon={Download}

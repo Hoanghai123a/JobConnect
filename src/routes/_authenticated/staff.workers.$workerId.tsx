@@ -385,6 +385,9 @@ function StaffWorkerDetailPage() {
     (viewer?.role === "staff" &&
       history.id === latestHistoryByJoinDate?.id &&
       canViewHistoryInStaffScope(viewer, history, allWorkerHistories, managedFactoryIds));
+  const isEditingOldHistory = Boolean(
+    editingHistory && editingHistory.id !== latestHistoryByJoinDate?.id,
+  );
   const activeHistory = useMemo(() => getCurrentEmploymentHistory(histories), [histories]);
   const recentRecruiter = isRecentRecruiter(viewer, histories);
   const canReportAdvanceForWorker = canReportAdvance(viewer, histories);
@@ -912,6 +915,13 @@ function StaffWorkerDetailPage() {
       return;
     }
     const before = { ...editingHistory };
+    const isOldHistory = editingHistory.id !== latestHistoryByJoinDate?.id;
+    const originalLeaveDate = before.leave_date || "";
+    if (isOldHistory && historyForm.leave_date !== originalLeaveDate) {
+      toast.error("Không được sửa ngày nghỉ của lịch sử cũ để tránh chồng chéo thời gian làm việc");
+      setHistoryForm((current) => ({ ...current, leave_date: originalLeaveDate }));
+      return;
+    }
     let cccdVersionId = editingHistory.cccd_version;
     if (editCccdFront || editCccdBack) {
       const cccdNumber = historyForm.worker_cccd_snapshot.trim();
@@ -944,7 +954,7 @@ function StaffWorkerDetailPage() {
       ...buildRecruiterPayload(historyForm.recruiter_staff),
       main_house: historyForm.main_house || undefined,
       join_date: historyForm.join_date,
-      leave_date: historyForm.leave_date,
+      leave_date: isOldHistory ? originalLeaveDate : historyForm.leave_date,
       note: historyForm.note.trim(),
     }, {
       actor: viewer,
@@ -1794,12 +1804,18 @@ function StaffWorkerDetailPage() {
                   className="rounded-xl"
                 />
               </FormField>
-              <FormField label="Ngày nghỉ">
+              <FormField label={`Ngày nghỉ${isEditingOldHistory ? " (không được sửa)" : ""}`}>
                 <DateInput
                   value={historyForm.leave_date}
                   onChange={(v) => setHistoryForm((current) => ({ ...current, leave_date: v }))}
+                  disabled={isEditingOldHistory}
                   className="rounded-xl"
                 />
+                {isEditingOldHistory && (
+                  <div className="text-[11px] text-muted-foreground">
+                    Lịch sử cũ giữ nguyên ngày nghỉ để không làm chồng chéo thời gian đi làm.
+                  </div>
+                )}
               </FormField>
             </div>
             <FormField label="Ghi chú">

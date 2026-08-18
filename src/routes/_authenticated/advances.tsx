@@ -1009,10 +1009,18 @@ export function AdvancesPage() {
                   {advancePolicyError}
                 </div>
               )}
+              {advancePolicyError.includes("chưa có mã nhân viên") && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  <div className="font-semibold">Chưa đủ thông tin để báo ứng</div>
+                  <div className="mt-1">{advancePolicyError}</div>
+                </div>
+              )}
               {advancePolicy && (
                 <div className="flex flex-wrap items-center gap-1.5 rounded-xl border bg-primary/5 p-3 text-xs">
                   <span className="text-muted-foreground">Nhà máy áp dụng:</span>
                   <span className="font-semibold">{advancePolicy.factoryName}</span>
+                  <span className="text-muted-foreground">Mã NV:</span>
+                  <span className="font-semibold">{advancePolicy.employment.employee_code}</span>
                   {!advancePolicy.isWorking && <StatusChip tone="warning">Đã nghỉ</StatusChip>}
                 </div>
               )}
@@ -2725,6 +2733,7 @@ function UserProfileCollapsible({
             label="Nhà máy theo lịch sử gần nhất"
             value={policy?.factoryName || "Chưa xác định được nhà máy"}
           />
+          <ReadOnlyField label="Mã nhân viên" value={policy?.employment.employee_code} />
           <ReadOnlyField label="Số điện thoại liên hệ" value={user?.phone} />
         </div>
       )}

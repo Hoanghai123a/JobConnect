@@ -5,6 +5,7 @@ import { LoginRequiredDialog } from "@/components/auth/LoginRequiredDialog";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { InstallFloatingBanner } from "./InstallFloatingBanner";
+import { useStaffExcelExport } from "@/components/staff/staff-excel-export-context";
 
 export type RoleNavigationItem = {
   to: string;
@@ -12,6 +13,7 @@ export type RoleNavigationItem = {
   icon: ComponentType<{ className?: string }>;
   exact?: boolean;
   requiresLogin?: boolean;
+  action?: "staff-export";
 };
 
 function isItemActive(item: RoleNavigationItem, pathname: string) {
@@ -24,13 +26,14 @@ export function BottomNav() {
   const { pathname } = useLocation();
   const { user } = useAuth();
   const [loginOpen, setLoginOpen] = useState(false);
+  const { openStaffExcelExport } = useStaffExcelExport();
 
   const items: readonly RoleNavigationItem[] =
     user?.role === "staff"
       ? [
           { to: "/staff", label: "Trang chủ", icon: Home, exact: true },
           { to: "/staff/workers", label: "Lao động", icon: Users },
-          { to: "/staff/export", label: "Xuất file", icon: Download },
+          { to: "/staff/export", label: "Xuất file", icon: Download, action: "staff-export" },
           { to: "/account", label: "Tài khoản", icon: User },
         ]
       : user?.role === "admin"
@@ -73,7 +76,14 @@ export function BottomNav() {
 
             return (
               <li key={item.to} className="min-w-0">
-                {item.requiresLogin ? (
+                {item.action === "staff-export" ? (
+                  <button type="button" onClick={openStaffExcelExport} className={className}>
+                    <Icon className="h-[22px] w-[22px]" />
+                    <span className="line-clamp-2 text-center text-[11px] leading-[1.1]">
+                      {item.label}
+                    </span>
+                  </button>
+                ) : item.requiresLogin ? (
                   <button type="button" onClick={() => setLoginOpen(true)} className={className}>
                     <Icon className="h-[22px] w-[22px]" />
                     <span className="line-clamp-2 text-center text-[11px] leading-[1.1]">

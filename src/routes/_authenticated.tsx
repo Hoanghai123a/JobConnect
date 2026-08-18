@@ -7,6 +7,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import { StaffRealtimeSyncGate } from "@/components/staff/StaffRealtimeSyncGate";
 import { DesktopAppShell } from "@/components/layout/DesktopAppShell";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
+import { StaffExcelExportProvider } from "@/components/staff/StaffExcelExportProvider";
 
 const GUEST_ACCESSIBLE_PATHS = new Set(["/news", "/transport", "/counter"]);
 
@@ -52,12 +53,14 @@ function AuthLayout() {
   }
 
   return (
-    <div className="pb-nav">
-      <StaffRealtimeSyncGate />
-      <DesktopAppShell>
-        <Outlet />
-      </DesktopAppShell>
-      <BottomNav />
-    </div>
+    <StaffExcelExportProvider>
+      <div className="pb-nav">
+        <StaffRealtimeSyncGate />
+        <DesktopAppShell>
+          <Outlet />
+        </DesktopAppShell>
+        <BottomNav />
+      </div>
+    </StaffExcelExportProvider>
   );
 }

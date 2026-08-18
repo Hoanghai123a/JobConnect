@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { fetchFactoryManagers, type FactoryManagerRecord } from "@/lib/factories";
 import { useAuth } from "@/lib/auth";
+import { useStaffExcelExport } from "@/components/staff/staff-excel-export-context";
 
 export const Route = createFileRoute("/_authenticated/staff/")({
   component: StaffDashboardPage,
@@ -43,6 +44,7 @@ export const Route = createFileRoute("/_authenticated/staff/")({
 
 function StaffDashboardPage() {
   const { user } = useAuth();
+  const { openStaffExcelExport } = useStaffExcelExport();
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState<FactoryManagerRecord[]>([]);
   const [utilOpen, setUtilOpen] = useState(false);
@@ -208,7 +210,13 @@ function StaffDashboardPage() {
               icon={CalendarClock}
               size="compact"
             />
-            <FeatureTile to="/staff/export" label="Xuất dữ liệu" icon={Download} size="compact" />
+            <FeatureTile
+              to="/staff/export"
+              onClick={openStaffExcelExport}
+              label="Xuất dữ liệu"
+              icon={Download}
+              size="compact"
+            />
             {user?.role === "staff" && (
               <div className="contents desktop:hidden">
                 <FeatureTile to="/counter" label="Bộ đếm" icon={ListOrdered} size="compact" />

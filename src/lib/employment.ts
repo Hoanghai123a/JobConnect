@@ -117,10 +117,28 @@ export interface EmploymentHistoryRecord {
 
 export function getHistoryCccdImageProgress(
   history: EmploymentHistoryRecord | null | undefined,
+  histories: EmploymentHistoryRecord[] = history ? [history] : [],
 ): string {
-  const version = history?.expand?.cccd_version;
-  const imageCount = Number(Boolean(version?.front_image)) + Number(Boolean(version?.back_image));
-  return `${imageCount}/2`;
+  const cccdNumber = normalizeCccdNumber(history?.worker_cccd_snapshot);
+  if (!cccdNumber) return "0/2";
+
+  const sides = new Set<"front" | "back">();
+  for (const candidate of histories) {
+    if (normalizeCccdNumber(candidate.worker_cccd_snapshot) !== cccdNumber) continue;
+    const version = candidate.expand?.cccd_version;
+    if (!version) continue;
+    const versionCccd = normalizeCccdNumber(version.cccd_number);
+    if (versionCccd && versionCccd !== cccdNumber) continue;
+    if (version.front_image) sides.add("front");
+    if (version.back_image) sides.add("back");
+    if (sides.size === 2) break;
+  }
+
+  return `${sides.size}/2`;
+}
+
+function normalizeCccdNumber(value?: string | null) {
+  return String(value ?? "").replace(/\D/g, "");
 }
 
 export interface EmploymentDraft {

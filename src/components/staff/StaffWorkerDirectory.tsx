@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   BriefcaseBusiness,
   FileDown,
+  ImageDown,
   Plus,
   RefreshCw,
   Search,
@@ -12,11 +13,11 @@ import {
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { WorkerEmploymentDrawer } from "@/components/employment/WorkerEmploymentDrawer";
+import { CccdHistoryExportDialog } from "@/components/cccd/CccdHistoryExportDialog";
 import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
 import { WorkerDesktopCard } from "@/components/staff/WorkerDesktopCard";
 import { ScopeChip } from "@/components/staff/WorkerQuickDrawer";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,7 @@ import {
 } from "@/lib/staff-workspace-query";
 import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { getRecruiterDisplay } from "@/lib/recruiters";
+import { useStaffExcelExport } from "@/components/staff/staff-excel-export-context";
 
 export type StaffWorkerDirectoryMode = "all" | "recruited";
 type WorkerScope = "all" | "qlnm" | "nvtd" | "working" | "left";
@@ -358,7 +360,7 @@ export function StaffWorkerDirectory({
             const snapshotCccd = latest?.worker_cccd_snapshot || "";
             const snapshotDateOfBirth = latest?.worker_date_of_birth_snapshot;
             const snapshotAddress = latest?.worker_address_snapshot || latest?.hometown_snapshot;
-            const cccdImageProgress = getHistoryCccdImageProgress(latest);
+            const cccdImageProgress = getHistoryCccdImageProgress(latest, worker.histories);
 
             return (
               <Fragment key={worker.user.id}>
@@ -435,6 +437,7 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
   const { user } = useAuth();
   const viewer = (user as UserRecord | null) ?? null;
   const navigate = useNavigate();
+  const { openStaffExcelExport } = useStaffExcelExport();
   const queryClient = useQueryClient();
   const workspaceQuery = useStaffWorkspaceQuery(viewer);
   const auxQuery = useStaffDirectoryAuxQuery(viewer);
@@ -442,6 +445,7 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [cccdExportOpen, setCccdExportOpen] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
 
   const workspace = workspaceQuery.data;
@@ -549,12 +553,21 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
             </button>
             <button
               type="button"
-              onClick={() => navigate({ to: "/staff/export" })}
+              onClick={openStaffExcelExport}
               className="hidden h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted active:scale-[0.98] desktop:flex"
               aria-label="Xuất Excel"
             >
               <FileDown className="h-4 w-4" />
               Xuất Excel
+            </button>
+            <button
+              type="button"
+              onClick={() => setCccdExportOpen(true)}
+              className="hidden h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted active:scale-[0.98] desktop:flex"
+              aria-label="Xuất ảnh CCCD"
+            >
+              <ImageDown className="h-4 w-4" />
+              Xuất CCCD
             </button>
             <button
               type="button"
@@ -570,25 +583,26 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
       }
     >
       {isAllMode && (
-        <button
-          type="button"
-          onClick={() => navigate({ to: "/staff/export" })}
-          className="block w-full text-left desktop:hidden"
-          aria-label="Mở trang xuất Excel"
-        >
-          <Card className="group flex items-center gap-3 rounded-2xl border-primary/20 bg-primary/5 p-4 text-left shadow-soft transition hover:border-primary/40 hover:bg-primary/10 active:scale-[0.99]">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-              <FileDown className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-foreground">Xuất Excel</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">
-                Xuất danh sách và dữ liệu lao động theo phạm vi quyền truy cập.
-              </div>
-            </div>
-            <FileDown className="h-4 w-4 shrink-0 text-primary transition-transform group-hover:translate-y-0.5" />
-          </Card>
-        </button>
+        <div className="grid grid-cols-2 gap-2 desktop:hidden">
+          <button
+            type="button"
+            onClick={openStaffExcelExport}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 text-xs font-medium text-primary shadow-soft active:scale-[0.99]"
+            aria-label="Xuất Excel"
+          >
+            <FileDown className="h-4 w-4" />
+            Xuất Excel
+          </button>
+          <button
+            type="button"
+            onClick={() => setCccdExportOpen(true)}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 text-xs font-medium text-foreground shadow-soft active:scale-[0.99]"
+            aria-label="Xuất ảnh CCCD"
+          >
+            <ImageDown className="h-4 w-4 text-primary" />
+            Xuất CCCD
+          </button>
+        </div>
       )}
 
       {refreshing && (
@@ -678,6 +692,14 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
                 });
               }
             }}
+          />
+
+          <CccdHistoryExportDialog
+            open={cccdExportOpen}
+            onClose={() => setCccdExportOpen(false)}
+            histories={workers.flatMap((worker) => worker.histories)}
+            users={workers.map((worker) => worker.user)}
+            factories={factories}
           />
 
           <RegisterDialog

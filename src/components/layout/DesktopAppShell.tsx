@@ -43,13 +43,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ReloadButton } from "@/components/layout/ReloadButton";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { useStaffExcelExport } from "@/components/staff/staff-excel-export-context";
 
 type NavigationItem = {
   to?: string;
   hash?: string;
   label: string;
   icon: ComponentType<{ className?: string }>;
-  action?: "game";
+  action?: "game" | "staff-export";
 };
 
 type NavigationSection = {
@@ -123,7 +124,7 @@ const staffNavigation: readonly NavigationSection[] = [
   },
   {
     label: "Khác",
-    items: [{ to: "/staff/export", label: "Xuất dữ liệu", icon: Download }],
+    items: [{ to: "/staff/export", label: "Xuất dữ liệu", icon: Download, action: "staff-export" }],
   },
 ];
 
@@ -218,6 +219,7 @@ export function DesktopAppShell({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(() => desktopSidebarCollapsed);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [gameOpen, setGameOpen] = useState(false);
+  const { openStaffExcelExport } = useStaffExcelExport();
   const immersive = pathname === "/force-change-password";
   const sections = navigationForRole(user?.role);
   const userName = user?.full_name || user?.username || user?.phone || "Tài khoản";
@@ -339,10 +341,12 @@ export function DesktopAppShell({ children }: { children: ReactNode }) {
 
                           return (
                             <li key={`${item.label}-${item.to || item.action || "item"}`}>
-                              {item.action === "game" ? (
+                              {item.action === "game" || item.action === "staff-export" ? (
                                 <button
                                   type="button"
-                                  onClick={() => setGameOpen(true)}
+                                  onClick={() =>
+                                    item.action === "game" ? setGameOpen(true) : openStaffExcelExport()
+                                  }
                                   title={collapsed ? item.label : undefined}
                                   aria-label={item.label}
                                   className={itemClassName + " w-full"}
