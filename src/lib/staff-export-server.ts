@@ -106,7 +106,11 @@ async function fetchManagedFactoryIds(staffId: string, token: string) {
   );
   if (!response.ok) {
     const body = await readJson(response);
-    console.error("[staff-export] factory_managers request failed", { status: response.status, staffId, body });
+    console.error("[staff-export] factory_managers request failed", {
+      status: response.status,
+      staffId,
+      body,
+    });
     throw new PocketBaseExportError(
       response.status === 403
         ? "Tài khoản Staff không có quyền đọc phạm vi nhà máy được phân công trong PocketBase."
@@ -116,7 +120,9 @@ async function fetchManagedFactoryIds(staffId: string, token: string) {
     );
   }
   const body = (await readJson(response)) as PocketBaseList<FactoryManagerRecord> | null;
-  return new Set((body?.items || []).filter(isManagerActive).map((record) => record.factory));
+  return new Set(
+    (body?.items || []).filter((record) => isManagerActive(record)).map((record) => record.factory),
+  );
 }
 
 function dateOnly(date: Date) {
@@ -183,7 +189,11 @@ async function fetchAllHistories(filter: string, token: string) {
     );
     if (!response.ok) {
       const body = await readJson(response);
-      console.error("[staff-export] employment_histories request failed", { status: response.status, filter, body });
+      console.error("[staff-export] employment_histories request failed", {
+        status: response.status,
+        filter,
+        body,
+      });
       throw new PocketBaseExportError(
         response.status === 403
           ? "Tài khoản Staff không có quyền đọc lịch sử đi làm trong PocketBase."
@@ -372,5 +382,3 @@ export async function handleStaffExcelExport(request: Request) {
     return jsonError(error instanceof Error ? error.message : "Không thể tạo file Excel.", 500);
   }
 }
-
-
