@@ -141,7 +141,10 @@ export function WorkforceDailyChart({
           }
         }}
       >
-        <DialogContent layout="raw" className="max-h-[88dvh] max-w-4xl overflow-hidden p-0">
+        <DialogContent
+          layout="raw"
+          className="max-h-[92dvh] w-[calc(100%-1rem)] max-w-none overflow-hidden p-0 sm:w-[calc(100%-2rem)] desktop:w-[98vw] desktop:max-w-[98vw]"
+        >
           {selected && (
             <>
               <DialogHeader className="border-b px-5 pb-4 pt-5 pr-14">
@@ -244,8 +247,8 @@ export function WorkforceDailyChart({
                 )}
                 {showDetails && workers.length > 0 && (
                   <>
-                    <div className="mt-4 hidden overflow-x-auto rounded-xl border sm:block">
-                      <table className="w-full min-w-[60rem] border-collapse text-left text-xs">
+                    <div className="mt-4 hidden overflow-x-hidden rounded-xl border sm:block">
+                      <table className="w-full min-w-0 table-fixed border-collapse text-left text-xs">
                         <thead className="sticky top-0 bg-muted text-[11px] font-semibold text-muted-foreground">
                           <tr>
                             <th className="px-3 py-2">STT</th>

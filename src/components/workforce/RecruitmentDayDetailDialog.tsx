@@ -114,8 +114,8 @@ function RecruitmentSummaryCard({ group }: { group: RecruitmentBreakdownGroup })
 
 function DesktopWorkerTable({ workers }: { workers: RecruitmentDayWorkerRow[] }) {
   return (
-    <div className="hidden overflow-x-auto rounded-2xl border border-border/70 sm:block">
-      <table className="w-full min-w-[64rem] border-collapse text-left text-sm">
+    <div className="hidden overflow-x-hidden rounded-2xl border border-border/70 sm:block">
+      <table className="w-full min-w-0 table-fixed border-collapse text-left text-sm">
         <thead className="sticky top-0 z-10 bg-muted/95 text-xs font-semibold text-muted-foreground backdrop-blur">
           <tr>
             <th className="px-4 py-3">Công ty</th>
@@ -205,7 +205,7 @@ export function RecruitmentDayDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         layout="raw"
-        className="max-h-[92dvh] w-[calc(100%-1rem)] max-w-none overflow-hidden p-0 sm:w-[calc(100%-2rem)] desktop:max-w-6xl"
+        className="max-h-[92dvh] w-[calc(100%-1rem)] max-w-none overflow-hidden p-0 sm:w-[calc(100%-2rem)] desktop:w-[98vw] desktop:max-w-[98vw]"
       >
         <DialogHeader className="border-b px-4 pb-4 pt-5 pr-14 sm:px-5">
           <DialogTitle className="pr-2 text-left text-base leading-snug sm:text-lg">
