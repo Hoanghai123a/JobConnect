@@ -116,7 +116,12 @@ function sourceFilter(scope: WorkforceRecruitmentScope) {
 }
 function historyFilter(from: string, to: string, permission: string, source: string) {
   const exclusiveTo = shiftWorkforceDate(to, 1);
-  return [`join_date<"${exclusiveTo}"`, `(leave_date="" || leave_date>="${from}")`, permission, source]
+  return [
+    `join_date<"${exclusiveTo}"`,
+    `(leave_date="" || leave_date>="${from}")`,
+    permission,
+    source,
+  ]
     .filter(Boolean)
     .map((p) => `(${p})`)
     .join(" && ");
@@ -166,8 +171,9 @@ export async function handleWorkforceDashboard(request: Request) {
       "employment_histories",
       {
         filter: historyFilter(from, to, permission, sourceFilter(scope)),
+        expand: "user,factory,main_house,recruiter_staff,recruiter_partner",
         fields:
-          "id,user,factory,recruiter_staff,recruiter_partner,join_date,leave_date,created,updated",
+          "id,user,factory,main_house,employee_code,worker_name_snapshot,recruiter_staff,recruiter_partner,join_date,leave_date,created,updated,expand.user.id,expand.user.full_name,expand.user.username,expand.factory.id,expand.factory.name,expand.main_house.id,expand.main_house.name,expand.recruiter_staff.id,expand.recruiter_staff.full_name,expand.recruiter_staff.username,expand.recruiter_partner.id,expand.recruiter_partner.name",
         sort: "join_date,created",
       },
       ctx.token,

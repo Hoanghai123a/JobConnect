@@ -30,7 +30,6 @@ import {
 import { useWorkforceDashboardData } from "@/lib/use-workforce-dashboard";
 import { WorkforceDailyChart } from "./WorkforceDailyChart";
 import { WorkforceInsightsCharts } from "./WorkforceInsightsCharts";
-import { RecruitmentChart } from "./RecruitmentChart";
 
 const STORAGE_KEY = "jobconnect:workforce-dashboard-date-range";
 const SCOPE_STORAGE_KEY = "jobconnect:workforce-dashboard-recruitment-scope";
@@ -101,7 +100,6 @@ export function WorkforceDashboard({
   const [reloadToken, setReloadToken] = useState(0);
   const today = localWorkforceDate();
   const compact = presentation === "mobile-dialog";
-  const hasDetailData = Boolean(detailHistories && detailUsers && detailFactories);
   const rangeError = validateWorkforceRange(range.from, range.to);
   const query = useWorkforceDashboardData({
     viewer,
@@ -405,11 +403,7 @@ export function WorkforceDashboard({
           <div
             className={query.staleView ? "pointer-events-none opacity-45" : "transition-opacity"}
           >
-            {hasDetailData ? (
-              <RecruitmentChart histories={detailHistories || []} users={detailUsers || []} factories={detailFactories || []} from={range.from} to={range.to} dayDetailPresentation="inline" />
-            ) : (
-              <WorkforceDailyChart days={days} lookups={query.data?.lookups || null} />
-            )}
+            <WorkforceDailyChart days={days} lookups={query.data?.lookups || null} />
           </div>
         )}
       </section>

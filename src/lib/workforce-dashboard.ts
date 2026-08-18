@@ -10,6 +10,16 @@ export type WorkforceHistoryInput = {
   leave_date?: string;
   created?: string;
   updated?: string;
+  employee_code?: string;
+  main_house?: string;
+  worker_name_snapshot?: string;
+  expand?: {
+    user?: { full_name?: string; username?: string };
+    factory?: { name?: string };
+    main_house?: { name?: string };
+    recruiter_staff?: { id?: string; full_name?: string; username?: string };
+    recruiter_partner?: { id?: string; name?: string };
+  };
 };
 
 export type WorkforceBreakdown = {
@@ -21,6 +31,18 @@ export type WorkforceBreakdown = {
   uniqueJoined: number;
 };
 
+export type WorkforceRecruitmentWorker = {
+  id: string;
+  employeeCode: string;
+  workerName: string;
+  factoryId: string;
+  factoryName: string;
+  mainHouseName: string;
+  recruiterName: string;
+  recruiterId: string;
+  recruiterSource?: "internal" | "partner";
+  joinDate: string;
+};
 export type WorkforceDashboardDay = {
   date: string;
   joined: number;
@@ -29,6 +51,8 @@ export type WorkforceDashboardDay = {
   uniqueJoined: number;
   factories: WorkforceBreakdown[];
   recruiters: WorkforceBreakdown[];
+  /** Optional so older IndexedDB entries can still render the cached chart. */
+  recruitedWorkers?: WorkforceRecruitmentWorker[];
 };
 
 export type WorkforceLookupItem = {
@@ -165,11 +189,36 @@ export function aggregateWorkforceDays(params: {
     let joined = 0;
     let left = 0;
     let uniqueJoined = 0;
+    const recruitedWorkers: WorkforceRecruitmentWorker[] = [];
 
     for (const row of histories) {
       if (datePart(row.join_date) === date) {
         joined += 1;
         addRowMetric(factories, recruiters, row, "joined");
+        const partner = row.expand?.recruiter_partner;
+        const staff = row.expand?.recruiter_staff;
+        const recruiterSource = partner
+          ? "partner"
+          : staff || row.recruiter_staff
+            ? "internal"
+            : undefined;
+        recruitedWorkers.push({
+          id: row.id,
+          employeeCode: row.employee_code || "—",
+          workerName:
+            row.worker_name_snapshot ||
+            row.expand?.user?.full_name ||
+            row.expand?.user?.username ||
+            "—",
+          factoryId: row.factory || "",
+          factoryName: row.expand?.factory?.name || "—",
+          mainHouseName: row.expand?.main_house?.name || "—",
+          recruiterName: partner?.name || staff?.full_name || staff?.username || "—",
+          recruiterId:
+            partner?.id || staff?.id || row.recruiter_partner || row.recruiter_staff || "",
+          recruiterSource,
+          joinDate: date,
+        });
         if (params.firstHistoryIds?.has(row.id)) {
           uniqueJoined += 1;
           addRowMetric(factories, recruiters, row, "uniqueJoined");
@@ -197,6 +246,7 @@ export function aggregateWorkforceDays(params: {
       uniqueJoined,
       factories: [...factories.values()],
       recruiters: [...recruiters.values()],
+      recruitedWorkers,
     };
   });
 }

@@ -45,7 +45,25 @@ function responseData(
   response: WorkforceDashboardResponse,
   lookups: WorkforceLookups | null,
 ): WorkforceDashboardData {
-  return { ...response, lookups };
+  return {
+    from: response.from,
+    to: response.to,
+    scope: response.scope,
+    generatedAt: response.generatedAt || new Date().toISOString(),
+    scopeFingerprint: response.scopeFingerprint || "",
+    days: Array.isArray(response.days)
+      ? response.days.filter((day) => day && typeof day.date === "string")
+      : [],
+    lookups:
+      lookups && typeof lookups === "object"
+        ? {
+            factories: Array.isArray(lookups.factories) ? lookups.factories : [],
+            recruiters: Array.isArray(lookups.recruiters) ? lookups.recruiters : [],
+            generatedAt: lookups.generatedAt || "",
+            scopeFingerprint: lookups.scopeFingerprint || "",
+          }
+        : null,
+  };
 }
 function mergeDays(current: WorkforceDashboardDay[], incoming: WorkforceDashboardDay[]) {
   const map = new Map(current.map((day) => [day.date, day]));
@@ -119,6 +137,13 @@ export function useWorkforceDashboardData(params: {
         readWorkforceLookupCache(viewer),
       ]);
       const cachedDateSet = new Set(cached.days.map((day) => day.date));
+      const detailMissingDates = new Set(
+        cached.days.filter((day) => !Array.isArray(day.recruitedWorkers)).map((day) => day.date),
+      );
+      const refreshRequested = signalToken > 0 || reloadToken > 0;
+      const refreshDateSet = refreshRequested
+        ? new Set<string>()
+        : new Set([...cachedDateSet].filter((date) => detailMissingDates.has(date)));
       if (!cancelled && cached.days.length === dates.length) {
         queryClient.setQueryData(queryKey, {
           from,
@@ -140,11 +165,7 @@ export function useWorkforceDashboardData(params: {
         })
         .catch(() => cachedLookups);
 
-      const missing = findMissingWorkforceRanges(dates, cachedDateSet);
-      const cachedRanges = findMissingWorkforceRanges(
-        dates,
-        new Set(dates.filter((date) => !cachedDateSet.has(date))),
-      );
+      const missing = findMissingWorkforceRanges(dates, refreshDateSet);
       let combined = cached.days;
       let fingerprint = cached.fingerprint;
       let generatedAt = cached.generatedAt;
@@ -188,7 +209,6 @@ export function useWorkforceDashboardData(params: {
       };
 
       await fetchRanges(missing);
-      await fetchRanges(cachedRanges);
       lookups = await lookupPromise;
       if (!cancelled && combined.length === dates.length) {
         queryClient.setQueryData(
