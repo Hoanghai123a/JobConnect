@@ -200,8 +200,8 @@ export async function syncStaffData(opts?: {
   const includeCccdVersions = opts?.includeCccdVersions ?? true;
   const lastSync = useCache ? await getLastSyncAt(db) : "";
 
-  const filters = [opts?.historyFilter, lastSync ? `updated>="${lastSync}"` : ""].filter(Boolean);
-  const historyFilter = filters.length ? filters.map((item) => `(${item})`).join(" && ") : "";
+  // Luon tai day du pham vi lich su de phuc hoi cache thieu record.
+  const historyFilter = opts?.historyFilter || "";
   const freshHistories = (await pb.collection("employment_histories").getFullList({
     filter: historyFilter,
     sort: "-join_date,-created",

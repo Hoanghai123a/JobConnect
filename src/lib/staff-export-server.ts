@@ -31,6 +31,17 @@ type PocketBaseList<T> = {
   items: T[];
 };
 
+class PocketBaseExportError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly responseBody?: unknown,
+  ) {
+    super(message);
+    this.name = "PocketBaseExportError";
+  }
+}
+
 const APPROVAL_STATUS_LABELS = {
   pending: "Chờ duyệt",
   approved: "Đã duyệt",
@@ -93,7 +104,17 @@ async function fetchManagedFactoryIds(staffId: string, token: string) {
     { method: "GET" },
     token,
   );
-  if (!response.ok) throw new Error("Không tải được phạm vi nhà máy được quản lý.");
+  if (!response.ok) {
+    const body = await readJson(response);
+    console.error("[staff-export] factory_managers request failed", { status: response.status, staffId, body });
+    throw new PocketBaseExportError(
+      response.status === 403
+        ? "Tài khoản Staff không có quyền đọc phạm vi nhà máy được phân công trong PocketBase."
+        : "Không tải được phạm vi nhà máy được quản lý từ PocketBase.",
+      response.status,
+      body,
+    );
+  }
   const body = (await readJson(response)) as PocketBaseList<FactoryManagerRecord> | null;
   return new Set((body?.items || []).filter(isManagerActive).map((record) => record.factory));
 }
@@ -160,7 +181,17 @@ async function fetchAllHistories(filter: string, token: string) {
       { method: "GET" },
       token,
     );
-    if (!response.ok) throw new Error("Không tải được lịch sử đi làm từ PocketBase.");
+    if (!response.ok) {
+      const body = await readJson(response);
+      console.error("[staff-export] employment_histories request failed", { status: response.status, filter, body });
+      throw new PocketBaseExportError(
+        response.status === 403
+          ? "Tài khoản Staff không có quyền đọc lịch sử đi làm trong PocketBase."
+          : "Không tải được lịch sử đi làm từ PocketBase.",
+        response.status,
+        body,
+      );
+    }
 
     const body = (await readJson(response)) as PocketBaseList<EmploymentHistoryRecord> | null;
     histories.push(...(body?.items || []));
@@ -334,6 +365,12 @@ export async function handleStaffExcelExport(request: Request) {
     });
   } catch (error) {
     console.error("[staff-export]", error);
+    if (error instanceof PocketBaseExportError) {
+      const status = error.status === 403 ? 403 : error.status >= 500 ? 502 : 400;
+      return jsonError(error.message, status);
+    }
     return jsonError(error instanceof Error ? error.message : "Không thể tạo file Excel.", 500);
   }
 }
+
+
