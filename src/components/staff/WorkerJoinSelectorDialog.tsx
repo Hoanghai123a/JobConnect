@@ -19,7 +19,6 @@ import {
   type EmploymentHistoryRecord,
 } from "@/lib/employment";
 import { escapePb, relationInFilter } from "@/lib/delegations";
-import { filterEmploymentFactories } from "@/lib/staff-employment-scope";
 import type { FactoryRecord } from "@/lib/factories";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { toast } from "@/lib/toast";
@@ -101,16 +100,12 @@ export function WorkerJoinSelectorDialog({
   onOpenChange,
   viewer,
   factories,
-  managedFactoryIds,
-  factoryScope,
   onSelect,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   viewer: UserRecord | null;
   factories: FactoryRecord[];
-  managedFactoryIds: Set<string>;
-  factoryScope?: "assigned" | "all";
   onSelect: (candidate: { user: UserRecord; histories: EmploymentHistoryRecord[] }) => void;
 }) {
   const [employeeCode, setEmployeeCode] = useState("");
@@ -124,13 +119,13 @@ export function WorkerJoinSelectorDialog({
   const [error, setError] = useState("");
   const [selectingId, setSelectingId] = useState("");
 
-  const allowedFactories = useMemo(
-    () => filterEmploymentFactories(viewer, factories, managedFactoryIds, factoryScope),
-    [factories, factoryScope, managedFactoryIds, viewer],
+  const searchFactories = useMemo(
+    () => factories.filter((factory) => factory.status !== "inactive"),
+    [factories],
   );
-  const allowedFactoryIds = useMemo(
-    () => new Set(allowedFactories.map((factory) => factory.id)),
-    [allowedFactories],
+  const searchFactoryIds = useMemo(
+    () => new Set(searchFactories.map((factory) => factory.id)),
+    [searchFactories],
   );
   const hasFilter = Boolean(employeeCode.trim() || factoryId);
 
@@ -203,7 +198,7 @@ export function WorkerJoinSelectorDialog({
 
         const latestByUser = await fetchLatestHistories(candidateUserIds);
         const validLatest = [...latestByUser.values()].filter((latest) => {
-          if (!allowedFactoryIds.has(latest.factory)) return false;
+          if (!searchFactoryIds.has(latest.factory)) return false;
           if (code && normalizeCode(latest.employee_code) !== code) return false;
           if (factoryId && latest.factory !== factoryId) return false;
           return true;
@@ -291,7 +286,7 @@ export function WorkerJoinSelectorDialog({
             <div className="space-y-1">
               <label className="text-xs font-medium">Nhà máy</label>
               <FactoryPicker
-                factories={allowedFactories}
+                factories={searchFactories}
                 value={factoryId}
                 onChange={(value) => {
                   setFactoryId(value);

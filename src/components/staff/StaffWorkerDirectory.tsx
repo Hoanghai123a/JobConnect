@@ -735,8 +735,6 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
         onOpenChange={setJoinSelectorOpen}
         viewer={viewer}
         factories={factories}
-        managedFactoryIds={managedFactoryIds}
-        factoryScope={factoryScope}
         onSelect={(candidate) => {
           setJoinSelectorOpen(false);
           setSelectedJoinWorker(candidate);

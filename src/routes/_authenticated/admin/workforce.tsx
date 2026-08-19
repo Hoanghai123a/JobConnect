@@ -593,8 +593,6 @@ function WorkforcePage() {
         onOpenChange={setJoinSelectorOpen}
         viewer={currentUser}
         factories={factories}
-        managedFactoryIds={workspace?.managedFactoryIds ?? new Set<string>()}
-        factoryScope={settings.staff_employment_factory_scope}
         onSelect={(candidate) => {
           setJoinSelectorOpen(false);
           setSelectedJoinWorker(candidate);
