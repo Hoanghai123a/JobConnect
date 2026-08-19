@@ -14,9 +14,10 @@ Collection `users` đã có sẵn nên không import đè ở đây.
    - Tuỳ chọn, dùng làm mã NV mặc định khi user chưa gắn với nhà máy nào.
 4. Các field ngân hàng (`bank_name`, `bank_account_number`, `bank_account_name`):
    - Đảm bảo đã tồn tại để staff có thể cập nhật STK cho user khi cần.
-5. Các field ảnh CCCD (`cccd_front`, `cccd_back`):
-   - Kiểu File, không bắt buộc, chấp nhận `image/jpeg`, `image/png`, `image/webp`.
-   - Dùng cho luồng tạo nhanh NLĐ và quản lý ảnh CCCD trên hồ sơ.
+5. Ảnh CCCD không còn lưu trên `users`:
+   - Không tạo hoặc sử dụng `cccd_front`, `cccd_back`.
+   - Mọi ảnh mặt trước/mặt sau chỉ lưu tại `cccd_versions.front_image/back_image`.
+   - Với hệ thống cũ, phải chạy quy trình migration CCCD Version trước khi xóa hai field này.
 
 ## Rule cần có cho luồng tạo nhanh NLĐ
 

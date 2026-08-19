@@ -371,16 +371,10 @@ function StaffWorkerDetailPage() {
   }, [allWorkerHistories, joinForm.worker_cccd_snapshot]);
   const joinCccdFrontUrl = joinCccdVersion?.front_image
     ? versionedCccdUrl(joinCccdVersion, joinCccdVersion.front_image)
-    : normalizeCccdNumber(joinForm.worker_cccd_snapshot) ===
-          normalizeCccdNumber(workerUser?.cccd) && workerUser?.cccd_front
-      ? fileUrl(workerUser, workerUser.cccd_front)
-      : "";
+    : "";
   const joinCccdBackUrl = joinCccdVersion?.back_image
     ? versionedCccdUrl(joinCccdVersion, joinCccdVersion.back_image)
-    : normalizeCccdNumber(joinForm.worker_cccd_snapshot) ===
-          normalizeCccdNumber(workerUser?.cccd) && workerUser?.cccd_back
-      ? fileUrl(workerUser, workerUser.cccd_back)
-      : "";
+    : "";
   const canEditHistory = (history: EmploymentHistoryRecord) =>
     viewer?.role === "admin" ||
     (viewer?.role === "staff" &&
@@ -681,14 +675,6 @@ function StaffWorkerDetailPage() {
         compressedFront,
         compressedBack,
       );
-      const isExisting = !!(version.front_image || version.back_image);
-      if (isExisting && (compressedFront || compressedBack)) {
-        await updateCccdVersionImages(
-          version.id,
-          compressedFront || undefined,
-          compressedBack || undefined,
-        );
-      }
       cccdVersionId = version.id;
     } else {
       const reusableVersion =
@@ -1941,21 +1927,10 @@ function StaffWorkerDetailPage() {
                 ) : (
                   <HistoryCccdUpload
                     history={detailHistory}
-                    workerUser={workerUser}
                     actor={viewer as UserRecord}
                     readOnly={!canEditHistory(detailHistory)}
                     onCreated={async (version) => {
                       setDetailCccdVersion(version);
-                      await updateEmploymentHistory(
-                        detailHistory.id,
-                        { cccd_version: version.id },
-                        {
-                          actor: viewer,
-                          source: "Ảnh CCCD trong chi tiết lịch sử",
-                          note: "Liên kết phiên bản ảnh CCCD",
-                          before: detailHistory,
-                        },
-                      );
                       setDetailHistory((current) =>
                         current?.id === detailHistory.id
                           ? { ...current, cccd_version: version.id }
@@ -2261,13 +2236,11 @@ function CccdImageSlot({
 
 function HistoryCccdUpload({
   history,
-  workerUser,
   actor,
   readOnly,
   onCreated,
 }: {
   history: EmploymentHistoryRecord;
-  workerUser: UserRecord | null;
   actor: Partial<UserRecord> | null;
   readOnly: boolean;
   onCreated: (version: CccdVersionRecord) => void;
@@ -2284,22 +2257,32 @@ function HistoryCccdUpload({
         return;
       }
       const userId = history.user;
-      const cccdNumber = history.worker_cccd_snapshot || workerUser?.cccd || "";
+      const cccdNumber = history.worker_cccd_snapshot;
       if (!cccdNumber) {
         toast.error("Không có số CCCD để tạo phiên bản");
         return;
       }
       setUploading(true);
       try {
+        const version = await findOrCreateCccdVersion(userId, cccdNumber);
+        await updateEmploymentHistory(
+          history.id,
+          { cccd_version: version.id },
+          {
+            actor,
+            source: "Ảnh CCCD trong chi tiết lịch sử",
+            note: "Liên kết phiên bản CCCD trước khi tải ảnh",
+            before: history,
+          },
+        );
         const compressed = await compressImage(file);
-        const version = await findOrCreateCccdVersion(
-          userId,
-          cccdNumber,
+        const updatedVersion = await updateCccdVersionImages(
+          version.id,
           side === "front" ? compressed : undefined,
           side === "back" ? compressed : undefined,
         );
         toast.success("Đã thêm ảnh CCCD");
-        onCreated(version);
+        onCreated(updatedVersion);
       } catch (error: unknown) {
         toast.error(getUserErrorMessage(error, "Lỗi upload ảnh"));
       } finally {

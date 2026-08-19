@@ -46,7 +46,6 @@ import {
   findOrCreateCccdVersion,
   getCccdVersionByNumber,
   getCurrentCccdVersion,
-  updateCccdVersionImages,
   type CccdVersionRecord,
 } from "@/lib/cccd-versions";
 import { compressImage } from "@/lib/image-compress";
@@ -236,18 +235,8 @@ export function WorkerQuickDrawer({
         history.expand?.cccd_version,
     )?.expand?.cccd_version;
   }, [joinForm.worker_cccd_snapshot, worker]);
-  const joinCccdFrontUrl = joinCccdVersion?.front_image
-    ? versionedCccdUrl(joinCccdVersion, joinCccdVersion.front_image)
-    : normalizeCccdNumber(joinForm.worker_cccd_snapshot) ===
-          normalizeCccdNumber(worker?.user.cccd) && worker?.user.cccd_front
-      ? fileUrl(worker.user, worker.user.cccd_front)
-      : "";
-  const joinCccdBackUrl = joinCccdVersion?.back_image
-    ? versionedCccdUrl(joinCccdVersion, joinCccdVersion.back_image)
-    : normalizeCccdNumber(joinForm.worker_cccd_snapshot) ===
-          normalizeCccdNumber(worker?.user.cccd) && worker?.user.cccd_back
-      ? fileUrl(worker.user, worker.user.cccd_back)
-      : "";
+  const joinCccdFrontUrl = versionedCccdUrl(joinCccdVersion, joinCccdVersion?.front_image);
+  const joinCccdBackUrl = versionedCccdUrl(joinCccdVersion, joinCccdVersion?.back_image);
   const isWorking = Boolean(latest && isCurrentlyWorking(latest));
   const activeHistory = worker ? getCurrentEmploymentHistory(worker.histories) : null;
   const allowAdvanceAfterLeave = Boolean(settings.allow_advance_after_leave);
@@ -374,15 +363,6 @@ export function WorkerQuickDrawer({
           compressedFront,
           compressedBack,
         );
-        if (version.front_image || version.back_image) {
-          if (compressedFront || compressedBack) {
-            await updateCccdVersionImages(
-              version.id,
-              compressedFront || undefined,
-              compressedBack || undefined,
-            );
-          }
-        }
         cccdVersionId = version.id;
       } else {
         const reusableVersion =

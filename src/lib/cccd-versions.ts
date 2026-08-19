@@ -2,6 +2,20 @@ import { pb } from "./pocketbase";
 import { updateCachedCccdVersion } from "./staff-cache";
 import { relationInFilter } from "./delegations";
 
+export const VALID_CCCD_LENGTHS = new Set([9, 12]);
+
+export function normalizeCccdNumber(value?: string | null) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+export function requireValidCccdNumber(value?: string | null) {
+  const normalized = normalizeCccdNumber(value);
+  if (!VALID_CCCD_LENGTHS.has(normalized.length)) {
+    throw new Error("Số CMND/CCCD phải có đúng 9 hoặc 12 chữ số.");
+  }
+  return normalized;
+}
+
 export interface CccdVersionRecord {
   id: string;
   user: string;
@@ -30,15 +44,80 @@ export async function getCccdVersionByNumber(
   userId: string,
   cccdNumber: string,
 ): Promise<CccdVersionRecord | null> {
+  const normalized = normalizeCccdNumber(cccdNumber);
+  if (!userId || !normalized) return null;
   try {
-    return (await pb
-      .collection("cccd_versions")
-      .getFirstListItem(
-        `user="${userId}" && cccd_number="${cccdNumber}"`,
-      )) as unknown as CccdVersionRecord;
+    const records = (await pb.collection("cccd_versions").getFullList({
+      filter: `user="${userId}"`,
+      sort: "-updated,-created",
+    })) as unknown as CccdVersionRecord[];
+    return (
+      records.find((version) => normalizeCccdNumber(version.cccd_number) === normalized) || null
+    );
   } catch {
     return null;
   }
+}
+
+function isUniqueConflict(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const response =
+    typeof error === "object" && error !== null && "response" in error
+      ? (error as { response?: { message?: string; data?: Record<string, unknown> } }).response
+      : undefined;
+  return /unique|already exists|đã tồn tại/i.test(
+    [message, response?.message, JSON.stringify(response?.data || {})].filter(Boolean).join(" "),
+  );
+}
+
+/** Bảo đảm cặp người dùng + số CCCD luôn có đúng một phiên bản. */
+export async function ensureCccdVersion(
+  userId: string,
+  cccdNumber: string,
+): Promise<CccdVersionRecord> {
+  if (!userId) throw new Error("Thiếu người lao động để tạo phiên bản CCCD.");
+  const normalized = requireValidCccdNumber(cccdNumber);
+  const existing = await getCccdVersionByNumber(userId, normalized);
+  if (existing) {
+    await updateCachedCccdVersion(existing);
+    return existing;
+  }
+
+  const currentVersion = await getCurrentCccdVersion(userId);
+  if (currentVersion && normalizeCccdNumber(currentVersion.cccd_number) !== normalized) {
+    await updateCccdVersionAndCache(currentVersion.id, { is_current: false });
+  }
+
+  try {
+    const created = (await pb.collection("cccd_versions").create({
+      user: userId,
+      cccd_number: normalized,
+      is_current: true,
+    })) as unknown as CccdVersionRecord;
+    await updateCachedCccdVersion(created);
+    return created;
+  } catch (error) {
+    if (!isUniqueConflict(error)) throw error;
+    const concurrent = await getCccdVersionByNumber(userId, normalized);
+    if (!concurrent) throw error;
+    await updateCachedCccdVersion(concurrent);
+    return concurrent;
+  }
+}
+
+export async function assertCccdVersionMatches(
+  versionId: string,
+  userId: string,
+  cccdNumber: string,
+): Promise<CccdVersionRecord> {
+  const normalized = requireValidCccdNumber(cccdNumber);
+  const version = (await pb
+    .collection("cccd_versions")
+    .getOne(versionId)) as unknown as CccdVersionRecord;
+  if (version.user !== userId || normalizeCccdNumber(version.cccd_number) !== normalized) {
+    throw new Error("Phiên bản CCCD không khớp người lao động hoặc số CCCD của lịch sử.");
+  }
+  return version;
 }
 
 export async function findOrCreateCccdVersion(
@@ -47,27 +126,9 @@ export async function findOrCreateCccdVersion(
   frontFile?: File | null,
   backFile?: File | null,
 ): Promise<CccdVersionRecord> {
-  const existing = await getCccdVersionByNumber(userId, cccdNumber);
-  if (existing) {
-    await updateCachedCccdVersion(existing);
-    return existing;
-  }
-
-  const currentVersion = await getCurrentCccdVersion(userId);
-  if (currentVersion) {
-    await updateCccdVersionAndCache(currentVersion.id, { is_current: false });
-  }
-
-  const fd = new FormData();
-  fd.append("user", userId);
-  fd.append("cccd_number", cccdNumber);
-  fd.append("is_current", "true");
-  if (frontFile) fd.append("front_image", frontFile);
-  if (backFile) fd.append("back_image", backFile);
-
-  const created = (await pb.collection("cccd_versions").create(fd)) as unknown as CccdVersionRecord;
-  await updateCachedCccdVersion(created);
-  return created;
+  const version = await ensureCccdVersion(userId, cccdNumber);
+  if (!frontFile && !backFile) return version;
+  return updateCccdVersionImages(version.id, frontFile, backFile);
 }
 
 export async function updateCccdVersionImages(

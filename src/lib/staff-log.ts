@@ -90,8 +90,6 @@ const FIELD_LABELS: Record<string, string> = {
   full_name: "Họ và tên",
   phone: "Số điện thoại",
   cccd: "CCCD",
-  cccd_front: "Ảnh CCCD mặt trước",
-  cccd_back: "Ảnh CCCD mặt sau",
   cccd_version: "Phiên bản CCCD",
   cccd_issue_date: "Ngày cấp CCCD",
   front_image: "Ảnh CCCD mặt trước",

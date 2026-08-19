@@ -33,8 +33,6 @@ export interface UserRecord {
   collectionId?: string;
   collectionName?: string;
   avatar?: string;
-  cccd_front?: string;
-  cccd_back?: string;
   gender?: string;
   date_of_birth?: string;
   address?: string;

@@ -99,7 +99,6 @@ Trong PocketBase Admin UI, vào **Settings -> Application -> Batch requests** v�
 
 Nếu Batch API chưa bật hoặc giới hạn request thấp hơn cấu hình của app, luồng import sẽ báo lỗi và không chuyển sang cách tạo tuần tự.
 
-
 ## Tiến độ công việc Admin
 
 Trong PocketBase Admin UI, vào **Collections -> Import collections**, chọn
@@ -122,3 +121,20 @@ xóa collection thủ công vì sẽ mất toàn bộ tab, trạng thái và cô
 - `check_attendance_items` và `check_salary_items` cần giữ `listRule` / `viewRule` cho `admin`, `staff` và chính NLĐ theo luồng check công/lương hiện có.
 - Staff chỉ được hiển thị dữ liệu có `employment_histories.recruiter_staff = @request.auth.id`; ứng dụng kiểm tra phạm vi này trước khi tổng hợp và hiển thị.
 - Trang thống kê chỉ đọc dữ liệu, không yêu cầu thêm quyền tạo, sửa hoặc xóa.
+
+## Di chuyển ảnh CCCD từ `users` sang CCCD Version
+
+Ảnh CCCD chỉ được lưu tại `cccd_versions`. Thực hiện trên bản sao lưu PocketBase và theo đúng thứ tự:
+
+```bash
+npm run pb:audit-cccd-versions -- --report=cccd-audit.json
+npm run pb:migrate-cccd-versions -- --report=cccd-migrate.json
+npm run pb:audit-cccd-versions -- --report=cccd-audit-after.json
+npm run pb:finalize-cccd-versions -- --report=cccd-finalize.json
+```
+
+- Với history thiếu/sai số CMND/CCCD, migration chủ động dùng `users.cccd` nếu field này hợp lệ; đồng thời cập nhật lại snapshot và relation version.
+- Nếu cả history và `users.cccd` đều không hợp lệ, history và ảnh cũ tương ứng được ghi vào danh sách `skipped*`, chấp nhận bỏ qua và không chặn xóa field ảnh cũ.
+- Migration không ghi đè ảnh đã tồn tại trên CCCD Version; ảnh version là dữ liệu chính thức.
+- Finalize tự chạy migration trước khi đổi schema. Nếu còn history bị bỏ qua, `cccd_version` được giữ không bắt buộc; nếu không còn history bỏ qua, relation được đặt bắt buộc. Sau đó lệnh xóa `users.cccd_front/cccd_back`.
+- Trước khi chạy phải sao lưu cả database và thư mục file của PocketBase, đồng thời tạm dừng thao tác cập nhật ảnh.

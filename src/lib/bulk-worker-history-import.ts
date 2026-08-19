@@ -66,6 +66,13 @@ export interface PreparedEmploymentHistory {
   payload: Record<string, unknown>;
 }
 
+export interface PreparedCccdVersion {
+  id: string;
+  user: string;
+  cccd_number: string;
+  is_current: boolean;
+}
+
 export interface PreparedWorkerImport {
   workerKey: string;
   userId: string;
@@ -73,6 +80,7 @@ export interface PreparedWorkerImport {
   username: string;
   workerRow: WorkerSheetRow;
   userPayload: Record<string, unknown>;
+  cccdVersions: PreparedCccdVersion[];
   histories: PreparedEmploymentHistory[];
 }
 
@@ -895,6 +903,34 @@ export async function prepareBulkWorkerImport(file: File): Promise<PreparedBulkW
     const uid = "";
     const userId = createRecordId(usedRecordIds);
     const latestEntry = historyEntries[historyEntries.length - 1];
+    const cccdVersionByNumber = new Map<string, PreparedCccdVersion>();
+    let hasInvalidHistoryCccd = false;
+    for (const entry of historyEntries) {
+      const cccdNumber = entry.row.workerCccdSnapshot.replace(/\D/g, "");
+      if (![9, 12].includes(cccdNumber.length)) {
+        errors.push({
+          workerKey: worker.workerKey,
+          username: worker.accountIdentity,
+          cccdBase: worker.cccdBase,
+          stage: "Kiểm tra dữ liệu",
+          reason: `Lịch sử dòng ${entry.row.rowNumber} có số CMND/CCCD không hợp lệ.`,
+          workerRow: worker,
+          historyRows: [entry.row],
+        });
+        hasInvalidHistoryCccd = true;
+        continue;
+      }
+      if (!cccdVersionByNumber.has(cccdNumber)) {
+        cccdVersionByNumber.set(cccdNumber, {
+          id: createRecordId(usedRecordIds),
+          user: userId,
+          cccd_number: cccdNumber,
+          is_current: cccdNumber === worker.cccdBase.replace(/\D/g, ""),
+        });
+      }
+    }
+    if (hasInvalidHistoryCccd) continue;
+    const cccdVersions = [...cccdVersionByNumber.values()];
     const histories: PreparedEmploymentHistory[] = [];
     for (const entry of historyEntries) {
       const historyUid = "";
@@ -911,7 +947,9 @@ export async function prepareBulkWorkerImport(file: File): Promise<PreparedBulkW
           main_house: entry.mainHouse.id,
           employee_code: entry.row.employeeCode,
           worker_name_snapshot: entry.row.workerNameSnapshot,
-          worker_cccd_snapshot: entry.row.workerCccdSnapshot,
+          worker_cccd_snapshot: entry.row.workerCccdSnapshot.replace(/\D/g, ""),
+          cccd_version: cccdVersionByNumber.get(entry.row.workerCccdSnapshot.replace(/\D/g, ""))
+            ?.id,
           worker_date_of_birth_snapshot: entry.row.workerDateOfBirthSnapshot,
           worker_address_snapshot: entry.row.workerAddressSnapshot,
           hometown_snapshot: entry.row.workerAddressSnapshot,
@@ -959,6 +997,7 @@ export async function prepareBulkWorkerImport(file: File): Promise<PreparedBulkW
         status: "active",
         must_change_password: true,
       },
+      cccdVersions,
       histories,
     });
   }
@@ -1022,7 +1061,7 @@ function packWorkers(workers: PreparedWorkerImport[]) {
   let current: PreparedWorkerImport[] = [];
   let requestCount = 0;
   for (const worker of workers) {
-    const workerRequestCount = 1 + worker.histories.length;
+    const workerRequestCount = 1 + worker.cccdVersions.length + worker.histories.length;
     if (current.length && requestCount + workerRequestCount > MAX_BATCH_REQUESTS) {
       groups.push(current);
       current = [];
@@ -1039,6 +1078,7 @@ async function sendWorkerBatch(workers: PreparedWorkerImport[]) {
   const batch = pb.createBatch();
   for (const worker of workers) {
     batch.collection("users").create(worker.userPayload);
+    for (const version of worker.cccdVersions) batch.collection("cccd_versions").create(version);
     for (const history of worker.histories)
       batch.collection("employment_histories").create(history.payload);
   }

@@ -198,35 +198,16 @@ function HistoryCccdImageSlot({
 function HistoryCccdSnapshot({
   history,
   version,
-  currentUser,
   loading,
   onPreview,
 }: {
   history: EmploymentHistoryRecord;
   version?: CccdVersionRecord;
-  currentUser: UserRecord;
   loading: boolean;
   onPreview: (src: string, label: string) => void;
 }) {
-  const historyNumber = normalizeCccdNumber(history.worker_cccd_snapshot);
-  const currentNumber = normalizeCccdNumber(currentUser.cccd);
-  const canUseCurrentProfile = Boolean(historyNumber && historyNumber === currentNumber);
-  const frontFromHistory = versionedCccdUrl(version, version?.front_image);
-  const backFromHistory = versionedCccdUrl(version, version?.back_image);
-  const frontFromProfile =
-    canUseCurrentProfile && currentUser.cccd_front
-      ? fileUrl(currentUser, currentUser.cccd_front)
-      : "";
-  const backFromProfile =
-    canUseCurrentProfile && currentUser.cccd_back
-      ? fileUrl(currentUser, currentUser.cccd_back)
-      : "";
-  const frontUrl = frontFromHistory || frontFromProfile;
-  const backUrl = backFromHistory || backFromProfile;
-  const usesProfileFallback =
-    (!frontFromHistory && Boolean(frontFromProfile)) ||
-    (!backFromHistory && Boolean(backFromProfile));
-
+  const frontUrl = versionedCccdUrl(version, version?.front_image);
+  const backUrl = versionedCccdUrl(version, version?.back_image);
   return (
     <div className="space-y-2 rounded-xl border border-border/60 p-3">
       <div>
@@ -234,9 +215,7 @@ function HistoryCccdSnapshot({
         <div className="text-[11px] text-muted-foreground">
           {loading
             ? "Đang tìm ảnh theo số CCCD của lịch sử..."
-            : usesProfileFallback
-              ? "Lịch sử chưa đủ ảnh riêng; ảnh còn thiếu được lấy từ hồ sơ hiện tại cùng số CCCD."
-              : "Nhấn vào ảnh để xem kích thước lớn."}
+            : "Nhấn vào ảnh để xem kích thước lớn."}
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:gap-3">
@@ -679,18 +658,8 @@ export function WorkerEmploymentDrawer({
         history.expand?.cccd_version,
     )?.expand?.cccd_version;
   }, [histories, joinForm.worker_cccd_snapshot]);
-  const joinCccdFrontUrl = joinCccdVersion?.front_image
-    ? versionedCccdUrl(joinCccdVersion, joinCccdVersion.front_image)
-    : normalizeCccdNumber(joinForm.worker_cccd_snapshot) === normalizeCccdNumber(user?.cccd) &&
-        user?.cccd_front
-      ? fileUrl(user, user.cccd_front)
-      : "";
-  const joinCccdBackUrl = joinCccdVersion?.back_image
-    ? versionedCccdUrl(joinCccdVersion, joinCccdVersion.back_image)
-    : normalizeCccdNumber(joinForm.worker_cccd_snapshot) === normalizeCccdNumber(user?.cccd) &&
-        user?.cccd_back
-      ? fileUrl(user, user.cccd_back)
-      : "";
+  const joinCccdFrontUrl = versionedCccdUrl(joinCccdVersion, joinCccdVersion?.front_image);
+  const joinCccdBackUrl = versionedCccdUrl(joinCccdVersion, joinCccdVersion?.back_image);
   const editingHistory = useMemo(
     () => histories.find((history) => history.id === editingId),
     [editingId, histories],
@@ -2050,7 +2019,6 @@ export function WorkerEmploymentDrawer({
               <HistoryCccdSnapshot
                 history={selectedHistory}
                 version={selectedHistoryCccdVersion || undefined}
-                currentUser={user}
                 loading={selectedHistoryCccdLoading}
                 onPreview={(src, label) => src && setHistoryCccdPreview({ src, label })}
               />

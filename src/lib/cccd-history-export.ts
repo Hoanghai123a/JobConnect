@@ -345,17 +345,10 @@ function imageUrlFromVersion(version: CccdVersionRecord | undefined, side: Image
   return exportFileUrl(version, filename);
 }
 
-function imageUrlFromUser(user: UserRecord | undefined, side: ImageSide) {
-  if (!user) return "";
-  const filename = side === "front" ? user.cccd_front : user.cccd_back;
-  return exportFileUrl(user, filename);
-}
-
 function resolveImageUrl(
   history: EmploymentHistoryRecord,
   versions: CccdVersionRecord[],
   versionById: Map<string, CccdVersionRecord>,
-  user: UserRecord | undefined,
   side: ImageSide,
 ) {
   const historyCccd = normalizeCccd(history.worker_cccd_snapshot);
@@ -372,12 +365,6 @@ function resolveImageUrl(
     const url = imageUrlFromVersion(version, side);
     if (url) return url;
   }
-
-  const userCccd = normalizeCccd(user?.cccd);
-  if (historyCccd && historyCccd === userCccd) {
-    return imageUrlFromUser(user, side);
-  }
-
   return "";
 }
 export async function prepareCccdHistoryExport(
@@ -393,12 +380,11 @@ export async function prepareCccdHistoryExport(
   throwIfAborted(signal);
   const groupedVersions = versionsByUserId(versions);
   const versionById = new Map(versions.map((version) => [version.id, version]));
-  const userById = new Map(users.map((user) => [user.id, user]));
+  void users;
   const factoryById = new Map(factories.map((factory) => [factory.id, factory]));
 
   const records = histories.map((history) => {
     const userVersions = groupedVersions.get(history.user) || [];
-    const user = userById.get(history.user) || history.expand?.user;
     return {
       historyId: history.id,
       factoryId: history.factory,
@@ -409,8 +395,8 @@ export async function prepareCccdHistoryExport(
       joinDate: safeJoinDate(history.join_date),
       workerName: history.worker_name_snapshot || "thieu-thong-tin",
       cccdNumber: history.worker_cccd_snapshot || "khong-co-cccd",
-      frontUrl: resolveImageUrl(history, userVersions, versionById, user, "front") || undefined,
-      backUrl: resolveImageUrl(history, userVersions, versionById, user, "back") || undefined,
+      frontUrl: resolveImageUrl(history, userVersions, versionById, "front") || undefined,
+      backUrl: resolveImageUrl(history, userVersions, versionById, "back") || undefined,
     } satisfies PreparedCccdHistoryRecord;
   });
 

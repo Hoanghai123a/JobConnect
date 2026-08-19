@@ -175,10 +175,10 @@ export function hasCompleteCccdImages(
   usersById: ReadonlyMap<string, UserRecord>,
   versionsById: ReadonlyMap<string, CccdVersionRecord>,
 ) {
-  const user = usersById.get(history.user);
+  void usersById;
   const version = history.cccd_version ? versionsById.get(history.cccd_version) : undefined;
-  const frontImage = version?.front_image || user?.cccd_front;
-  const backImage = version?.back_image || user?.cccd_back;
+  const frontImage = version?.front_image;
+  const backImage = version?.back_image;
   return Boolean(frontImage && backImage);
 }
 

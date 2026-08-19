@@ -1,7 +1,13 @@
 import { pb, type UserRecord } from "./pocketbase";
 import type { FactoryRecord } from "./factories";
 import type { RecruitmentEntityRecord } from "./recruitment-entities";
-import type { CccdVersionRecord } from "./cccd-versions";
+import {
+  assertCccdVersionMatches,
+  ensureCccdVersion,
+  normalizeCccdNumber,
+  requireValidCccdNumber,
+  type CccdVersionRecord,
+} from "./cccd-versions";
 import { relationInFilter } from "./delegations";
 import { updateCachedHistory, updateCachedUser } from "./staff-cache";
 import { allocateEmploymentHistoryUids } from "./uid-counter";
@@ -135,10 +141,6 @@ export function getHistoryCccdImageProgress(
   }
 
   return `${sides.size}/2`;
-}
-
-function normalizeCccdNumber(value?: string | null) {
-  return String(value ?? "").replace(/\D/g, "");
 }
 
 export interface EmploymentDraft {
@@ -483,6 +485,19 @@ export async function findActiveEmploymentByUser(userId: string) {
   return getCurrentEmploymentHistory(histories);
 }
 
+async function resolveHistoryCccdVersion(
+  userId: string,
+  cccdNumber: string,
+  requestedVersionId?: string,
+) {
+  const normalized = requireValidCccdNumber(cccdNumber);
+  if (requestedVersionId) {
+    const matching = await assertCccdVersionMatches(requestedVersionId, userId, normalized);
+    return matching.id;
+  }
+  return (await ensureCccdVersion(userId, normalized)).id;
+}
+
 export async function createEmploymentHistory(draft: EmploymentDraft, opts?: { uid?: string }) {
   const normalizedDraft = normalizeEmploymentPayload(draft);
   normalizedDraft.status = deriveEmploymentStatus(normalizedDraft);
@@ -490,6 +505,14 @@ export async function createEmploymentHistory(draft: EmploymentDraft, opts?: { u
   if (missingFields.length) {
     throw new Error(`Thiếu thông tin cá nhân của lịch sử đi làm: ${missingFields.join(", ")}.`);
   }
+  normalizedDraft.worker_cccd_snapshot = requireValidCccdNumber(
+    normalizedDraft.worker_cccd_snapshot,
+  );
+  normalizedDraft.cccd_version = await resolveHistoryCccdVersion(
+    normalizedDraft.user,
+    normalizedDraft.worker_cccd_snapshot,
+    normalizedDraft.cccd_version,
+  );
 
   const uid = opts?.uid || (await generateEmploymentHistoryUid());
   const record = (await pb
@@ -518,7 +541,24 @@ export async function updateEmploymentHistory(
     }
   }
 
+  if (!before) {
+    before = (await pb
+      .collection("employment_histories")
+      .getOne(id)) as unknown as EmploymentHistoryRecord;
+  }
+
   const normalizedPayload = normalizeEmploymentPayload(payload);
+  const historyUser = normalizedPayload.user || before.user;
+  const historyCccd = normalizedPayload.worker_cccd_snapshot ?? before.worker_cccd_snapshot;
+  normalizedPayload.worker_cccd_snapshot = requireValidCccdNumber(historyCccd);
+  const cccdChanged =
+    normalizeCccdNumber(before.worker_cccd_snapshot) !== normalizedPayload.worker_cccd_snapshot;
+  const requestedVersionId = cccdChanged ? undefined : normalizedPayload.cccd_version;
+  normalizedPayload.cccd_version = await resolveHistoryCccdVersion(
+    historyUser,
+    normalizedPayload.worker_cccd_snapshot,
+    requestedVersionId,
+  );
   if (Object.prototype.hasOwnProperty.call(payload, "leave_date")) {
     normalizedPayload.leave_date = normalizedPayload.leave_date || "";
     normalizedPayload.status = deriveEmploymentStatus(normalizedPayload);
