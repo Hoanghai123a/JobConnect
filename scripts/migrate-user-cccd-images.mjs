@@ -238,13 +238,18 @@ async function readState(pb) {
   const userFieldList = ["id", "username", "cccd"];
   if (userFields.has("cccd_front")) userFieldList.push("cccd_front");
   if (userFields.has("cccd_back")) userFieldList.push("cccd_back");
-  const [users, histories, versions] = await Promise.all([
+  const [rawUsers, histories, versions] = await Promise.all([
     pb.collection("users").getFullList({ sort: "created", fields: userFieldList.join(",") }),
     pb
       .collection("employment_histories")
       .getFullList({ sort: "created", fields: "id,uid,user,worker_cccd_snapshot,cccd_version" }),
     pb.collection("cccd_versions").getFullList({ sort: "created" }),
   ]);
+  const users = rawUsers.map((user) => ({
+    ...user,
+    collectionId: user.collectionId || usersCollection.id,
+    collectionName: user.collectionName || usersCollection.name,
+  }));
   return { usersCollection, historyCollection, hasLegacyFields, users, histories, versions };
 }
 
