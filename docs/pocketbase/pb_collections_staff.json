@@ -559,6 +559,8 @@
       "CREATE INDEX `idx_emphist_factory` ON `employment_histories` (`factory`)",
       "CREATE INDEX `idx_emphist_recruiter` ON `employment_histories` (`recruiter_staff`)",
       "CREATE INDEX `idx_emphist_join_date` ON `employment_histories` (`join_date`)",
+      "CREATE INDEX `idx_emphist_lookup_join` ON `employment_histories` (`factory`, `employee_code`, `join_date` DESC, `created` DESC)",
+      "CREATE INDEX `idx_emphist_user_latest` ON `employment_histories` (`user`, `join_date` DESC, `created` DESC)",
       "CREATE UNIQUE INDEX `idx_emphist_one_active` ON `employment_histories` (`user`) WHERE `status` = 'working'",
       "CREATE INDEX `idx_emphist_recruiter_partner` ON `employment_histories` (`recruiter_partner`)"
     ]

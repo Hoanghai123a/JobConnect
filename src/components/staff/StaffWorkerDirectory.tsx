@@ -15,6 +15,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { WorkerEmploymentDrawer } from "@/components/employment/WorkerEmploymentDrawer";
 import { CccdHistoryExportDialog } from "@/components/cccd/CccdHistoryExportDialog";
 import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
+import { WorkerJoinSelectorDialog } from "@/components/staff/WorkerJoinSelectorDialog";
 import { WorkerDesktopCard } from "@/components/staff/WorkerDesktopCard";
 import { ScopeChip } from "@/components/staff/WorkerQuickDrawer";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ import { readCachedAuxData } from "@/lib/staff-cache";
 import {
   fetchCachedStaffWorkspace,
   hasActiveOrRecentlyLeftEmployment,
+  canReportJoin,
   type StaffWorkerRecord,
 } from "@/lib/staff-permissions";
 import {
@@ -47,6 +49,8 @@ import {
 import { useStaffCacheSignal } from "@/lib/use-staff-cache-signal";
 import { getRecruiterDisplay } from "@/lib/recruiters";
 import { useStaffExcelExport } from "@/components/staff/staff-excel-export-context";
+import { useAppSettings } from "@/lib/app-settings";
+import { filterEmploymentFactories } from "@/lib/staff-employment-scope";
 
 export type StaffWorkerDirectoryMode = "all" | "recruited";
 type WorkerScope = "all" | "qlnm" | "nvtd" | "working" | "left";
@@ -439,11 +443,17 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
   const navigate = useNavigate();
   const { openStaffExcelExport } = useStaffExcelExport();
   const queryClient = useQueryClient();
+  const { data: settings } = useAppSettings();
   const workspaceQuery = useStaffWorkspaceQuery(viewer);
   const auxQuery = useStaffDirectoryAuxQuery(viewer);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [joinSelectorOpen, setJoinSelectorOpen] = useState(false);
+  const [selectedJoinWorker, setSelectedJoinWorker] = useState<{
+    user: UserRecord;
+    histories: StaffWorkerRecord["histories"];
+  } | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [cccdExportOpen, setCccdExportOpen] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
@@ -455,6 +465,13 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
   const mainHouses = auxData?.recruitmentEntities || [];
   const managedFactoryIds = workspace?.managedFactoryIds ?? EMPTY_MANAGED_FACTORY_IDS;
   const staffUsers = auxData?.staffUsers || [];
+  const factoryScope = settings.staff_employment_factory_scope || "assigned";
+  const allowedFactories = filterEmploymentFactories(
+    viewer,
+    factories,
+    managedFactoryIds,
+    factoryScope,
+  );
   const managedFactoryNames = useMemo(
     () =>
       (auxData?.factories ?? [])
@@ -571,8 +588,17 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
             </button>
             <button
               type="button"
+              onClick={() => setJoinSelectorOpen(true)}
+              className="hidden h-9 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 text-xs font-medium text-primary shadow-sm active:scale-[0.98] desktop:flex"
+              aria-label="Nối TN cho NLĐ đã có"
+            >
+              <UserRoundSearch className="h-4 w-4" />
+              Nối TN
+            </button>
+            <button
+              type="button"
               onClick={() => setQuickCreateOpen(true)}
-              className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground shadow active:scale-[0.98]"
+              className="hidden h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground shadow active:scale-[0.98] desktop:flex"
               aria-label="Tạo nhanh tài khoản NLĐ"
             >
               <Plus className="h-4 w-4" />
@@ -582,6 +608,27 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
         ) : undefined
       }
     >
+      {isAllMode && (
+        <div className="grid grid-cols-2 gap-2 desktop:hidden">
+          <button
+            type="button"
+            onClick={() => setJoinSelectorOpen(true)}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-primary/25 bg-primary/5 px-3 text-xs font-semibold text-primary shadow-soft active:scale-[0.99]"
+          >
+            <UserRoundSearch className="h-4 w-4" />
+            Nối TN
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuickCreateOpen(true)}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-soft active:scale-[0.99]"
+          >
+            <Plus className="h-4 w-4" />
+            Tạo nhanh
+          </button>
+        </div>
+      )}
+
       {isAllMode && (
         <div className="grid grid-cols-2 gap-2 desktop:hidden">
           <button
@@ -660,18 +707,67 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
         mainHouses={mainHouses}
         users={staffUsers}
         managedFactoryIds={managedFactoryIds}
+        factoryScope={factoryScope}
         permissions={{
           canEditHistory: selected?.canEditHistory ?? false,
           canAddOldHistory: viewer?.role === "admin",
           canReportAdvance: selected?.canReportAdvance ?? false,
           canUpdateBank: selected?.canUpdateBank ?? false,
           canReportLeave: selected?.canReportLeave ?? false,
-          canReportJoin: selected?.canReportJoin ?? false,
+          canReportJoin: selected
+            ? canReportJoin(
+                viewer,
+                selected.histories,
+                managedFactoryIds,
+                undefined,
+                factoryScope,
+              )
+            : false,
           canViewPayroll: selected?.canViewPayroll ?? false,
         }}
         open={drawerOpen}
         onClose={closeDrawer}
         onDataChanged={refreshDirectory}
+      />
+
+      <WorkerJoinSelectorDialog
+        open={joinSelectorOpen}
+        onOpenChange={setJoinSelectorOpen}
+        viewer={viewer}
+        factories={factories}
+        managedFactoryIds={managedFactoryIds}
+        factoryScope={factoryScope}
+        onSelect={(candidate) => {
+          setJoinSelectorOpen(false);
+          setSelectedJoinWorker(candidate);
+        }}
+      />
+
+      <WorkerEmploymentDrawer
+        user={selectedJoinWorker?.user ?? null}
+        actor={viewer}
+        histories={selectedJoinWorker?.histories ?? []}
+        factories={factories}
+        mainHouses={mainHouses}
+        users={staffUsers}
+        managedFactoryIds={managedFactoryIds}
+        factoryScope={factoryScope}
+        initialJoinOpen
+        permissions={{
+          canEditHistory: false,
+          canAddOldHistory: false,
+          canReportAdvance: false,
+          canUpdateBank: false,
+          canReportLeave: false,
+          canReportJoin: allowedFactories.length > 0,
+          canViewPayroll: false,
+        }}
+        open={Boolean(selectedJoinWorker)}
+        onClose={() => setSelectedJoinWorker(null)}
+        onDataChanged={async () => {
+          setSelectedJoinWorker(null);
+          await refreshDirectory();
+        }}
       />
 
       {isAllMode && (
@@ -680,7 +776,7 @@ export function StaffWorkerDirectoryPage({ mode }: { mode: StaffWorkerDirectoryM
             open={quickCreateOpen}
             onOpenChange={setQuickCreateOpen}
             actor={viewer}
-            factories={factories}
+            factories={allowedFactories}
             mainHouses={mainHouses}
             staffUsers={staffUsers}
             onCreated={(results) => {

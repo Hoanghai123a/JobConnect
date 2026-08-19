@@ -19,6 +19,7 @@ import {
   UserRoundCheck,
   UserRoundMinus,
   Users,
+  UserRoundSearch,
   WifiOff,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
@@ -62,6 +63,7 @@ import {
 } from "@/components/ui/select";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";
+import { filterEmploymentFactories } from "@/lib/staff-employment-scope";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import {
   fetchEmploymentHistories,
@@ -91,6 +93,7 @@ import { CccdManager } from "@/components/cccd/CccdManager";
 import { CccdHistoryExportDialog } from "@/components/cccd/CccdHistoryExportDialog";
 import { WorkerEmploymentDrawer } from "@/components/employment/WorkerEmploymentDrawer";
 import { QuickWorkerAccountDialog } from "@/components/staff/QuickWorkerAccountDialog";
+import { WorkerJoinSelectorDialog } from "@/components/staff/WorkerJoinSelectorDialog";
 import { WorkerDesktopCard } from "@/components/staff/WorkerDesktopCard";
 import { StaffWorkerDirectory } from "@/components/staff/StaffWorkerDirectory";
 import { RecruitChartDialog } from "@/components/workforce/RecruitChartDialog";
@@ -216,6 +219,7 @@ function getPocketBaseFieldErrors(error: unknown) {
 function WorkforcePage() {
   const currentUser = pb.authStore.record as UserRecord | null;
   const { openStaffExcelExport } = useStaffExcelExport();
+  const { data: settings } = useAppSettings();
   const queryClient = useQueryClient();
   const workspaceQuery = useStaffWorkspaceQuery(currentUser);
   const auxQuery = useStaffDirectoryAuxQuery(currentUser);
@@ -224,6 +228,11 @@ function WorkforcePage() {
   const [to, setTo] = useState(todayIso());
   const [openRegister, setOpenRegister] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [joinSelectorOpen, setJoinSelectorOpen] = useState(false);
+  const [selectedJoinWorker, setSelectedJoinWorker] = useState<{
+    user: UserRecord;
+    histories: EmploymentHistoryRecord[];
+  } | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [cccdExportOpen, setCccdExportOpen] = useState(false);
   const [chartOpen, setChartOpen] = useState(false);
@@ -247,6 +256,12 @@ function WorkforcePage() {
   const workspaceWorkers = workspace?.workers ?? EMPTY_WORKSPACE_WORKERS;
   const staffAdminUsers = auxQuery.data?.staffUsers ?? EMPTY_USERS;
   const factories = auxQuery.data?.factories ?? EMPTY_FACTORIES;
+  const employmentFactories = filterEmploymentFactories(
+    currentUser,
+    factories,
+    workspace?.managedFactoryIds ?? new Set<string>(),
+    settings.staff_employment_factory_scope,
+  );
   const mainHouses = auxQuery.data?.recruitmentEntities ?? EMPTY_MAIN_HOUSES;
   const histories = useMemo(
     () => workspaceWorkers.flatMap((worker) => worker.histories),
@@ -423,6 +438,15 @@ function WorkforcePage() {
           </button>
           <button
             type="button"
+            onClick={() => setJoinSelectorOpen(true)}
+            className="flex h-9 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 text-xs font-medium text-primary shadow-sm active:scale-[0.98]"
+            aria-label="Nối TN cho NLĐ đã có"
+          >
+            <UserRoundSearch className="h-4 w-4" />
+            Nối TN
+          </button>
+          <button
+            type="button"
             onClick={() => setQuickCreateOpen(true)}
             className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground shadow active:scale-[0.98]"
             aria-label="Tạo nhanh tài khoản NLĐ"
@@ -554,13 +578,53 @@ function WorkforcePage() {
         open={quickCreateOpen}
         onOpenChange={setQuickCreateOpen}
         actor={currentUser}
-        factories={factories}
+        factories={employmentFactories}
         mainHouses={mainHouses}
         staffUsers={users.filter((item) => item.role === "staff" || item.role === "admin")}
         onCreated={(results) => {
           void refreshWorkforce().then(() => {
             if (results.length === 1) setSelectedUserId(results[0].user.id);
           });
+        }}
+      />
+
+      <WorkerJoinSelectorDialog
+        open={joinSelectorOpen}
+        onOpenChange={setJoinSelectorOpen}
+        viewer={currentUser}
+        factories={factories}
+        managedFactoryIds={workspace?.managedFactoryIds ?? new Set<string>()}
+        factoryScope={settings.staff_employment_factory_scope}
+        onSelect={(candidate) => {
+          setJoinSelectorOpen(false);
+          setSelectedJoinWorker(candidate);
+        }}
+      />
+
+      <WorkerEmploymentDrawer
+        user={selectedJoinWorker?.user ?? null}
+        actor={currentUser}
+        histories={selectedJoinWorker?.histories ?? []}
+        factories={factories}
+        mainHouses={mainHouses}
+        users={users}
+        managedFactoryIds={workspace?.managedFactoryIds}
+        factoryScope={settings.staff_employment_factory_scope}
+        initialJoinOpen
+        permissions={{
+          canEditHistory: false,
+          canAddOldHistory: false,
+          canReportAdvance: false,
+          canUpdateBank: false,
+          canReportLeave: false,
+          canReportJoin: true,
+          canViewPayroll: false,
+        }}
+        open={Boolean(selectedJoinWorker)}
+        onClose={() => setSelectedJoinWorker(null)}
+        onDataChanged={async () => {
+          setSelectedJoinWorker(null);
+          await refreshWorkforce();
         }}
       />
 

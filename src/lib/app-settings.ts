@@ -14,6 +14,7 @@ export interface AppSettings {
   advance_rules?: string;
   allow_advance_after_leave?: boolean;
   advance_reporting_enabled?: boolean;
+  staff_employment_factory_scope?: "assigned" | "all";
   account_code_prefix?: string;
   logo?: string;
   updated?: string;
@@ -33,6 +34,7 @@ const DEFAULTS: AppSettings = {
   advance_rules: "",
   allow_advance_after_leave: false,
   advance_reporting_enabled: true,
+  staff_employment_factory_scope: "assigned",
   install_guide_images: [],
 };
 

@@ -112,9 +112,10 @@ function CompanyTab() {
       about: settings.about || "",
       advance_rules: settings.advance_rules || "",
       account_code_prefix: settings.account_code_prefix || "",
+      staff_employment_factory_scope: settings.staff_employment_factory_scope || "assigned",
     });
     setLogoPreview(logoUrl);
-  }, [settings.id]);
+  }, [logoUrl, settings]);
 
   const onPickLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -242,6 +243,26 @@ function CompanyTab() {
         />
       </div>
       <div>
+        <Label className="text-xs">Phạm vi nhà máy khi tạo/báo đi làm</Label>
+        <Select
+          value={form.staff_employment_factory_scope || "assigned"}
+          onValueChange={(value) =>
+            setForm({ ...form, staff_employment_factory_scope: value })
+          }
+        >
+          <SelectTrigger className="mt-1 rounded-xl">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="assigned">Chỉ nhà máy được phân công</SelectItem>
+            <SelectItem value="all">Toàn bộ nhà máy</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Áp dụng cho staff trong Tạo nhanh và Báo đi làm mới.
+        </p>
+      </div>
+      <div>
         <Label className="text-xs">Giới thiệu</Label>
         <Textarea
           className="mt-1 rounded-xl"
@@ -319,8 +340,8 @@ function CompanyTab() {
       <p className="text-[11px] text-muted-foreground">
         Yêu cầu collection PocketBase tên <code>app_settings</code> với các field: company_name,
         slogan, address, hotline, email, about (text), advance_limit (number), advance_rules (text),
-        logo (file), install_guide_images (multiple files). Collection <code>factories</code> cần
-        thêm field attendance_cutoff_day (number).
+        logo (file), install_guide_images (multiple files), staff_employment_factory_scope (select:
+        assigned/all). Collection <code>factories</code> cần thêm field attendance_cutoff_day (number).
       </p>
     </Card>
   );

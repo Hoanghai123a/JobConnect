@@ -17,6 +17,7 @@ import {
   idbPutManyHistories,
 } from "./staff-cache";
 import { escapePb, relationInFilter } from "./delegations";
+import { canUseEmploymentFactory } from "./staff-employment-scope";
 
 export type StaffVisibilityReason = "qlnm" | "nvtd";
 
@@ -215,14 +216,16 @@ export function canReportJoin(
   viewer: Partial<UserRecord> | null | undefined,
   histories: EmploymentHistoryRecord[],
   managedFactoryIds: Set<string>,
-  _targetFactoryId?: string,
+  targetFactoryId?: string,
+  factoryScope?: "assigned" | "all",
 ) {
   if (!viewer?.id) return false;
   if (viewer.role === "admin") return true;
-  if (isRecentRecruiter(viewer, histories)) return true;
   if (viewer.role !== "staff") return false;
-  // Staff with an existing management scope may report a join at any factory.
-  return managedFactoryIds.size > 0;
+  if (targetFactoryId) {
+    return canUseEmploymentFactory(viewer, targetFactoryId, managedFactoryIds, factoryScope);
+  }
+  return factoryScope === "all" || managedFactoryIds.size > 0;
 }
 
 export function canEditHistory(

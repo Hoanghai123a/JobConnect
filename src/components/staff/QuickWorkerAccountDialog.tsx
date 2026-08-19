@@ -570,6 +570,9 @@ export function QuickWorkerAccountDialog({
       errors.push("Nhập số CMND/CCCD hợp lệ trước khi lưu ảnh CCCD");
     }
     if (!form.factory) errors.push("Chọn công ty/nhà máy");
+    else if (!factories.some((factory) => factory.id === form.factory)) {
+      errors.push("Nhà máy không nằm trong phạm vi được phép");
+    }
     if (!form.main_house) errors.push("Chọn nhà chính");
     if (!form.recruiter_staff) errors.push("Chọn người tuyển");
     if (!form.join_date) errors.push("Nhập ngày vào làm");

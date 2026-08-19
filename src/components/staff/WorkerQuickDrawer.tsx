@@ -71,6 +71,7 @@ import type { AdvancePayoutMethod } from "@/lib/advances";
 import { JoinCccdSection } from "@/components/employment/JoinCccdSection";
 import { RecruiterPicker } from "@/components/employment/RecruiterPicker";
 import { getUserErrorMessage } from "@/lib/toast";
+import { filterEmploymentFactories } from "@/lib/staff-employment-scope";
 import {
   buildRecruiterPayload,
   encodeInternalRecruiter,
@@ -214,7 +215,16 @@ export function WorkerQuickDrawer({
     setEmployeeCodeForm(latest?.employee_code || "");
   }, [worker, viewer?.id]);
 
-  const joinableFactories = useMemo(() => factories, [factories]);
+  const joinableFactories = useMemo(
+    () =>
+      filterEmploymentFactories(
+        viewer,
+        factories,
+        managedFactoryIds,
+        settings.staff_employment_factory_scope,
+      ),
+    [factories, managedFactoryIds, settings.staff_employment_factory_scope, viewer],
+  );
 
   const latest = worker?.latestHistory ?? null;
   const joinCccdVersion = useMemo(() => {
@@ -248,7 +258,14 @@ export function WorkerQuickDrawer({
   const canOpenAdvance =
     canReportAdvanceByScope &&
     advanceInteractionAllowed &&
-    (!latest?.recruiter_partner || viewer?.role === "admin");
+      (!latest?.recruiter_partner || viewer?.role === "admin");
+  const canOpenJoin = canReportJoin(
+    viewer,
+    worker?.histories || [],
+    managedFactoryIds,
+    undefined,
+    settings.staff_employment_factory_scope,
+  );
 
   const submitLeave = async () => {
     if (!worker || !activeHistory || !viewer?.id) return;
@@ -304,7 +321,15 @@ export function WorkerQuickDrawer({
       toast.warning(`Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`);
       return;
     }
-    if (!canReportJoin(viewer, worker.histories, managedFactoryIds, joinForm.factory)) {
+    if (
+      !canReportJoin(
+        viewer,
+        worker.histories,
+        managedFactoryIds,
+        joinForm.factory,
+        settings.staff_employment_factory_scope,
+      )
+    ) {
       toast.error("Bạn không có quyền báo đi làm tại nhà máy đã chọn");
       return;
     }
@@ -563,7 +588,7 @@ export function WorkerQuickDrawer({
                 {worker.canReportLeave && (
                   <ActionButton icon={Clock3} label="Báo nghỉ" onClick={() => setView("leave")} />
                 )}
-                {worker.canReportJoin && (
+                {canOpenJoin && (
                   <ActionButton
                     icon={Plus}
                     label="Báo đi làm mới"
@@ -595,7 +620,7 @@ export function WorkerQuickDrawer({
                     onClick={() => setView("bank")}
                   />
                 )}
-                {(worker.canReportLeave || worker.canReportJoin || canReportAdvanceByScope) && (
+                {(worker.canReportLeave || canOpenJoin || canReportAdvanceByScope) && (
                   <ActionButton
                     icon={Hash}
                     label="Cập nhật mã NV"

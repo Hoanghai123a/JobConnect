@@ -103,6 +103,7 @@ import {
 } from "@/lib/recruiters";
 import type { AdvancePayoutMethod } from "@/lib/advances";
 import { getUserErrorMessage } from "@/lib/toast";
+import { filterEmploymentFactories } from "@/lib/staff-employment-scope";
 
 type RestoreRequest = {
   history: EmploymentHistoryRecord;
@@ -376,6 +377,8 @@ export function WorkerEmploymentDrawer({
   managedFactoryIds,
   permissions,
   open,
+  initialJoinOpen = false,
+  factoryScope,
   onClose,
   onDataChanged,
 }: {
@@ -388,6 +391,8 @@ export function WorkerEmploymentDrawer({
   managedFactoryIds?: Set<string>;
   permissions: WorkerEmploymentPermissions;
   open: boolean;
+  initialJoinOpen?: boolean;
+  factoryScope?: "assigned" | "all";
   onClose: () => void;
   onDataChanged: () => void | Promise<void>;
 }) {
@@ -576,7 +581,11 @@ export function WorkerEmploymentDrawer({
     setActionLogsRefreshKey((current) => current + 1);
   };
 
-  const joinableFactories = useMemo(() => factories, [factories]);
+  const joinableFactories = useMemo(
+    () => filterEmploymentFactories(actor, factories, managedIds, factoryScope),
+    [actor, factories, factoryScope, managedIds],
+  );
+  const latestForFormReset = useMemo(() => getLatestEmploymentHistory(histories), [histories]);
 
   useEffect(() => {
     if (user) {
@@ -603,7 +612,7 @@ export function WorkerEmploymentDrawer({
       setRestoreRequest(null);
       setRestoreSaving(false);
       setCccdViewerOpen(false);
-      const latest = getLatestEmploymentHistory(histories);
+      const latest = latestForFormReset;
       const personalSnapshot = getEmploymentPersonalSnapshot(latest, user);
       setJoinForm({
         factory: "",
@@ -616,9 +625,10 @@ export function WorkerEmploymentDrawer({
         join_date: todayIso(),
         note: "",
       });
+      if (initialJoinOpen && (!latest || !isCurrentlyWorking(latest))) setJoinOpen(true);
       setEmployeeCodeForm(latest?.employee_code || "");
     }
-  }, [user?.id]);
+  }, [actor?.id, initialJoinOpen, latestForFormReset, user]);
 
   useEffect(() => {
     if (!selectedHistory || !user?.id) {
@@ -762,7 +772,15 @@ export function WorkerEmploymentDrawer({
     if (missingSnapshotFields.length) {
       return toast.warning(`Thiếu thông tin cá nhân: ${missingSnapshotFields.join(", ")}`);
     }
-    if (!canReportJoin(actor, histories, managedFactoryIds ?? new Set(), joinForm.factory)) {
+    if (
+      !canReportJoin(
+        actor,
+        histories,
+        managedFactoryIds ?? new Set(),
+        joinForm.factory,
+        factoryScope,
+      )
+    ) {
       toast.error("Bạn không có quyền báo đi làm tại nhà máy đã chọn");
       return;
     }

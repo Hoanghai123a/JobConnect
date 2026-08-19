@@ -119,6 +119,7 @@ import {
   normalizeAdvancePayoutMethod,
   type AdvancePayoutMethod,
 } from "@/lib/advances";
+import { filterEmploymentFactories } from "@/lib/staff-employment-scope";
 
 export const Route = createFileRoute("/_authenticated/staff/workers/$workerId")({
   component: StaffWorkerDetailPage,
@@ -410,8 +411,15 @@ function StaffWorkerDetailPage() {
     histories,
     managedFactoryIds,
     joinForm.factory,
+    settings.staff_employment_factory_scope,
   );
-  const canOpenJoinForm = canReportJoin(viewer, histories, managedFactoryIds);
+  const canOpenJoinForm = canReportJoin(
+    viewer,
+    histories,
+    managedFactoryIds,
+    undefined,
+    settings.staff_employment_factory_scope,
+  );
   const canUpdateBankForWorker = canUpdateBank(viewer, allWorkerHistories, managedFactoryIds);
   const canDoAnyAction =
     canOpenAdvanceForWorker ||
@@ -445,7 +453,16 @@ function StaffWorkerDetailPage() {
     };
   }, [advanceOpen, allowAdvanceAfterLeave, viewer?.role, workerUser?.id]);
 
-  const joinableFactories = useMemo(() => factories, [factories]);
+  const joinableFactories = useMemo(
+    () =>
+      filterEmploymentFactories(
+        viewer,
+        factories,
+        managedFactoryIds,
+        settings.staff_employment_factory_scope,
+      ),
+    [factories, managedFactoryIds, settings.staff_employment_factory_scope, viewer],
+  );
   const latestLeaveDate = useMemo(() => {
     const dates = allWorkerHistories
       .map((h) => h.leave_date?.slice(0, 10))

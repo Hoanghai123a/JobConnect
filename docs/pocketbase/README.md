@@ -16,6 +16,10 @@ File này chỉ chứa các collection mới cần thêm:
 - `staff_action_logs`
 - `push_subscriptions` (nếu bật thông báo PWA)
 
+Collection `app_settings` cần có field Select `staff_employment_factory_scope` với các giá trị
+`assigned` và `all`. Giá trị mặc định là `assigned`; field này cho phép Admin quyết định staff
+được chọn nhà máy được phân công hay toàn bộ nhà máy trong luồng Tạo nhanh và Báo đi làm mới.
+
 Collection `users` đã có sẵn. Chỉ cần đảm bảo field `role` chấp nhận thêm giá trị `staff` (xem hướng dẫn ở `users-role-update.md`).
 Luồng tạo nhanh NLĐ trong mục danh sách lao động còn cần rule `users.create/update`
 cho admin/staff và các field ảnh CCCD/ngân hàng/ngày sinh như hướng dẫn trong
@@ -29,6 +33,10 @@ cho admin/staff và các field ảnh CCCD/ngân hàng/ngày sinh như hướng d
   - `updateRule`: admin, staff, hoặc chính user. App chỉ mở luồng user tự báo nghỉ; các quyền chi tiết hơn được kiểm tra ở frontend.
   - Field lịch sử đi làm cần có `worker_tax_code_snapshot` để lưu mã số thuế theo từng nhà máy/lịch sử, không lấy cứng từ hồ sơ user.
   - Giữ index `idx_emphist_one_active` để mỗi user chỉ có một bản ghi `working`.
+  - Luồng **Nối TN** tìm theo mã NV/nhà máy và kiểm tra lịch sử gần nhất theo từng NLĐ.
+    Nên có thêm composite index `idx_emphist_lookup_join` trên
+    `(factory, employee_code, join_date DESC, created DESC)` và `idx_emphist_user_latest` trên
+    `(user, join_date DESC, created DESC)` để dữ liệu lớn vẫn phân trang nhanh.
 - `salary_holds`
   - C?n field text `rejection_reason` (t?i ?a 1000 k? t?) ?? l?u l? do Admin t? ch?i.
   - `updateRule` b?t bu?c g?i `rejection_reason` khi chuy?n tr?ng th?i t? `received` sang `rejected`.
