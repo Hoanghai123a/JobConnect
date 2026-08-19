@@ -32,6 +32,24 @@ export interface CccdHistoryExportProgress {
   message: string;
 }
 
+function createAbortError() {
+  return new DOMException("Đã hủy", "AbortError");
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return;
+  throw signal.reason instanceof Error ? signal.reason : createAbortError();
+}
+
+function isAbortError(error: unknown, signal?: AbortSignal) {
+  return (
+    signal?.aborted ||
+    (error && typeof error === "object" && "isAbort" in error && Boolean(error.isAbort)) ||
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
+}
+
 export interface PreparedCccdHistoryRecord {
   historyId: string;
   factoryId: string;
@@ -367,9 +385,12 @@ export async function prepareCccdHistoryExport(
   users: UserRecord[],
   factories: FactoryRecord[],
   recordOrder: CccdHistoryPreparation["recordOrder"] = "default",
+  signal?: AbortSignal,
 ): Promise<CccdHistoryPreparation> {
+  throwIfAborted(signal);
   const userIds = [...new Set(histories.map((history) => history.user).filter(Boolean))];
-  const versions = await fetchCccdVersionsByUsers(userIds);
+  const versions = await fetchCccdVersionsByUsers(userIds, signal);
+  throwIfAborted(signal);
   const groupedVersions = versionsByUserId(versions);
   const versionById = new Map(versions.map((version) => [version.id, version]));
   const userById = new Map(users.map((user) => [user.id, user]));
@@ -407,8 +428,9 @@ function inferImageExtension(blob: Blob) {
   return "jpg";
 }
 
-async function downloadImage(url: string): Promise<DownloadedImage> {
-  const response = await fetch(url);
+async function downloadImage(url: string, signal?: AbortSignal): Promise<DownloadedImage> {
+  throwIfAborted(signal);
+  const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`Không tải được ảnh (${response.status})`);
   const blob = await response.blob();
   if (!blob.size) throw new Error("Ảnh tải về rỗng");
@@ -435,7 +457,9 @@ function progress(
   completed: number,
   total: number,
   message: string,
+  signal?: AbortSignal,
 ) {
+  throwIfAborted(signal);
   callback?.({ completed, total, message });
 }
 
@@ -467,7 +491,9 @@ function summarizeActual(
 async function exportFolderArchive(
   preparation: CccdHistoryPreparation,
   onProgress?: (value: CccdHistoryExportProgress) => void,
+  signal?: AbortSignal,
 ): Promise<CccdHistoryExportResult> {
+  throwIfAborted(signal);
   const zip = new JSZip();
   const usedPaths = new Set<string>();
   const actualSides = new Map<string, Set<ImageSide>>();
@@ -483,6 +509,7 @@ async function exportFolderArchive(
   const sequenceByGroup = new Map<string, number>();
 
   for (const record of availableRecords) {
+    throwIfAborted(signal);
     const factoryFolder = safePathSegment(record.factoryName, "chua-ro-nha-may");
     const dateFolder = safePathSegment(record.joinDate, "khong-ro-ngay-vao");
     const groupKey = `${record.factoryId}|${record.joinDate}`;
@@ -499,8 +526,9 @@ async function exportFolderArchive(
       ["back", record.backUrl],
     ] as const) {
       if (!url) continue;
+      throwIfAborted(signal);
       try {
-        const image = await downloadImage(url);
+        const image = await downloadImage(url, signal);
         const label = side === "front" ? "mat_truoc" : "mat_sau";
         const path = uniqueZipPath(
           `${factoryFolder}/${dateFolder}/${prefix}_${label}.${image.extension}`,
@@ -508,19 +536,32 @@ async function exportFolderArchive(
         );
         zip.file(path, image.blob);
         updateActualSides(actualSides, record.historyId, side);
-      } catch {
+      } catch (error) {
+        if (isAbortError(error, signal)) throw error;
         failedImages += 1;
       } finally {
-        completed += 1;
-        progress(onProgress, completed, totalImages, `Đang tải ảnh ${completed}/${totalImages}`);
+        if (!signal?.aborted) {
+          completed += 1;
+          progress(
+            onProgress,
+            completed,
+            totalImages,
+            `Đang tải ảnh ${completed}/${totalImages}`,
+            signal,
+          );
+        }
       }
     }
   }
 
+  throwIfAborted(signal);
   const result = summarizeActual(preparation.stats.total, actualSides, failedImages);
   if (!result.exported) throw new Error("Không tải được ảnh CCCD nào để xuất");
-  progress(onProgress, totalImages, totalImages, "Đang đóng gói ZIP...");
-  const content = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+  progress(onProgress, totalImages, totalImages, "Đang đóng gói ZIP...", signal);
+  const content = await zip.generateAsync({ type: "blob", compression: "DEFLATE" }, () =>
+    throwIfAborted(signal),
+  );
+  throwIfAborted(signal);
   saveAs(content, `CCCD_thu_muc_theo_lich_su_${timestampForFilename()}.zip`);
   return result;
 }
@@ -564,9 +605,11 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number)
   });
 }
 
-async function normalizeWordImage(blob: Blob): Promise<WordImage> {
+async function normalizeWordImage(blob: Blob, signal?: AbortSignal): Promise<WordImage> {
+  throwIfAborted(signal);
   const drawable = await loadDrawable(blob);
   try {
+    throwIfAborted(signal);
     if (!drawable.width || !drawable.height) throw new Error("Kích thước ảnh không hợp lệ");
     const mime = blob.type.toLowerCase().split(";")[0];
     const supportedType =
@@ -593,6 +636,7 @@ async function normalizeWordImage(blob: Blob): Promise<WordImage> {
       outputType = "png";
     }
 
+    throwIfAborted(signal);
     return {
       data: new Uint8Array(await outputBlob.arrayBuffer()),
       type: outputType,
@@ -607,7 +651,9 @@ async function normalizeWordImage(blob: Blob): Promise<WordImage> {
 async function exportWordArchive(
   preparation: CccdHistoryPreparation,
   onProgress?: (value: CccdHistoryExportProgress) => void,
+  signal?: AbortSignal,
 ): Promise<CccdHistoryExportResult> {
+  throwIfAborted(signal);
   const {
     AlignmentType,
     Document: WordDocument,
@@ -643,6 +689,7 @@ async function exportWordArchive(
   let failedImages = 0;
 
   for (const records of recordsByFactory.values()) {
+    throwIfAborted(signal);
     if (preparation.recordOrder === "default") records.sort(comparePreparedRecords);
     const children: DocxParagraph[] = [];
     let exportedInDocument = 0;
@@ -654,24 +701,30 @@ async function exportWordArchive(
         ["back", record.backUrl],
       ] as const) {
         if (!url) continue;
+        throwIfAborted(signal);
         try {
-          const downloaded = await downloadImage(url);
-          const image = await normalizeWordImage(downloaded.blob);
+          const downloaded = await downloadImage(url, signal);
+          const image = await normalizeWordImage(downloaded.blob, signal);
           images.push(image);
           updateActualSides(actualSides, record.historyId, side);
-        } catch {
+        } catch (error) {
+          if (isAbortError(error, signal)) throw error;
           failedImages += 1;
         } finally {
-          completed += 1;
-          progress(
-            onProgress,
-            completed,
-            totalImages,
-            `Đang xử lý ảnh ${completed}/${totalImages}`,
-          );
+          if (!signal?.aborted) {
+            completed += 1;
+            progress(
+              onProgress,
+              completed,
+              totalImages,
+              `Đang xử lý ảnh ${completed}/${totalImages}`,
+              signal,
+            );
+          }
         }
       }
 
+      throwIfAborted(signal);
       if (!images.length) continue;
       images.forEach((image, imageIndex) => {
         const scale = Math.min(
@@ -725,17 +778,28 @@ async function exportWordArchive(
         },
       ],
     });
-    progress(onProgress, completed, totalImages, `Đang tạo Word ${records[0].factoryName}...`);
+    progress(
+      onProgress,
+      completed,
+      totalImages,
+      `Đang tạo Word ${records[0].factoryName}...`,
+      signal,
+    );
     const documentBlob = await Packer.toBlob(document);
+    throwIfAborted(signal);
     const safeName = safePathSegment(records[0].factoryName, "chua-ro-nha-may");
     const documentPath = uniqueZipPath(`${safeName}.docx`, usedDocumentNames);
     zip.file(documentPath, documentBlob);
   }
 
+  throwIfAborted(signal);
   const result = summarizeActual(preparation.stats.total, actualSides, failedImages);
   if (!result.exported) throw new Error("Không tạo được file Word từ ảnh CCCD");
-  progress(onProgress, totalImages, totalImages, "Đang đóng gói Word vào ZIP...");
-  const content = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+  progress(onProgress, totalImages, totalImages, "Đang đóng gói Word vào ZIP...", signal);
+  const content = await zip.generateAsync({ type: "blob", compression: "DEFLATE" }, () =>
+    throwIfAborted(signal),
+  );
+  throwIfAborted(signal);
   saveAs(content, `CCCD_Word_theo_lich_su_${timestampForFilename()}.zip`);
   return result;
 }
@@ -744,8 +808,9 @@ export async function exportCccdHistoryArchive(
   mode: CccdHistoryExportMode,
   preparation: CccdHistoryPreparation,
   onProgress?: (value: CccdHistoryExportProgress) => void,
+  signal?: AbortSignal,
 ) {
   return mode === "word"
-    ? exportWordArchive(preparation, onProgress)
-    : exportFolderArchive(preparation, onProgress);
+    ? exportWordArchive(preparation, onProgress, signal)
+    : exportFolderArchive(preparation, onProgress, signal);
 }

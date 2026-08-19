@@ -39,6 +39,12 @@ function normalizeCode(value?: string) {
     .toLocaleLowerCase("vi-VN");
 }
 
+function normalizeFullName(value?: string) {
+  return String(value || "")
+    .trim()
+    .toLocaleLowerCase("vi-VN");
+}
+
 function formatDate(value?: string) {
   if (!value) return "—";
   const match = value.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -109,6 +115,7 @@ export function WorkerJoinSelectorDialog({
   onSelect: (candidate: { user: UserRecord; histories: EmploymentHistoryRecord[] }) => void;
 }) {
   const [employeeCode, setEmployeeCode] = useState("");
+  const [fullName, setFullName] = useState("");
   const [factoryId, setFactoryId] = useState("");
   const [items, setItems] = useState<WorkerJoinCandidate[]>([]);
   const [loading, setLoading] = useState(false);
@@ -127,7 +134,7 @@ export function WorkerJoinSelectorDialog({
     () => new Set(searchFactories.map((factory) => factory.id)),
     [searchFactories],
   );
-  const hasFilter = Boolean(employeeCode.trim() || factoryId);
+  const hasFilter = Boolean(employeeCode.trim() || fullName.trim() || factoryId);
 
   const clearResults = () => {
     setItems([]);
@@ -139,14 +146,21 @@ export function WorkerJoinSelectorDialog({
 
   const resetFilters = () => {
     setEmployeeCode("");
+    setFullName("");
     setFactoryId("");
     clearResults();
   };
 
   const search = async (append = false) => {
     const code = normalizeCode(employeeCode);
-    if (!code && !factoryId) {
-      toast.warning("Nhập mã NV hoặc chọn nhà máy");
+    const name = normalizeFullName(fullName);
+    const useNameFallback = !code && Boolean(name);
+    if (!code && !name && !factoryId) {
+      toast.warning("Nhập mã NV, họ tên hoặc chọn nhà máy");
+      return;
+    }
+    if (useNameFallback && !factoryId) {
+      toast.warning("Khi tìm theo họ tên, vui lòng chọn nhà máy");
       return;
     }
     if (!viewer?.id) return;
@@ -157,6 +171,64 @@ export function WorkerJoinSelectorDialog({
     if (!append) setHasSearched(true);
 
     try {
+      if (useNameFallback) {
+        let sourcePage = append ? nextSourcePage : 1;
+        let sourceHasMore = true;
+        let pagesScanned = 0;
+        const candidateMap = new Map<string, WorkerJoinCandidate>(
+          append ? items.map((item) => [item.user.id, item]) : [],
+        );
+        const initialCount = candidateMap.size;
+
+        while (
+          sourceHasMore &&
+          pagesScanned < MAX_SOURCE_PAGES_PER_LOAD &&
+          candidateMap.size - initialCount < RESULT_PAGE_SIZE
+        ) {
+          const response = await pb
+            .collection("users")
+            .getList<UserRecord>(sourcePage, SOURCE_PAGE_SIZE, {
+              filter: `role="user" && full_name~"${escapePb(fullName.trim())}"`,
+              sort: "full_name,username",
+              fields: "id,username,full_name,phone",
+            });
+
+          sourceHasMore = sourcePage < response.totalPages;
+          sourcePage += 1;
+          pagesScanned += 1;
+
+          const exactUsers = response.items.filter(
+            (user) => normalizeFullName(user.full_name) === name && !candidateMap.has(user.id),
+          );
+          if (!exactUsers.length) continue;
+
+          const latestByUser = await fetchLatestHistories(exactUsers.map((user) => user.id));
+          exactUsers.forEach((user) => {
+            const latest = latestByUser.get(user.id);
+            if (
+              latest &&
+              searchFactoryIds.has(latest.factory) &&
+              latest.factory === factoryId &&
+              !normalizeCode(latest.employee_code)
+            ) {
+              candidateMap.set(user.id, { user, latest });
+            }
+          });
+        }
+
+        setItems(
+          [...candidateMap.values()].sort((left, right) =>
+            (left.user.full_name || left.user.username || "").localeCompare(
+              right.user.full_name || right.user.username || "",
+              "vi",
+            ),
+          ),
+        );
+        setNextSourcePage(sourcePage);
+        setHasMore(sourceHasMore);
+        return;
+      }
+
       const filters = [];
       // PocketBase's ~ operator narrows the query; exact matching is verified below.
       if (code) filters.push(`employee_code~"${escapePb(employeeCode.trim())}"`);
@@ -261,49 +333,68 @@ export function WorkerJoinSelectorDialog({
             Nối TN
           </DialogTitle>
           <DialogDescription>
-            Tìm theo mã NV và nhà máy của lịch sử đi làm gần nhất.
+            Tìm theo mã NV hoặc dùng họ tên khi lịch sử đi làm gần nhất chưa có mã NV.
           </DialogDescription>
         </DialogHeader>
         <div className="min-w-0 space-y-3 overflow-y-auto px-4 pb-5 sm:px-5">
           <form
-            className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-end"
+            className="space-y-3"
             onSubmit={(event) => {
               event.preventDefault();
               void search(false);
             }}
           >
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Mã NV</label>
-              <Input
-                value={employeeCode}
-                onChange={(event) => {
-                  setEmployeeCode(event.target.value);
-                  clearResults();
-                }}
-                placeholder="Nhập đúng mã NV"
-              />
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Mã NV</label>
+                <Input
+                  value={employeeCode}
+                  onChange={(event) => {
+                    setEmployeeCode(event.target.value);
+                    clearResults();
+                  }}
+                  placeholder="Nhập đúng mã NV"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Họ tên</label>
+                <Input
+                  value={fullName}
+                  disabled={Boolean(employeeCode.trim())}
+                  onChange={(event) => {
+                    setFullName(event.target.value);
+                    clearResults();
+                  }}
+                  placeholder="Nhập đúng họ tên"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Dùng khi lịch sử gần nhất chưa có mã NV.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Nhà máy</label>
+                <FactoryPicker
+                  factories={searchFactories}
+                  value={factoryId}
+                  onChange={(value) => {
+                    setFactoryId(value);
+                    clearResults();
+                  }}
+                  placeholder="Chọn nhà máy..."
+                  allowClear
+                />
+              </div>
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Nhà máy</label>
-              <FactoryPicker
-                factories={searchFactories}
-                value={factoryId}
-                onChange={(value) => {
-                  setFactoryId(value);
-                  clearResults();
-                }}
-                placeholder="Chọn nhà máy..."
-                allowClear
-              />
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" className="gap-1.5" onClick={resetFilters}>
+                <RotateCcw className="h-4 w-4" />
+                Xóa lọc
+              </Button>
+              <Button type="submit" className="gap-1.5" disabled={!hasFilter || loading}>
+                <Search className="h-4 w-4" />
+                {loading ? "Đang tìm..." : "Tìm kiếm"}
+              </Button>
             </div>
-            <Button type="button" variant="outline" className="gap-1.5" onClick={resetFilters}>
-              <RotateCcw className="h-4 w-4" />
-              Xóa lọc
-            </Button>
-            <Button type="submit" className="gap-1.5" disabled={!hasFilter || loading}>
-              <Search className="h-4 w-4" />
-              {loading ? "Đang tìm..." : "Tìm kiếm"}
-            </Button>
           </form>
 
           {loading ? (
@@ -329,7 +420,7 @@ export function WorkerJoinSelectorDialog({
             <EmptyState
               icon={Search}
               title="Không tìm thấy NLĐ phù hợp"
-              description="Mã NV và nhà máy được đối chiếu với lịch sử đi làm gần nhất."
+              description="Mã NV, trạng thái chưa có mã và nhà máy đều được đối chiếu với lịch sử đi làm gần nhất."
               action={
                 hasMore ? (
                   <Button

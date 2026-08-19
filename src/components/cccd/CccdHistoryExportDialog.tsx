@@ -8,6 +8,7 @@ import {
   FileText,
   Loader2,
   Upload,
+  XCircle,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
@@ -84,7 +85,11 @@ export function CccdHistoryExportDialog({
   const [largeExportConfirmed, setLargeExportConfirmed] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [preparationCancelled, setPreparationCancelled] = useState(false);
   const [preparation, setPreparation] = useState<CccdHistoryPreparation | null>(null);
+  const activeControllerRef = useRef<AbortController | null>(null);
+  const cancelRequestedRef = useRef(false);
   const [progressState, setProgressState] = useState<CccdHistoryExportProgress>({
     completed: 0,
     total: 0,
@@ -99,7 +104,9 @@ export function CccdHistoryExportDialog({
   }, [endDate, excelResult, factoryIds, histories, source]);
 
   const selectionReady =
-    source === "date-range" ? dateSelectionValid : Boolean(excelResult && !excelResult.blockingError);
+    source === "date-range"
+      ? dateSelectionValid
+      : Boolean(excelResult && !excelResult.blockingError);
   const largeSelection = selectedHistories.length > LARGE_EXPORT_THRESHOLD;
 
   useEffect(() => {
@@ -111,6 +118,11 @@ export function CccdHistoryExportDialog({
     setExcelFileName("");
     setExcelResult(null);
     setLargeExportConfirmed(false);
+    activeControllerRef.current?.abort();
+    activeControllerRef.current = null;
+    cancelRequestedRef.current = false;
+    setCancelling(false);
+    setPreparationCancelled(false);
     setPreparation(null);
     setProgressState({ completed: 0, total: 0, message: "" });
   }, [open]);
@@ -120,44 +132,75 @@ export function CccdHistoryExportDialog({
   }, [selectedHistories]);
 
   useEffect(() => {
-    if (!open || !selectionReady) {
-      setPreparation(null);
-      setPreparing(false);
+    if (!open || !selectionReady || preparationCancelled || excelReading) {
+      if (!open || !selectionReady) {
+        setPreparation(null);
+        setPreparing(false);
+      }
       return;
     }
 
+    const controller = new AbortController();
+    activeControllerRef.current = controller;
+    cancelRequestedRef.current = false;
     let alive = true;
+    setPreparationCancelled(false);
     setPreparation(null);
     setPreparing(true);
+    setCancelling(false);
     setProgressState({ completed: 0, total: 0, message: "Đang đọc dữ liệu CCCD..." });
     prepareCccdHistoryExport(
       selectedHistories,
       users,
       factories,
       source === "excel" ? "source" : "default",
+      controller.signal,
     )
       .then((result) => {
         if (alive) setPreparation(result);
       })
       .catch((error: unknown) => {
-        if (alive) {
-          toast.error(getUserErrorMessage(error, "Không đọc được dữ liệu CCCD"));
+        if (!alive) return;
+        if (controller.signal.aborted && cancelRequestedRef.current) {
+          setPreparationCancelled(true);
+          toast.success("Đã hủy quá trình xuất ảnh CCCD.");
+          return;
         }
+        toast.error(getUserErrorMessage(error, "Không đọc được dữ liệu CCCD"));
       })
       .finally(() => {
-        if (alive) setPreparing(false);
+        if (alive) {
+          setPreparing(false);
+          setCancelling(false);
+        }
+        if (activeControllerRef.current === controller) activeControllerRef.current = null;
       });
 
     return () => {
       alive = false;
+      controller.abort();
+      if (activeControllerRef.current === controller) activeControllerRef.current = null;
     };
-  }, [factories, open, selectedHistories, selectionReady, source, users]);
+  }, [
+    excelReading,
+    factories,
+    open,
+    preparationCancelled,
+    selectedHistories,
+    selectionReady,
+    source,
+    users,
+  ]);
 
   const handleExcelFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file || excelReading || exporting) return;
 
+    const controller = new AbortController();
+    activeControllerRef.current = controller;
+    cancelRequestedRef.current = false;
+    setCancelling(false);
     setExcelReading(true);
     setExcelFileName(file.name);
     setExcelResult(null);
@@ -166,7 +209,9 @@ export function CccdHistoryExportDialog({
     setProgressState({ completed: 0, total: 0, message: "Đang đọc file Excel..." });
     try {
       const rows = await parseExcelToRows(file);
+      controller.signal.throwIfAborted();
       const result = matchCccdHistoriesFromExcelRows(rows, histories, factories);
+      controller.signal.throwIfAborted();
       setExcelResult(result);
 
       if (result.issues.length) exportExcelIssues(result);
@@ -182,24 +227,39 @@ export function CccdHistoryExportDialog({
         toast.success(`Đã khớp ${result.histories.length} lịch sử đi làm.`);
       }
     } catch (error: unknown) {
-      setExcelFileName("");
-      toast.error(getUserErrorMessage(error, "Không đọc được file Excel"));
+      if (controller.signal.aborted && cancelRequestedRef.current) {
+        toast.success("Đã hủy quá trình xuất ảnh CCCD.");
+      } else {
+        setExcelFileName("");
+        toast.error(getUserErrorMessage(error, "Không đọc được file Excel"));
+      }
     } finally {
+      if (activeControllerRef.current === controller) activeControllerRef.current = null;
       setExcelReading(false);
+      setCancelling(false);
     }
   };
 
   const startExport = async () => {
-    if (!preparation || busy) return;
+    if (!preparation || busy || cancelling) return;
     if (!preparation.stats.full && !preparation.stats.partial) {
       toast.warning("Không có ảnh CCCD phù hợp để xuất");
       return;
     }
 
+    const controller = new AbortController();
+    activeControllerRef.current = controller;
+    cancelRequestedRef.current = false;
     setExporting(true);
+    setCancelling(false);
     setProgressState({ completed: 0, total: 0, message: "Đang chuẩn bị xuất..." });
     try {
-      const result = await exportCccdHistoryArchive(mode, preparation, setProgressState);
+      const result = await exportCccdHistoryArchive(
+        mode,
+        preparation,
+        setProgressState,
+        controller.signal,
+      );
       toast.success(
         `Đã xuất ${result.exported} lịch sử (${result.full} đủ 2 mặt, ${result.partial} thiếu 1 mặt).`,
       );
@@ -210,10 +270,28 @@ export function CccdHistoryExportDialog({
       }
       onClose();
     } catch (error: unknown) {
-      toast.error(getUserErrorMessage(error, "Lỗi xuất ảnh CCCD"));
+      if (controller.signal.aborted && cancelRequestedRef.current) {
+        toast.success("Đã hủy quá trình xuất ảnh CCCD.");
+      } else {
+        toast.error(getUserErrorMessage(error, "Lỗi xuất ảnh CCCD"));
+      }
     } finally {
+      if (activeControllerRef.current === controller) activeControllerRef.current = null;
       setExporting(false);
+      setCancelling(false);
     }
+  };
+
+  const cancelCurrentTask = () => {
+    if (!busy || cancelling) return;
+    cancelRequestedRef.current = true;
+    setCancelling(true);
+    activeControllerRef.current?.abort();
+  };
+
+  const retryPreparation = () => {
+    if (busy) return;
+    setPreparationCancelled(false);
   };
 
   const progressValue =
@@ -419,6 +497,22 @@ export function CccdHistoryExportDialog({
                   {progressState.completed}/{progressState.total} ảnh
                 </div>
               )}
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-xl border-destructive/40 text-destructive hover:bg-destructive/5"
+                onClick={cancelCurrentTask}
+                disabled={cancelling || !activeControllerRef.current}
+              >
+                <XCircle className="h-4 w-4" />
+                {cancelling ? "Đang hủy..." : "Hủy xuất"}
+              </Button>
+            </div>
+          )}
+
+          {preparationCancelled && !busy && (
+            <div className="rounded-xl border border-amber-400/60 bg-amber-50 p-3 text-xs text-amber-900">
+              Đã hủy chuẩn bị dữ liệu. Bạn có thể chỉnh lựa chọn hoặc chuẩn bị lại.
             </div>
           )}
 
@@ -433,12 +527,13 @@ export function CccdHistoryExportDialog({
           <Button
             type="button"
             className="w-full rounded-xl"
-            onClick={startExport}
+            onClick={preparationCancelled ? retryPreparation : startExport}
             disabled={
               busy ||
-              !preparation ||
-              !(preparation.stats.full || preparation.stats.partial) ||
-              (largeSelection && !largeExportConfirmed)
+              (!preparationCancelled &&
+                (!preparation ||
+                  !(preparation.stats.full || preparation.stats.partial) ||
+                  (largeSelection && !largeExportConfirmed)))
             }
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
@@ -446,9 +541,11 @@ export function CccdHistoryExportDialog({
               ? "Đang xuất..."
               : preparing || excelReading
                 ? "Đang chuẩn bị..."
-                : mode === "folders"
-                  ? "Tạo ZIP thư mục ảnh"
-                  : "Tạo ZIP file Word"}
+                : preparationCancelled
+                  ? "Chuẩn bị lại dữ liệu"
+                  : mode === "folders"
+                    ? "Tạo ZIP thư mục ảnh"
+                    : "Tạo ZIP file Word"}
           </Button>
         </div>
       </DialogContent>

@@ -116,16 +116,21 @@ export async function fetchCccdVersionsByUser(userId: string): Promise<CccdVersi
   })) as unknown as CccdVersionRecord[];
 }
 
-export async function fetchCccdVersionsByUsers(userIds: string[]): Promise<CccdVersionRecord[]> {
+export async function fetchCccdVersionsByUsers(
+  userIds: string[],
+  signal?: AbortSignal,
+): Promise<CccdVersionRecord[]> {
   const uniqueIds = [...new Set(userIds.filter(Boolean))];
   if (!uniqueIds.length) return [];
 
   const items: CccdVersionRecord[] = [];
   for (let i = 0; i < uniqueIds.length; i += 50) {
+    signal?.throwIfAborted();
     const batch = uniqueIds.slice(i, i + 50);
     const records = (await pb.collection("cccd_versions").getFullList({
       filter: relationInFilter("user", batch),
       sort: "-updated,-created",
+      signal,
     })) as unknown as CccdVersionRecord[];
     items.push(...records);
   }
