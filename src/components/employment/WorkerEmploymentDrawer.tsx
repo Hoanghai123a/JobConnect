@@ -464,7 +464,6 @@ export function WorkerEmploymentDrawer({
   const [saving, setSaving] = useState(false);
   const [submittingAdvance, setSubmittingAdvance] = useState(false);
   const [bankEditing, setBankEditing] = useState(false);
-  const [cccdViewerOpen, setCccdViewerOpen] = useState(false);
   const [actionLogs, setActionLogs] = useState<WorkerActionHistoryRecord[]>([]);
   const [actionLogsLoading, setActionLogsLoading] = useState(false);
   const [actionLogsError, setActionLogsError] = useState("");
@@ -590,7 +589,6 @@ export function WorkerEmploymentDrawer({
       setSelectedHistory(null);
       setRestoreRequest(null);
       setRestoreSaving(false);
-      setCccdViewerOpen(false);
       const latest = latestForFormReset;
       const personalSnapshot = getEmploymentPersonalSnapshot(latest, user);
       setJoinForm({
@@ -1467,16 +1465,8 @@ export function WorkerEmploymentDrawer({
                           label="Ghi chú STK"
                           value={user.bank_account_note || "—"}
                         />
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setCccdViewerOpen(true)}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-                          >
-                            <IdCard className="h-3.5 w-3.5" />
-                            Xem CCCD
-                          </button>
-                          {permissions.canUpdateBank && !bankEditing && (
+                        {permissions.canUpdateBank && !bankEditing && (
+                          <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
                               onClick={() => setBankEditing(true)}
@@ -1485,8 +1475,8 @@ export function WorkerEmploymentDrawer({
                               <Landmark className="h-3.5 w-3.5" />
                               Sửa STK
                             </button>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -2138,23 +2128,6 @@ export function WorkerEmploymentDrawer({
               {restoreSaving || saving ? "Đang cập nhật..." : "Xóa ngày nghỉ và khôi phục"}
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={cccdViewerOpen} onOpenChange={setCccdViewerOpen}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto desktop:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Ảnh CCCD</DialogTitle>
-            <DialogDescription>
-              {user.full_name || user.username || "Người lao động"}
-            </DialogDescription>
-          </DialogHeader>
-          <CccdManager
-            targetUser={user}
-            actor={actor}
-            onUpdated={() => void notifyDataChanged()}
-            readOnly
-          />
         </DialogContent>
       </Dialog>
 
