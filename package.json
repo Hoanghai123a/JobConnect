@@ -28,7 +28,8 @@
     "pb:audit-cccd-versions": "node scripts/migrate-user-cccd-images.mjs",
     "pb:migrate-cccd-versions": "node scripts/migrate-user-cccd-images.mjs --apply",
     "pb:finalize-cccd-versions": "node scripts/migrate-user-cccd-images.mjs --finalize",
-    "test:cccd-migration": "node --test scripts/migrate-user-cccd-images.test.mjs"
+    "test:cccd-migration": "node --test scripts/migrate-user-cccd-images.test.mjs",
+    "test:uid-counter": "node --test src/lib/uid-counter-server.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

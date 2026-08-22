@@ -1,4 +1,4 @@
-﻿import { getPBUpstream } from "./pocketbase-config";
+import { getPBUpstream } from "./pocketbase-config";
 
 export type UidCounterType = "user" | "employment_history";
 
@@ -10,6 +10,7 @@ type CounterRecord = {
   prefix: string;
   period?: string;
   current_value: number;
+  note?: string;
 };
 
 type AllocateBody = {
@@ -18,8 +19,32 @@ type AllocateBody = {
   count?: number;
   referenceDate?: string;
   uid?: string;
-  actorId?: string;
 };
+
+type UidCounterErrorCode =
+  | "PB_UNREACHABLE"
+  | "PB_AUTH_EXPIRED"
+  | "PB_PERMISSION_DENIED"
+  | "PB_RECORD_NOT_FOUND"
+  | "PB_READ_FAILED"
+  | "PB_WRITE_FAILED"
+  | "PB_VALIDATION_FAILED"
+  | "UID_PREFIX_MISSING"
+  | "UID_COUNTER_INVALID";
+
+class UidCounterRequestError extends Error {
+  readonly code: UidCounterErrorCode;
+  readonly status: number;
+  readonly operation: string;
+
+  constructor(message: string, code: UidCounterErrorCode, status: number, operation: string) {
+    super(message);
+    this.name = "UidCounterRequestError";
+    this.code = code;
+    this.status = status;
+    this.operation = operation;
+  }
+}
 
 const locks = new Map<string, Promise<void>>();
 let cachedAdminToken = "";
@@ -52,6 +77,73 @@ function jsonError(message: string, status = 400) {
   return Response.json({ message }, { status });
 }
 
+function structuredError(
+  message: string,
+  code: UidCounterErrorCode,
+  status: number,
+  operation?: string,
+) {
+  return Response.json({ message, code, ...(operation ? { operation } : {}) }, { status });
+}
+
+function pocketBaseMessage(body: any, fallback: string) {
+  return typeof body?.message === "string" && body.message.trim() ? body.message.trim() : fallback;
+}
+
+function pocketBaseErrorCode(status: number, operation: string): UidCounterErrorCode {
+  if (status === 401) return "PB_AUTH_EXPIRED";
+  if (status === 403) return "PB_PERMISSION_DENIED";
+  if (status === 404) return "PB_RECORD_NOT_FOUND";
+  if (status === 400 || status === 409) return "PB_VALIDATION_FAILED";
+  return operation.startsWith("read") ? "PB_READ_FAILED" : "PB_WRITE_FAILED";
+}
+
+function logPocketBaseFailure(operation: string, response: Response, body: any) {
+  const fieldErrors = body?.data && typeof body.data === "object" ? Object.keys(body.data) : [];
+  console.error("[uid-counter] PocketBase request failed", {
+    operation,
+    status: response.status,
+    message: pocketBaseMessage(body, response.statusText || "PocketBase request failed"),
+    fieldErrors,
+  });
+}
+
+async function requirePocketBaseJson<T>(
+  path: string,
+  init: RequestInit,
+  token: string,
+  operation: string,
+  fallback: string,
+): Promise<T> {
+  let response: Response;
+  try {
+    response = await pbFetch(path, init, token);
+  } catch (error) {
+    console.error("[uid-counter] PocketBase request unreachable", {
+      operation,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw new UidCounterRequestError(
+      "Máy chủ không kết nối được PocketBase.",
+      "PB_UNREACHABLE",
+      503,
+      operation,
+    );
+  }
+
+  const body = await readJson(response);
+  if (!response.ok) {
+    logPocketBaseFailure(operation, response, body);
+    throw new UidCounterRequestError(
+      pocketBaseMessage(body, fallback),
+      pocketBaseErrorCode(response.status, operation),
+      response.status,
+      operation,
+    );
+  }
+  return body as T;
+}
+
 function bearerToken(request: Request) {
   return /^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") || "")?.[1] || "";
 }
@@ -59,10 +151,18 @@ function bearerToken(request: Request) {
 async function getAuthUser(request: Request): Promise<AuthUser | null> {
   const token = bearerToken(request);
   if (!token) return null;
-  const response = await pbFetch("/api/collections/users/auth-refresh", { method: "POST" }, token);
-  if (!response.ok) return null;
-  const body = await readJson(response);
-  return body?.record?.id ? (body.record as AuthUser) : null;
+  try {
+    const response = await pbFetch(
+      "/api/collections/users/auth-refresh",
+      { method: "POST" },
+      token,
+    );
+    if (!response.ok) return null;
+    const body = await readJson(response);
+    return body?.record?.id ? (body.record as AuthUser) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function getAdminToken(): Promise<AdminAuthResult> {
@@ -92,6 +192,11 @@ async function getAdminToken(): Promise<AdminAuthResult> {
         cachedAdminToken = body.token;
         return { ok: true, token: cachedAdminToken };
       }
+      console.error("[uid-counter] PocketBase admin authentication failed", {
+        operation: path,
+        status: response.status,
+        message: pocketBaseMessage(body, "PocketBase admin authentication failed"),
+      });
     } catch {
       return { ok: false, reason: "unreachable" };
     }
@@ -102,12 +207,20 @@ async function getAdminToken(): Promise<AdminAuthResult> {
 
 function adminAuthError(reason: Exclude<AdminAuthResult, { ok: true }>["reason"]) {
   if (reason === "missing_config") {
-    return jsonError("Máy chủ thiếu cấu hình quản trị PocketBase.", 424);
+    return structuredError(
+      "Máy chủ thiếu cấu hình quản trị PocketBase.",
+      "PB_VALIDATION_FAILED",
+      424,
+    );
   }
   if (reason === "unreachable") {
-    return jsonError("Máy chủ không kết nối được PocketBase.", 503);
+    return structuredError("Máy chủ không kết nối được PocketBase.", "PB_UNREACHABLE", 503);
   }
-  return jsonError("Thông tin đăng nhập quản trị PocketBase không hợp lệ.", 424);
+  return structuredError(
+    "Thông tin đăng nhập quản trị PocketBase không hợp lệ.",
+    "PB_AUTH_EXPIRED",
+    424,
+  );
 }
 
 async function withCounterLock<T>(key: string, task: () => Promise<T>): Promise<T> {
@@ -126,16 +239,25 @@ async function withCounterLock<T>(key: string, task: () => Promise<T>): Promise<
 }
 
 async function getPrefix(token: string) {
-  const response = await pbFetch(
+  const body = await requirePocketBaseJson<{ items?: Array<{ account_code_prefix?: string }> }>(
     "/api/collections/app_settings/records?page=1&perPage=1&fields=account_code_prefix",
     {},
     token,
+    "read app_settings.account_code_prefix",
+    "Không đọc được tiền tố UID từ PocketBase.",
   );
-  if (!response.ok) throw new Error("Không đọc được tiền tố UID từ PocketBase.");
-  const body = await readJson(response);
-  return String(body?.items?.[0]?.account_code_prefix || "")
+  const prefix = String(body?.items?.[0]?.account_code_prefix || "")
     .trim()
     .toUpperCase();
+  if (!prefix) {
+    throw new UidCounterRequestError(
+      "PocketBase chưa cấu hình tiền tố UID.",
+      "UID_PREFIX_MISSING",
+      424,
+      "read app_settings.account_code_prefix",
+    );
+  }
+  return prefix;
 }
 
 function counterMeta(type: UidCounterType, prefix: string, referenceDate?: string) {
@@ -162,21 +284,40 @@ async function getCounter(key: string, token: string): Promise<CounterRecord | n
     perPage: "1",
     filter: `counter_key="${escapePb(key)}"`,
   });
-  const response = await pbFetch(`/api/collections/uid_counters/records?${params}`, {}, token);
-  if (response.status === 404) throw new Error("PocketBase chưa có collection uid_counters.");
-  if (!response.ok) throw new Error("Không đọc được bộ đếm UID.");
-  return ((await readJson(response))?.items?.[0] as CounterRecord | undefined) || null;
+  try {
+    const body = await requirePocketBaseJson<{ items?: CounterRecord[] }>(
+      `/api/collections/uid_counters/records?${params}`,
+      {},
+      token,
+      "read uid_counters",
+      "Không đọc được bộ đếm UID.",
+    );
+    return body?.items?.[0] || null;
+  } catch (error) {
+    if (error instanceof UidCounterRequestError && error.code === "PB_RECORD_NOT_FOUND") {
+      throw new UidCounterRequestError(
+        "PocketBase chưa có collection uid_counters.",
+        "PB_RECORD_NOT_FOUND",
+        424,
+        "read uid_counters",
+      );
+    }
+    throw error;
+  }
 }
 
 async function scanMaximum(type: UidCounterType, prefix: string, period: string, token: string) {
   const collection = type === "user" ? "users" : "employment_histories";
-  const response = await pbFetch(
+  const body = await requirePocketBaseJson<{
+    totalPages?: number;
+    items?: Array<{ uid?: string }>;
+  }>(
     `/api/collections/${collection}/records?page=1&perPage=500&fields=uid`,
     {},
     token,
+    `read ${collection}.uid`,
+    "Không thể khởi tạo bộ đếm từ dữ liệu UID hiện tại.",
   );
-  if (!response.ok) throw new Error("Không thể khởi tạo bộ đếm từ dữ liệu UID hiện tại.");
-  const body = await readJson(response);
   const totalPages = Math.max(1, Number(body?.totalPages || 1));
   let max = 0;
   const inspect = (items: Array<{ uid?: string }>) => {
@@ -193,26 +334,27 @@ async function scanMaximum(type: UidCounterType, prefix: string, period: string,
   };
   inspect(body?.items || []);
   for (let page = 2; page <= totalPages; page += 1) {
-    const next = await pbFetch(
+    const nextBody = await requirePocketBaseJson<{ items?: Array<{ uid?: string }> }>(
       `/api/collections/${collection}/records?page=${page}&perPage=500&fields=uid`,
       {},
       token,
+      `read ${collection}.uid page ${page}`,
+      "Không thể quét đầy đủ UID hiện tại.",
     );
-    if (!next.ok) throw new Error("Không thể quét đầy đủ UID hiện tại.");
-    inspect((await readJson(next))?.items || []);
+    inspect(nextBody?.items || []);
   }
   return max;
 }
 
 async function saveCounter(
-  input: Omit<CounterRecord, "id">,
+  input: Omit<CounterRecord, "id"> & { updated_by?: string },
   id: string | undefined,
   token: string,
 ) {
   const path = id
     ? `/api/collections/uid_counters/records/${encodeURIComponent(id)}`
     : "/api/collections/uid_counters/records";
-  const response = await pbFetch(
+  return requirePocketBaseJson<CounterRecord>(
     path,
     {
       method: id ? "PATCH" : "POST",
@@ -220,12 +362,44 @@ async function saveCounter(
       body: JSON.stringify(input),
     },
     token,
+    `${id ? "update" : "create"} uid_counters`,
+    "Không cập nhật được bộ đếm UID.",
   );
-  if (!response.ok) {
-    const body = await readJson(response);
-    throw new Error(body?.message || "Không cập nhật được bộ đếm UID.");
+}
+
+function validateCounter(
+  counter: CounterRecord,
+  expected: { key: string; type: UidCounterType; prefix: string; period: string },
+) {
+  const currentValue = Number(counter.current_value);
+  if (
+    counter.counter_key !== expected.key ||
+    counter.counter_type !== expected.type ||
+    String(counter.prefix || "") !== expected.prefix ||
+    String(counter.period || "") !== expected.period ||
+    !Number.isSafeInteger(currentValue) ||
+    currentValue < 0
+  ) {
+    console.error("[uid-counter] Invalid PocketBase counter record", {
+      operation: "read uid_counters",
+      counterId: counter.id,
+      expected,
+      actual: {
+        counterKey: counter.counter_key,
+        counterType: counter.counter_type,
+        prefix: counter.prefix || "",
+        period: counter.period || "",
+        currentValue: counter.current_value,
+      },
+    });
+    throw new UidCounterRequestError(
+      "Bản ghi bộ đếm UID trong PocketBase không hợp lệ.",
+      "UID_COUNTER_INVALID",
+      500,
+      "read uid_counters",
+    );
   }
-  return (await readJson(response)) as CounterRecord;
+  return currentValue;
 }
 
 async function allocate(body: AllocateBody, actor: AuthUser | null, adminToken: string) {
@@ -250,14 +424,20 @@ async function allocate(body: AllocateBody, actor: AuthUser | null, adminToken: 
           prefix,
           period: meta.period,
           current_value: current,
-          updated_by: actor?.id || body.actorId || "",
+          updated_by: actor?.id || "",
           note: "Khởi tạo tự động từ dữ liệu hiện có",
         },
         undefined,
         adminToken,
       );
     }
-    const startValue = Number(counter.current_value || 0) + 1;
+    const currentValue = validateCounter(counter, {
+      key: meta.key,
+      type,
+      prefix,
+      period: meta.period,
+    });
+    const startValue = currentValue + 1;
     const endValue = startValue + count - 1;
     if (endValue > meta.limit)
       return jsonError(
@@ -273,7 +453,7 @@ async function allocate(body: AllocateBody, actor: AuthUser | null, adminToken: 
         prefix,
         period: meta.period,
         current_value: endValue,
-        updated_by: actor?.id || body.actorId || "",
+        updated_by: actor?.id || "",
         note: counter.note || "",
       },
       counter.id,
@@ -308,8 +488,15 @@ async function observe(body: AllocateBody, actor: AuthUser | null, adminToken: s
   const observed = Number(match[1]);
   return withCounterLock(meta.key, async () => {
     const counter = await getCounter(meta.key, adminToken);
-    if (counter && Number(counter.current_value || 0) >= observed)
-      return Response.json({ observed: false });
+    if (counter) {
+      const currentValue = validateCounter(counter, {
+        key: meta.key,
+        type,
+        prefix,
+        period: meta.period,
+      });
+      if (currentValue >= observed) return Response.json({ observed: false });
+    }
     await saveCounter(
       {
         counter_key: meta.key,
@@ -327,17 +514,41 @@ async function observe(body: AllocateBody, actor: AuthUser | null, adminToken: s
   });
 }
 
+async function executeRequest(body: AllocateBody, actor: AuthUser | null, token: string) {
+  return body.action === "observe" ? observe(body, actor, token) : allocate(body, actor, token);
+}
+
 export async function handleUidCounterRequest(request: Request) {
   try {
     const body = (await request.json().catch(() => null)) as AllocateBody | null;
     if (!body) return jsonError("Dữ liệu yêu cầu không hợp lệ.");
+    const actor = await getAuthUser(request);
     const adminAuth = await getAdminToken();
     if (!adminAuth.ok) return adminAuthError(adminAuth.reason);
-    const actor = await getAuthUser(request);
-    return body.action === "observe"
-      ? observe(body, actor, adminAuth.token)
-      : allocate(body, actor, adminAuth.token);
+
+    try {
+      return await executeRequest(body, actor, adminAuth.token);
+    } catch (error) {
+      if (!(error instanceof UidCounterRequestError) || error.code !== "PB_AUTH_EXPIRED") {
+        throw error;
+      }
+      cachedAdminToken = "";
+      const refreshed = await getAdminToken();
+      if (!refreshed.ok || refreshed.token === adminAuth.token) throw error;
+      return await executeRequest(body, actor, refreshed.token);
+    }
   } catch (error) {
-    return jsonError(error instanceof Error ? error.message : "Không cấp được UID.", 500);
+    if (error instanceof UidCounterRequestError) {
+      return structuredError(error.message, error.code, error.status, error.operation);
+    }
+    console.error("[uid-counter] Unexpected UID allocation error", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return structuredError("Không cấp được UID do lỗi máy chủ.", "PB_WRITE_FAILED", 500);
   }
+}
+
+export function resetUidCounterServerStateForTests() {
+  cachedAdminToken = "";
+  locks.clear();
 }
