@@ -701,15 +701,16 @@
 
   html[data-ui-device="mobile"] [data-responsive-overlay="true"] {
     box-sizing: border-box;
-    left: 0;
-    right: 0;
-    top: auto;
-    bottom: 0;
-    width: 100%;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    bottom: 0 !important;
+    width: 100% !important;
     min-width: 0;
     max-width: none;
     max-height: 92dvh;
-    transform: none;
+    transform: none !important;
+    animation: none !important;
     overflow-x: hidden;
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
@@ -737,15 +738,16 @@
   }
 
   html[data-ui-device="mobile"] [data-responsive-overlay="true"][data-presentation="dialog"] {
-    left: 50%;
-    right: auto;
-    top: 50%;
-    bottom: auto;
-    width: calc(100% - 2rem);
+    left: 50% !important;
+    right: auto !important;
+    top: 50% !important;
+    bottom: auto !important;
+    width: calc(100% - 2rem) !important;
     min-width: 0;
     max-width: 26rem;
     max-height: 88dvh;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%) !important;
+    animation: none !important;
     border-radius: 1rem;
     padding-bottom: 1.25rem;
     box-shadow: var(--shadow-card);
