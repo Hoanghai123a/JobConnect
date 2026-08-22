@@ -37,7 +37,11 @@ export function ResponsiveOverlay({
         {...contentProps}
         data-responsive-overlay="true"
         data-presentation={presentation}
-        className={cn(presentation === "full" && "mobile:h-[96dvh]", className)}
+        className={cn(
+          "min-w-0 mobile:max-w-[calc(100vw-1rem)] mobile:overflow-x-hidden",
+          presentation === "full" && "mobile:h-[96dvh]",
+          className,
+        )}
       >
         <DialogHeader className="shrink-0 text-left">
           <DialogTitle>{title}</DialogTitle>

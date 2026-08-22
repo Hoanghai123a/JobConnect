@@ -700,14 +700,17 @@
   }
 
   html[data-ui-device="mobile"] [data-responsive-overlay="true"] {
+    box-sizing: border-box;
     left: 0;
     right: 0;
     top: auto;
     bottom: 0;
     width: 100%;
+    min-width: 0;
     max-width: none;
     max-height: 92dvh;
     transform: none;
+    overflow-x: hidden;
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
     border-top-left-radius: 1.5rem;
@@ -739,6 +742,7 @@
     top: 50%;
     bottom: auto;
     width: calc(100% - 2rem);
+    min-width: 0;
     max-width: 26rem;
     max-height: 88dvh;
     transform: translate(-50%, -50%);

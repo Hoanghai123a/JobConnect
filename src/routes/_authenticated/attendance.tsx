@@ -639,12 +639,12 @@ function UserAttendance() {
               submit();
             }}
           >
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="min-w-0 space-y-1">
                 <Label className="text-xs">Ngày</Label>
                 <DateInput value={date} onChange={(v) => setDate(v)} />
               </div>
-              <div className="space-y-1">
+              <div className="min-w-0 space-y-1">
                 <Label className="text-xs">Ca</Label>
                 <ShiftToggle value={shift} onChange={setShift} />
               </div>
@@ -658,8 +658,8 @@ function UserAttendance() {
               </div>
             </label>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="min-w-0 space-y-1">
                 <Label className="text-xs">Giờ hành chính</Label>
                 <Input
                   type="number"
@@ -671,7 +671,7 @@ function UserAttendance() {
                   onKeyDown={submitFromHours}
                 />
               </div>
-              <div className="space-y-1">
+              <div className="min-w-0 space-y-1">
                 <Label className="text-xs">Giờ tăng ca</Label>
                 <Input
                   type="number"
@@ -685,7 +685,7 @@ function UserAttendance() {
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex min-w-0 gap-2">
               {selectedRow && (
                 <Button
                   type="button"
@@ -977,7 +977,7 @@ function AttendanceSettingsDialog({
           onChange={(v) => setForm({ ...form, tham_nien: v })}
         />
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
           <SettingsNumberField
             label="Giờ HC mặc định"
             value={form.default_hc_hours}
