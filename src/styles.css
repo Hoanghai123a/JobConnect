@@ -699,6 +699,40 @@
     display: none;
   }
 
+  /* Use the real viewport width as a fallback when device detection is stale. */
+  @media (max-width: 767px) {
+    [data-responsive-overlay="true"] {
+      left: 0 !important;
+      right: 0 !important;
+      top: auto !important;
+      bottom: 0 !important;
+      width: 100% !important;
+      max-width: none !important;
+      transform: none !important;
+      --tw-translate-x: 0px !important;
+      --tw-translate-y: 0px !important;
+      animation: none !important;
+    }
+
+    [data-responsive-overlay="true"][data-presentation="full"] {
+      height: 96dvh !important;
+      max-height: 96dvh !important;
+    }
+
+    [data-responsive-overlay="true"][data-presentation="dialog"] {
+      left: 50% !important;
+      right: auto !important;
+      top: 50% !important;
+      bottom: auto !important;
+      width: calc(100% - 2rem) !important;
+      max-width: 26rem !important;
+      max-height: 88dvh !important;
+      transform: none !important;
+      --tw-translate-x: -50% !important;
+      --tw-translate-y: -50% !important;
+    }
+  }
+
   html[data-ui-device="mobile"] [data-responsive-overlay="true"] {
     box-sizing: border-box;
     left: 0 !important;
@@ -710,6 +744,8 @@
     max-width: none;
     max-height: 92dvh;
     transform: none !important;
+    --tw-translate-x: 0px !important;
+    --tw-translate-y: 0px !important;
     animation: none !important;
     overflow-x: hidden;
     border-bottom-left-radius: 0;
@@ -746,7 +782,9 @@
     min-width: 0;
     max-width: 26rem;
     max-height: 88dvh;
-    transform: translate(-50%, -50%) !important;
+    transform: none !important;
+    --tw-translate-x: -50% !important;
+    --tw-translate-y: -50% !important;
     animation: none !important;
     border-radius: 1rem;
     padding-bottom: 1.25rem;
