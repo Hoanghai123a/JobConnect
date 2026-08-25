@@ -135,8 +135,8 @@ function AccountPage() {
             variant="ghost"
             aria-label="Đăng xuất"
             title="Đăng xuất"
-            onClick={async () => {
-              await logout();
+            onClick={() => {
+              logout();
               nav({ to: "/login" });
             }}
           >
