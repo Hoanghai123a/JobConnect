@@ -24,7 +24,7 @@ interface AuthCtx {
   isAdmin: boolean;
   isStaff: boolean;
   login: (identity: string, password: string) => Promise<UserRecord>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const isRedirectingForPasswordReauth = useRef(false);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     const userId = (pb.authStore.record as UserRecord | null)?.id;
     clearPasswordVerifiedAt(userId);
     pb.authStore.clear();
@@ -110,18 +110,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     }
-    stopStaffRealtimeSync()
-      .catch((error) => console.warn("[auth] stopRealtime failed", error))
-      .finally(() => clearStaffCache());
+    try {
+      await stopStaffRealtimeSync();
+    } catch (error) {
+      console.warn("[auth] stopRealtime failed", error);
+    } finally {
+      clearStaffCache();
+    }
   }, [queryClient]);
 
   const expirePasswordReauth = useCallback(
-    (userId: string) => {
+    async (userId: string) => {
       if (isRedirectingForPasswordReauth.current || typeof window === "undefined") return;
       isRedirectingForPasswordReauth.current = true;
       clearPasswordVerifiedAt(userId);
       window.sessionStorage.setItem(PASSWORD_REAUTH_NOTICE_KEY, PASSWORD_REAUTH_NOTICE);
-      logout();
+      await logout();
       window.location.replace("/login");
     },
     [logout],

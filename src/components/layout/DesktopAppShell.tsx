@@ -257,8 +257,8 @@ export function DesktopAppShell({ children }: { children: ReactNode }) {
     setOpenSections((current) => ({ ...current, [activeSection]: true }));
   }, [activeSection]);
 
-  const signOut = () => {
-    logout();
+  const signOut = async () => {
+    await logout();
     navigate({ to: "/login" });
   };
 
@@ -439,7 +439,7 @@ export function DesktopAppShell({ children }: { children: ReactNode }) {
 
               <button
                 type="button"
-                onClick={signOut}
+                onClick={() => void signOut()}
                 title={collapsed ? "Đăng xuất" : undefined}
                 className={cn(
                   "desktop-sidebar-link mt-2 flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive",
@@ -480,7 +480,7 @@ export function DesktopAppShell({ children }: { children: ReactNode }) {
               </div>
               <button
                 type="button"
-                onClick={signOut}
+                onClick={() => void signOut()}
                 className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-medium text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
               >
                 <LogOut className="h-4 w-4" />

@@ -1061,6 +1061,22 @@ function FactoriesTab() {
               </div>
             </div>
             <div>
+              <Label className="text-xs">Hạn mức báo ứng</Label>
+              <Input
+                className="mt-1 rounded-xl"
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
+                value={formatMoneyInput(String(editing?.advance_limit || 0))}
+                onChange={(e) =>
+                  setEditing({ ...editing, advance_limit: parseMoneyInput(e.target.value) })
+                }
+              />
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                Hạn mức tối đa cho mỗi NLĐ tại nhà máy này. Nhập 0 để không cho phép báo ứng.
+              </div>
+            </div>
+            <div>
               <Label className="text-xs">Ghi chú</Label>
               <Textarea
                 className="mt-1 rounded-xl"
