@@ -670,7 +670,6 @@ export function WorkerEmploymentDrawer({
     actor?.role === "admin" ||
     (actor?.role === "staff" &&
       permissions.canEditHistory &&
-      history.id === latestHistory?.id &&
       canViewHistoryInStaffScope(actor, history, histories, managedIds));
   const restorableHistory =
     latestHistory?.leave_date && canEditHistoryRecord(latestHistory) ? latestHistory : null;
@@ -1013,12 +1012,6 @@ export function WorkerEmploymentDrawer({
       if (!before) throw new Error("Không tìm thấy lịch sử đi làm cần cập nhật");
 
       const latest = getLatestEmploymentHistory(latestHistories);
-      if (actor?.role === "staff" && latest?.id !== editingId) {
-        toast.error("Staff chỉ được sửa lịch sử đi làm gần nhất");
-        setEditingId(null);
-        await notifyDataChanged();
-        return;
-      }
 
       const isOldHistory = latest?.id !== editingId;
       const originalLeaveDate = before.leave_date || "";
