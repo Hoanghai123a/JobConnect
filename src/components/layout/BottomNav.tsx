@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useState, type ComponentType, type ReactNode } from "react";
-import { ChevronLeft, Download, Home, Info, LogIn, Settings, Upload, User, Users } from "lucide-react";
+import { ChevronLeft, Download, Home, Info, LogIn, LogOut, Settings, Upload, User, Users } from "lucide-react";
 import { LoginRequiredDialog } from "@/components/auth/LoginRequiredDialog";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -13,7 +13,7 @@ export type RoleNavigationItem = {
   icon: ComponentType<{ className?: string }>;
   exact?: boolean;
   requiresLogin?: boolean;
-  action?: "staff-export";
+  action?: "staff-export" | "logout";
 };
 
 function isItemActive(item: RoleNavigationItem, pathname: string) {
@@ -24,9 +24,15 @@ function isItemActive(item: RoleNavigationItem, pathname: string) {
 
 export function BottomNav() {
   const { pathname } = useLocation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [loginOpen, setLoginOpen] = useState(false);
   const { openStaffExcelExport } = useStaffExcelExport();
+
+  const signOut = () => {
+    logout();
+    navigate({ to: "/login" });
+  };
 
   const items: readonly RoleNavigationItem[] =
     user?.role === "staff"
@@ -43,11 +49,17 @@ export function BottomNav() {
             { to: "/admin/imports", label: "Nhập liệu", icon: Upload },
             { to: "/account", label: "Tài khoản", icon: User },
           ]
-        : [
-            { to: "/", label: "Trang chủ", icon: Home, exact: true },
-            { to: "/login", label: "Đăng nhập", icon: LogIn, requiresLogin: true },
-            { to: "/about", label: "Về chúng tôi", icon: Info },
-          ];
+        : user
+          ? [
+              { to: "/", label: "Trang chủ", icon: Home, exact: true },
+              { to: "/about", label: "Về chúng tôi", icon: Info },
+              { to: "/login", label: "Đăng xuất", icon: LogOut, action: "logout" },
+            ]
+          : [
+              { to: "/", label: "Trang chủ", icon: Home, exact: true },
+              { to: "/login", label: "Đăng nhập", icon: LogIn, requiresLogin: true },
+              { to: "/about", label: "Về chúng tôi", icon: Info },
+            ];
 
   const focusMode = pathname === "/gems" || pathname === "/minesweeper";
   if (focusMode) return null;
@@ -78,6 +90,13 @@ export function BottomNav() {
               <li key={item.to} className="min-w-0">
                 {item.action === "staff-export" ? (
                   <button type="button" onClick={openStaffExcelExport} className={className}>
+                    <Icon className="h-[22px] w-[22px]" />
+                    <span className="line-clamp-2 text-center text-[11px] leading-[1.1]">
+                      {item.label}
+                    </span>
+                  </button>
+                ) : item.action === "logout" ? (
+                  <button type="button" onClick={signOut} className={className}>
                     <Icon className="h-[22px] w-[22px]" />
                     <span className="line-clamp-2 text-center text-[11px] leading-[1.1]">
                       {item.label}
