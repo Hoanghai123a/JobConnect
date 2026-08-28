@@ -417,19 +417,16 @@ async function allocate(body: AllocateBody, actor: AuthUser | null, adminToken: 
     let counter = await getCounter(meta.key, adminToken);
     if (!counter) {
       const current = await scanMaximum(type, prefix, meta.period, adminToken);
-      counter = await saveCounter(
-        {
-          counter_key: meta.key,
-          counter_type: type,
-          prefix,
-          period: meta.period,
-          current_value: current,
-          updated_by: actor?.id || "",
-          note: "Khởi tạo tự động từ dữ liệu hiện có",
-        },
-        undefined,
-        adminToken,
-      );
+      const payload: Omit<CounterRecord, "id"> & { updated_by?: string } = {
+        counter_key: meta.key,
+        counter_type: type,
+        prefix,
+        period: meta.period,
+        current_value: current,
+        note: "Khởi tạo tự động từ dữ liệu hiện có",
+      };
+      if (actor?.id) payload.updated_by = actor.id;
+      counter = await saveCounter(payload, undefined, adminToken);
     }
     const currentValue = validateCounter(counter, {
       key: meta.key,
@@ -446,19 +443,16 @@ async function allocate(body: AllocateBody, actor: AuthUser | null, adminToken: 
           : "Đã vượt giới hạn 9999 UID lịch sử trong tháng.",
         409,
       );
-    await saveCounter(
-      {
-        counter_key: meta.key,
-        counter_type: type,
-        prefix,
-        period: meta.period,
-        current_value: endValue,
-        updated_by: actor?.id || "",
-        note: counter.note || "",
-      },
-      counter.id,
-      adminToken,
-    );
+    const payload: Omit<CounterRecord, "id"> & { updated_by?: string } = {
+      counter_key: meta.key,
+      counter_type: type,
+      prefix,
+      period: meta.period,
+      current_value: endValue,
+      note: counter.note || "",
+    };
+    if (actor?.id) payload.updated_by = actor.id;
+    await saveCounter(payload, counter.id, adminToken);
     const uids = Array.from({ length: count }, (_, index) =>
       formatUid(type, prefix, meta.period, startValue + index),
     );
