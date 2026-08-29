@@ -323,7 +323,11 @@ function makeFallbackHistoryRow(
     factoryName: pickValue(raw, ["Tên nhà máy", "Nhà máy", "factory_name"]),
     factoryCode: pickValue(raw, ["Mã nhà máy", "factory_code"]),
     mainHouseName: pickValue(raw, ["Nhà chính", "main_house_name"]),
-    recruiterUsername: pickValue(raw, ["Người tuyển", "recruiter_username"]),
+    recruiterUsername: pickValue(raw, [
+      "Người tuyển (username/tên đối tác)",
+      "Người tuyển",
+      "recruiter_username",
+    ]),
     recruiterType: pickValue(raw, ["Loại người tuyển", "recruiter_type"]),
     employeeCode: pickValue(raw, ["Mã nhân viên", "Mã NV", "employee_code"]),
     joinDate: "",
@@ -371,7 +375,11 @@ function parseHistoryRow(
   const factoryName = pickValue(raw, ["Tên nhà máy", "Nhà máy", "factory_name"]);
   const factoryCode = pickValue(raw, ["Mã nhà máy", "factory_code"]);
   const mainHouseName = pickValue(raw, ["Nhà chính", "main_house_name"]);
-  const recruiterUsername = pickValue(raw, ["Người tuyển", "recruiter_username"]);
+  const recruiterUsername = pickValue(raw, [
+    "Người tuyển (username/tên đối tác)",
+    "Người tuyển",
+    "recruiter_username",
+  ]);
   const recruiterType = pickValue(raw, ["Loại người tuyển", "recruiter_type"]);
   const employeeCode = pickValue(raw, ["Mã nhân viên", "Mã NV", "employee_code"]);
   const joinRaw = raw["Ngày vào làm"] ?? raw.join_date ?? raw["Ngày vào"] ?? "";
@@ -479,6 +487,13 @@ function recruiterTypeFlags(value: string) {
   };
 }
 
+export function recruiterTypeLabel(value: string) {
+  const { wantsPartner, wantsInternal } = recruiterTypeFlags(value);
+  if (wantsPartner) return "Đối tác";
+  if (wantsInternal) return "Nội bộ";
+  return value;
+}
+
 export async function inspectBulkWorkerImportReferences(
   file: File,
 ): Promise<BulkImportReferenceInspection> {
@@ -579,7 +594,11 @@ export async function inspectBulkWorkerImportReferences(
     const mainHouseName = pickValue(raw, ["Nhà chính", "main_house_name"]);
     addMainHouse(mainHouseName, rowNumber);
 
-    const recruiterUsername = pickValue(raw, ["Người tuyển", "recruiter_username"]);
+    const recruiterUsername = pickValue(raw, [
+      "Người tuyển (username/tên đối tác)",
+      "Người tuyển",
+      "recruiter_username",
+    ]);
     if (!recruiterUsername) continue;
     const recruiterType = pickValue(raw, ["Loại người tuyển", "recruiter_type"]);
     const { wantsPartner, wantsInternal } = recruiterTypeFlags(recruiterType);
@@ -1157,7 +1176,8 @@ export function downloadBulkWorkerTemplate() {
           "Tên nhà máy": "Nhà máy A",
           "Mã nhà máy": "",
           "Nhà chính": "Nhà chính HN",
-          "Người tuyển": "staff01",
+          "Người tuyển (username/tên đối tác)": "staff01",
+          "Loại người tuyển": "Nội bộ",
           "Mã nhân viên": "NM001",
           "Ngày vào làm": "01/01/2025",
           "Ngày nghỉ": "31/12/2025",
@@ -1169,7 +1189,8 @@ export function downloadBulkWorkerTemplate() {
           "Tên nhà máy": "Nhà máy B",
           "Mã nhà máy": "",
           "Nhà chính": "Nhà chính HN",
-          "Người tuyển": "staff01",
+          "Người tuyển (username/tên đối tác)": "Nhà chính HN",
+          "Loại người tuyển": "Đối tác",
           "Mã nhân viên": "NM002",
           "Ngày vào làm": "01/01/2026",
           "Ngày nghỉ": "",

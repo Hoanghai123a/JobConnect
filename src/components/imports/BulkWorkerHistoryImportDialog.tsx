@@ -31,6 +31,7 @@ import {
   exportBulkWorkerErrors,
   inspectBulkWorkerImportReferences,
   prepareBulkWorkerImport,
+  recruiterTypeLabel,
   type AppliedImportReference,
   type BulkImportReferenceInspection,
   type BulkWorkerImportSummary,
@@ -293,7 +294,10 @@ export function BulkWorkerHistoryImportCard({ actor }: { actor: UserRecord }) {
           </div>
           <div className="rounded-2xl border border-border/60 bg-background/70 p-3 text-xs leading-5 text-muted-foreground backdrop-blur">
             Có thể thêm hậu tố chữ a-z, dấu chấm hoặc gạch dưới vào SĐT/CCCD để phân biệt tên đăng
-            nhập. Hậu tố không được lưu vào SĐT, CCCD hoặc lịch sử đi làm.
+            nhập. Hậu tố không được lưu vào SĐT, CCCD hoặc lịch sử đi làm. Cột "Loại người tuyển"
+            nhận "Nội bộ" (khai username tài khoản Staff/Admin) hoặc "Đối tác" (khai tên Nhà chính &
+            Đối tác). Để trống thì hệ thống tự suy đoán, nhưng sẽ báo lỗi nếu tên trùng giữa hai
+            loại.
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button
@@ -546,8 +550,9 @@ function ReferenceInspectionPanel({ inspection }: { inspection: BulkImportRefere
                 Người tuyển chưa có tài khoản ({inspection.recruiters.length})
               </div>
               <p className="mt-1 text-xs leading-5 text-amber-800">
-                Admin cần chủ động tạo tài khoản Staff. Các NLĐ liên quan sẽ được bỏ qua; những NLĐ
-                hợp lệ khác vẫn được nhập.
+                <strong>Người tuyển Nội bộ:</strong> Admin cần tạo tài khoản Staff trước khi import.{" "}
+                <strong>Người tuyển Đối tác:</strong> có thể được tạo cùng với Nhà chính nếu thiếu.
+                Các NLĐ có người tuyển thiếu sẽ được bỏ qua; những NLĐ hợp lệ khác vẫn được nhập.
               </p>
             </div>
           </div>
@@ -568,7 +573,7 @@ function ReferenceInspectionPanel({ inspection }: { inspection: BulkImportRefere
                       {item.username}
                       {item.recruiterType && (
                         <div className="mt-0.5 text-[11px] font-normal text-amber-700">
-                          {item.recruiterType}
+                          {recruiterTypeLabel(item.recruiterType)}
                         </div>
                       )}
                     </td>
