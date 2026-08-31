@@ -39,3 +39,4 @@ dist-ssr
 
 # Local UID audit exports may contain personal data
 uid-audit-output/
+uid-rebuild-output/
