@@ -61,3 +61,13 @@ test("createTemporaryUids tạo UID tạm không trùng và tôn trọng max", (
   assert.equal(new Set(values).size, 3);
   assert.ok(values.every((value) => value.length <= 20 && value.startsWith("T")));
 });
+
+test("createTemporaryUids hỗ trợ dải lớn hơn 20 UID", () => {
+  const values = createTemporaryUids({
+    currentUids: [],
+    count: 50,
+    uidField: { min: 0, max: 20, pattern: "" },
+  });
+  assert.equal(values.length, 50);
+  assert.equal(new Set(values).size, 50);
+});

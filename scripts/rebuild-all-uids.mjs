@@ -351,28 +351,27 @@ async function assertPlanStillCurrent(pb, collection, plan) {
 }
 
 export function createTemporaryUids({ currentUids, count, uidField }) {
+  if (count === 0) return [];
   const max = Number(uidField.max || 255);
   const min = Number(uidField.min || 0);
   if (uidField.pattern) {
     throw new Error("Trường UID có pattern validation; không thể dùng UID tạm một cách an toàn.");
   }
-  const sequenceWidth = Math.max(2, Math.ceil(Math.log(Math.max(count, 1) + 1) / Math.log(36)));
+  const sequenceWidth = Math.max(2, Math.ceil(Math.log(count + 1) / Math.log(36)));
   const tokenLength = Math.min(8, max - sequenceWidth - 1);
   if (tokenLength < 4 || max < min || 1 + tokenLength + sequenceWidth < min) {
     throw new Error("Trường UID không đủ độ dài để tạo UID tạm an toàn.");
   }
   const existing = new Set([...currentUids].map(normalizeUid).filter(Boolean));
-  const result = [];
-  let attempt = 0;
-  while (result.length < count) {
-    if (attempt++ > 20) throw new Error("Không tạo được dải UID tạm không trùng.");
+  for (let attempt = 0; attempt < 100; attempt += 1) {
     const token = crypto.randomBytes(8).toString("hex").slice(0, tokenLength).toUpperCase();
-    const candidate = `T${token}${result.length.toString(36).padStart(sequenceWidth, "0").toUpperCase()}`;
-    if (candidate.length > max || existing.has(candidate)) continue;
-    existing.add(candidate);
-    result.push(candidate);
+    const result = Array.from({ length: count }, (_, index) =>
+      `T${token}${index.toString(36).padStart(sequenceWidth, "0").toUpperCase()}`,
+    );
+    if (result.some((candidate) => candidate.length > max || existing.has(candidate))) continue;
+    return result;
   }
-  return result;
+  throw new Error("Không tạo được dải UID tạm không trùng sau 100 lần thử.");
 }
 
 function assignTemporaryUids(plan, temporaryUids) {
