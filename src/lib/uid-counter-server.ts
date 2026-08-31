@@ -165,10 +165,10 @@ async function getAuthUser(request: Request): Promise<AuthUser | null> {
   }
 }
 
-async function getAdminToken(): Promise<AdminAuthResult> {
+async function getAdminToken(options: { ignoreDirectToken?: boolean } = {}): Promise<AdminAuthResult> {
   if (cachedAdminToken) return { ok: true, token: cachedAdminToken };
   const direct = env("PB_ADMIN_TOKEN");
-  if (direct) {
+  if (direct && !options.ignoreDirectToken) {
     cachedAdminToken = direct;
     return { ok: true, token: cachedAdminToken };
   }
@@ -523,11 +523,16 @@ export async function handleUidCounterRequest(request: Request) {
     try {
       return await executeRequest(body, actor, adminAuth.token);
     } catch (error) {
-      if (!(error instanceof UidCounterRequestError) || error.code !== "PB_AUTH_EXPIRED") {
+      if (
+        !(error instanceof UidCounterRequestError) ||
+        (error.code !== "PB_AUTH_EXPIRED" && error.code !== "PB_PERMISSION_DENIED")
+      ) {
         throw error;
       }
       cachedAdminToken = "";
-      const refreshed = await getAdminToken();
+      // A stale/user token can produce 403 (not only 401). Fall back to the
+      // configured superuser credentials exactly once before surfacing the error.
+      const refreshed = await getAdminToken({ ignoreDirectToken: true });
       if (!refreshed.ok || refreshed.token === adminAuth.token) throw error;
       return await executeRequest(body, actor, refreshed.token);
     }

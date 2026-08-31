@@ -28,14 +28,19 @@ Tên bảng/index thực tế cần được xác nhận trong PocketBase Admin 
 
 1. Sao lưu PocketBase.
 2. Tạo collection và index trước.
-3. Tạo `.env` riêng trên máy chủ và cấu hình `PB_URL`, `PB_ADMIN_EMAIL`, `PB_ADMIN_PASSWORD`.
-   Không commit `.env` hoặc ghi mật khẩu vào `ecosystem.config.cjs`.
+3. Tạo `.env` riêng trên máy chủ và cấu hình `PB_URL` cùng **một tài khoản PocketBase Superuser thực**:
+   - Khuyến nghị: `PB_ADMIN_EMAIL` và `PB_ADMIN_PASSWORD` của Superuser.
+   - Hoặc: `PB_ADMIN_TOKEN` là token được cấp từ tài khoản Superuser, không phải token đăng nhập của collection `users` (kể cả user có `role = admin`).
+   Không commit `.env` hoặc ghi mật khẩu vào `ecosystem.config.cjs`. Nếu dùng `PB_ADMIN_TOKEN`, vẫn nên giữ
+   `PB_ADMIN_EMAIL` và `PB_ADMIN_PASSWORD` để API có thể tự cấp lại token khi token trực tiếp bị thu hồi/hết quyền.
 4. Chạy `npm run pb:init-uid-counters`.
 5. Kiểm tra báo cáo UID sai định dạng và UID trùng. Script không sửa các bản ghi nghiệp vụ.
 6. Chạy lại script để xác nhận bộ đếm không bị giảm.
 
 Sau khi thay đổi `.env` trên production, chạy `npm run deploy` để build và reload PM2 với môi
 trường mới. Cấu hình PM2 sử dụng `node --env-file=.env`, vì vậy máy chủ cần Node.js 20.6 trở lên.
+Sau đó đăng nhập bằng tài khoản staff/admin của ứng dụng và thử tạo một lao động: request `POST /api/uid-counter`
+phải trả `200`, không còn `PB_PERMISSION_DENIED`.
 
 ## Vận hành
 

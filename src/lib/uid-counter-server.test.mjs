@@ -64,6 +64,9 @@ function createPocketBaseMock(options = {}) {
       return json({ record: { id: "staff-id", role: "staff" } });
     }
     if (url.pathname.endsWith("/app_settings/records")) {
+      if (options.rejectDirectToken && authorization === "Bearer user-token") {
+        return json({ message: "Only superusers can perform this action." }, 403);
+      }
       if (options.expireFirstToken && authorization === "Bearer admin-token-1") {
         return json({ message: "The request requires valid authentication." }, 401);
       }
@@ -156,6 +159,24 @@ test("đăng nhập lại đúng một lần khi token quản trị hết hạn"
   const result = await responseJson(await handleUidCounterRequest(request()));
   assert.equal(result.status, 200);
   assert.equal(pb.calls.filter((call) => call.path.endsWith("/auth-with-password")).length, 2);
+});
+
+test("tự thay token PB_ADMIN_TOKEN không có quyền bằng thông tin superuser", async () => {
+  resetUidCounterServerStateForTests();
+  const previousToken = process.env.PB_ADMIN_TOKEN;
+  process.env.PB_ADMIN_TOKEN = "user-token";
+  const pb = createPocketBaseMock({ rejectDirectToken: true });
+  globalThis.fetch = pb.mock;
+
+  const result = await responseJson(await handleUidCounterRequest(request()));
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.uids, ["HL001321"]);
+  assert.equal(
+    pb.calls.filter((call) => call.path.endsWith("/auth-with-password")).length,
+    1,
+  );
+  if (previousToken === undefined) delete process.env.PB_ADMIN_TOKEN;
+  else process.env.PB_ADMIN_TOKEN = previousToken;
 });
 
 test("trả lỗi có cấu trúc khi PocketBase từ chối updated_by", async () => {
