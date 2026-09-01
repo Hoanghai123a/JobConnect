@@ -13,6 +13,8 @@ type CounterRecord = {
   note?: string;
 };
 
+type CounterWritePayload = Omit<CounterRecord, "id"> & { updated_by?: string };
+
 type AllocateBody = {
   action?: "allocate" | "observe";
   type?: UidCounterType;
@@ -348,16 +350,12 @@ async function scanMaximum(type: UidCounterType, prefix: string, period: string,
   return max;
 }
 
-async function saveCounter(
-  input: Omit<CounterRecord, "id"> & { updated_by?: string },
-  id: string | undefined,
-  token: string,
-) {
+async function saveCounter(input: CounterWritePayload, id: string | undefined, token: string) {
   const path = id
     ? `/api/collections/uid_counters/records/${encodeURIComponent(id)}`
     : "/api/collections/uid_counters/records";
   const operation = `${id ? "update" : "create"} uid_counters`;
-  const request = (payload: Omit<CounterRecord, "id"> & { updated_by?: string }) =>
+  const request = (payload: CounterWritePayload) =>
     requirePocketBaseJson<CounterRecord>(
       path,
       {
@@ -375,16 +373,35 @@ async function saveCounter(
   } catch (error) {
     // updated_by is optional bookkeeping. Older/partially migrated PocketBase
     // schemas may reject the relation even though the counter payload is valid.
-    if (
-      !input.updated_by ||
-      !(error instanceof UidCounterRequestError) ||
-      error.code !== "PB_VALIDATION_FAILED"
-    ) {
+    if (!(error instanceof UidCounterRequestError) || error.code !== "PB_VALIDATION_FAILED") {
       throw error;
     }
-    const { updated_by: _ignored, ...withoutActor } = input;
-    console.warn("[uid-counter] Retrying counter write without optional updated_by relation");
-    return request(withoutActor);
+    const withoutActor = input.updated_by
+      ? (({ updated_by: _ignored, ...payload }) => payload)(input)
+      : undefined;
+    if (withoutActor) {
+      console.warn("[uid-counter] Retrying counter write without optional updated_by relation");
+    }
+    try {
+      if (withoutActor) return await request(withoutActor);
+      throw error;
+    } catch (retryError) {
+      if (
+        !(retryError instanceof UidCounterRequestError) ||
+        retryError.code !== "PB_VALIDATION_FAILED"
+      ) {
+        throw retryError;
+      }
+      // The counter's three required fields are enough for both create/update.
+      // Optional metadata is retried separately below when the schema supports it.
+      const minimalPayload: CounterWritePayload = {
+        counter_key: input.counter_key,
+        counter_type: input.counter_type,
+        current_value: input.current_value,
+      };
+      console.warn("[uid-counter] Retrying counter write with required fields only");
+      return request(minimalPayload);
+    }
   }
 }
 
@@ -393,11 +410,19 @@ function validateCounter(
   expected: { key: string; type: UidCounterType; prefix: string; period: string },
 ) {
   const currentValue = Number(counter.current_value);
+  const prefixMatches =
+    counter.prefix === undefined ||
+    counter.prefix === null ||
+    String(counter.prefix) === expected.prefix;
+  const periodMatches =
+    counter.period === undefined ||
+    counter.period === null ||
+    String(counter.period) === expected.period;
   if (
     counter.counter_key !== expected.key ||
     counter.counter_type !== expected.type ||
-    String(counter.prefix || "") !== expected.prefix ||
-    String(counter.period || "") !== expected.period ||
+    !prefixMatches ||
+    !periodMatches ||
     !Number.isSafeInteger(currentValue) ||
     currentValue < 0
   ) {
@@ -446,8 +471,21 @@ async function allocate(body: AllocateBody, actor: AuthUser | null, adminToken: 
         current_value: current,
         note: "Khởi tạo tự động từ dữ liệu hiện có",
       };
-      if (actor?.id) payload.updated_by = actor.id;
-      counter = await saveCounter(payload, undefined, adminToken);
+      try {
+        counter = await saveCounter(payload, undefined, adminToken);
+      } catch (error) {
+        // Another server process may have created the unique counter_key after
+        // our empty read. Re-read before returning a misleading create error.
+        if (!(error instanceof UidCounterRequestError) || error.code !== "PB_VALIDATION_FAILED") {
+          throw error;
+        }
+        try {
+          counter = await getCounter(meta.key, adminToken);
+        } catch {
+          throw error;
+        }
+        if (!counter) throw error;
+      }
     }
     const currentValue = validateCounter(counter, {
       key: meta.key,

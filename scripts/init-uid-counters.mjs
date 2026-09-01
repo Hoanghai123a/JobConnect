@@ -171,7 +171,8 @@ async function ensureUniqueUidIndex(collectionName, indexName, indexSql, duplica
 for (const item of maxima.values()) {
   const existing = counterByKey.get(item.counter_key);
   if (existing && Number(existing.current_value || 0) >= item.current_value) continue;
-  const payload = { ...item, note: "Khởi tạo/đối soát từ script", updated_by: "" };
+  // updated_by is optional; an empty relation value is rejected by PocketBase.
+  const payload = { ...item, note: "Khởi tạo/đối soát từ script" };
   if (existing) await pb.collection("uid_counters").update(existing.id, payload);
   else await pb.collection("uid_counters").create(payload);
 }

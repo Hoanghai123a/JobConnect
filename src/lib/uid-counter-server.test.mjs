@@ -46,6 +46,7 @@ function json(body, status = 200) {
 function createPocketBaseMock(options = {}) {
   let tokenSequence = 0;
   let currentValue = options.currentValue ?? 1320;
+  let counterExists = !options.emptyCounter;
   let activeWrites = 0;
   let maxActiveWrites = 0;
   const calls = [];
@@ -63,6 +64,9 @@ function createPocketBaseMock(options = {}) {
     if (url.pathname.endsWith("/users/auth-refresh")) {
       return json({ record: { id: "staff-id", role: "staff" } });
     }
+    if (url.pathname.endsWith("/users/records")) {
+      return json({ totalPages: 1, items: [] });
+    }
     if (url.pathname.endsWith("/app_settings/records")) {
       if (options.rejectDirectToken && authorization === "Bearer user-token") {
         return json({ message: "Only superusers can perform this action." }, 403);
@@ -73,6 +77,7 @@ function createPocketBaseMock(options = {}) {
       return json({ items: [{ account_code_prefix: options.prefix ?? "HL" }] });
     }
     if (url.pathname.endsWith("/uid_counters/records") && method === "GET") {
+      if (!counterExists) return json({ items: [] });
       return json({
         items: [
           {
@@ -87,7 +92,29 @@ function createPocketBaseMock(options = {}) {
         ],
       });
     }
-    if (url.pathname.endsWith("/uid_counters/records/counter-id") && method === "PATCH") {
+    if (url.pathname.endsWith("/uid_counters/records") && method === "POST") {
+      const payload = JSON.parse(String(init.body));
+      if (options.createConflictOnce) {
+        counterExists = true;
+        return json(
+          {
+            message: "Failed to create record.",
+            data: { counter_key: { message: "Value must be unique." } },
+          },
+          400,
+        );
+      }
+      if (options.rejectCreateMetadata && "note" in payload) {
+        return json(
+          { message: "Failed to create record.", data: { note: { message: "Missing field" } } },
+          400,
+        );
+      }
+      counterExists = true;
+      currentValue = payload.current_value;
+      return json({ id: "created-counter", ...payload });
+    }
+    if (url.pathname.includes("/uid_counters/records/") && method === "PATCH") {
       activeWrites += 1;
       maxActiveWrites = Math.max(maxActiveWrites, activeWrites);
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -191,6 +218,26 @@ test("trả lỗi có cấu trúc khi PocketBase từ chối updated_by", async 
 test("retry ghi bộ đếm khi schema từ chối relation updated_by tùy chọn", async () => {
   resetUidCounterServerStateForTests();
   const pb = createPocketBaseMock({ rejectUpdatedByOnce: true });
+  globalThis.fetch = pb.mock;
+
+  const result = await responseJson(await handleUidCounterRequest(request()));
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.uids, ["HL001321"]);
+});
+
+test("tạo counter mới với schema chỉ có các field bắt buộc", async () => {
+  resetUidCounterServerStateForTests();
+  const pb = createPocketBaseMock({ emptyCounter: true, rejectCreateMetadata: true });
+  globalThis.fetch = pb.mock;
+
+  const result = await responseJson(await handleUidCounterRequest(request()));
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.uids, ["HL000001"]);
+});
+
+test("đọc lại counter khi create bị trùng khóa do request cạnh tranh", async () => {
+  resetUidCounterServerStateForTests();
+  const pb = createPocketBaseMock({ emptyCounter: true, createConflictOnce: true });
   globalThis.fetch = pb.mock;
 
   const result = await responseJson(await handleUidCounterRequest(request()));

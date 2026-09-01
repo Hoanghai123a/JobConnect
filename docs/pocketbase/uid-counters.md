@@ -28,6 +28,10 @@ Tên bảng/index thực tế cần được xác nhận trong PocketBase Admin 
 nếu PocketBase trả lỗi validation do collection production chưa có relation hoặc relation trỏ sai collection.
 Tuy nhiên cần đồng bộ schema theo file `docs/pocketbase/uid_counters.pb_schema.json` để lưu được người thao tác.
 
+API cũng có fallback cuối cùng chỉ gửi ba field bắt buộc `counter_key`, `counter_type`,
+`current_value`. Fallback này giúp hệ thống không bị gián đoạn trong lúc collection production
+còn thiếu field tùy chọn, nhưng không thay thế việc chạy migration schema.
+
 ## Khởi tạo
 
 1. Sao lưu PocketBase.
@@ -45,6 +49,11 @@ Sau khi thay đổi `.env` trên production, chạy `npm run deploy` để build
 trường mới. Cấu hình PM2 sử dụng `node --env-file=.env`, vì vậy máy chủ cần Node.js 20.6 trở lên.
 Sau đó đăng nhập bằng tài khoản staff/admin của ứng dụng và thử tạo một lao động: request `POST /api/uid-counter`
 phải trả `200`, không còn `PB_PERMISSION_DENIED`.
+
+Nếu log vẫn ghi `PB_VALIDATION_FAILED` hoặc `Failed to create record`, cần chạy lại `npm run pb:init-uid-counters`
+trên đúng máy chủ production với `.env` chứa PocketBase Superuser. Kiểm tra collection `uid_counters`
+đủ ba field bắt buộc, field tùy chọn theo `docs/pocketbase/uid_counters.pb_schema.json`, và unique index
+`idx_uid_counters_key`; sau đó build/reload ứng dụng bằng `npm run deploy`. Không xóa counter hiện có hoặc giảm `current_value`.
 
 ## Vận hành
 
