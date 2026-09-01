@@ -8,7 +8,7 @@ Tạo Base collection với các field:
 - `counter_type`: Select, required, giá trị `user`, `employment_history`.
 - `prefix`: Text.
 - `period`: Text.
-- `current_value`: Number, required, min 0.
+- `current_value`: Number, optional, integer, min 0. The API always writes this field; it is optional in PocketBase because PocketBase treats numeric `0` as blank when `required` is enabled, which prevents creating a new period counter at zero.
 - `updated_by`: Relation một bản ghi tới `users`, optional.
 - `note`: Text, optional.
 

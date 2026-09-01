@@ -33,7 +33,9 @@ async function ensureUidCounterCollection() {
     },
     { name: "prefix", type: "text", required: false, max: 20 },
     { name: "period", type: "text", required: false, max: 6 },
-    { name: "current_value", type: "number", required: true, onlyInt: true, min: 0 },
+    // PocketBase treats numeric zero as blank when a number field is required.
+    // The allocator always sends this value and validates it before writing.
+    { name: "current_value", type: "number", required: false, onlyInt: true, min: 0 },
     {
       name: "updated_by",
       type: "relation",
