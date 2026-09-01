@@ -93,7 +93,8 @@ function createPocketBaseMock(options = {}) {
       await new Promise((resolve) => setTimeout(resolve, 5));
       const payload = JSON.parse(String(init.body));
       activeWrites -= 1;
-      if (options.rejectUpdatedBy) {
+      if (options.rejectUpdatedBy || (options.rejectUpdatedByOnce && !options.rejectedUpdatedBy)) {
+        options.rejectedUpdatedBy = true;
         return json(
           {
             message: "Failed to update record.",
@@ -171,10 +172,7 @@ test("tự thay token PB_ADMIN_TOKEN không có quyền bằng thông tin superu
   const result = await responseJson(await handleUidCounterRequest(request()));
   assert.equal(result.status, 200);
   assert.deepEqual(result.body.uids, ["HL001321"]);
-  assert.equal(
-    pb.calls.filter((call) => call.path.endsWith("/auth-with-password")).length,
-    1,
-  );
+  assert.equal(pb.calls.filter((call) => call.path.endsWith("/auth-with-password")).length, 1);
   if (previousToken === undefined) delete process.env.PB_ADMIN_TOKEN;
   else process.env.PB_ADMIN_TOKEN = previousToken;
 });
@@ -188,6 +186,16 @@ test("trả lỗi có cấu trúc khi PocketBase từ chối updated_by", async 
   assert.equal(result.status, 400);
   assert.equal(result.body.code, "PB_VALIDATION_FAILED");
   assert.equal(result.body.operation, "update uid_counters");
+});
+
+test("retry ghi bộ đếm khi schema từ chối relation updated_by tùy chọn", async () => {
+  resetUidCounterServerStateForTests();
+  const pb = createPocketBaseMock({ rejectUpdatedByOnce: true });
+  globalThis.fetch = pb.mock;
+
+  const result = await responseJson(await handleUidCounterRequest(request()));
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.uids, ["HL001321"]);
 });
 
 test("từ chối tiền tố rỗng và bộ đếm sai kiểu hoặc sai giá trị", async (t) => {

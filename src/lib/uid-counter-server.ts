@@ -165,7 +165,9 @@ async function getAuthUser(request: Request): Promise<AuthUser | null> {
   }
 }
 
-async function getAdminToken(options: { ignoreDirectToken?: boolean } = {}): Promise<AdminAuthResult> {
+async function getAdminToken(
+  options: { ignoreDirectToken?: boolean } = {},
+): Promise<AdminAuthResult> {
   if (cachedAdminToken) return { ok: true, token: cachedAdminToken };
   const direct = env("PB_ADMIN_TOKEN");
   if (direct && !options.ignoreDirectToken) {
@@ -354,17 +356,36 @@ async function saveCounter(
   const path = id
     ? `/api/collections/uid_counters/records/${encodeURIComponent(id)}`
     : "/api/collections/uid_counters/records";
-  return requirePocketBaseJson<CounterRecord>(
-    path,
-    {
-      method: id ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    },
-    token,
-    `${id ? "update" : "create"} uid_counters`,
-    "Không cập nhật được bộ đếm UID.",
-  );
+  const operation = `${id ? "update" : "create"} uid_counters`;
+  const request = (payload: Omit<CounterRecord, "id"> & { updated_by?: string }) =>
+    requirePocketBaseJson<CounterRecord>(
+      path,
+      {
+        method: id ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      token,
+      operation,
+      "Không cập nhật được bộ đếm UID.",
+    );
+
+  try {
+    return await request(input);
+  } catch (error) {
+    // updated_by is optional bookkeeping. Older/partially migrated PocketBase
+    // schemas may reject the relation even though the counter payload is valid.
+    if (
+      !input.updated_by ||
+      !(error instanceof UidCounterRequestError) ||
+      error.code !== "PB_VALIDATION_FAILED"
+    ) {
+      throw error;
+    }
+    const { updated_by: _ignored, ...withoutActor } = input;
+    console.warn("[uid-counter] Retrying counter write without optional updated_by relation");
+    return request(withoutActor);
+  }
 }
 
 function validateCounter(

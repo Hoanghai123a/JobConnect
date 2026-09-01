@@ -24,6 +24,10 @@ CREATE UNIQUE INDEX idx_employment_histories_uid_unique ON employment_histories 
 
 Tên bảng/index thực tế cần được xác nhận trong PocketBase Admin trước khi áp dụng trực tiếp bằng SQL. Có thể dùng phần Indexes của collection thay cho SQL.
 
+`updated_by` chỉ là thông tin ghi nhận, không tham gia cấp số. API sẽ tự thử lại một lần không gửi field này
+nếu PocketBase trả lỗi validation do collection production chưa có relation hoặc relation trỏ sai collection.
+Tuy nhiên cần đồng bộ schema theo file `docs/pocketbase/uid_counters.pb_schema.json` để lưu được người thao tác.
+
 ## Khởi tạo
 
 1. Sao lưu PocketBase.
@@ -31,8 +35,8 @@ Tên bảng/index thực tế cần được xác nhận trong PocketBase Admin 
 3. Tạo `.env` riêng trên máy chủ và cấu hình `PB_URL` cùng **một tài khoản PocketBase Superuser thực**:
    - Khuyến nghị: `PB_ADMIN_EMAIL` và `PB_ADMIN_PASSWORD` của Superuser.
    - Hoặc: `PB_ADMIN_TOKEN` là token được cấp từ tài khoản Superuser, không phải token đăng nhập của collection `users` (kể cả user có `role = admin`).
-   Không commit `.env` hoặc ghi mật khẩu vào `ecosystem.config.cjs`. Nếu dùng `PB_ADMIN_TOKEN`, vẫn nên giữ
-   `PB_ADMIN_EMAIL` và `PB_ADMIN_PASSWORD` để API có thể tự cấp lại token khi token trực tiếp bị thu hồi/hết quyền.
+     Không commit `.env` hoặc ghi mật khẩu vào `ecosystem.config.cjs`. Nếu dùng `PB_ADMIN_TOKEN`, vẫn nên giữ
+     `PB_ADMIN_EMAIL` và `PB_ADMIN_PASSWORD` để API có thể tự cấp lại token khi token trực tiếp bị thu hồi/hết quyền.
 4. Chạy `npm run pb:init-uid-counters`.
 5. Kiểm tra báo cáo UID sai định dạng và UID trùng. Script không sửa các bản ghi nghiệp vụ.
 6. Chạy lại script để xác nhận bộ đếm không bị giảm.
