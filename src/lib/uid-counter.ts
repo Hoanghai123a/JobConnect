@@ -15,6 +15,7 @@ type UidCounterErrorPayload = {
   message?: string;
   code?: string;
   operation?: string;
+  details?: Record<string, string>;
 };
 
 const UID_ERROR_MESSAGES: Record<string, string> = {
@@ -59,10 +60,14 @@ async function requestCounter(body: Record<string, unknown>) {
   if (!response.ok) {
     const codeMessage = payload?.code ? UID_ERROR_MESSAGES[payload.code] : "";
     const message = payload?.message || codeMessage || "Không cấp được UID.";
+    const validationDetails = Object.entries(payload?.details || {})
+      .map(([field, detail]) => `${field}: ${detail}`)
+      .join("; ");
+    const fullMessage = validationDetails ? `${message} (${validationDetails})` : message;
     throw new Error(
-      codeMessage && payload?.message && payload.message !== codeMessage
-        ? `${codeMessage} Chi tiết: ${payload.message}`
-        : message,
+      codeMessage && fullMessage !== codeMessage
+        ? `${codeMessage} Chi tiết: ${fullMessage}`
+        : fullMessage,
     );
   }
   return payload;

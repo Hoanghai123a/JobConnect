@@ -64,6 +64,11 @@ function createPocketBaseMock(options = {}) {
     if (url.pathname.endsWith("/users/auth-refresh")) {
       return json({ record: { id: "staff-id", role: "staff" } });
     }
+    if (url.pathname.endsWith("/_superusers/auth-refresh")) {
+      if (authorization === "Bearer user-token")
+        return json({ message: "Only superusers can perform this action." }, 403);
+      return json({ token: authorization.replace(/^Bearer\s+/, "") || "admin-token" });
+    }
     if (url.pathname.endsWith("/users/records")) {
       return json({ totalPages: 1, items: [] });
     }
@@ -204,6 +209,26 @@ test("tự thay token PB_ADMIN_TOKEN không có quyền bằng thông tin superu
   else process.env.PB_ADMIN_TOKEN = previousToken;
 });
 
+test("không dùng PB_ADMIN_TOKEN của collection users để tạo counter", async () => {
+  resetUidCounterServerStateForTests();
+  const previousToken = process.env.PB_ADMIN_TOKEN;
+  process.env.PB_ADMIN_TOKEN = "user-token";
+  const pb = createPocketBaseMock();
+  globalThis.fetch = pb.mock;
+
+  const result = await responseJson(await handleUidCounterRequest(request()));
+  assert.equal(result.status, 200);
+  assert.equal(
+    pb.calls.some(
+      (call) =>
+        call.path.includes("/uid_counters/records") && call.authorization === "Bearer user-token",
+    ),
+    false,
+  );
+  if (previousToken === undefined) delete process.env.PB_ADMIN_TOKEN;
+  else process.env.PB_ADMIN_TOKEN = previousToken;
+});
+
 test("trả lỗi có cấu trúc khi PocketBase từ chối updated_by", async () => {
   resetUidCounterServerStateForTests();
   const pb = createPocketBaseMock({ rejectUpdatedBy: true });
@@ -213,6 +238,7 @@ test("trả lỗi có cấu trúc khi PocketBase từ chối updated_by", async 
   assert.equal(result.status, 400);
   assert.equal(result.body.code, "PB_VALIDATION_FAILED");
   assert.equal(result.body.operation, "update uid_counters");
+  assert.equal(result.body.details.updated_by, "Invalid relation.");
 });
 
 test("retry ghi bộ đếm khi schema từ chối relation updated_by tùy chọn", async () => {

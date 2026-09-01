@@ -34,17 +34,27 @@ type UidCounterErrorCode =
   | "UID_PREFIX_MISSING"
   | "UID_COUNTER_INVALID";
 
+type PocketBaseFieldErrors = Record<string, string>;
+
 class UidCounterRequestError extends Error {
   readonly code: UidCounterErrorCode;
   readonly status: number;
   readonly operation: string;
+  readonly details: PocketBaseFieldErrors;
 
-  constructor(message: string, code: UidCounterErrorCode, status: number, operation: string) {
+  constructor(
+    message: string,
+    code: UidCounterErrorCode,
+    status: number,
+    operation: string,
+    details: PocketBaseFieldErrors = {},
+  ) {
     super(message);
     this.name = "UidCounterRequestError";
     this.code = code;
     this.status = status;
     this.operation = operation;
+    this.details = details;
   }
 }
 
@@ -84,8 +94,17 @@ function structuredError(
   code: UidCounterErrorCode,
   status: number,
   operation?: string,
+  details: PocketBaseFieldErrors = {},
 ) {
-  return Response.json({ message, code, ...(operation ? { operation } : {}) }, { status });
+  return Response.json(
+    {
+      message,
+      code,
+      ...(operation ? { operation } : {}),
+      ...(Object.keys(details).length ? { details } : {}),
+    },
+    { status },
+  );
 }
 
 function pocketBaseMessage(body: any, fallback: string) {
@@ -100,8 +119,18 @@ function pocketBaseErrorCode(status: number, operation: string): UidCounterError
   return operation.startsWith("read") ? "PB_READ_FAILED" : "PB_WRITE_FAILED";
 }
 
+function pocketBaseFieldErrors(body: any): PocketBaseFieldErrors {
+  if (!body?.data || typeof body.data !== "object" || Array.isArray(body.data)) return {};
+  return Object.fromEntries(
+    Object.entries(body.data).map(([field, value]) => [
+      field,
+      pocketBaseMessage(value, "Dữ liệu không hợp lệ."),
+    ]),
+  );
+}
+
 function logPocketBaseFailure(operation: string, response: Response, body: any) {
-  const fieldErrors = body?.data && typeof body.data === "object" ? Object.keys(body.data) : [];
+  const fieldErrors = pocketBaseFieldErrors(body);
   console.error("[uid-counter] PocketBase request failed", {
     operation,
     status: response.status,
@@ -141,6 +170,7 @@ async function requirePocketBaseJson<T>(
       pocketBaseErrorCode(response.status, operation),
       response.status,
       operation,
+      pocketBaseFieldErrors(body),
     );
   }
   return body as T;
@@ -167,14 +197,37 @@ async function getAuthUser(request: Request): Promise<AuthUser | null> {
   }
 }
 
+async function refreshSuperuserToken(token: string): Promise<string> {
+  for (const path of ["/api/collections/_superusers/auth-refresh", "/api/admins/auth-refresh"]) {
+    try {
+      const response = await pbFetch(path, { method: "POST" }, token);
+      const body = await readJson(response);
+      if (response.ok) return typeof body?.token === "string" && body.token ? body.token : token;
+      if (response.status !== 404) {
+        console.warn("[uid-counter] Configured PB_ADMIN_TOKEN is not a PocketBase Superuser", {
+          operation: path,
+          status: response.status,
+        });
+        return "";
+      }
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
 async function getAdminToken(
   options: { ignoreDirectToken?: boolean } = {},
 ): Promise<AdminAuthResult> {
   if (cachedAdminToken) return { ok: true, token: cachedAdminToken };
   const direct = env("PB_ADMIN_TOKEN");
   if (direct && !options.ignoreDirectToken) {
-    cachedAdminToken = direct;
-    return { ok: true, token: cachedAdminToken };
+    const verifiedToken = await refreshSuperuserToken(direct);
+    if (verifiedToken) {
+      cachedAdminToken = verifiedToken;
+      return { ok: true, token: cachedAdminToken };
+    }
   }
 
   const identity = env("PB_ADMIN_EMAIL");
@@ -597,7 +650,13 @@ export async function handleUidCounterRequest(request: Request) {
     }
   } catch (error) {
     if (error instanceof UidCounterRequestError) {
-      return structuredError(error.message, error.code, error.status, error.operation);
+      return structuredError(
+        error.message,
+        error.code,
+        error.status,
+        error.operation,
+        error.details,
+      );
     }
     console.error("[uid-counter] Unexpected UID allocation error", {
       message: error instanceof Error ? error.message : String(error),
