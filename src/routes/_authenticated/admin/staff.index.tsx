@@ -67,6 +67,7 @@ function AdminStaffPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [importingStaff, setImportingStaff] = useState(false);
   const [importResult, setImportResult] = useState("");
+  const [editingStaff, setEditingStaff] = useState<UserRecord | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -362,34 +363,44 @@ function AdminStaffPage() {
         <div className="space-y-2">
           {staffUsers.map((staff) => {
             const factoryCount = assignmentCounts[staff.id] || 0;
+            const isDisabled = staff.status === "disabled";
             return (
-              <Card key={staff.id} className="space-y-1 rounded-2xl p-4 shadow-soft">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">
-                      {staff.full_name || staff.username || "Chưa có tên"}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-muted-foreground">
-                      @{staff.username || "—"} · {staff.phone || "chưa có SĐT"}
-                    </div>
-                    {(staff.date_of_birth || staff.address) && (
-                      <div className="mt-0.5 text-[11px] text-muted-foreground">
-                        {staff.date_of_birth && `Sinh: ${staff.date_of_birth}`}
-                        {staff.date_of_birth && staff.address && " · "}
-                        {staff.address && `ĐC: ${staff.address}`}
+              <button
+                key={staff.id}
+                onClick={() => setEditingStaff(staff)}
+                className="block w-full text-left transition hover:opacity-80"
+              >
+                <Card className="space-y-1 rounded-2xl p-4 shadow-soft">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">
+                        {staff.full_name || staff.username || "Chưa có tên"}
                       </div>
-                    )}
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        @{staff.username || "—"} · {staff.phone || "chưa có SĐT"}
+                      </div>
+                      {(staff.date_of_birth || staff.address) && (
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">
+                          {staff.date_of_birth && `Sinh: ${staff.date_of_birth}`}
+                          {staff.date_of_birth && staff.address && " · "}
+                          {staff.address && `ĐC: ${staff.address}`}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <StatusChip tone={staff.role === "admin" ? "info" : "success"}>
+                        {staff.role === "admin" ? "Admin" : "Staff"}
+                      </StatusChip>
+                      <StatusChip tone={isDisabled ? "danger" : "success"}>
+                        {isDisabled ? "Đã dừng" : "Hoạt động"}
+                      </StatusChip>
+                      <StatusChip tone={factoryCount ? "info" : "neutral"}>
+                        {factoryCount ? `${factoryCount} nhà máy` : "Chưa gán NM"}
+                      </StatusChip>
+                    </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1.5">
-                    <StatusChip tone={staff.role === "admin" ? "info" : "success"}>
-                      {staff.role === "admin" ? "Admin" : "Staff"}
-                    </StatusChip>
-                    <StatusChip tone={factoryCount ? "info" : "neutral"}>
-                      {factoryCount ? `${factoryCount} nhà máy` : "Chưa gán NM"}
-                    </StatusChip>
-                  </div>
-                </div>
-              </Card>
+                </Card>
+              </button>
             );
           })}
         </div>
@@ -401,6 +412,14 @@ function AdminStaffPage() {
         actor={currentUser}
         factories={factories}
         onCreated={load}
+      />
+
+      <EditStaffStatusDialog
+        open={!!editingStaff}
+        onClose={() => setEditingStaff(null)}
+        staff={editingStaff}
+        actor={currentUser}
+        onUpdated={load}
       />
     </PageContainer>
   );
@@ -590,6 +609,119 @@ function CreateStaffDialog({
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditStaffStatusDialog({
+  open,
+  onClose,
+  staff,
+  actor,
+  onUpdated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  staff: UserRecord | null;
+  actor: UserRecord;
+  onUpdated: () => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+
+  if (!staff) return null;
+
+  const currentStatus = staff.status || "active";
+  const isDisabled = currentStatus === "disabled";
+
+  const toggleStatus = async () => {
+    setSubmitting(true);
+    try {
+      const newStatus = isDisabled ? "active" : "disabled";
+      const before = { status: currentStatus };
+      const after = { status: newStatus };
+
+      await pb.collection("users").update(staff.id, { status: newStatus });
+
+      await createStaffActionLog({
+        actor,
+        targetUserId: staff.id,
+        targetCollection: "users",
+        targetRecord: staff.id,
+        action: "update",
+        before,
+        after,
+        note: `Admin ${isDisabled ? "kích hoạt lại" : "dừng hoạt động"} tài khoản staff`,
+      });
+
+      toast.success(
+        isDisabled
+          ? `Đã kích hoạt lại "${staff.full_name || staff.username}"`
+          : `Đã dừng hoạt động "${staff.full_name || staff.username}"`,
+      );
+      onClose();
+      onUpdated();
+    } catch (error: any) {
+      toast.error(error?.message || "Lỗi cập nhật trạng thái staff");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="rounded-2xl">
+        <DialogHeader>
+          <DialogTitle>Quản lý trạng thái staff</DialogTitle>
+          <DialogDescription>
+            {staff.full_name || staff.username} (@{staff.username})
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-xs">Trạng thái hiện tại</Label>
+            <div className="flex items-center gap-2">
+              <StatusChip tone={isDisabled ? "danger" : "success"}>
+                {isDisabled ? "Đã dừng hoạt động" : "Đang hoạt động"}
+              </StatusChip>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+            {isDisabled ? (
+              <>
+                <strong>Staff đã dừng:</strong>
+                <ul className="ml-4 mt-1 list-disc space-y-0.5">
+                  <li>Không xuất hiện trong dropdown chọn người tuyển</li>
+                  <li>Lịch sử đã gán vẫn hiển thị bình thường</li>
+                  <li>Dữ liệu xuất Excel không bị ảnh hưởng</li>
+                </ul>
+              </>
+            ) : (
+              <>
+                <strong>Staff đang hoạt động:</strong>
+                <ul className="ml-4 mt-1 list-disc space-y-0.5">
+                  <li>Xuất hiện trong dropdown chọn người tuyển</li>
+                  <li>Có thể được gán vào lịch sử làm việc mới</li>
+                </ul>
+              </>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">
+            Đóng
+          </Button>
+          <Button
+            type="button"
+            variant={isDisabled ? "default" : "destructive"}
+            disabled={submitting}
+            onClick={toggleStatus}
+            className="rounded-xl"
+          >
+            {submitting ? "Đang xử lý..." : isDisabled ? "Kích hoạt lại" : "Dừng hoạt động"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
