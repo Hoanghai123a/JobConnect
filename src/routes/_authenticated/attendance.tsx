@@ -24,7 +24,14 @@ import { FilterBar } from "@/components/ui/filter-bar";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
-import { aggregate, calcSalary, formatVND, type AttendanceRow, type Shift } from "@/lib/salary";
+import {
+  aggregate,
+  calcSalary,
+  formatVND,
+  type AttendanceRow,
+  type AttendanceType,
+  type Shift,
+} from "@/lib/salary";
 import {
   addDaysToDateKey,
   buildPayrollCalendarCells,
@@ -70,6 +77,12 @@ function todayStr() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+function getAttendanceTypeLabel(type?: AttendanceType) {
+  if (type === "off") return "Nghỉ";
+  if (type === "paid_leave") return "Nghỉ phép";
+  return "Làm việc";
+}
+
 function AttendancePage() {
   const { isAdmin } = useAuth();
   return isAdmin ? <AdminAttendance /> : <UserAttendance />;
@@ -85,6 +98,7 @@ interface RowWithUser {
   is_holiday: boolean;
   hc_hours: number;
   ot_hours: number;
+  attendance_type?: AttendanceType;
   expand?: { user?: any };
 }
 
@@ -126,6 +140,7 @@ function AdminAttendance() {
           is_holiday: !!r.is_holiday,
           hc_hours: Number(r.hc_hours) || 0,
           ot_hours: Number(r.ot_hours) || 0,
+          attendance_type: r.attendance_type || "work",
           expand: r.expand,
         })),
       );
@@ -198,6 +213,7 @@ function AdminAttendance() {
         Lễ: r.is_holiday ? "x" : "",
         "Giờ hành chính": r.hc_hours,
         "Giờ tăng ca": r.ot_hours,
+        "Trạng thái": getAttendanceTypeLabel(r.attendance_type),
       };
     });
     const summary = grouped.map(({ user, rows: rs }) => {
@@ -305,6 +321,9 @@ function AdminAttendance() {
                 <span className="chip chip-info">{rs.length} ngày</span>
                 <span className="chip chip-warning">HC {hc}h</span>
                 <span className="chip chip-neutral">TC {ot}h</span>
+                {rs.some((row) => row.attendance_type === "paid_leave") && (
+                  <span className="chip chip-success">Có nghỉ phép</span>
+                )}
                 <span className="chip chip-neutral inline-flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   Cuối: {lastWorkDate || "Chưa có"}
@@ -380,6 +399,11 @@ function UserDetailMonth({
               )}
               <span className="font-medium">{r.date}</span>
               {r.is_holiday && <span className="chip chip-danger">Lễ</span>}
+              {r.attendance_type && r.attendance_type !== "work" && (
+                <span className={r.attendance_type === "paid_leave" ? "chip chip-success" : "chip chip-neutral"}>
+                  {getAttendanceTypeLabel(r.attendance_type)}
+                </span>
+              )}
             </div>
             <div className="text-xs text-muted-foreground">
               HC {r.hc_hours}h · TC {r.ot_hours}h
@@ -408,6 +432,7 @@ function UserAttendance() {
   const [date, setDate] = useState(todayStr());
   const [shift, setShift] = useState<Shift>("day");
   const [isHoliday, setIsHoliday] = useState(false);
+  const [attendanceType, setAttendanceType] = useState<AttendanceType>("work");
   const [hcHours, setHcHours] = useState<number>(user?.default_hc_hours ?? 8);
   const [otHours, setOtHours] = useState<number>(user?.default_ot_hours ?? 0);
   const [entryOpen, setEntryOpen] = useState(false);
@@ -461,6 +486,7 @@ function UserAttendance() {
           is_holiday: !!r.is_holiday,
           hc_hours: Number(r.hc_hours) || 0,
           ot_hours: Number(r.ot_hours) || 0,
+          attendance_type: r.attendance_type || "work",
         })),
       );
     } catch (e: any) {
@@ -509,13 +535,22 @@ function UserAttendance() {
     setSaving(true);
     try {
       const existing = rows.find((r) => r.date === date);
+      const normalizedPayload =
+        attendanceType === "off"
+          ? { shift: "day" as Shift, is_holiday: false, hc_hours: 0, ot_hours: 0 }
+          : attendanceType === "paid_leave"
+            ? { shift: "day" as Shift, is_holiday: false, hc_hours: 8, ot_hours: 0 }
+            : {
+                shift,
+                is_holiday: isHoliday,
+                hc_hours: Number(hcHours) || 0,
+                ot_hours: Number(otHours) || 0,
+              };
       const payload = {
         user: user.id,
         date,
-        shift,
-        is_holiday: isHoliday,
-        hc_hours: Number(hcHours) || 0,
-        ot_hours: Number(otHours) || 0,
+        ...normalizedPayload,
+        attendance_type: attendanceType,
       };
       if (existing) await pb.collection("attendance").update(existing.id, payload);
       else await pb.collection("attendance").create(payload);
@@ -549,9 +584,28 @@ function UserAttendance() {
     setDate(nextDate);
     setShift(existing?.shift ?? "day");
     setIsHoliday(existing?.is_holiday ?? false);
+    setAttendanceType(existing?.attendance_type ?? "work");
     setHcHours(existing?.hc_hours ?? user?.default_hc_hours ?? 8);
     setOtHours(existing?.ot_hours ?? user?.default_ot_hours ?? 0);
     setEntryOpen(true);
+  };
+
+  const changeAttendanceType = (nextType: AttendanceType) => {
+    setAttendanceType(nextType);
+    if (nextType === "off") {
+      setShift("day");
+      setHcHours(0);
+      setOtHours(0);
+      setIsHoliday(false);
+    } else if (nextType === "paid_leave") {
+      setShift("day");
+      setHcHours(8);
+      setOtHours(0);
+      setIsHoliday(false);
+    } else {
+      setHcHours(user?.default_hc_hours ?? 8);
+      setOtHours(user?.default_ot_hours ?? 0);
+    }
   };
 
   const selectedRow = rows.find((r) => r.date === date);
@@ -639,6 +693,33 @@ function UserAttendance() {
               submit();
             }}
           >
+            <div className="space-y-2">
+              <Label className="text-xs">Trạng thái ngày</Label>
+              <div className="grid grid-cols-3 gap-2 rounded-md border bg-background p-1">
+                {([
+                  ["work", "Làm việc"],
+                  ["off", "Nghỉ"],
+                  ["paid_leave", "Nghỉ phép"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => changeAttendanceType(value)}
+                    className={`rounded px-2 py-2 text-xs font-medium transition ${
+                      attendanceType === value
+                        ? value === "paid_leave"
+                          ? "bg-emerald-600 text-white"
+                          : value === "off"
+                            ? "bg-muted text-foreground"
+                            : "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted/60"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="min-w-0 space-y-1">
                 <Label className="text-xs">Ngày</Label>
@@ -646,12 +727,20 @@ function UserAttendance() {
               </div>
               <div className="min-w-0 space-y-1">
                 <Label className="text-xs">Ca</Label>
-                <ShiftToggle value={shift} onChange={setShift} />
+                <ShiftToggle
+                  value={shift}
+                  onChange={setShift}
+                  disabled={attendanceType !== "work"}
+                />
               </div>
             </div>
 
             <label className="flex items-center gap-3 rounded-lg border bg-secondary/50 p-3">
-              <Checkbox checked={isHoliday} onCheckedChange={(c) => setIsHoliday(c === true)} />
+              <Checkbox
+                checked={isHoliday}
+                disabled={attendanceType !== "work"}
+                onCheckedChange={(c) => setIsHoliday(c === true)}
+              />
               <div className="flex-1">
                 <div className="text-sm font-medium">Ngày lễ</div>
                 <div className="text-xs text-muted-foreground">Áp dụng hệ số 300% / 390%</div>
@@ -667,6 +756,7 @@ function UserAttendance() {
                   enterKeyHint="done"
                   step="0.5"
                   value={hcHours}
+                  disabled={attendanceType !== "work"}
                   onChange={(e) => setHcHours(Number(e.target.value))}
                   onKeyDown={submitFromHours}
                 />
@@ -679,6 +769,7 @@ function UserAttendance() {
                   enterKeyHint="done"
                   step="0.5"
                   value={otHours}
+                  disabled={attendanceType !== "work"}
                   onChange={(e) => setOtHours(Number(e.target.value))}
                   onKeyDown={submitFromHours}
                 />
@@ -809,7 +900,11 @@ function MonthCalendar({
           const base =
             "relative flex aspect-square flex-col items-center justify-start rounded-lg border p-1 text-left transition active:scale-95";
           const stateCls = r
-            ? r.is_holiday
+            ? r.attendance_type === "paid_leave"
+              ? "border-emerald-500/40 bg-emerald-500/10"
+              : r.attendance_type === "off"
+                ? "border-border bg-muted/60"
+                : r.is_holiday
               ? "border-[color:var(--status-danger)]/40 bg-[color:var(--status-danger-bg)]"
               : r.shift === "day"
                 ? "border-[color:var(--status-warning)]/40 bg-[color:var(--status-warning-bg)]"
@@ -831,12 +926,21 @@ function MonthCalendar({
               </div>
               {r ? (
                 <div className="mt-0.5 flex flex-1 flex-col items-center justify-center gap-0.5">
-                  {r.shift === "day" ? (
+                  {r.attendance_type === "off" ? (
+                    <span className="text-[9px] font-semibold text-muted-foreground">Nghỉ</span>
+                  ) : r.attendance_type === "paid_leave" ? (
+                    <span className="text-[9px] font-semibold text-emerald-700">Phép</span>
+                  ) : r.shift === "day" ? (
                     <Sun className="h-3 w-3 text-[color:var(--status-warning-fg)]" />
                   ) : (
                     <Moon className="h-3 w-3 text-primary" />
                   )}
                   <div className="text-[9px] font-semibold leading-none">{total}h</div>
+                  {r.attendance_type && r.attendance_type !== "work" && (
+                    <div className="text-[8px] font-medium leading-none">
+                      {getAttendanceTypeLabel(r.attendance_type)}
+                    </div>
+                  )}
                   {r.is_holiday && (
                     <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-[color:var(--status-danger)]" />
                   )}
@@ -850,11 +954,20 @@ function MonthCalendar({
   );
 }
 
-function ShiftToggle({ value, onChange }: { value: Shift; onChange: (v: Shift) => void }) {
+function ShiftToggle({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: Shift;
+  onChange: (v: Shift) => void;
+  disabled?: boolean;
+}) {
   return (
     <div className="flex items-center gap-2 rounded-md border bg-background p-1">
       <button
         type="button"
+        disabled={disabled}
         onClick={() => onChange("day")}
         className={`flex flex-1 items-center justify-center gap-1 rounded px-2 py-1.5 text-xs font-medium ${value === "day" ? "bg-warning/20 text-warning-foreground" : "text-muted-foreground"}`}
       >
@@ -862,6 +975,7 @@ function ShiftToggle({ value, onChange }: { value: Shift; onChange: (v: Shift) =
       </button>
       <button
         type="button"
+        disabled={disabled}
         onClick={() => onChange("night")}
         className={`flex flex-1 items-center justify-center gap-1 rounded px-2 py-1.5 text-xs font-medium ${value === "night" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
       >

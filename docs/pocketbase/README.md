@@ -117,6 +117,8 @@ xóa collection thủ công vì sẽ mất toàn bộ tab, trạng thái và cô
 
 ## Thống kê giờ
 
+Collection `attendance` bổ sung field select `attendance_type` với các giá trị `work`, `off`, `paid_leave`; đặt mặc định `work` và không bắt buộc để tương thích bản ghi cũ. Không thay đổi rule hiện tại.
+
 - Không cần thêm collection hoặc field mới. Trang `/staff/hour-stats` đọc trực tiếp `check_attendance_items`, `check_salary_items` và `employment_histories`.
 - `check_attendance_items` và `check_salary_items` cần giữ `listRule` / `viewRule` cho `admin`, `staff` và chính NLĐ theo luồng check công/lương hiện có.
 - Staff chỉ được hiển thị dữ liệu có `employment_histories.recruiter_staff = @request.auth.id`; ứng dụng kiểm tra phạm vi này trước khi tổng hợp và hiển thị.

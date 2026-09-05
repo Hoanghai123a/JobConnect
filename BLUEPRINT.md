@@ -260,7 +260,7 @@ erDiagram
 > Tên field chính xác từ TS types + payload `.create()/.update()`; **constraint/rule cấp PocketBase phải tự định nghĩa lại**.
 
 - **`advances`** (tạm ứng) — xem ERD + §8.1. Full field: `user, requested_by, recruiter_id, target_admins[], employee_code, full_name, company, phone, join_date, bank_name, bank_account_number, bank_account_name, amount, original_amount, reason, status, recovery_status, admin_note, recruiter_note, recovery_note, resolved_at, recovered_at, disbursed, disbursed_at`.
-- **`attendance`** — `user, date, shift (day|night), is_holiday, hc_hours, ot_hours`.
+- **`attendance`** — `user, date, shift (day|night), attendance_type (work|off|paid_leave, mặc định work), is_holiday, hc_hours, ot_hours`.
 - **`check_attendance_batches` / `check_attendance_items`** — sheet chấm công import. Batch: `month, round_no, note, total_users, total_rows, source_file`. Item: `batch, user, month, round_no, rows[] (json), summary (json)`.
 - **`check_salary_batches` / `check_salary_items`** — sheet lương import. Item: `batch, user, month, round_no, personal, wage_lines, allowance_lines, deduction_lines, totals` (đều json).
 - **`complaints`** — `full_name, employee_code, company, phone, content, status (pending|accepted|rejected), admin_note, resolved_at`.

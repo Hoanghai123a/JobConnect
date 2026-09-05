@@ -1,12 +1,14 @@
 // Salary computation per the user's rules.
 // Rates: 100, 130, 150, 200, 270, 300, 390
 export type Shift = "day" | "night";
+export type AttendanceType = "work" | "off" | "paid_leave";
 export interface AttendanceRow {
   date: string; // yyyy-mm-dd
   shift: Shift;
   is_holiday: boolean;
   hc_hours: number;
   ot_hours: number;
+  attendance_type?: AttendanceType;
 }
 
 export interface RateBuckets {
@@ -35,6 +37,11 @@ function add(b: RateBuckets, key: keyof RateBuckets, h: number) {
 
 /** Distribute one day's HC + OT hours into rate buckets per business rules. */
 export function distributeDay(row: AttendanceRow, b: RateBuckets) {
+  if (row.attendance_type === "off") return;
+  if (row.attendance_type === "paid_leave") {
+    add(b, "r100", 8);
+    return;
+  }
   const hc = Math.max(0, row.hc_hours || 0);
   const ot = Math.max(0, row.ot_hours || 0);
   const isSunday = new Date(row.date + "T00:00:00").getDay() === 0;
@@ -112,7 +119,7 @@ function localDateKey(d: Date) {
 function hasFullWeekdayAttendance(rows: AttendanceRow[], periodStart: string): boolean {
   const today = localDateKey(new Date());
   const endDate = today < periodStart ? periodStart : today;
-  const attendedDates = new Set(rows.map((r) => r.date));
+  const attendedDates = new Map(rows.map((r) => [r.date, r]));
   const [sy, sm, sd] = periodStart.split("-").map(Number);
   const cursor = new Date(sy, sm - 1, sd);
   const end = new Date(endDate + "T00:00:00");
@@ -121,7 +128,8 @@ function hasFullWeekdayAttendance(rows: AttendanceRow[], periodStart: string): b
     const dow = cursor.getDay();
     if (dow !== 0) {
       const key = localDateKey(cursor);
-      if (!attendedDates.has(key)) return false;
+      const row = attendedDates.get(key);
+      if (!row || row.attendance_type === "off") return false;
     }
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -131,7 +139,7 @@ function hasFullWeekdayAttendance(rows: AttendanceRow[], periodStart: string): b
 function countEligibleDoiSongDays(rows: AttendanceRow[]): number {
   return rows.filter((r) => {
     const dow = new Date(r.date + "T00:00:00").getDay();
-    return dow !== 0 && !r.is_holiday;
+    return dow !== 0 && !r.is_holiday && (!r.attendance_type || r.attendance_type === "work");
   }).length;
 }
 
