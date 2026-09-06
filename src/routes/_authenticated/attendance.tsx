@@ -1361,22 +1361,21 @@ function MonthCalendar({
               {r ? (
                 <div className="mt-0.5 flex flex-1 flex-col items-center justify-center gap-0.5">
                   {r.attendance_type === "off" ? (
-                    <span className="text-[9px] font-semibold text-muted-foreground">Nghỉ</span>
+                    <span className="text-[9px] font-semibold text-muted-foreground">nghỉ</span>
                   ) : r.attendance_type === "paid_leave" ? (
-                    <span className="text-[9px] font-semibold text-emerald-700">Phép</span>
+                    <span className="text-[9px] font-semibold text-emerald-700">phép</span>
                   ) : r.shift === "day" ? (
                     <Sun className="h-3 w-3 text-[color:var(--status-warning-fg)]" />
                   ) : (
                     <Moon className="h-3 w-3 text-primary" />
                   )}
-                  <div className="text-[9px] font-semibold leading-none">{total}h</div>
-                  {r.attendance_type && r.attendance_type !== "work" && (
-                    <div className="text-[8px] font-medium leading-none">
-                      {getAttendanceTypeLabel(r.attendance_type)}
-                    </div>
-                  )}
-                  {r.is_holiday && (
-                    <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-[color:var(--status-danger)]" />
+                  {r.attendance_type === "work" && (
+                    <>
+                      <div className="text-[9px] font-semibold leading-none">{total}h</div>
+                      {r.is_holiday && (
+                        <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-[color:var(--status-danger)]" />
+                      )}
+                    </>
                   )}
                 </div>
               ) : null}
