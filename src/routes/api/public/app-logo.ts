@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { buildPocketBaseFileUrl, fetchAppSettingsRecord } from "@/lib/server-app-brand";
+import { fetchAppSettingsRecord, getAppLogoFileUrl } from "@/lib/server-app-brand";
 
 const FALLBACK_ICON = "/pwa-icon.svg";
 
@@ -24,18 +24,10 @@ export const Route = createFileRoute("/api/public/app-logo")({
     handlers: {
       GET: async () => {
         const app = await fetchAppSettingsRecord();
-        if (!app?.item.logo || !app.item.id) return fallback();
+        if (!app) return fallback();
 
-        const collectionIdOrName =
-          app.item.collectionId || app.item.collectionName || "app_settings";
-
-        const fileUrl = buildPocketBaseFileUrl({
-          upstream: app.upstream,
-          collectionIdOrName,
-          recordId: app.item.id,
-          fileName: app.item.logo,
-        });
-
+        const fileUrl = getAppLogoFileUrl(app);
+        if (!fileUrl) return fallback();
         const upstreamFile = await fetch(fileUrl, {
           headers: { "ngrok-skip-browser-warning": "true" },
         }).catch(() => null);

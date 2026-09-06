@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { fetchAppSettingsRecord } from "@/lib/server-app-brand";
 
+const FALLBACK_ICON = "/icons/app-icon.svg";
+
 export const Route = createFileRoute("/api/public/manifest/webmanifest")({
   server: {
     handlers: {
@@ -8,7 +10,11 @@ export const Route = createFileRoute("/api/public/manifest/webmanifest")({
         const app = await fetchAppSettingsRecord();
         const name = app?.item.company_name?.trim() || "JobConnect";
         const shortName = name.slice(0, 12) || "JobConnect";
-        const iconSrc = app?.item.logo ? "/api/public/app-logo" : "/pwa-icon.svg";
+        const iconVersion = app?.item.updated || app?.item.id || "";
+        const iconSrc = app?.item.logo
+          ? `/api/public/app-icon${iconVersion ? `?v=${encodeURIComponent(iconVersion)}` : ""}`
+          : FALLBACK_ICON;
+        const iconType = app?.item.logo ? undefined : "image/svg+xml";
 
         return Response.json(
           {
@@ -24,16 +30,34 @@ export const Route = createFileRoute("/api/public/manifest/webmanifest")({
             orientation: "portrait-primary",
             icons: [
               {
-                src: iconSrc,
+                src: "/icons/app-icon-192.png",
                 sizes: "192x192",
-                type: "image/svg+xml",
-                purpose: "any maskable",
+                type: "image/png",
+                purpose: "any",
+              },
+              {
+                src: "/icons/app-icon-512.png",
+                sizes: "512x512",
+                type: "image/png",
+                purpose: "any",
+              },
+              {
+                src: "/icons/app-icon-192.png",
+                sizes: "192x192",
+                type: "image/png",
+                purpose: "maskable",
+              },
+              {
+                src: "/icons/app-icon-512.png",
+                sizes: "512x512",
+                type: "image/png",
+                purpose: "maskable",
               },
               {
                 src: iconSrc,
-                sizes: "512x512",
-                type: "image/svg+xml",
-                purpose: "any maskable",
+                sizes: "any",
+                type: iconType,
+                purpose: "any",
               },
             ],
           },

@@ -3,10 +3,14 @@ import { useEffect, useMemo, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { usePwaInstallPrompt } from "@/lib/pwa-install";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
+import { normalizeUserPickerSearch } from "@/components/workforce/UserPicker";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { IosInstallGuideDialog } from "@/components/layout/IosInstallGuideDialog";
+import { GuideDocumentsTab } from "@/components/guides/GuideDocumentsTab";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,12 +33,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
-import * as Icons from "lucide-react";
 import {
+  fetchEmploymentHistories,
+  findActiveEmploymentByUser,
+  getCurrentEmploymentHistory,
+} from "@/lib/employment";
+import { toast } from "@/lib/toast";
+import {
+  AlertTriangle,
+  Banknote,
   BookOpen,
+  Briefcase,
+  Calendar,
   ChevronDown,
+  Clock,
   Download,
   Pencil,
   Plus,
@@ -43,6 +57,15 @@ import {
   Send,
   Users,
   Factory as FactoryIcon,
+  FileText,
+  FolderOpen,
+  GraduationCap,
+  HelpCircle,
+  Lightbulb,
+  Mail,
+  Map as MapIcon,
+  Phone,
+  ShieldCheck,
   User as UserIcon,
 } from "lucide-react";
 
@@ -50,23 +73,25 @@ export const Route = createFileRoute("/_authenticated/guides")({
   component: GuidesPage,
 });
 
-const ICONS = [
-  "BookOpen",
-  "Lightbulb",
-  "FileText",
-  "ShieldCheck",
-  "Phone",
-  "Briefcase",
-  "GraduationCap",
-  "Calendar",
-  "Clock",
-  "Banknote",
-  "AlertTriangle",
-  "Users",
-  "Map",
-  "Mail",
-  "HelpCircle",
-];
+const GUIDE_ICONS = {
+  BookOpen,
+  Lightbulb,
+  FileText,
+  ShieldCheck,
+  Phone,
+  Briefcase,
+  GraduationCap,
+  Calendar,
+  Clock,
+  Banknote,
+  AlertTriangle,
+  Users,
+  Map: MapIcon,
+  Mail,
+  HelpCircle,
+} as const;
+
+const ICONS = Object.keys(GUIDE_ICONS) as Array<keyof typeof GUIDE_ICONS>;
 
 type TargetType = "all" | "factories" | "users";
 
@@ -110,6 +135,8 @@ function MultiSelectDropdown({
   emptyText: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedSearch(query);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const selectedOptions = options.filter((option) => selectedSet.has(option.value));
   const summary =
@@ -126,13 +153,27 @@ function MultiSelectDropdown({
     onChange(Array.from(next));
   };
 
+  const filteredOptions = useMemo(() => {
+    const keyword = normalizeUserPickerSearch(debouncedQuery);
+    if (!keyword) return options;
+    return options.filter((option) =>
+      normalizeUserPickerSearch(`${option.label} ${option.description || ""}`).includes(keyword),
+    );
+  }, [debouncedQuery, options]);
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setQuery("");
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           type="button"
           variant="outline"
-          className="h-11 w-full justify-between gap-2 rounded-xl px-3 text-left font-normal"
+          className="h-11 w-full justify-between gap-2 rounded-xl bg-white px-3 text-left font-normal text-slate-900"
         >
           <span className={cn("truncate", selectedOptions.length === 0 && "text-muted-foreground")}>
             {summary}
@@ -141,11 +182,11 @@ function MultiSelectDropdown({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[min(calc(100vw-3rem),24rem)] p-0">
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+        <Command shouldFilter={false}>
+          <CommandInput placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
           <CommandList className="max-h-64">
             <CommandEmpty>{emptyText}</CommandEmpty>
-            {options.map((option) => {
+            {filteredOptions.map((option) => {
               const checked = selectedSet.has(option.value);
               return (
                 <CommandItem
@@ -197,36 +238,60 @@ function MultiSelectDropdown({
 
 function GuidesPage() {
   const { user, isAdmin } = useAuth();
+  const [activeTab, setActiveTab] = useState<"guides" | "documents">("guides");
   const [items, setItems] = useState<Guide[]>([]);
+  const [loading, setLoading] = useState(true);
   const [factories, setFactories] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [currentFactoryName, setCurrentFactoryName] = useState("");
   const [editing, setEditing] = useState<Guide | null>(null);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedSearch(search);
   const [reading, setReading] = useState<Guide | null>(null);
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
   const { installPrompt, installApp: installPwaApp, isAndroid, isIos } = usePwaInstallPrompt();
 
   const load = async () => {
+    setLoading(true);
     try {
-      const res = await pb.collection("guides").getFullList({ sort: "order,created" });
-      setItems(res as any);
+      const res = await pb.collection("guides").getList(1, 200, { sort: "order,created" });
+      setItems(res.items as any);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải hướng dẫn");
+    } finally {
+      setLoading(false);
     }
   };
   const loadAdminRefs = async () => {
     if (!isAdmin) return;
     try {
-      const f = await pb.collection("factories").getFullList({ sort: "name" });
-      setFactories(f as any);
+      const f = await pb.collection("factories").getList(1, 300, { sort: "name" });
+      setFactories(f.items as any);
     } catch {
       /* optional */
     }
     try {
-      const u = await pb.collection("users").getFullList({ sort: "-created" });
+      const [u, histories] = await Promise.all([
+        pb.collection("users").getFullList({ sort: "-created" }),
+        fetchEmploymentHistories(),
+      ]);
+      const historiesByUser = new Map<string, typeof histories>();
+      for (const history of histories) {
+        const list = historiesByUser.get(history.user) || [];
+        list.push(history);
+        historiesByUser.set(history.user, list);
+      }
       const workerUsers = (u as any[])
         .filter((item) => item.role !== "admin")
+        .map((item) => {
+          const employment = getCurrentEmploymentHistory(historiesByUser.get(item.id) || []);
+          return {
+            ...item,
+            employeeCode: employment?.employee_code || "",
+            factoryName: employment?.expand?.factory?.name || "",
+          };
+        })
         .sort((a, b) =>
           String(a.full_name || a.username || a.phone || "").localeCompare(
             String(b.full_name || b.username || b.phone || ""),
@@ -244,16 +309,33 @@ function GuidesPage() {
     loadAdminRefs(); /* eslint-disable-next-line */
   }, [isAdmin]);
 
-  const installApp = async () => {
-    if (!installPrompt) {
-      toast.info("Chưa thể mở hộp cài đặt", {
-        description:
-          "Vui lòng mở bằng Chrome trên Android, hoặc thử tải lại trang rồi bấm Cài đặt.",
-      });
+  useEffect(() => {
+    if (!user?.id) {
+      setCurrentFactoryName("");
       return;
     }
-    const outcome = await installPwaApp();
-    if (outcome === "accepted") toast.success("Đã gửi yêu cầu cài app");
+    let active = true;
+    findActiveEmploymentByUser(user.id)
+      .then((history) => {
+        if (active) setCurrentFactoryName(history?.expand?.factory?.name || "");
+      })
+      .catch(() => {
+        if (active) setCurrentFactoryName("");
+      });
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  const [desktopGuideOpen, setDesktopGuideOpen] = useState(false);
+
+  const installApp = async () => {
+    if (installPrompt) {
+      const outcome = await installPwaApp();
+      if (outcome === "accepted") toast.success("Đã cài app thành công");
+      return;
+    }
+    setDesktopGuideOpen(true);
   };
 
   const openNew = () => {
@@ -322,7 +404,7 @@ function GuidesPage() {
       if (t === "factories") {
         const list = g.target_factories || [];
         if (!list.length) return false;
-        return list.some((f) => f === user?.company || f === (user as any)?.factory);
+        return list.includes(currentFactoryName);
       }
       if (t === "users") {
         const list = g.target_users || [];
@@ -330,22 +412,31 @@ function GuidesPage() {
       }
       return false;
     });
-  }, [items, isAdmin, user]);
+  }, [items, isAdmin, user?.id, currentFactoryName]);
 
   const filtered = useMemo(
     () =>
       visible.filter(
-        (g) => !search || (g.title + " " + g.content).toLowerCase().includes(search.toLowerCase()),
+        (g) =>
+          !debouncedSearch ||
+          (g.title + " " + g.content).toLowerCase().includes(debouncedSearch.toLowerCase()),
       ),
-    [visible, search],
+    [visible, debouncedSearch],
   );
 
   return (
     <PageContainer
       title="Hướng dẫn"
-      subtitle={`${filtered.length} mục`}
+      subtitle={
+        activeTab === "guides"
+          ? loading && items.length === 0
+            ? "Đang tải dữ liệu..."
+            : `${filtered.length} mục`
+          : "Kho tài liệu nội bộ"
+      }
       right={
-        isAdmin && (
+        isAdmin &&
+        activeTab === "guides" && (
           <button
             onClick={openNew}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-soft active:scale-95"
@@ -356,109 +447,175 @@ function GuidesPage() {
         )
       }
     >
-      {(isIos || isAndroid) && (
-        <div className="mb-3 rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
-          <button
-            type="button"
-            onClick={() => (isIos ? setInstallGuideOpen(true) : void installApp())}
-            className="flex w-full items-center gap-2 text-left"
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
-              {isIos ? (
-                <Smartphone className="h-4.5 w-4.5" />
-              ) : (
-                <Download className="h-4.5 w-4.5" />
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-foreground">Cài app ra màn hình chính</div>
-              <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                {isIos
-                  ? "Bấm Hướng dẫn để xem từng bước bằng ảnh."
-                  : "Bấm Cài đặt để thêm app vào màn hình chính."}
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as "guides" | "documents")}
+        className="space-y-3"
+      >
+        <TabsList className="grid w-full grid-cols-2 rounded-xl desktop:grid desktop:grid-cols-2">
+          <TabsTrigger value="guides" className="gap-1.5 desktop:min-w-0">
+            <BookOpen className="h-4 w-4" /> Hướng dẫn
+          </TabsTrigger>
+          <TabsTrigger value="documents" className="gap-1.5 desktop:min-w-0">
+            <FolderOpen className="h-4 w-4" /> Tài liệu
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="guides" className="mt-0 space-y-3">
+          <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
+            <button
+              type="button"
+              onClick={() => (isIos ? setInstallGuideOpen(true) : void installApp())}
+              className="flex w-full items-center gap-2 text-left"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
+                {isIos ? (
+                  <Smartphone className="h-4.5 w-4.5" />
+                ) : (
+                  <Download className="h-4.5 w-4.5" />
+                )}
               </div>
-            </div>
-            <span className="shrink-0 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
-              {isIos ? "Hướng dẫn" : "Cài đặt"}
-            </span>
-          </button>
-        </div>
-      )}
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-foreground">Cài ứng dụng</div>
+                <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  {isIos
+                    ? "Bấm Hướng dẫn để xem từng bước bằng ảnh."
+                    : "Bấm Cài đặt để cài app trực tiếp vào thiết bị."}
+                </div>
+              </div>
+              <span className="shrink-0 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
+                {isIos ? "Hướng dẫn" : "Cài đặt"}
+              </span>
+            </button>
+          </div>
 
-      <FilterBar search={search} onSearchChange={setSearch} placeholder="Tìm hướng dẫn…" />
+          <FilterBar search={search} onSearchChange={setSearch} placeholder="Tìm hướng dẫn…" />
 
-      {filtered.length === 0 ? (
-        <EmptyState
-          icon={BookOpen}
-          title="Chưa có hướng dẫn"
-          description={
-            search
-              ? "Không tìm thấy kết quả."
-              : isAdmin
-                ? "Bấm + để gửi hướng dẫn."
-                : "Hướng dẫn sẽ xuất hiện ở đây."
-          }
-        />
-      ) : (
-        <div className="grid grid-cols-2 gap-2.5">
-          {filtered.map((g) => {
-            const Icon = (Icons as any)[g.icon] || BookOpen;
-            const t = (g.target_type || "all") as TargetType;
-            const TIcon = TARGET_META[t].icon;
-            return (
-              <div key={g.id} className="relative">
-                <button
-                  onClick={() => setReading(g)}
-                  className="flex h-full w-full flex-col gap-2 rounded-2xl border border-border bg-card p-3 text-left shadow-soft active:scale-[0.98] transition"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="line-clamp-2 text-sm font-semibold leading-tight">
-                      {g.title}
-                    </div>
-                    <div className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
-                      {g.content}
-                    </div>
+          {loading && items.length > 0 && (
+            <DataLoadingState variant="inline" label="Đang cập nhật hướng dẫn..." />
+          )}
+
+          {loading && items.length === 0 ? (
+            <DataLoadingState variant="grid" label="Đang tải hướng dẫn..." rows={4} />
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon={BookOpen}
+              title="Chưa có hướng dẫn"
+              description={
+                search
+                  ? "Không tìm thấy kết quả."
+                  : isAdmin
+                    ? "Bấm + để gửi hướng dẫn."
+                    : "Hướng dẫn sẽ xuất hiện tại đây."
+              }
+            />
+          ) : (
+            <div className="grid grid-cols-2 gap-2.5">
+              {filtered.map((g) => {
+                const Icon = GUIDE_ICONS[g.icon as keyof typeof GUIDE_ICONS] || BookOpen;
+                const t = (g.target_type || "all") as TargetType;
+                const TIcon = TARGET_META[t].icon;
+                return (
+                  <div key={g.id} className="relative">
+                    <button
+                      onClick={() => setReading(g)}
+                      className="flex h-full w-full flex-col gap-2 rounded-2xl border border-border bg-card p-3 text-left shadow-soft active:scale-[0.98] transition"
+                    >
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="line-clamp-2 text-sm font-semibold leading-tight">
+                          {g.title}
+                        </div>
+                        <div className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
+                          {g.content}
+                        </div>
+                        {isAdmin && (
+                          <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                            <TIcon className="h-3 w-3" /> {TARGET_META[t].label}
+                            {t === "factories" && g.target_factories?.length
+                              ? ` (${g.target_factories.length})`
+                              : ""}
+                            {t === "users" && g.target_users?.length
+                              ? ` (${g.target_users.length})`
+                              : ""}
+                          </div>
+                        )}
+                      </div>
+                    </button>
                     {isAdmin && (
-                      <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                        <TIcon className="h-3 w-3" /> {TARGET_META[t].label}
-                        {t === "factories" && g.target_factories?.length
-                          ? ` (${g.target_factories.length})`
-                          : ""}
-                        {t === "users" && g.target_users?.length
-                          ? ` (${g.target_users.length})`
-                          : ""}
+                      <div className="absolute right-1.5 top-1.5 flex gap-0.5">
+                        <button
+                          onClick={() => openEdit(g)}
+                          className="flex h-7 w-7 items-center justify-center rounded-full bg-card/80 text-muted-foreground backdrop-blur hover:bg-muted"
+                          aria-label="Sửa"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => remove(g.id)}
+                          className="flex h-7 w-7 items-center justify-center rounded-full bg-card/80 text-destructive backdrop-blur hover:bg-destructive/10"
+                          aria-label="Xoá"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     )}
                   </div>
-                </button>
-                {isAdmin && (
-                  <div className="absolute right-1.5 top-1.5 flex gap-0.5">
-                    <button
-                      onClick={() => openEdit(g)}
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-card/80 text-muted-foreground backdrop-blur hover:bg-muted"
-                      aria-label="Sửa"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => remove(g.id)}
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-card/80 text-destructive backdrop-blur hover:bg-destructive/10"
-                      aria-label="Xoá"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="documents" className="mt-0">
+          <GuideDocumentsTab isAdmin={isAdmin} />
+        </TabsContent>
+      </Tabs>
 
       <IosInstallGuideDialog open={installGuideOpen} onOpenChange={setInstallGuideOpen} />
+
+      <Dialog open={desktopGuideOpen} onOpenChange={setDesktopGuideOpen}>
+        <DialogContent className="max-h-[88dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Cài ứng dụng trên máy tính</DialogTitle>
+            <DialogDescription>
+              Làm theo hướng dẫn bên dưới để cài app vào máy tính.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                  1
+                </span>
+                <span className="font-medium">Mở trang này bằng trình duyệt Chrome hoặc Edge</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                  2
+                </span>
+                <span className="font-medium">Nhấn vào biểu tượng cài đặt trên thanh địa chỉ</span>
+              </div>
+              <p className="ml-8 text-xs text-muted-foreground">
+                Biểu tượng hình màn hình có mũi tên (⊞) nằm ở góc phải thanh địa chỉ. Hoặc bấm dấu 3
+                chấm (⋮) → "Cài đặt ứng dụng..." / "Install app..."
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                  3
+                </span>
+                <span className="font-medium">Bấm "Cài đặt" trong hộp thoại xuất hiện</span>
+              </div>
+            </div>
+            <div className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
+              Sau khi cài, app sẽ mở như một ứng dụng riêng trên máy tính — không cần mở trình
+              duyệt.
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Reader */}
       <Dialog open={!!reading} onOpenChange={(o) => !o && setReading(null)}>
@@ -502,7 +659,7 @@ function GuidesPage() {
                 <Label>Icon</Label>
                 <div className="grid grid-cols-6 gap-2">
                   {ICONS.map((name) => {
-                    const I = (Icons as any)[name];
+                    const I = GUIDE_ICONS[name];
                     const active = editing.icon === name;
                     return (
                       <button
@@ -597,7 +754,7 @@ function GuidesPage() {
                         options={users.map((u) => ({
                           value: u.id,
                           label: u.full_name || u.username || u.phone || "Chưa có tên",
-                          description: `${u.company || "chưa có nhà máy"}${u.employee_code ? ` · ${u.employee_code}` : ""}`,
+                          description: `${u.factoryName || "chưa có lịch sử đi làm"}${u.employeeCode ? ` · ${u.employeeCode}` : ""}`,
                         }))}
                         selected={editing.target_users || []}
                         onChange={(values) => setEditing({ ...editing, target_users: values })}

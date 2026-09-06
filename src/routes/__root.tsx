@@ -11,8 +11,22 @@ import { useEffect } from "react";
 
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/lib/auth";
+import { getUserErrorMessage } from "@/lib/toast";
 import { Toaster } from "@/components/ui/sonner";
 import { installPwaPromptListeners } from "@/lib/pwa-install";
+import { RoamingPet } from "@/components/garden/RoamingPet";
+import { BrandHeadLinks } from "@/components/layout/BrandHeadLinks";
+import { PushPermissionPrompt } from "@/components/layout/PushPermissionPrompt";
+import { InstallFloatingBanner } from "@/components/layout/InstallFloatingBanner";
+import { DEVICE_PROFILE_BOOTSTRAP } from "@/lib/device-profile";
+
+const CHUNK_RELOAD_KEY = "jobconnect.chunk-reload-path";
+
+function isChunkLoadError(error: Error) {
+  return /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Load failed for module/i.test(
+    error.message,
+  );
+}
 
 function NotFoundComponent() {
   return (
@@ -33,13 +47,34 @@ function NotFoundComponent() {
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
+  const chunkLoadFailed = isChunkLoadError(error);
+  const userMessage = getUserErrorMessage(error);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) console.error("[JobConnect] L?i giao di?n g?c:", error);
+  }, [error]);
+
+  useEffect(() => {
+    if (!chunkLoadFailed) return;
+
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (sessionStorage.getItem(CHUNK_RELOAD_KEY) === currentPath) return;
+
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, currentPath);
+    window.location.reload();
+  }, [chunkLoadFailed]);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold">Đã có lỗi xảy ra</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{userMessage}</p>
         <button
           onClick={() => {
+            if (chunkLoadFailed) {
+              window.location.reload();
+              return;
+            }
             router.invalidate();
             reset();
           }}
@@ -62,10 +97,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "description", content: "Kết nối nhà tuyển dụng và người lao động khu công nghiệp." },
     ],
     links: [
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      {
+        rel: "preconnect",
+        href: "https://fonts.gstatic.com",
+        crossOrigin: "anonymous",
+      },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap",
+      },
       { rel: "stylesheet", href: appCss },
-      { rel: "manifest", href: "/api/public/manifest/webmanifest" },
-      { rel: "apple-touch-icon", href: "/api/public/app-logo" },
-      { rel: "icon", href: "/api/public/app-logo" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/api/public/app-icon" },
+      { rel: "icon", href: "/api/public/app-icon" },
     ],
   }),
   shellComponent: RootShell,
@@ -76,8 +121,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="vi">
+    <html lang="vi" data-ui-device="mobile">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: DEVICE_PROFILE_BOOTSTRAP }} />
         <HeadContent />
       </head>
       <body>
@@ -91,6 +137,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useEffect(() => {
+    sessionStorage.removeItem(CHUNK_RELOAD_KEY);
     const removePwaListeners = installPwaPromptListeners();
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
@@ -101,8 +148,12 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <BrandHeadLinks />
+        <PushPermissionPrompt />
         <div className="app-shell">
           <Outlet />
+          <InstallFloatingBanner />
+          <RoamingPet />
           <Toaster richColors position="top-center" />
         </div>
       </AuthProvider>

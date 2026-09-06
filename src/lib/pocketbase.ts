@@ -4,7 +4,6 @@ import { PB_URL } from "./pocketbase-config";
 export const pb = new PocketBase(PB_URL);
 pb.autoCancellation(false);
 
-
 export type Role = "admin" | "user" | "staff";
 
 export interface UserRecord {
@@ -14,14 +13,15 @@ export interface UserRecord {
   phone?: string;
   full_name?: string;
   cccd?: string;
+  cccd_issue_date?: string;
+  uid?: string;
   role?: Role;
   approved?: boolean | string;
   approvalStatus?: "pending" | "approved" | "rejected";
   status?: "active" | "disabled";
   default_hc_hours?: number;
   default_ot_hours?: number;
-  company?: string;
-  employee_code?: string;
+  attendance_cutoff_day?: number;
   lcb?: number;
   chuyen_can?: number;
   doi_song?: number;
@@ -29,9 +29,15 @@ export interface UserRecord {
   bank_name?: string;
   bank_account_number?: string;
   bank_account_name?: string;
+  bank_account_note?: string;
   collectionId?: string;
   collectionName?: string;
   avatar?: string;
+  gender?: string;
+  date_of_birth?: string;
+  address?: string;
+  must_change_password?: boolean;
+  last_login?: string;
 }
 
 /** Convert base64 dataURL to File (per HRJob skill rule #1) */

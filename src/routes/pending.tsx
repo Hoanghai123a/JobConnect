@@ -15,7 +15,7 @@ function PendingPage() {
   const nav = useNavigate();
 
   return (
-    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-4 px-6 text-center desktop:mx-auto desktop:max-w-xl desktop:rounded-3xl desktop:bg-card desktop:shadow-card">
       <BackButton className="absolute left-4 top-4 text-muted-foreground" />
 
       <div className="rounded-full bg-warning/20 p-5 text-warning-foreground">
@@ -24,8 +24,8 @@ function PendingPage() {
 
       <h1 className="text-xl font-semibold">Đang chờ duyệt</h1>
       <p className="max-w-xs text-sm text-muted-foreground">
-        Tài khoản <strong>{user?.full_name || user?.phone}</strong> đã được gửi tới admin. Bạn sẽ vào
-        được hệ thống ngay khi được duyệt.
+        Tài khoản <strong>{user?.full_name || user?.phone}</strong> đã được gửi tới admin. Bạn sẽ
+        vào được hệ thống ngay khi được duyệt.
       </p>
 
       <div className="flex gap-2">

@@ -21,10 +21,10 @@ function AboutPage() {
   const { data: settings, logoUrl } = useAppSettings();
 
   return (
-    <div className="pb-nav">
+    <div className="pb-nav desktop:mx-auto desktop:max-w-[90rem]">
       <AppHeader title="Về chúng tôi" back />
 
-      <div className="gradient-hero relative overflow-hidden px-5 py-8 text-white">
+      <div className="gradient-hero relative overflow-hidden px-5 py-8 text-white desktop:mx-6 desktop:rounded-3xl desktop:px-10 desktop:py-12">
         <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/20 blur-2xl" />
         <div className="relative flex flex-col items-center gap-3 text-center">
           <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl bg-white/95 shadow-soft">
@@ -39,7 +39,7 @@ function AboutPage() {
         </div>
       </div>
 
-      <div className="space-y-4 p-4">
+      <div className="space-y-4 p-4 desktop:grid desktop:grid-cols-2 desktop:gap-6 desktop:space-y-0 desktop:px-6 desktop:py-6">
         {settings.about && (
           <Card className="rounded-2xl border-border/60 p-4 shadow-soft">
             <h2 className="mb-2 text-sm font-semibold">Giới thiệu</h2>

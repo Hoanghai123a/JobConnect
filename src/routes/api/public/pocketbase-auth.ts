@@ -29,10 +29,15 @@ async function authWithPassword(identity: string, password: string) {
     body: JSON.stringify({ identity, password }),
   });
 
-  return {
-    response,
-    body: await readPocketBaseAuthResponse(response),
-  };
+  const body = await readPocketBaseAuthResponse(response);
+  if (response.ok && body?.record?.status === "disabled") {
+    return {
+      response: new Response(null, { status: 403 }),
+      body: { message: "Tài khoản đã bị khóa và không thể đăng nhập." },
+    };
+  }
+
+  return { response, body };
 }
 
 function escapePocketBaseString(value: string) {
@@ -55,14 +60,29 @@ async function resolveCanonicalIdentity(identity: string) {
   if (!response.ok) return null;
 
   const body = await response.json().catch(() => null);
-  const items = Array.isArray(body?.items) ? body.items : [];
+  const items: Array<{ username?: unknown; email?: unknown }> = Array.isArray(body?.items)
+    ? body.items
+    : [];
   const matched = items.find(
     (item) =>
       String(item?.username || "").toLowerCase() === normalizedIdentity ||
       String(item?.email || "").toLowerCase() === normalizedIdentity,
   );
 
-  return matched?.username || matched?.email || null;
+  if (!matched) return null;
+  return String(matched.username || matched.email || "") || null;
+}
+
+function updateLastLogin(token: string, recordId: string) {
+  fetch(`${getPBUpstream()}/api/collections/users/records/${recordId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      "ngrok-skip-browser-warning": "true",
+    },
+    body: JSON.stringify({ last_login: new Date().toISOString() }),
+  }).catch(() => {});
 }
 
 export const Route = createFileRoute("/api/public/pocketbase-auth")({
@@ -83,6 +103,9 @@ export const Route = createFileRoute("/api/public/pocketbase-auth")({
             lastResult = await authWithPassword(identity, parsed.data.password);
 
             if (lastResult.response.ok || lastResult.response.status !== 400) {
+              if (lastResult.response.ok && lastResult.body?.token && lastResult.body?.record?.id) {
+                updateLastLogin(lastResult.body.token, lastResult.body.record.id);
+              }
               return Response.json(lastResult.body, { status: lastResult.response.status });
             }
           }
@@ -90,6 +113,10 @@ export const Route = createFileRoute("/api/public/pocketbase-auth")({
           const canonicalIdentity = await resolveCanonicalIdentity(parsed.data.identity);
           if (canonicalIdentity && !identityCandidates.includes(canonicalIdentity)) {
             lastResult = await authWithPassword(canonicalIdentity, parsed.data.password);
+          }
+
+          if (lastResult?.response.ok && lastResult.body?.token && lastResult.body?.record?.id) {
+            updateLastLogin(lastResult.body.token, lastResult.body.record.id);
           }
 
           return Response.json(lastResult?.body || {}, {

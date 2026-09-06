@@ -1,19 +1,29 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { pb, dataUrlToFile, fileUrl } from "@/lib/pocketbase";
+import { pb, dataUrlToFile, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";
-import { isUserApproved } from "@/lib/user-approval";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
+import { createStaffActionLog } from "@/lib/staff-log";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { useQueryClient } from "@tanstack/react-query";
-import { DelegationPanel } from "@/components/delegations/DelegationPanel";
 import { AppHeader } from "@/components/layout/BottomNav";
+import { PushNotificationSettingsCard } from "@/components/layout/PushNotificationSettingsCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { FactoryManagersDialog } from "@/components/factories/FactoryManagersDialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
@@ -22,24 +32,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   Building2,
   Factory,
-  Users,
+  Home,
   Save,
   ImagePlus,
   Pencil,
   Trash2,
   Plus,
-  Check,
   X,
   ShieldCheck,
-  Search,
   Smartphone,
   CalendarDays,
   ChevronDown,
   MapPin,
+  Search,
+  Wallet,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({
@@ -55,16 +65,14 @@ function AdminSettingsPage() {
     <div>
       <AppHeader title="Cài đặt hệ thống" back />
       <div className="p-4">
+        <PushNotificationSettingsCard />
         <Tabs defaultValue="company" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 rounded-2xl">
+          <TabsList className="grid w-full grid-cols-2 rounded-2xl">
             <TabsTrigger value="company" className="rounded-xl text-xs">
               <Building2 className="mr-1 h-4 w-4" /> Công ty
             </TabsTrigger>
             <TabsTrigger value="factories" className="rounded-xl text-xs">
               <Factory className="mr-1 h-4 w-4" /> Nhà máy
-            </TabsTrigger>
-            <TabsTrigger value="users" className="rounded-xl text-xs">
-              <Users className="mr-1 h-4 w-4" /> Người dùng
             </TabsTrigger>
           </TabsList>
           <TabsContent value="company" className="mt-4">
@@ -72,9 +80,6 @@ function AdminSettingsPage() {
           </TabsContent>
           <TabsContent value="factories" className="mt-4">
             <FactoriesTab />
-          </TabsContent>
-          <TabsContent value="users" className="mt-4">
-            <UsersTab />
           </TabsContent>
         </Tabs>
       </div>
@@ -105,11 +110,12 @@ function CompanyTab() {
       hotline: settings.hotline || "",
       email: settings.email || "",
       about: settings.about || "",
-      advance_limit: formatMoneyInput(settings.advance_limit || 0),
       advance_rules: settings.advance_rules || "",
+      account_code_prefix: settings.account_code_prefix || "",
+      staff_employment_factory_scope: settings.staff_employment_factory_scope || "assigned",
     });
     setLogoPreview(logoUrl);
-  }, [settings.id]);
+  }, [logoUrl, settings]);
 
   const onPickLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -195,6 +201,28 @@ function CompanyTab() {
       />
       <Field label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
       <div>
+        <Label className="text-xs">Tiền tố UID</Label>
+        <Input
+          className="mt-1 rounded-xl uppercase"
+          placeholder="VD: HL"
+          maxLength={6}
+          value={form.account_code_prefix || ""}
+          onChange={(e) =>
+            setForm({
+              ...form,
+              account_code_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
+            })
+          }
+        />
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          UID sẽ có dạng{" "}
+          <span className="font-mono font-semibold">
+            {(form.account_code_prefix || "HL") + "000001"}
+          </span>{" "}
+          và tăng dần. Đổi tiền tố chỉ áp dụng cho UID cấp mới.
+        </p>
+      </div>
+      <div>
         <Label className="text-xs">Hạn mức Ứng lương</Label>
         <Input
           className="mt-1 rounded-xl"
@@ -213,6 +241,26 @@ function CompanyTab() {
           value={form.advance_rules || ""}
           onChange={(e) => setForm({ ...form, advance_rules: e.target.value })}
         />
+      </div>
+      <div>
+        <Label className="text-xs">Phạm vi nhà máy khi tạo/báo đi làm</Label>
+        <Select
+          value={form.staff_employment_factory_scope || "assigned"}
+          onValueChange={(value) =>
+            setForm({ ...form, staff_employment_factory_scope: value })
+          }
+        >
+          <SelectTrigger className="mt-1 rounded-xl">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="assigned">Chỉ nhà máy được phân công</SelectItem>
+            <SelectItem value="all">Toàn bộ nhà máy</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Áp dụng cho staff trong Tạo nhanh và Báo đi làm mới.
+        </p>
       </div>
       <div>
         <Label className="text-xs">Giới thiệu</Label>
@@ -272,7 +320,7 @@ function CompanyTab() {
               </button>
             </div>
           ))}
-          <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed text-muted-foreground">
+          <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed bg-white text-muted-foreground">
             <ImagePlus className="h-5 w-5" />
             <input
               type="file"
@@ -292,8 +340,8 @@ function CompanyTab() {
       <p className="text-[11px] text-muted-foreground">
         Yêu cầu collection PocketBase tên <code>app_settings</code> với các field: company_name,
         slogan, address, hotline, email, about (text), advance_limit (number), advance_rules (text),
-        logo (file), install_guide_images (multiple files). Collection <code>factories</code> cần
-        thêm field attendance_cutoff_day (number).
+        logo (file), install_guide_images (multiple files), staff_employment_factory_scope (select:
+        assigned/all). Collection <code>factories</code> cần thêm field attendance_cutoff_day (number).
       </p>
     </Card>
   );
@@ -329,6 +377,8 @@ interface Factory {
   hotline?: string;
   note?: string;
   attendance_cutoff_day?: number;
+  advance_limit?: number;
+  status?: string;
 }
 
 interface RecruitmentArea {
@@ -337,21 +387,78 @@ interface RecruitmentArea {
   note?: string;
 }
 
+interface MainHouse {
+  id: string;
+  name: string;
+  address?: string;
+  hotline?: string;
+  note?: string;
+  status?: "active" | "inactive";
+}
+
 function FactoriesTab() {
+  const currentUser = pb.authStore.record as UserRecord | null;
+  const { data: appSettings } = useAppSettings();
+  const queryClient = useQueryClient();
   const [items, setItems] = useState<Factory[]>([]);
   const [areas, setAreas] = useState<RecruitmentArea[]>([]);
+  const [mainHouses, setMainHouses] = useState<MainHouse[]>([]);
   const [editing, setEditing] = useState<Partial<Factory> | null>(null);
   const [editingArea, setEditingArea] = useState<Partial<RecruitmentArea> | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [areasLoading, setAreasLoading] = useState(false);
+  const [editingMainHouse, setEditingMainHouse] = useState<Partial<MainHouse> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [areasLoading, setAreasLoading] = useState(true);
+  const [mainHousesLoading, setMainHousesLoading] = useState(true);
   const [factoriesOpen, setFactoriesOpen] = useState(true);
   const [areasOpen, setAreasOpen] = useState(true);
+  const [mainHousesOpen, setMainHousesOpen] = useState(true);
+  const [managingFactory, setManagingFactory] = useState<Factory | null>(null);
+  const [factorySearch, setFactorySearch] = useState("");
+  const [areaSearch, setAreaSearch] = useState("");
+  const [mainHouseSearch, setMainHouseSearch] = useState("");
+  const debouncedFactorySearch = useDebouncedSearch(factorySearch);
+  const debouncedAreaSearch = useDebouncedSearch(areaSearch);
+  const debouncedMainHouseSearch = useDebouncedSearch(mainHouseSearch);
+  const [bulkAdvanceLimit, setBulkAdvanceLimit] = useState("");
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [editingAdvanceFactory, setEditingAdvanceFactory] = useState<Factory | null>(null);
+  const [advanceLimitText, setAdvanceLimitText] = useState("");
+  const [advanceSaving, setAdvanceSaving] = useState(false);
+  const [allowAfterLeaveSaving, setAllowAfterLeaveSaving] = useState(false);
+  const [allowAfterLeavePending, setAllowAfterLeavePending] = useState(false);
+
+  const filteredFactories = items.filter((f) => {
+    if (!debouncedFactorySearch.trim()) return true;
+    const q = debouncedFactorySearch.toLowerCase();
+    return (
+      f.name.toLowerCase().includes(q) ||
+      (f.address || "").toLowerCase().includes(q) ||
+      (f.hotline || "").toLowerCase().includes(q)
+    );
+  });
+
+  const filteredAreas = areas.filter((a) => {
+    if (!debouncedAreaSearch.trim()) return true;
+    const q = debouncedAreaSearch.toLowerCase();
+    return a.name.toLowerCase().includes(q) || (a.note || "").toLowerCase().includes(q);
+  });
+
+  const filteredMainHouses = mainHouses.filter((h) => {
+    if (!debouncedMainHouseSearch.trim()) return true;
+    const q = debouncedMainHouseSearch.toLowerCase();
+    return (
+      h.name.toLowerCase().includes(q) ||
+      (h.address || "").toLowerCase().includes(q) ||
+      (h.hotline || "").toLowerCase().includes(q)
+    );
+  });
 
   const loadFactories = async () => {
     setLoading(true);
     try {
-      const res = await pb.collection("factories").getFullList({ sort: "name" });
-      setItems(res as any);
+      const res = await pb.collection("factories").getList(1, 300, { sort: "name" });
+      setItems(res.items as any);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải nhà máy. Hãy tạo collection 'factories'.");
     } finally {
@@ -362,8 +469,8 @@ function FactoriesTab() {
   const loadAreas = async () => {
     setAreasLoading(true);
     try {
-      const res = await pb.collection("recruitment_areas").getFullList({ sort: "name" });
-      setAreas(res as any);
+      const res = await pb.collection("recruitment_areas").getList(1, 300, { sort: "name" });
+      setAreas(res.items as any);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải khu vực. Hãy tạo collection 'recruitment_areas'.");
     } finally {
@@ -371,14 +478,41 @@ function FactoriesTab() {
     }
   };
 
+  const loadMainHouses = async () => {
+    setMainHousesLoading(true);
+    try {
+      const res = await pb.collection("recruitment_entities").getList(1, 300, { sort: "name" });
+      setMainHouses(res.items as any);
+    } catch (e: any) {
+      toast.error(
+        e?.message ||
+          "Lỗi tải danh sách Nhà chính & Đối tác. Hãy cấu hình collection 'recruitment_entities'.",
+      );
+    } finally {
+      setMainHousesLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadFactories();
     loadAreas();
+    loadMainHouses();
   }, []);
+
+  useEffect(() => {
+    setAllowAfterLeaveSaving(Boolean(appSettings.allow_advance_after_leave));
+  }, [appSettings.allow_advance_after_leave]);
 
   const save = async () => {
     if (!editing?.name?.trim()) {
       toast.error("Tên nhà máy bắt buộc");
+      return;
+    }
+    const duplicate = items.find(
+      (f) => f.name.toLowerCase() === editing.name!.trim().toLowerCase() && f.id !== editing.id,
+    );
+    if (duplicate) {
+      toast.error(`Nhà máy "${duplicate.name}" đã tồn tại`);
       return;
     }
     try {
@@ -388,11 +522,31 @@ function FactoriesTab() {
         hotline: editing.hotline || "",
         note: editing.note || "",
         attendance_cutoff_day: Number(editing.attendance_cutoff_day) || 31,
+        advance_limit: Math.max(0, Number(editing.advance_limit) || 0),
+        status: editing.status || "active",
       };
       if (editing.id) {
+        const before = items.find((it) => it.id === editing.id);
         await pb.collection("factories").update(editing.id, payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "factories",
+          targetRecord: editing.id,
+          action: "update",
+          before,
+          after: payload,
+          note: "Admin cập nhật nhà máy",
+        });
       } else {
-        await pb.collection("factories").create(payload);
+        const created = await pb.collection("factories").create(payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "factories",
+          targetRecord: created.id,
+          action: "create",
+          after: payload,
+          note: "Admin tạo nhà máy mới",
+        });
       }
       toast.success("Đã lưu");
       setEditing(null);
@@ -402,10 +556,130 @@ function FactoriesTab() {
     }
   };
 
+  const saveAllowAfterLeave = async (checked: boolean) => {
+    setAllowAfterLeaveSaving(checked);
+    setAllowAfterLeavePending(true);
+    try {
+      if (appSettings.id) {
+        await pb.collection("app_settings").update(appSettings.id, {
+          allow_advance_after_leave: checked,
+        });
+      } else {
+        await pb.collection("app_settings").create({
+          allow_advance_after_leave: checked,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["app_settings"] });
+      toast.success(
+        checked ? "Đã cho phép báo ứng khi NLĐ đã nghỉ" : "Đã tắt báo ứng khi NLĐ đã nghỉ",
+      );
+    } catch (e: any) {
+      setAllowAfterLeaveSaving(!checked);
+      toast.error(e?.message || "Không thể lưu cài đặt báo ứng sau nghỉ");
+    } finally {
+      setAllowAfterLeavePending(false);
+    }
+  };
+
+  const openAdvanceEditor = (factory: Factory) => {
+    setEditingAdvanceFactory(factory);
+    setAdvanceLimitText(formatMoneyInput(String(factory.advance_limit || 0)));
+  };
+
+  const saveAdvanceLimit = async () => {
+    if (!editingAdvanceFactory) return;
+    const advanceLimit = Math.max(0, parseMoneyInput(advanceLimitText));
+    setAdvanceSaving(true);
+    try {
+      const before = items.find((item) => item.id === editingAdvanceFactory.id);
+      const status = editingAdvanceFactory.status === "inactive" ? "inactive" : "active";
+      await pb.collection("factories").update(editingAdvanceFactory.id, {
+        advance_limit: advanceLimit,
+        status,
+      });
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "factories",
+        targetRecord: editingAdvanceFactory.id,
+        action: "update",
+        before,
+        after: { advance_limit: advanceLimit, status },
+        note: "Admin cập nhật hạn mức ứng tiền theo nhà máy",
+      });
+      setItems((current) =>
+        current.map((item) =>
+          item.id === editingAdvanceFactory.id
+            ? { ...item, advance_limit: advanceLimit, status }
+            : item,
+        ),
+      );
+      setEditingAdvanceFactory(null);
+      toast.success("Đã lưu hạn mức ứng tiền");
+    } catch (e: any) {
+      toast.error(e?.message || "Không thể lưu hạn mức ứng tiền");
+    } finally {
+      setAdvanceSaving(false);
+    }
+  };
+
+  const applyAdvanceLimitToAll = async () => {
+    const advanceLimit = Math.max(0, parseMoneyInput(bulkAdvanceLimit));
+    if (!items.length) {
+      toast.warning("Chưa có nhà máy để áp dụng");
+      setBulkConfirmOpen(false);
+      return;
+    }
+    setBulkSaving(true);
+    try {
+      for (const factory of items) {
+        const before = factory;
+        const status = factory.status === "inactive" ? "inactive" : "active";
+        await pb.collection("factories").update(factory.id, {
+          advance_limit: advanceLimit,
+          status,
+        });
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "factories",
+          targetRecord: factory.id,
+          action: "update",
+          before,
+          after: { advance_limit: advanceLimit, status },
+          note: "Admin áp dụng đồng loạt hạn mức ứng tiền cho toàn bộ nhà máy",
+        });
+      }
+      setItems((current) =>
+        current.map((factory) => ({
+          ...factory,
+          advance_limit: advanceLimit,
+          status: factory.status === "inactive" ? "inactive" : "active",
+        })),
+      );
+      setBulkConfirmOpen(false);
+      toast.success(
+        `Đã áp dụng ${advanceLimit.toLocaleString("vi-VN")} đ cho ${items.length} nhà máy`,
+      );
+    } catch (e: any) {
+      toast.error(e?.message || "Không thể áp dụng hạn mức cho toàn bộ nhà máy");
+      loadFactories();
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const remove = async (id: string) => {
     if (!confirm("Xoá nhà máy này?")) return;
     try {
+      const before = items.find((it) => it.id === id);
       await pb.collection("factories").delete(id);
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "factories",
+        targetRecord: id,
+        action: "delete",
+        before,
+        note: "Admin xoá nhà máy",
+      });
       toast.success("Đã xoá");
       loadFactories();
     } catch (e: any) {
@@ -425,9 +699,27 @@ function FactoriesTab() {
         note: editingArea?.note || "",
       };
       if (editingArea?.id) {
+        const before = areas.find((a) => a.id === editingArea.id);
         await pb.collection("recruitment_areas").update(editingArea.id, payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "recruitment_areas",
+          targetRecord: editingArea.id,
+          action: "update",
+          before,
+          after: payload,
+          note: "Admin cập nhật khu vực tuyển dụng",
+        });
       } else {
-        await pb.collection("recruitment_areas").create(payload);
+        const created = await pb.collection("recruitment_areas").create(payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "recruitment_areas",
+          targetRecord: created.id,
+          action: "create",
+          after: payload,
+          note: "Admin tạo khu vực tuyển dụng",
+        });
       }
       toast.success("Đã lưu khu vực");
       setEditingArea(null);
@@ -440,7 +732,16 @@ function FactoriesTab() {
   const removeArea = async (id: string) => {
     if (!confirm("Xoá khu vực này?")) return;
     try {
+      const before = areas.find((a) => a.id === id);
       await pb.collection("recruitment_areas").delete(id);
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "recruitment_areas",
+        targetRecord: id,
+        action: "delete",
+        before,
+        note: "Admin xoá khu vực tuyển dụng",
+      });
       toast.success("Đã xoá khu vực");
       loadAreas();
     } catch (e: any) {
@@ -448,8 +749,151 @@ function FactoriesTab() {
     }
   };
 
+  const saveMainHouse = async () => {
+    const name = editingMainHouse?.name?.trim();
+    if (!name) {
+      toast.error("Tên đơn vị bắt buộc");
+      return;
+    }
+    const duplicate = mainHouses.find(
+      (h) => h.name.toLowerCase() === name.toLowerCase() && h.id !== editingMainHouse?.id,
+    );
+    if (duplicate) {
+      toast.error(`Đơn vị "${duplicate.name}" đã tồn tại`);
+      return;
+    }
+    try {
+      const payload = {
+        name,
+        address: editingMainHouse?.address || "",
+        hotline: editingMainHouse?.hotline || "",
+        note: editingMainHouse?.note || "",
+        status: editingMainHouse?.status || "active",
+      };
+      if (editingMainHouse?.id) {
+        const before = mainHouses.find((m) => m.id === editingMainHouse.id);
+        await pb.collection("recruitment_entities").update(editingMainHouse.id, payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "recruitment_entities",
+          targetRecord: editingMainHouse.id,
+          action: "update",
+          before,
+          after: payload,
+          note: "Admin cập nhật đơn vị Nhà chính & Đối tác",
+        });
+      } else {
+        const created = await pb.collection("recruitment_entities").create(payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "recruitment_entities",
+          targetRecord: created.id,
+          action: "create",
+          after: payload,
+          note: "Admin tạo đơn vị Nhà chính & Đối tác",
+        });
+      }
+      toast.success("Đã lưu đơn vị");
+      setEditingMainHouse(null);
+      loadMainHouses();
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi lưu đơn vị");
+    }
+  };
+
+  const removeMainHouse = async (id: string) => {
+    if (!confirm("Xoá đơn vị này?")) return;
+    try {
+      const before = mainHouses.find((m) => m.id === id);
+      await pb.collection("recruitment_entities").delete(id);
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "recruitment_entities",
+        targetRecord: id,
+        action: "delete",
+        before,
+        note: "Admin xoá đơn vị Nhà chính & Đối tác",
+      });
+      toast.success("Đã xoá đơn vị");
+      loadMainHouses();
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi xoá đơn vị");
+    }
+  };
+
   return (
     <div className="space-y-3">
+      <Card className="space-y-3 rounded-2xl border-border/70 p-3 shadow-soft">
+        <div className="flex items-start gap-2">
+          <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div>
+            <div className="text-sm font-semibold">Cài đặt ứng tiền theo nhà máy</div>
+            <div className="text-[11px] text-muted-foreground">
+              Hạn mức được lấy theo lịch sử đi làm gần nhất của NLĐ. 0 đ nghĩa là không cho phép báo
+              ứng.
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3">
+          <div className="min-w-0">
+            <div className="text-xs font-medium">Cho phép báo ứng khi NLĐ đã nghỉ</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              Mặc định tắt; khi bật sử dụng nhà máy của lịch sử gần nhất.
+            </div>
+          </div>
+          <Switch
+            checked={allowAfterLeaveSaving}
+            onCheckedChange={saveAllowAfterLeave}
+            disabled={allowAfterLeavePending}
+            aria-label="Cho phép báo ứng khi NLĐ đã nghỉ"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Hạn mức áp dụng nhanh cho toàn bộ nhà máy</Label>
+          <div className="flex gap-2">
+            <Input
+              className="min-w-0 flex-1 rounded-xl"
+              inputMode="numeric"
+              placeholder="Nhập số tiền, 0 để tắt"
+              value={bulkAdvanceLimit}
+              onChange={(event) => setBulkAdvanceLimit(formatMoneyInput(event.target.value))}
+            />
+            <Button
+              type="button"
+              className="shrink-0 rounded-xl"
+              onClick={() => setBulkConfirmOpen(true)}
+              disabled={bulkSaving || !bulkAdvanceLimit.trim()}
+            >
+              Áp dụng
+            </Button>
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            Sau khi áp dụng, Admin vẫn có thể chỉnh riêng từng nhà máy bên dưới.
+          </div>
+        </div>
+      </Card>
+
+      <Dialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
+        <DialogContent className="w-[calc(100%-2rem)] rounded-2xl sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Áp dụng hạn mức cho toàn bộ nhà máy?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Tất cả {items.length} nhà máy sẽ được đặt hạn mức{" "}
+            {parseMoneyInput(bulkAdvanceLimit).toLocaleString("vi-VN")} đ. Thao tác này ghi đè hạn
+            mức riêng hiện tại.
+          </p>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setBulkConfirmOpen(false)}>
+              Huỷ
+            </Button>
+            <Button type="button" onClick={applyAdvanceLimitToAll} disabled={bulkSaving}>
+              {bulkSaving ? "Đang áp dụng..." : "Xác nhận áp dụng"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Collapsible open={factoriesOpen} onOpenChange={setFactoriesOpen}>
         <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
           <div className="flex items-center justify-between gap-2">
@@ -477,15 +921,33 @@ function FactoriesTab() {
           </div>
 
           <CollapsibleContent className="mt-3 space-y-3">
-            {loading && (
-              <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
+            {items.length > 3 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="rounded-xl pl-9 text-xs"
+                  placeholder="Tìm nhà máy..."
+                  value={factorySearch}
+                  onChange={(e) => setFactorySearch(e.target.value)}
+                />
+              </div>
             )}
+            {loading && items.length === 0 ? (
+              <DataLoadingState variant="list" label="Đang tải danh sách nhà máy..." rows={3} />
+            ) : loading ? (
+              <DataLoadingState variant="inline" label="Đang cập nhật danh sách nhà máy..." />
+            ) : null}
             {!loading && items.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
                 Chưa có nhà máy. Bấm nút + để thêm.
               </div>
             )}
-            {items.map((f) => (
+            {!loading && items.length > 0 && filteredFactories.length === 0 && (
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                Không tìm thấy nhà máy phù hợp
+              </div>
+            )}
+            {filteredFactories.map((f) => (
               <div
                 key={f.id}
                 className="list-card border-l-[color:var(--status-info)] flex items-start gap-3"
@@ -501,7 +963,7 @@ function FactoriesTab() {
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="mt-0.5 block text-[11px] text-muted-foreground hover:text-primary hover:underline"
+                      className="mt-0.5 block truncate text-[11px] text-muted-foreground hover:text-primary hover:underline"
                     >
                       📍 {f.address}
                     </a>
@@ -513,8 +975,31 @@ function FactoriesTab() {
                     <CalendarDays className="h-3 w-3" />
                     Chốt công ngày {f.attendance_cutoff_day || 31}
                   </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground">
+                      Hạn mức ứng tiền: {Number(f.advance_limit || 0).toLocaleString("vi-VN")} đ
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-lg px-2.5 text-[11px]"
+                      onClick={() => openAdvanceEditor(f)}
+                    >
+                      <Wallet className="h-3.5 w-3.5" />
+                      Cài hạn mức
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex gap-1">
+                  <button
+                    onClick={() => setManagingFactory(f)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
+                    aria-label="Cấp quyền quản lý"
+                    title="Cấp quyền quản lý"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                  </button>
                   <button
                     onClick={() => setEditing(f)}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
@@ -576,6 +1061,22 @@ function FactoriesTab() {
               </div>
             </div>
             <div>
+              <Label className="text-xs">Hạn mức báo ứng</Label>
+              <Input
+                className="mt-1 rounded-xl"
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
+                value={formatMoneyInput(String(editing?.advance_limit || 0))}
+                onChange={(e) =>
+                  setEditing({ ...editing, advance_limit: parseMoneyInput(e.target.value) })
+                }
+              />
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                Hạn mức tối đa cho mỗi NLĐ tại nhà máy này. Nhập 0 để không cho phép báo ứng.
+              </div>
+            </div>
+            <div>
               <Label className="text-xs">Ghi chú</Label>
               <Textarea
                 className="mt-1 rounded-xl"
@@ -595,6 +1096,45 @@ function FactoriesTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={!!editingAdvanceFactory}
+        onOpenChange={(open) => !open && setEditingAdvanceFactory(null)}
+      >
+        <DialogContent className="w-[calc(100%-2rem)] rounded-2xl sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Hạn mức ứng tiền · {editingAdvanceFactory?.name || "Nhà máy"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label className="text-xs">Hạn mức tối đa cho mỗi NLĐ</Label>
+            <Input
+              className="rounded-xl"
+              inputMode="numeric"
+              placeholder="0"
+              value={advanceLimitText}
+              onChange={(event) => setAdvanceLimitText(formatMoneyInput(event.target.value))}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Nhập 0 đ để tạm khoá báo ứng tại nhà máy này.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setEditingAdvanceFactory(null)}>
+              Huỷ
+            </Button>
+            <Button type="button" onClick={saveAdvanceLimit} disabled={advanceSaving}>
+              {advanceSaving ? "Đang lưu..." : "Lưu hạn mức"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <FactoryManagersDialog
+        factoryId={managingFactory?.id || null}
+        factoryName={managingFactory?.name || ""}
+        open={!!managingFactory}
+        onOpenChange={(open) => !open && setManagingFactory(null)}
+      />
 
       <Collapsible open={areasOpen} onOpenChange={setAreasOpen}>
         <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
@@ -623,17 +1163,33 @@ function FactoriesTab() {
           </div>
 
           <CollapsibleContent className="mt-3 space-y-3">
-            {areasLoading && (
-              <div className="py-6 text-center text-sm text-muted-foreground">
-                Đang tải khu vực...
+            {areas.length > 3 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="rounded-xl pl-9 text-xs"
+                  placeholder="Tìm khu vực..."
+                  value={areaSearch}
+                  onChange={(e) => setAreaSearch(e.target.value)}
+                />
               </div>
             )}
+            {areasLoading && areas.length === 0 ? (
+              <DataLoadingState variant="list" label="Đang tải khu vực tuyển dụng..." rows={3} />
+            ) : areasLoading ? (
+              <DataLoadingState variant="inline" label="Đang cập nhật khu vực tuyển dụng..." />
+            ) : null}
             {!areasLoading && areas.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
                 Chưa có khu vực. Bấm nút + để thêm.
               </div>
             )}
-            {areas.map((area) => (
+            {!areasLoading && areas.length > 0 && filteredAreas.length === 0 && (
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                Không tìm thấy khu vực phù hợp
+              </div>
+            )}
+            {filteredAreas.map((area) => (
               <div
                 key={area.id}
                 className="list-card border-l-[color:var(--status-success)] flex items-start gap-3"
@@ -700,312 +1256,176 @@ function FactoriesTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
 
-/* ───────── USERS ───────── */
-
-function UsersTab() {
-  const [users, setUsers] = useState<any[]>([]);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [requireApproval, setRequireApproval] = useState(true);
-  const [settingsId, setSettingsId] = useState<string | null>(null);
-  const [pendingApprovalValue, setPendingApprovalValue] = useState<boolean | null>(null);
-  const [adminPassword, setAdminPassword] = useState("");
-  const [confirmingApproval, setConfirmingApproval] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await pb.collection("users").getFullList({ sort: "-created" });
-      setUsers(res as any);
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi tải user");
-    } finally {
-      setLoading(false);
-    }
-
-    try {
-      const s = await pb.collection("settings").getList(1, 1);
-      if (s.items[0]) {
-        setSettingsId(s.items[0].id);
-        setRequireApproval(Boolean(s.items[0].require_approval));
-      }
-    } catch {
-      // Settings collection may be initialized later by another admin screen.
-    }
-  };
-  useEffect(() => {
-    load();
-  }, []);
-
-  const toggleApproved = async (u: any) => {
-    const approved = isUserApproved(u);
-    try {
-      await pb.collection("users").update(u.id, {
-        approvalStatus: approved ? "pending" : "approved",
-        approved: approved ? "false" : "true",
-        status: approved ? "disabled" : "active",
-      });
-      toast.success(approved ? "Đã huỷ duyệt" : "Đã duyệt");
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
-    }
-  };
-
-  const toggleRole = async (u: any) => {
-    const newRole = u.role === "admin" ? "user" : "admin";
-    if (!confirm(`Đổi vai trò sang ${newRole}?`)) return;
-    try {
-      await pb.collection("users").update(u.id, { role: newRole });
-      toast.success("Đã đổi vai trò");
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
-    }
-  };
-
-  const remove = async (u: any) => {
-    if (!confirm(`Xoá user ${u.username || u.full_name}?`)) return;
-    try {
-      await pb.collection("users").delete(u.id);
-      toast.success("Đã xoá");
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
-    }
-  };
-
-  const toggleApprovalRequirement = async (val: boolean) => {
-    setRequireApproval(val);
-    try {
-      if (settingsId) {
-        await pb.collection("settings").update(settingsId, { require_approval: val });
-      } else {
-        const r = await pb.collection("settings").create({ require_approval: val });
-        setSettingsId(r.id);
-      }
-      toast.success("Đã cập nhật kiểm duyệt đăng ký");
-    } catch (e: any) {
-      setRequireApproval((prev) => !prev);
-      toast.error(e?.message || "Lỗi cập nhật");
-    }
-  };
-
-  const requestToggleApprovalRequirement = (val: boolean) => {
-    setPendingApprovalValue(val);
-    setAdminPassword("");
-  };
-
-  const closeApprovalConfirm = () => {
-    if (confirmingApproval) return;
-    setPendingApprovalValue(null);
-    setAdminPassword("");
-  };
-
-  const confirmToggleApprovalRequirement = async () => {
-    if (pendingApprovalValue === null) return;
-    const admin = pb.authStore.record as any;
-    const identity = admin?.username || admin?.email;
-    if (!identity) {
-      toast.error("Không xác định được tài khoản admin");
-      return;
-    }
-    if (!adminPassword) {
-      toast.error("Nhập mật khẩu admin");
-      return;
-    }
-
-    setConfirmingApproval(true);
-    try {
-      const res = await fetch("/api/public/pocketbase-auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identity, password: adminPassword }),
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload?.message || "Mật khẩu admin không đúng");
-      if (payload?.record?.id !== admin.id || payload?.record?.role !== "admin") {
-        throw new Error("Tài khoản xác thực không phải admin hiện tại");
-      }
-
-      await toggleApprovalRequirement(pendingApprovalValue);
-      closeApprovalConfirm();
-    } catch (e: any) {
-      toast.error(e?.message || "Không xác thực được mật khẩu admin");
-    } finally {
-      setConfirmingApproval(false);
-    }
-  };
-
-  const filtered = users.filter((u) => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return (
-      (u.username || "").toLowerCase().includes(s) ||
-      (u.full_name || "").toLowerCase().includes(s) ||
-      (u.phone || "").toLowerCase().includes(s)
-    );
-  });
-
-  return (
-    <Tabs defaultValue="accounts" className="space-y-3">
-      <TabsList className="grid h-10 w-full grid-cols-2 rounded-2xl">
-        <TabsTrigger value="accounts" className="rounded-xl text-xs">
-          Tài khoản
-        </TabsTrigger>
-        <TabsTrigger value="delegations" className="rounded-xl text-xs">
-          Ủy quyền
-        </TabsTrigger>
-      </TabsList>
-
-      <TabsContent value="accounts" className="mt-0 space-y-3">
-        <Card className="flex items-center gap-3 rounded-2xl border-border/60 p-3.5 shadow-soft">
-          <div className="rounded-xl bg-primary/10 p-2 text-primary">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <Label className="text-sm font-semibold">Yêu cầu duyệt khi đăng ký</Label>
-            <div className="text-[11px] text-muted-foreground">
-              Tắt để user tạo tài khoản và sử dụng ngay.
-            </div>
-          </div>
-          <Switch checked={requireApproval} onCheckedChange={requestToggleApprovalRequirement} />
-        </Card>
-
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="rounded-full pl-9"
-            placeholder="Tìm theo tên / username / SĐT"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        <div className="px-1 text-xs text-muted-foreground">
-          Tổng: {users.length} · Hiển thị: {filtered.length}
-        </div>
-
-        {loading && (
-          <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
-        )}
-        {!loading && filtered.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
-            Không có user.
-          </div>
-        )}
-        {filtered.map((u) => {
-          const avatar = u.avatar ? fileUrl(u, u.avatar) : "";
-          const approved = isUserApproved(u);
-          const borderTone = approved
-            ? "border-l-[color:var(--status-success)]"
-            : "border-l-[color:var(--status-warning)]";
-          return (
-            <div key={u.id} className={`list-card flex items-start gap-3 ${borderTone}`}>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
-                {avatar ? (
-                  <img src={avatar} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="text-sm font-semibold text-muted-foreground">
-                    {(u.full_name || u.username || "?").slice(0, 1).toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  @{u.username} {u.phone && `· ${u.phone}`}
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  <span className={`chip ${u.role === "admin" ? "chip-info" : "chip-neutral"}`}>
-                    {u.role === "admin" && <ShieldCheck className="h-3 w-3" />}
-                    {u.role === "admin" ? "Admin" : "User"}
-                  </span>
-                  <span className={`chip ${approved ? "chip-success" : "chip-warning"}`}>
-                    {approved ? "Đã duyệt" : "Chờ duyệt"}
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1">
-                <button
-                  onClick={() => toggleApproved(u)}
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                    approved
-                      ? "text-[color:var(--status-warning-fg)] hover:bg-[color:var(--status-warning-bg)]"
-                      : "text-[color:var(--status-success-fg)] hover:bg-[color:var(--status-success-bg)]"
-                  }`}
-                  title={approved ? "Huỷ duyệt" : "Duyệt"}
-                >
-                  {approved ? <X className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                </button>
-                <button
-                  onClick={() => toggleRole(u)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
-                  title="Đổi vai trò"
-                >
-                  <ShieldCheck className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => remove(u)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
-                  title="Xoá"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-
-        <Dialog
-          open={pendingApprovalValue !== null}
-          onOpenChange={(open) => !open && closeApprovalConfirm()}
-        >
-          <DialogContent className="rounded-2xl">
-            <DialogHeader>
-              <DialogTitle>Xác nhận mật khẩu admin</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Label className="text-xs">Mật khẩu admin</Label>
-              <Input
-                type="password"
-                className="rounded-xl"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") confirmToggleApprovalRequirement();
-                }}
-                autoComplete="current-password"
-                autoFocus
-              />
-              <div className="text-xs text-muted-foreground">
-                Sau khi xác thực, hệ thống sẽ {pendingApprovalValue ? "bật" : "tắt"} yêu cầu duyệt
-                khi đăng ký.
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={closeApprovalConfirm} className="rounded-xl">
-                Huỷ
-              </Button>
-              <Button
-                onClick={confirmToggleApprovalRequirement}
-                disabled={confirmingApproval}
-                className="rounded-xl"
+      <Collapsible open={mainHousesOpen} onOpenChange={setMainHousesOpen}>
+        <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
+          <div className="flex items-center justify-between gap-2">
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                aria-label="Thu gọn hoặc mở rộng danh sách Nhà chính & Đối tác"
               >
-                {confirmingApproval ? "Đang xác thực..." : "Xác nhận"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </TabsContent>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${mainHousesOpen ? "rotate-0" : "-rotate-90"}`}
+                />
+                <h2 className="text-sm font-semibold">
+                  Nhà chính & Đối tác{" "}
+                  <span className="text-muted-foreground">({mainHouses.length})</span>
+                </h2>
+              </button>
+            </CollapsibleTrigger>
+            <button
+              onClick={() => setEditingMainHouse({ status: "active" })}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-soft active:scale-95"
+              aria-label="Thêm đơn vị"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
 
-      <TabsContent value="delegations" className="mt-0">
-        <DelegationPanel mode="admin" />
-      </TabsContent>
-    </Tabs>
+          <CollapsibleContent className="mt-3 space-y-3">
+            {mainHouses.length > 3 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="rounded-xl pl-9 text-xs"
+                  placeholder="Tìm Nhà chính hoặc Đối tác..."
+                  value={mainHouseSearch}
+                  onChange={(e) => setMainHouseSearch(e.target.value)}
+                />
+              </div>
+            )}
+            {mainHousesLoading && mainHouses.length === 0 ? (
+              <DataLoadingState variant="list" label="Đang tải danh sách đơn vị..." rows={3} />
+            ) : mainHousesLoading ? (
+              <DataLoadingState variant="inline" label="Đang cập nhật danh sách đơn vị..." />
+            ) : null}
+            {!mainHousesLoading && mainHouses.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
+                Chưa có đơn vị. Bấm nút + để thêm.
+              </div>
+            )}
+            {!mainHousesLoading && mainHouses.length > 0 && filteredMainHouses.length === 0 && (
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                Không tìm thấy đơn vị phù hợp
+              </div>
+            )}
+            {filteredMainHouses.map((house) => (
+              <div
+                key={house.id}
+                className="list-card border-l-[color:var(--status-warning)] flex items-start gap-3"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Home className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{house.name}</div>
+                  <div className="mt-0.5 text-[10px] font-medium text-muted-foreground">
+                    {house.status === "inactive" ? "Ngừng sử dụng" : "Đang hoạt động"}
+                  </div>
+                  {house.address && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(house.address)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-0.5 block text-[11px] text-muted-foreground hover:text-primary hover:underline"
+                    >
+                      📍 {house.address}
+                    </a>
+                  )}
+                  {house.hotline && (
+                    <div className="text-[11px] text-muted-foreground">📞 {house.hotline}</div>
+                  )}
+                  {house.note && (
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">{house.note}</div>
+                  )}
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setEditingMainHouse(house)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+                    aria-label="Sửa đơn vị"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => removeMainHouse(house.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
+                    aria-label="Xoá đơn vị"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+
+      <Dialog open={!!editingMainHouse} onOpenChange={(o) => !o && setEditingMainHouse(null)}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingMainHouse?.id ? "Sửa đơn vị" : "Thêm đơn vị"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Field
+              label="Tên đơn vị *"
+              value={editingMainHouse?.name || ""}
+              onChange={(v) => setEditingMainHouse({ ...editingMainHouse, name: v })}
+            />
+            <Field
+              label="Địa chỉ"
+              value={editingMainHouse?.address || ""}
+              onChange={(v) => setEditingMainHouse({ ...editingMainHouse, address: v })}
+            />
+            <Field
+              label="Hotline"
+              value={editingMainHouse?.hotline || ""}
+              onChange={(v) => setEditingMainHouse({ ...editingMainHouse, hotline: v })}
+            />
+            <div className="space-y-1">
+              <Label className="text-xs">Trạng thái</Label>
+              <Select
+                value={editingMainHouse?.status || "active"}
+                onValueChange={(status: "active" | "inactive") =>
+                  setEditingMainHouse({ ...editingMainHouse, status })
+                }
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Đang hoạt động</SelectItem>
+                  <SelectItem value="inactive">Ngừng sử dụng</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Ghi chú</Label>
+              <Textarea
+                className="mt-1 rounded-xl"
+                rows={3}
+                value={editingMainHouse?.note || ""}
+                onChange={(e) => setEditingMainHouse({ ...editingMainHouse, note: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditingMainHouse(null)}
+              className="rounded-xl"
+            >
+              Huỷ
+            </Button>
+            <Button onClick={saveMainHouse} className="rounded-xl">
+              <Save className="h-4 w-4" /> Lưu
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
