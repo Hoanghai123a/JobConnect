@@ -17,6 +17,7 @@ import { installPwaPromptListeners } from "@/lib/pwa-install";
 import { RoamingPet } from "@/components/garden/RoamingPet";
 import { BrandHeadLinks } from "@/components/layout/BrandHeadLinks";
 import { PushPermissionPrompt } from "@/components/layout/PushPermissionPrompt";
+import { InstallFloatingBanner } from "@/components/layout/InstallFloatingBanner";
 import { DEVICE_PROFILE_BOOTSTRAP } from "@/lib/device-profile";
 
 const CHUNK_RELOAD_KEY = "jobconnect.chunk-reload-path";
@@ -151,6 +152,7 @@ function RootComponent() {
         <PushPermissionPrompt />
         <div className="app-shell">
           <Outlet />
+          <InstallFloatingBanner />
           <RoamingPet />
           <Toaster richColors position="top-center" />
         </div>

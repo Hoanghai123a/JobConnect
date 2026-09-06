@@ -1,10 +1,20 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useState, type ComponentType, type ReactNode } from "react";
-import { ChevronLeft, Download, Home, Info, LogIn, LogOut, Settings, Upload, User, Users } from "lucide-react";
+import {
+  ChevronLeft,
+  Download,
+  Home,
+  Info,
+  LogIn,
+  LogOut,
+  Settings,
+  Upload,
+  User,
+  Users,
+} from "lucide-react";
 import { LoginRequiredDialog } from "@/components/auth/LoginRequiredDialog";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { InstallFloatingBanner } from "./InstallFloatingBanner";
 import { useStaffExcelExport } from "@/components/staff/staff-excel-export-context";
 
 export type RoleNavigationItem = {
@@ -66,7 +76,6 @@ export function BottomNav() {
 
   return (
     <>
-      <InstallFloatingBanner />
       <nav
         aria-label="Điều hướng chính"
         className="mobile-bottom-nav fixed bottom-0 left-1/2 z-40 w-full max-w-[30rem] -translate-x-1/2 border-t border-border/70 bg-card/95 backdrop-blur-xl desktop:hidden"
@@ -110,9 +119,16 @@ export function BottomNav() {
                     </span>
                   </button>
                 ) : (
-                  <Link to={item.to as never} aria-current={active ? "page" : undefined} className={className}>
+                  <Link
+                    to={item.to as never}
+                    aria-current={active ? "page" : undefined}
+                    className={className}
+                  >
                     <Icon
-                      className={cn("h-[22px] w-[22px] transition-transform", active && "scale-105")}
+                      className={cn(
+                        "h-[22px] w-[22px] transition-transform",
+                        active && "scale-105",
+                      )}
                     />
                     <span className="line-clamp-2 text-center text-[11px] leading-[1.1]">
                       {item.label}

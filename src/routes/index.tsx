@@ -997,9 +997,10 @@ function GuestDashboard({
           <FeatureTile
             to="/attendance"
             label="Tự chấm công"
-            description="Ghi nhận giờ làm"
+            description="Ghi nhận giờ làm, có thể dùng không đăng nhập"
             icon={Clock}
             variant="accent"
+            allowGuest
           />
           <FeatureTile
             to="/check-attendance"

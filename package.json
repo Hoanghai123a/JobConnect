@@ -29,6 +29,7 @@
     "pb:workforce-indexes": "node scripts/ensure-workforce-dashboard-indexes.mjs",
     "test:workforce-dashboard": "node --test --experimental-strip-types src/lib/workforce-dashboard.test.mjs",
     "test:salary": "node --test --experimental-strip-types src/lib/salary.test.mjs",
+    "test:local-attendance": "node --test --experimental-strip-types src/lib/local-attendance.test.mjs",
     "pb:audit-cccd-versions": "node scripts/migrate-user-cccd-images.mjs",
     "pb:migrate-cccd-versions": "node scripts/migrate-user-cccd-images.mjs --apply",
     "pb:finalize-cccd-versions": "node scripts/migrate-user-cccd-images.mjs --finalize",

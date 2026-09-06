@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
@@ -48,6 +48,15 @@ import {
 } from "@/lib/employment";
 import { toast } from "@/lib/toast";
 import {
+  DEFAULT_LOCAL_ATTENDANCE_PROFILE,
+  readLocalAttendance,
+  removeLocalAttendanceRow,
+  upsertLocalAttendanceRow,
+  writeLocalAttendance,
+  type LocalAttendanceProfile,
+  type LocalAttendanceState,
+} from "@/lib/local-attendance";
+import {
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -60,6 +69,8 @@ import {
   ClipboardList,
   Settings,
   Save,
+  AlertTriangle,
+  LogIn,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/attendance")({
@@ -86,6 +97,11 @@ function getAttendanceTypeLabel(type?: AttendanceType) {
 function AttendancePage() {
   const { isAdmin } = useAuth();
   return isAdmin ? <AdminAttendance /> : <UserAttendance />;
+}
+
+function UserAttendance() {
+  const { user } = useAuth();
+  return user ? <AuthenticatedUserAttendance /> : <LocalAttendance />;
 }
 
 /* ─────────────────────────── ADMIN ─────────────────────────── */
@@ -400,7 +416,11 @@ function UserDetailMonth({
               <span className="font-medium">{r.date}</span>
               {r.is_holiday && <span className="chip chip-danger">Lễ</span>}
               {r.attendance_type && r.attendance_type !== "work" && (
-                <span className={r.attendance_type === "paid_leave" ? "chip chip-success" : "chip chip-neutral"}>
+                <span
+                  className={
+                    r.attendance_type === "paid_leave" ? "chip chip-success" : "chip chip-neutral"
+                  }
+                >
                   {getAttendanceTypeLabel(r.attendance_type)}
                 </span>
               )}
@@ -417,7 +437,7 @@ function UserDetailMonth({
 
 /* ─────────────────────────── USER ─────────────────────────── */
 
-function UserAttendance() {
+function AuthenticatedUserAttendance() {
   const { user, refresh } = useAuth();
   const [monthDate, setMonthDate] = useState(() => {
     const d = new Date();
@@ -696,11 +716,13 @@ function UserAttendance() {
             <div className="space-y-2">
               <Label className="text-xs">Trạng thái ngày</Label>
               <div className="grid grid-cols-3 gap-2 rounded-md border bg-background p-1">
-                {([
-                  ["work", "Làm việc"],
-                  ["off", "Nghỉ"],
-                  ["paid_leave", "Nghỉ phép"],
-                ] as const).map(([value, label]) => (
+                {(
+                  [
+                    ["work", "Làm việc"],
+                    ["off", "Nghỉ"],
+                    ["paid_leave", "Nghỉ phép"],
+                  ] as const
+                ).map(([value, label]) => (
                   <button
                     key={value}
                     type="button"
@@ -807,6 +829,418 @@ function UserAttendance() {
   );
 }
 
+function LocalAttendance() {
+  const navigate = useNavigate();
+  const [state, setState] = useState<LocalAttendanceState>(() => readLocalAttendance());
+  const [monthDate, setMonthDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d;
+  });
+  const [profileOpen, setProfileOpen] = useState(() => !readLocalAttendance().profile);
+  const [entryOpen, setEntryOpen] = useState(false);
+  const [date, setDate] = useState(todayStr());
+  const [shift, setShift] = useState<Shift>("day");
+  const [isHoliday, setIsHoliday] = useState(false);
+  const [attendanceType, setAttendanceType] = useState<AttendanceType>("work");
+  const [hcHours, setHcHours] = useState(8);
+  const [otHours, setOtHours] = useState(0);
+  const [saving, setSaving] = useState(false);
+
+  const profile = state.profile || DEFAULT_LOCAL_ATTENDANCE_PROFILE;
+  const payrollPeriod = useMemo(
+    () => getPayrollPeriod(monthDate, normalizeCutoffDay(profile.attendance_cutoff_day)),
+    [monthDate, profile.attendance_cutoff_day],
+  );
+  const rows = state.rows.filter(
+    (row) => row.date >= payrollPeriod.start && row.date <= payrollPeriod.end,
+  );
+  const buckets = useMemo(() => aggregate(rows), [rows]);
+  const salary = useMemo(
+    () =>
+      calcSalary(buckets, {
+        lcb: profile.lcb,
+        chuyen_can: profile.chuyen_can,
+        doi_song: profile.doi_song,
+        tham_nien: profile.tham_nien,
+        rows,
+        periodStart: payrollPeriod.start,
+      }),
+    [buckets, payrollPeriod.start, profile, rows],
+  );
+  const visibleRateCells = [
+    { label: "100%", hours: buckets.r100 },
+    { label: "130%", hours: buckets.r130 },
+    { label: "150%", hours: buckets.r150 },
+    { label: "200%", hours: buckets.r200 },
+    { label: "270%", hours: buckets.r270 },
+    { label: "300%", hours: buckets.r300 },
+    { label: "390%", hours: buckets.r390 },
+  ].filter((cell) => cell.hours > 0);
+
+  const saveProfile = (nextProfile: LocalAttendanceProfile) => {
+    const nextState = { ...state, profile: nextProfile };
+    if (!writeLocalAttendance(nextState)) {
+      toast.error("Không thể lưu dữ liệu trên thiết bị");
+      return;
+    }
+    setState(nextState);
+    setProfileOpen(false);
+    toast.success("Đã lưu hồ sơ chấm công trên máy");
+  };
+
+  const openEntryForDate = (nextDate: string) => {
+    const existing = state.rows.find((row) => row.date === nextDate);
+    setDate(nextDate);
+    setShift(existing?.shift ?? "day");
+    setIsHoliday(existing?.is_holiday ?? false);
+    setAttendanceType(existing?.attendance_type ?? "work");
+    setHcHours(existing?.hc_hours ?? profile.default_hc_hours);
+    setOtHours(existing?.ot_hours ?? profile.default_ot_hours);
+    setEntryOpen(true);
+  };
+
+  const changeAttendanceType = (nextType: AttendanceType) => {
+    setAttendanceType(nextType);
+    if (nextType === "off") {
+      setShift("day");
+      setHcHours(0);
+      setOtHours(0);
+      setIsHoliday(false);
+    } else if (nextType === "paid_leave") {
+      setShift("day");
+      setHcHours(8);
+      setOtHours(0);
+      setIsHoliday(false);
+    } else {
+      setHcHours(profile.default_hc_hours);
+      setOtHours(profile.default_ot_hours);
+    }
+  };
+
+  const submit = () => {
+    if (saving) return;
+    setSaving(true);
+    const normalizedPayload =
+      attendanceType === "off"
+        ? { shift: "day" as Shift, is_holiday: false, hc_hours: 0, ot_hours: 0 }
+        : attendanceType === "paid_leave"
+          ? { shift: "day" as Shift, is_holiday: false, hc_hours: 8, ot_hours: 0 }
+          : {
+              shift,
+              is_holiday: isHoliday,
+              hc_hours: Number(hcHours) || 0,
+              ot_hours: Number(otHours) || 0,
+            };
+    const nextState = upsertLocalAttendanceRow(state, {
+      date,
+      ...normalizedPayload,
+      attendance_type: attendanceType,
+    });
+    if (!writeLocalAttendance(nextState)) toast.error("Không thể lưu dữ liệu trên thiết bị");
+    else {
+      setState(nextState);
+      setEntryOpen(false);
+      toast.success("Đã lưu chấm công trên máy");
+    }
+    setSaving(false);
+  };
+
+  const selectedRow = state.rows.find((row) => row.date === date);
+  const remove = () => {
+    if (!selectedRow) return;
+    const nextState = removeLocalAttendanceRow(state, selectedRow.id);
+    if (!writeLocalAttendance(nextState)) toast.error("Không thể cập nhật dữ liệu trên thiết bị");
+    else {
+      setState(nextState);
+      setEntryOpen(false);
+      toast.success("Đã xóa ngày chấm công");
+    }
+  };
+
+  return (
+    <PageContainer
+      title="Tự chấm công không đăng nhập"
+      subtitle={
+        profile.display_name
+          ? `Xin chào ${profile.display_name}`
+          : "Ghi nhận giờ làm trên thiết bị này"
+      }
+      className="worker-attendance-page"
+    >
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-5 text-amber-950">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold">Dữ liệu chỉ lưu trên máy và trình duyệt này</div>
+            <p className="mt-1 text-xs leading-5 text-amber-900/80">
+              Chế độ không đăng nhập không đồng bộ với công ty và có thể mất khi xóa dữ liệu trình
+              duyệt. Đăng nhập để dùng đầy đủ tính năng và lưu dữ liệu an toàn hơn.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button type="button" size="sm" onClick={() => navigate({ to: "/login" })}>
+                <LogIn className="h-4 w-4" /> Đăng nhập
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setProfileOpen(true)}
+              >
+                <Settings className="h-4 w-4" /> Hồ sơ local
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <Card className="worker-attendance-salary overflow-hidden">
+          <div className="gradient-accent p-4 text-accent-foreground">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase opacity-80">Lương tạm tính trên máy</div>
+                <div className="text-xl font-bold">{profile.display_name || "Chưa tạo hồ sơ"}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProfileOpen(true)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 transition hover:bg-white/30"
+                aria-label="Cài đặt hồ sơ local"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-3 text-3xl font-extrabold tracking-tight">
+              {formatVND(salary.total)}
+            </div>
+            <div className="mt-0.5 text-xs opacity-80">
+              Lương theo giờ: {formatVND(salary.wage)} • Phụ cấp: {formatVND(salary.allowance)}
+            </div>
+          </div>
+          <div className="worker-attendance-rate-grid grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
+            {visibleRateCells.map((cell) => (
+              <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
+            ))}
+            <RateCell label="LCB" hours={profile.lcb} suffix="₫" className="col-span-2" />
+          </div>
+        </Card>
+
+        <div className="flex items-center justify-center rounded-2xl shadow-soft">
+          <MonthSwitcher value={monthDate} onChange={setMonthDate} neutral />
+        </div>
+        <MonthCalendar period={payrollPeriod} rows={rows} onPickDate={openEntryForDate} />
+        <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-muted-foreground">
+          <span>· Chạm ngày để nhập / chỉnh sửa</span>
+          <span>· Bản local trên thiết bị</span>
+        </div>
+      </div>
+
+      <ResponsiveOverlay
+        open={entryOpen}
+        onOpenChange={setEntryOpen}
+        title={selectedRow ? "Cập nhật chấm công local" : "Nhập chấm công local"}
+        description="Dữ liệu chỉ lưu trên máy và trình duyệt hiện tại."
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <div className="space-y-2">
+            <Label className="text-xs">Trạng thái ngày</Label>
+            <div className="grid grid-cols-3 gap-2 rounded-md border bg-background p-1">
+              {(
+                [
+                  ["work", "Làm việc"],
+                  ["off", "Nghỉ"],
+                  ["paid_leave", "Nghỉ phép"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => changeAttendanceType(value)}
+                  className={`rounded px-2 py-2 text-xs font-medium transition ${attendanceType === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/60"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="min-w-0 space-y-1">
+              <Label className="text-xs">Ngày</Label>
+              <DateInput value={date} onChange={setDate} />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <Label className="text-xs">Ca</Label>
+              <ShiftToggle value={shift} onChange={setShift} disabled={attendanceType !== "work"} />
+            </div>
+          </div>
+          <label className="flex items-center gap-3 rounded-lg border bg-secondary/50 p-3">
+            <Checkbox
+              checked={isHoliday}
+              disabled={attendanceType !== "work"}
+              onCheckedChange={(checked) => setIsHoliday(checked === true)}
+            />
+            <div className="flex-1">
+              <div className="text-sm font-medium">Ngày lễ</div>
+              <div className="text-xs text-muted-foreground">Áp dụng hệ số 300% / 390%</div>
+            </div>
+          </label>
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="min-w-0 space-y-1">
+              <Label className="text-xs">Giờ hành chính</Label>
+              <Input
+                type="number"
+                inputMode="decimal"
+                step="0.5"
+                value={hcHours}
+                disabled={attendanceType !== "work"}
+                onChange={(event) => setHcHours(Number(event.target.value))}
+              />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <Label className="text-xs">Giờ tăng ca</Label>
+              <Input
+                type="number"
+                inputMode="decimal"
+                step="0.5"
+                value={otHours}
+                disabled={attendanceType !== "work"}
+                onChange={(event) => setOtHours(Number(event.target.value))}
+              />
+            </div>
+          </div>
+          <div className="flex min-w-0 gap-2">
+            {selectedRow && (
+              <Button type="button" variant="outline" className="flex-none" onClick={remove}>
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            )}
+            <Button type="submit" className="flex-1" disabled={saving}>
+              <Plus className="h-4 w-4" /> Lưu / Cập nhật
+            </Button>
+          </div>
+        </form>
+      </ResponsiveOverlay>
+
+      <LocalAttendanceProfileDialog
+        open={profileOpen}
+        onOpenChange={(open) => {
+          if (!open && !state.profile) return;
+          setProfileOpen(open);
+        }}
+        profile={profile}
+        onSave={saveProfile}
+      />
+    </PageContainer>
+  );
+}
+
+function LocalAttendanceProfileDialog({
+  open,
+  onOpenChange,
+  profile,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  profile: LocalAttendanceProfile;
+  onSave: (profile: LocalAttendanceProfile) => void;
+}) {
+  const [form, setForm] = useState(profile);
+  useEffect(() => {
+    if (open) setForm(profile);
+  }, [open, profile]);
+  return (
+    <ResponsiveOverlay
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Hồ sơ chấm công local"
+      description="Thông tin chỉ lưu trên thiết bị này."
+      presentation="full"
+    >
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!form.display_name.trim()) {
+            toast.warning("Vui lòng nhập tên hiển thị");
+            return;
+          }
+          onSave({ ...form, display_name: form.display_name.trim() });
+        }}
+      >
+        <div className="space-y-1">
+          <Label className="text-xs">
+            Tên hiển thị <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            value={form.display_name}
+            onChange={(event) => setForm({ ...form, display_name: event.target.value })}
+            placeholder="Ví dụ: Nguyễn Văn A"
+            autoFocus
+          />
+        </div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+          Hồ sơ này chỉ phục vụ tính toán tham khảo trên máy. Muốn công ty ghi nhận chính thức, hãy
+          đăng nhập.
+        </div>
+        <SettingsNumberField
+          label="Ngày chốt công (1–31, để trống = theo tháng dương lịch)"
+          value={form.attendance_cutoff_day || ""}
+          onChange={(value) => setForm({ ...form, attendance_cutoff_day: value })}
+          min={0}
+          max={31}
+          placeholder="Để trống"
+        />
+        <SettingsMoneyField
+          label="LCB (Lương cơ bản)"
+          value={form.lcb}
+          onChange={(value) => setForm({ ...form, lcb: value })}
+        />
+        <SettingsMoneyField
+          label="Chuyên cần"
+          value={form.chuyen_can}
+          onChange={(value) => setForm({ ...form, chuyen_can: value })}
+        />
+        <SettingsMoneyField
+          label="Đời sống"
+          value={form.doi_song}
+          onChange={(value) => setForm({ ...form, doi_song: value })}
+        />
+        <SettingsMoneyField
+          label="Thâm niên"
+          value={form.tham_nien}
+          onChange={(value) => setForm({ ...form, tham_nien: value })}
+        />
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+          <SettingsNumberField
+            label="Giờ HC mặc định"
+            value={form.default_hc_hours}
+            onChange={(value) => setForm({ ...form, default_hc_hours: value })}
+          />
+          <SettingsNumberField
+            label="Giờ TC mặc định"
+            value={form.default_ot_hours}
+            onChange={(value) => setForm({ ...form, default_ot_hours: value })}
+          />
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Đóng
+          </Button>
+          <Button type="submit">
+            <Save className="h-4 w-4" /> Lưu hồ sơ
+          </Button>
+        </DialogFooter>
+      </form>
+    </ResponsiveOverlay>
+  );
+}
+
 function MonthSwitcher({
   value,
   onChange,
@@ -905,10 +1339,10 @@ function MonthCalendar({
               : r.attendance_type === "off"
                 ? "border-border bg-muted/60"
                 : r.is_holiday
-              ? "border-[color:var(--status-danger)]/40 bg-[color:var(--status-danger-bg)]"
-              : r.shift === "day"
-                ? "border-[color:var(--status-warning)]/40 bg-[color:var(--status-warning-bg)]"
-                : "border-primary/40 bg-primary/10"
+                  ? "border-[color:var(--status-danger)]/40 bg-[color:var(--status-danger-bg)]"
+                  : r.shift === "day"
+                    ? "border-[color:var(--status-warning)]/40 bg-[color:var(--status-warning-bg)]"
+                    : "border-primary/40 bg-primary/10"
             : "border-border bg-card hover:bg-muted/40";
           const ringCls = isToday ? "ring-1 ring-primary/60" : "";
           const total = r ? r.hc_hours + r.ot_hours : 0;

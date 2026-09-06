@@ -1,4 +1,10 @@
-import { createFileRoute, Outlet, redirect, useLocation, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Outlet,
+  redirect,
+  useLocation,
+  useNavigate,
+} from "@tanstack/react-router";
 import { useEffect } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
@@ -9,7 +15,7 @@ import { DesktopAppShell } from "@/components/layout/DesktopAppShell";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { StaffExcelExportProvider } from "@/components/staff/StaffExcelExportProvider";
 
-const GUEST_ACCESSIBLE_PATHS = new Set(["/news", "/transport", "/counter"]);
+const GUEST_ACCESSIBLE_PATHS = new Set(["/news", "/transport", "/counter", "/attendance"]);
 
 function canGuestAccess(pathname: string) {
   return GUEST_ACCESSIBLE_PATHS.has(pathname);
@@ -42,15 +48,34 @@ function AuthLayout() {
   const { loading, user } = useAuth();
   const nav = useNavigate();
 
+  const guestAttendance =
+    !user &&
+    !loading &&
+    typeof window !== "undefined" &&
+    window.location.pathname === "/attendance";
+
   useEffect(() => {
-    if (!loading && !user) {
+    if (!loading && !user && !guestAttendance) {
       nav({ to: "/", search: { login: "1", redirect: window.location.pathname } as any });
     }
-  }, [loading, nav, user]);
+  }, [guestAttendance, loading, nav, user]);
 
-  if (loading || !user) {
+  if (loading) {
     return <DataLoadingState variant="page" label="Đang xác thực tài khoản..." rows={4} />;
   }
+
+  if (!user && guestAttendance) {
+    return (
+      <StaffExcelExportProvider>
+        <div className="pb-nav">
+          <Outlet />
+          <BottomNav />
+        </div>
+      </StaffExcelExportProvider>
+    );
+  }
+
+  if (!user) return <DataLoadingState variant="page" label="Đang mở ứng dụng..." rows={4} />;
 
   return (
     <StaffExcelExportProvider>
