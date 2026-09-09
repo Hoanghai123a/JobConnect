@@ -13,7 +13,17 @@ const baseRow = {
 
 test("trạng thái nghỉ không tạo giờ lương", () => {
   const buckets = EMPTY_BUCKETS();
-  distributeDay({ ...baseRow, shift: "night", hc_hours: 8, ot_hours: 4, is_holiday: true, attendance_type: "off" }, buckets);
+  distributeDay(
+    {
+      ...baseRow,
+      shift: "night",
+      hc_hours: 8,
+      ot_hours: 4,
+      is_holiday: true,
+      attendance_type: "off",
+    },
+    buckets,
+  );
   assert.deepEqual(buckets, EMPTY_BUCKETS());
 });
 

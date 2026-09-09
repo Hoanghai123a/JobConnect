@@ -1,21 +1,9 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useState, type ComponentType, type ReactNode } from "react";
-import {
-  ChevronLeft,
-  Download,
-  Home,
-  Info,
-  LogIn,
-  LogOut,
-  Settings,
-  Upload,
-  User,
-  Users,
-} from "lucide-react";
+import { ChevronLeft, Home, Info, LogIn, LogOut, Settings, Upload, User } from "lucide-react";
 import { LoginRequiredDialog } from "@/components/auth/LoginRequiredDialog";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { useStaffExcelExport } from "@/components/staff/staff-excel-export-context";
 
 export type RoleNavigationItem = {
   to: string;
@@ -23,7 +11,7 @@ export type RoleNavigationItem = {
   icon: ComponentType<{ className?: string }>;
   exact?: boolean;
   requiresLogin?: boolean;
-  action?: "staff-export" | "logout";
+  action?: "logout";
 };
 
 function isItemActive(item: RoleNavigationItem, pathname: string) {
@@ -37,7 +25,6 @@ export function BottomNav() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [loginOpen, setLoginOpen] = useState(false);
-  const { openStaffExcelExport } = useStaffExcelExport();
 
   const signOut = () => {
     logout();
@@ -45,31 +32,24 @@ export function BottomNav() {
   };
 
   const items: readonly RoleNavigationItem[] =
-    user?.role === "staff"
+    user?.role === "admin"
       ? [
-          { to: "/staff", label: "Trang chủ", icon: Home, exact: true },
-          { to: "/staff/workers", label: "Lao động", icon: Users },
-          { to: "/staff/export", label: "Xuất file", icon: Download, action: "staff-export" },
+          { to: "/", label: "Trang chủ", icon: Home, exact: true },
+          { to: "/admin/settings", label: "Cài đặt", icon: Settings },
+          { to: "/admin/imports", label: "Nhập liệu", icon: Upload },
           { to: "/account", label: "Tài khoản", icon: User },
         ]
-      : user?.role === "admin"
+      : user
         ? [
             { to: "/", label: "Trang chủ", icon: Home, exact: true },
-            { to: "/admin/settings", label: "Cài đặt", icon: Settings },
-            { to: "/admin/imports", label: "Nhập liệu", icon: Upload },
-            { to: "/account", label: "Tài khoản", icon: User },
+            { to: "/about", label: "Về chúng tôi", icon: Info },
+            { to: "/login", label: "Đăng xuất", icon: LogOut, action: "logout" },
           ]
-        : user
-          ? [
-              { to: "/", label: "Trang chủ", icon: Home, exact: true },
-              { to: "/about", label: "Về chúng tôi", icon: Info },
-              { to: "/login", label: "Đăng xuất", icon: LogOut, action: "logout" },
-            ]
-          : [
-              { to: "/", label: "Trang chủ", icon: Home, exact: true },
-              { to: "/login", label: "Đăng nhập", icon: LogIn, requiresLogin: true },
-              { to: "/about", label: "Về chúng tôi", icon: Info },
-            ];
+        : [
+            { to: "/", label: "Trang chủ", icon: Home, exact: true },
+            { to: "/login", label: "Đăng nhập", icon: LogIn, requiresLogin: true },
+            { to: "/about", label: "Về chúng tôi", icon: Info },
+          ];
 
   const focusMode = pathname === "/gems" || pathname === "/minesweeper";
   if (focusMode) return null;
@@ -97,14 +77,7 @@ export function BottomNav() {
 
             return (
               <li key={item.to} className="min-w-0">
-                {item.action === "staff-export" ? (
-                  <button type="button" onClick={openStaffExcelExport} className={className}>
-                    <Icon className="h-[22px] w-[22px]" />
-                    <span className="line-clamp-2 text-center text-[11px] leading-[1.1]">
-                      {item.label}
-                    </span>
-                  </button>
-                ) : item.action === "logout" ? (
+                {item.action === "logout" ? (
                   <button type="button" onClick={signOut} className={className}>
                     <Icon className="h-[22px] w-[22px]" />
                     <span className="line-clamp-2 text-center text-[11px] leading-[1.1]">

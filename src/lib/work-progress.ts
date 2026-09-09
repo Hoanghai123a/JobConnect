@@ -1,5 +1,5 @@
 ﻿import { pb } from "./pocketbase";
-import { escapePb } from "./delegations";
+import { escapePb } from "./pocketbase-utils";
 
 export const WORK_PROGRESS_COLLECTIONS = {
   tabs: "work_progress_tabs",

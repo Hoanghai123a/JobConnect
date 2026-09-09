@@ -1,20 +1,13 @@
 import { pb } from "@/lib/pocketbase";
-import { escapePb } from "@/lib/delegations";
+import { escapePb } from "@/lib/pocketbase-utils";
 import type { UserRecord } from "@/lib/pocketbase";
 
-export type AdvanceStatus = "pending" | "recruiter_approved" | "accepted" | "rejected";
+export type AdvanceStatus = "pending" | "accepted" | "rejected";
 export type RecoveryStatus = "none" | "recovered" | "unrecoverable";
 export type AdvancePayoutMethod = "bank_transfer" | "cash";
-export type AdminTab =
-  | "pending"
-  | "recruiter_approved"
-  | "accepted"
-  | "recovered"
-  | "unrecoverable"
-  | "rejected"
-  | "all";
+export type AdminTab = "pending" | "accepted" | "recovered" | "unrecoverable" | "rejected" | "all";
 
-export type AdminAdvanceSegment = "workers" | "staff";
+export type AdminAdvanceSegment = "workers";
 
 export type AdvanceRecord = {
   id: string;
@@ -51,7 +44,6 @@ export type AdvanceRecord = {
 
 export const ADVANCE_TAB_FILTERS = {
   pending: 'status="pending"',
-  recruiter_approved: 'status="recruiter_approved"',
   accepted: 'status="accepted" && (recovery_status="" || recovery_status="none")',
   recovered: 'status="accepted" && recovery_status="recovered"',
   unrecoverable: 'status="accepted" && recovery_status="unrecoverable"',
@@ -59,15 +51,14 @@ export const ADVANCE_TAB_FILTERS = {
   all: "",
 } satisfies Record<AdminTab, string>;
 
-export const LEGACY_STAFF_REQUESTED_PENDING_FILTER =
-  '(status="pending" && (requested_by.role="staff" || requested_by.role="admin"))';
+// Legacy: Not used anymore (Staff role removed)
+export const LEGACY_STAFF_REQUESTED_PENDING_FILTER = 'id=""';
 
 export const STATUS_META: Record<
   AdvanceStatus,
   { label: string; tone: "warning" | "success" | "danger" | "primary" }
 > = {
-  pending: { label: "Chờ người tuyển duyệt", tone: "warning" },
-  recruiter_approved: { label: "Chờ admin duyệt", tone: "primary" },
+  pending: { label: "Chờ admin duyệt", tone: "warning" },
   accepted: { label: "Đã tiếp nhận", tone: "success" },
   rejected: { label: "Đã từ chối", tone: "danger" },
 };
@@ -104,9 +95,8 @@ export function joinPbFilters(parts: Array<string | false | null | undefined>) {
 }
 
 export function buildAdminAdvanceSegmentFilter(segment: AdminAdvanceSegment) {
-  return segment === "workers"
-    ? '(user.role="user" || user.role="")'
-    : 'user.role="staff"';
+  // Staff segment removed - only workers remain
+  return '(user.role="user" || user.role="")';
 }
 
 export function containsAny(fields: string[], keyword: string) {
@@ -117,14 +107,12 @@ export function containsAny(fields: string[], keyword: string) {
 
 export function buildAdvanceFilter(input: {
   isAdmin: boolean;
-  isStaff: boolean;
   userId?: string;
   tab?: AdminTab;
   dateFrom?: string;
   dateTo?: string;
   search?: string;
   factoryName?: string;
-  staffSelfOnly?: boolean;
   disbursed?: "all" | "yes" | "no";
 }) {
   if (!input.isAdmin && !input.userId) return 'id=""';
@@ -146,23 +134,14 @@ export function buildAdvanceFilter(input: {
   );
 
   let roleFilter = "";
-  if (input.staffSelfOnly && input.userId) {
-    const id = escapePb(input.userId);
-    roleFilter = `(user="${id}" && requested_by="${id}" && recruiter_id="")`;
-  } else if (!input.isAdmin && !input.isStaff && input.userId) {
+  if (!input.isAdmin && input.userId) {
+    // Normal user can only see their own advances
     roleFilter = `user="${escapePb(input.userId)}"`;
-  } else if (input.isStaff && !input.isAdmin && input.userId) {
-    const currentUserId = escapePb(input.userId);
-    roleFilter = `(recruiter_id="${currentUserId}" || requested_by="${currentUserId}")`;
   }
 
   let tabFilter = "";
   if (input.tab) {
-    if (input.isAdmin && input.tab === "pending") {
-      tabFilter = `(status="recruiter_approved" || ${LEGACY_STAFF_REQUESTED_PENDING_FILTER})`;
-    } else {
-      tabFilter = ADVANCE_TAB_FILTERS[input.tab];
-    }
+    tabFilter = ADVANCE_TAB_FILTERS[input.tab];
   }
 
   const disbursedFilter =

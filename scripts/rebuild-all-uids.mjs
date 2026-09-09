@@ -22,7 +22,9 @@ const HISTORY_UID_LIMIT = 9_999;
 const APPLY_CONFIRMATION = "--maintenance-confirmed";
 
 export function normalizeUid(value) {
-  return String(value || "").trim().toUpperCase();
+  return String(value || "")
+    .trim()
+    .toUpperCase();
 }
 
 export function parseArgs(argv = process.argv.slice(2)) {
@@ -172,7 +174,11 @@ export function buildUserPlanFromRecords(users, prefix) {
   });
 }
 
-export function buildHistoryPlanFromRecords(histories, prefix, { allowCreatedDateFallback = false } = {}) {
+export function buildHistoryPlanFromRecords(
+  histories,
+  prefix,
+  { allowCreatedDateFallback = false } = {},
+) {
   const groups = new Map();
   const invalidJoinDates = [];
 
@@ -266,9 +272,12 @@ async function loadUidSafetyMeta(pb) {
   const collections = await pb.collections.getFullList();
   const targetNames = new Set(["users", "employment_histories"]);
   const targetIds = new Set(
-    collections.filter((collection) => targetNames.has(collection.name)).map((collection) => collection.id),
+    collections
+      .filter((collection) => targetNames.has(collection.name))
+      .map((collection) => collection.id),
   );
-  if (targetIds.size !== targetNames.size) throw new Error("Thiếu collection users hoặc employment_histories.");
+  if (targetIds.size !== targetNames.size)
+    throw new Error("Thiếu collection users hoặc employment_histories.");
 
   const relationFields = [];
   const unsupportedUidFields = [];
@@ -279,7 +288,8 @@ async function loadUidSafetyMeta(pb) {
         relationFields.push({ collection: collection.name, field: field.name });
       }
       if (field.type === "text" && /uid/i.test(field.name)) {
-        if (targetNames.has(collection.name) && field.name === "uid") uidFields.set(collection.name, field);
+        if (targetNames.has(collection.name) && field.name === "uid")
+          uidFields.set(collection.name, field);
         else unsupportedUidFields.push({ collection: collection.name, field: field.name });
       }
     }
@@ -340,12 +350,16 @@ function relationSnapshotSummary(snapshot) {
 async function assertPlanStillCurrent(pb, collection, plan) {
   const current = await pb.collection(collection).getFullList({ fields: "id,uid" });
   if (current.length !== plan.length) {
-    throw new Error(`${collection} đã thay đổi số lượng record kể từ lúc lập kế hoạch. Hãy chạy lại.`);
+    throw new Error(
+      `${collection} đã thay đổi số lượng record kể từ lúc lập kế hoạch. Hãy chạy lại.`,
+    );
   }
   const byId = new Map(current.map((record) => [record.id, record]));
   for (const item of plan) {
     if (String(byId.get(item.id)?.uid || "") !== item.original_uid) {
-      throw new Error(`${collection}/${item.id} đã thay đổi UID kể từ lúc lập kế hoạch. Hãy chạy lại.`);
+      throw new Error(
+        `${collection}/${item.id} đã thay đổi UID kể từ lúc lập kế hoạch. Hãy chạy lại.`,
+      );
     }
   }
 }
@@ -365,8 +379,9 @@ export function createTemporaryUids({ currentUids, count, uidField }) {
   const existing = new Set([...currentUids].map(normalizeUid).filter(Boolean));
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const token = crypto.randomBytes(8).toString("hex").slice(0, tokenLength).toUpperCase();
-    const result = Array.from({ length: count }, (_, index) =>
-      `T${token}${index.toString(36).padStart(sequenceWidth, "0").toUpperCase()}`,
+    const result = Array.from(
+      { length: count },
+      (_, index) => `T${token}${index.toString(36).padStart(sequenceWidth, "0").toUpperCase()}`,
     );
     if (result.some((candidate) => candidate.length > max || existing.has(candidate))) continue;
     return result;
@@ -384,7 +399,9 @@ async function updateUids(pb, collection, rows, uidKey) {
     for (const item of chunk) {
       await pb.collection(collection).update(item.id, { uid: item[uidKey] });
     }
-    console.log(`${collection}: đã cập nhật ${Math.min(offset + chunk.length, rows.length)}/${rows.length}`);
+    console.log(
+      `${collection}: đã cập nhật ${Math.min(offset + chunk.length, rows.length)}/${rows.length}`,
+    );
   }
 }
 
@@ -429,7 +446,9 @@ function assertCounterMatches(counter, expected) {
   if (!counter) return;
   for (const key of ["counter_key", "counter_type", "prefix", "period"]) {
     if (String(counter[key] || "") !== String(expected[key] || "")) {
-      throw new Error(`uid_counters/${counter.id} không đúng metadata cho ${expected.counter_key}.`);
+      throw new Error(
+        `uid_counters/${counter.id} không đúng metadata cho ${expected.counter_key}.`,
+      );
     }
   }
 }
@@ -623,13 +642,11 @@ async function main() {
       historyResult.counterValues,
     );
 
-    writeCsv(paths.rollback, [...userPlan, ...historyPlan], [
-      "collection",
-      "id",
-      "original_uid",
-      "temporary_uid",
-      "new_uid",
-    ]);
+    writeCsv(
+      paths.rollback,
+      [...userPlan, ...historyPlan],
+      ["collection", "id", "original_uid", "temporary_uid", "new_uid"],
+    );
 
     const appliedCounters = [];
     try {

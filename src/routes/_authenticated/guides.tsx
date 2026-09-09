@@ -4,7 +4,9 @@ import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { usePwaInstallPrompt } from "@/lib/pwa-install";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
-import { normalizeUserPickerSearch } from "@/components/workforce/UserPicker";
+function normalizeUserPickerSearch(text: string) {
+  return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
 import { PageContainer } from "@/components/layout/PageContainer";
 import { IosInstallGuideDialog } from "@/components/layout/IosInstallGuideDialog";
 import { GuideDocumentsTab } from "@/components/guides/GuideDocumentsTab";

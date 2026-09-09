@@ -1,16 +1,15 @@
-import type { UserRecord } from "./pocketbase";
-
+/**
+ * Escape PocketBase filter string values
+ */
 export function escapePb(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+/**
+ * Create OR filter for relation field
+ */
 export function relationInFilter(field: string, ids: string[]) {
   const cleanIds = [...new Set(ids.filter(Boolean))];
-  if (!cleanIds.length) return `${field}=""`;
+  if (!cleanIds.length) return "";
   return cleanIds.map((id) => `${field}="${escapePb(id)}"`).join(" || ");
-}
-
-export function userDisplayName(user?: Partial<UserRecord> | null) {
-  if (!user) return "Không rõ";
-  return user.full_name || user.username || user.phone || user.id;
 }

@@ -1,5 +1,8 @@
 import { pb } from "./pocketbase";
-import { escapePb } from "./delegations";
+
+function escapePb(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
 
 export type FactoryStatus = "active" | "inactive";
 

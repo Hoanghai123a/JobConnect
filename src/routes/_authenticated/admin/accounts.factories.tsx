@@ -48,7 +48,7 @@ import {
   type FactoryStatus,
 } from "@/lib/factories";
 import { createStaffActionLog } from "@/lib/staff-log";
-import { escapePb } from "@/lib/delegations";
+import { escapePb } from "@/lib/pocketbase-utils";
 
 export const Route = createFileRoute("/_authenticated/admin/accounts/factories")({
   beforeLoad: () => {

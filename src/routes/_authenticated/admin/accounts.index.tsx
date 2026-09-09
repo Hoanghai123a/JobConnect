@@ -21,10 +21,9 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { pb, type UserRecord } from "@/lib/pocketbase";
-import { escapePb } from "@/lib/delegations";
+import { escapePb } from "@/lib/pocketbase-utils";
 import { updateUserAndCache } from "@/lib/employment";
-import { createStaffActionLog } from "@/lib/staff-log";
-import { BankPicker } from "@/components/staff/BankNameInput";
+import { BankPicker } from "@/components/ui/BankPicker";
 import { DeleteWorkerDialog } from "@/components/admin/DeleteWorkerDialog";
 
 function userSearchFilter(search: string) {
@@ -138,17 +137,6 @@ function AdminAccountsPage() {
     setSavingProfile(true);
     try {
       await updateUserAndCache(detailUser.id, payload);
-      const actor = pb.authStore.record as UserRecord | null;
-      await createStaffActionLog({
-        actor,
-        targetUserId: detailUser.id,
-        targetCollection: "users",
-        targetRecord: detailUser.id,
-        action: "update",
-        before,
-        after: payload,
-        note: "Admin cập nhật thông tin cá nhân",
-      });
       setUsers((prev) => prev.map((u) => (u.id === detailUser.id ? { ...u, ...payload } : u)));
       setDetailUser((prev) => (prev ? { ...prev, ...payload } : prev));
       toast.success("Đã cập nhật thông tin cá nhân");

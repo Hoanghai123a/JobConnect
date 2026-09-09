@@ -345,7 +345,9 @@ export function DesktopAppShell({ children }: { children: ReactNode }) {
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    item.action === "game" ? setGameOpen(true) : openStaffExcelExport()
+                                    item.action === "game"
+                                      ? setGameOpen(true)
+                                      : openStaffExcelExport()
                                   }
                                   title={collapsed ? item.label : undefined}
                                   aria-label={item.label}

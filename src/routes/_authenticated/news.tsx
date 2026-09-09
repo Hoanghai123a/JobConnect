@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { pb, fileUrl } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
-import { escapePb } from "@/lib/delegations";
+import { escapePb } from "@/lib/pocketbase-utils";
 import { markSeen } from "@/lib/seen";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { ResponsiveOverlay } from "@/components/layout/ResponsiveOverlay";

@@ -20,8 +20,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
-import { escapePb } from "@/lib/delegations";
-import { findActiveEmploymentByUser, type EmploymentHistoryRecord } from "@/lib/employment";
+import { escapePb } from "@/lib/pocketbase-utils";
 import { toast } from "@/lib/toast";
 import {
   Phone,
@@ -111,7 +110,6 @@ function ComplaintsPage() {
   });
   const [sending, setSending] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [currentEmployment, setCurrentEmployment] = useState<EmploymentHistoryRecord | null>(null);
   const [expandedComplaintId, setExpandedComplaintId] = useState<string | null>(null);
 
   const load = async () => {
@@ -156,29 +154,14 @@ function ComplaintsPage() {
     /* eslint-disable-next-line */
   }, [debouncedSearch, isAdmin, user?.phone, tab]);
 
-  useEffect(() => {
-    if (!user?.id) {
-      setCurrentEmployment(null);
-      return;
-    }
-    let active = true;
-    findActiveEmploymentByUser(user.id)
-      .then((history) => active && setCurrentEmployment(history))
-      .catch(() => active && setCurrentEmployment(null));
-    return () => {
-      active = false;
-    };
-  }, [user?.id]);
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSending(true);
     try {
-      const employment = user?.id ? await findActiveEmploymentByUser(user.id) : null;
       await pb.collection("complaints").create({
         full_name: user?.full_name || "",
-        employee_code: employment?.employee_code || "",
-        company: employment?.expand?.factory?.name || "",
+        employee_code: "",
+        company: "",
         phone: user?.phone || "",
         content: form.content,
         status: "pending",

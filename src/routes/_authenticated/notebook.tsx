@@ -33,7 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { escapePb } from "@/lib/delegations";
+import { escapePb } from "@/lib/pocketbase-utils";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { toast } from "@/lib/toast";
 import {

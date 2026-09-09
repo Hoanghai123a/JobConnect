@@ -22,9 +22,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
-import { escapePb } from "@/lib/delegations";
+import { escapePb } from "@/lib/pocketbase-utils";
 import { pb, type UserRecord } from "@/lib/pocketbase";
-import { formatStaffActionDateTime, getWorkerActionSummary, type StaffActionLogRecord } from "@/lib/staff-log";
+import {
+  formatStaffActionDateTime,
+  getWorkerActionSummary,
+  type StaffActionLogRecord,
+} from "@/lib/staff-log";
 
 export const Route = createFileRoute("/_authenticated/admin/logs")({
   beforeLoad: () => {

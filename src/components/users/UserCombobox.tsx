@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
-import { userDisplayName } from "@/lib/delegations";
+import { userDisplayName } from "@/lib/pocketbase-utils";
 import type { UserRecord } from "@/lib/pocketbase";
 import { cn } from "@/lib/utils";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";

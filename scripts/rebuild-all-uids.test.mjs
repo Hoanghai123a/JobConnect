@@ -25,13 +25,17 @@ test("buildUserPlanFromRecords chuẩn hóa theo thứ tự đã tải", () => {
     ],
     "HL",
   );
-  assert.deepEqual(plan.map((item) => item.new_uid), ["HL000001", "HL000002"]);
+  assert.deepEqual(
+    plan.map((item) => item.new_uid),
+    ["HL000001", "HL000002"],
+  );
   assert.ok(plan.every((item) => item.changed));
 });
 
 test("buildHistoryPlanFromRecords dừng khi thiếu join_date", () => {
   assert.throws(
-    () => buildHistoryPlanFromRecords([{ id: "h1", uid: "", created: "2026-08-01 08:00:00" }], "HL"),
+    () =>
+      buildHistoryPlanFromRecords([{ id: "h1", uid: "", created: "2026-08-01 08:00:00" }], "HL"),
     /join_date/,
   );
 });

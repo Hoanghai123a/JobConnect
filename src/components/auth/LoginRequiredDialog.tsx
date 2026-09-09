@@ -168,7 +168,11 @@ export function LoginRequiredDialog({
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? <Loader2 className="animate-spin" aria-hidden="true" /> : <LogIn aria-hidden="true" />}
+            {loading ? (
+              <Loader2 className="animate-spin" aria-hidden="true" />
+            ) : (
+              <LogIn aria-hidden="true" />
+            )}
             {loading ? "Đang đăng nhập..." : "Đăng nhập"}
           </Button>
 

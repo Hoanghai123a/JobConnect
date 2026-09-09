@@ -41,7 +41,7 @@ import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { BankPicker } from "@/components/staff/BankNameInput";
+import { BankPicker } from "@/components/ui/BankPicker";
 import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -71,10 +71,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
-import { escapePb } from "@/lib/delegations";
+import { escapePb } from "@/lib/pocketbase-utils";
 import { markSeen } from "@/lib/seen";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
-import { createStaffActionLog } from "@/lib/staff-log";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import {
   assertAdvanceInteractionAllowed,
@@ -142,7 +141,6 @@ type AdvanceSummary = {
 function emptyAdvanceSummaries(): Record<AdminTab, AdvanceSummary> {
   return {
     pending: { count: 0, total: 0 },
-    recruiter_approved: { count: 0, total: 0 },
     accepted: { count: 0, total: 0 },
     recovered: { count: 0, total: 0 },
     unrecoverable: { count: 0, total: 0 },
@@ -214,7 +212,7 @@ async function loadAdvanceSummary(filter: string): Promise<AdvanceSummary> {
 }
 
 export function AdvancesPage() {
-  const { user, isAdmin, isStaff } = useAuth();
+  const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const { data: settings } = useAppSettings();
   const [storedFilters] = useState(readStoredAdvanceFilters);
@@ -253,7 +251,7 @@ export function AdvancesPage() {
   const [advancePolicyError, setAdvancePolicyError] = useState("");
   const [advancePolicyLoading, setAdvancePolicyLoading] = useState(false);
   const [stats, setStats] = useState<Record<AdminTab, AdvanceSummary>>(emptyAdvanceSummaries);
-  const [adminSegment, setAdminSegment] = useState<AdminAdvanceSegment>("workers");
+  const adminSegment: AdminAdvanceSegment = "workers"; // Always workers, staff removed
   const [transferDescriptionTemplate, setTransferDescriptionTemplate] = useState(
     DEFAULT_TRANSFER_DESCRIPTION_TEMPLATE,
   );
@@ -367,9 +365,8 @@ export function AdvancesPage() {
     try {
       const baseFilter = buildAdvanceFilter({
         isAdmin,
-        isStaff,
         userId: user?.id,
-        tab: isAdmin || isStaff ? tab : undefined,
+        tab: isAdmin ? tab : undefined,
         dateFrom,
         dateTo,
         search: debouncedSearch,
@@ -409,7 +406,6 @@ export function AdvancesPage() {
     disbursementFilter,
     handleAdvancesFilterError,
     isAdmin,
-    isStaff,
     debouncedSearch,
     selectedFactoryName,
     tab,
@@ -419,7 +415,6 @@ export function AdvancesPage() {
   const loadStats = useCallback(async () => {
     const base = buildAdvanceFilter({
       isAdmin,
-      isStaff,
       userId: user?.id,
       dateFrom,
       dateTo,
@@ -431,21 +426,16 @@ export function AdvancesPage() {
       ? joinPbFilters([base, buildAdminAdvanceSegmentFilter(adminSegment)])
       : base;
     const withBase = (statusFilter: string) => joinPbFilters([segmentBase, statusFilter]);
-    const adminPendingFilter = `(status="recruiter_approved" || ${LEGACY_STAFF_REQUESTED_PENDING_FILTER})`;
     try {
-      const [pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all] =
-        await Promise.all([
-          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.pending)),
-          loadAdvanceSummary(
-            withBase(isAdmin ? adminPendingFilter : ADVANCE_TAB_FILTERS.recruiter_approved),
-          ),
-          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.accepted)),
-          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.recovered)),
-          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.unrecoverable)),
-          loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.rejected)),
-          loadAdvanceSummary(segmentBase),
-        ]);
-      setStats({ pending, recruiter_approved, accepted, recovered, unrecoverable, rejected, all });
+      const [pending, accepted, recovered, unrecoverable, rejected, all] = await Promise.all([
+        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.pending)),
+        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.accepted)),
+        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.recovered)),
+        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.unrecoverable)),
+        loadAdvanceSummary(withBase(ADVANCE_TAB_FILTERS.rejected)),
+        loadAdvanceSummary(segmentBase),
+      ]);
+      setStats({ pending, accepted, recovered, unrecoverable, rejected, all });
     } catch (error: unknown) {
       if (handleAdvancesFilterError(error)) return;
       throw error;
@@ -457,7 +447,6 @@ export function AdvancesPage() {
     disbursementFilter,
     handleAdvancesFilterError,
     isAdmin,
-    isStaff,
     debouncedSearch,
     selectedFactoryName,
     user?.id,
@@ -469,7 +458,7 @@ export function AdvancesPage() {
   }, [load, loadStats]);
 
   useEffect(() => {
-    if (!selectedAdvanceUser?.id || isAdmin || isStaff) {
+    if (!selectedAdvanceUser?.id || isAdmin) {
       setAdvancePolicy(null);
       setAdvancePolicyError("");
       return;
@@ -488,15 +477,13 @@ export function AdvancesPage() {
       .catch((error: unknown) => {
         if (!active) return;
         setAdvancePolicy(null);
-        setAdvancePolicyError(
-          getUserErrorMessage(error, "Không thể kiểm tra hạn mức ứng tiền"),
-        );
+        setAdvancePolicyError(getUserErrorMessage(error, "Không thể kiểm tra hạn mức ứng tiền"));
       })
       .finally(() => active && setAdvancePolicyLoading(false));
     return () => {
       active = false;
     };
-  }, [isAdmin, isStaff, selectedAdvanceUser?.id, settings.allow_advance_after_leave, user?.role]);
+  }, [isAdmin, selectedAdvanceUser?.id, settings.allow_advance_after_leave, user?.role]);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -510,22 +497,11 @@ export function AdvancesPage() {
   const isActionable = (row: AdvanceRecord) => {
     const status = row.status || "pending";
     const recovery = row.recovery_status || "none";
-    if (isAdmin) {
-      return (
-        status === "pending" ||
-        status === "recruiter_approved" ||
-        (status === "accepted" && recovery === "none")
-      );
-    }
     return status === "pending" || (status === "accepted" && recovery === "none");
   };
   const selectableFiltered = useMemo(() => filtered.filter(isActionable), [filtered]);
   const selectedPendingCount = filtered.filter(
-    (row) =>
-      selectedIds.has(row.id) &&
-      (isAdmin
-        ? (row.status || "pending") === "pending" || row.status === "recruiter_approved"
-        : (row.status || "pending") === "pending"),
+    (row) => selectedIds.has(row.id) && (row.status || "pending") === "pending",
   ).length;
   const selectedRecoverableCount = filtered.filter(
     (row) =>
@@ -557,9 +533,7 @@ export function AdvancesPage() {
       );
       if (!enabled) setDisableConfirmationOpen(false);
     } catch (error: unknown) {
-      toast.error(
-        getUserErrorMessage(error, "Không thể lưu trạng thái chức năng báo ứng"),
-      );
+      toast.error(getUserErrorMessage(error, "Không thể lưu trạng thái chức năng báo ứng"));
     } finally {
       setAdvanceSettingSaving(false);
     }
@@ -607,16 +581,6 @@ export function AdvancesPage() {
         status: "pending",
         recovery_status: "none",
       });
-      await createStaffActionLog({
-        actor: user,
-        targetUserId: selectedAdvanceUser.id,
-        targetCollection: "advances",
-        targetRecord: created.id,
-        action: "report_advance",
-        after: created,
-        note:
-          user?.id === selectedAdvanceUser.id ? "NLĐ tự báo ứng" : "Tạo yêu cầu ứng lương cho NLĐ",
-      });
       toast.success("Đã gửi Ứng lương");
       setAmountText("");
       setReason("");
@@ -650,13 +614,9 @@ export function AdvancesPage() {
     }
   };
 
-  const bulkUpdate = async (status: Exclude<AdvanceStatus, "pending" | "recruiter_approved">) => {
+  const bulkUpdate = async (status: Exclude<AdvanceStatus, "pending">) => {
     const rows = filtered.filter(
-      (row) =>
-        selectedIds.has(row.id) &&
-        (isAdmin
-          ? (row.status || "pending") === "pending" || row.status === "recruiter_approved"
-          : (row.status || "pending") === "pending"),
+      (row) => selectedIds.has(row.id) && (row.status || "pending") === "pending",
     );
     if (!rows.length || bulkAction) return;
     await runBulkAction(status, async () => {
@@ -668,16 +628,6 @@ export function AdvancesPage() {
             admin_note: row.admin_note || "",
           };
           await updateRow(row.id, after);
-          await createStaffActionLog({
-            actor: user,
-            targetUserId: row.user,
-            targetCollection: "advances",
-            targetRecord: row.id,
-            action: "update",
-            before: { status: row.status || "pending" },
-            after,
-            note: status === "accepted" ? "Admin duyệt báo ứng" : "Admin từ chối báo ứng",
-          });
         }
         toast.success(status === "accepted" ? "Đã duyệt" : "Đã từ chối");
         setSelectedIds(new Set());
@@ -705,19 +655,6 @@ export function AdvancesPage() {
             recovered_at: recoveryStatus === "recovered" ? new Date().toISOString() : "",
           };
           await updateRow(row.id, after);
-          await createStaffActionLog({
-            actor: user,
-            targetUserId: row.user,
-            targetCollection: "advances",
-            targetRecord: row.id,
-            action: "update",
-            before: { recovery_status: row.recovery_status || "none" },
-            after,
-            note:
-              recoveryStatus === "recovered"
-                ? "Admin đánh dấu đã thu hồi"
-                : "Admin đánh dấu không thu hồi",
-          });
         }
         toast.success(
           recoveryStatus === "recovered" ? "Đã đánh dấu thu hồi" : "Đã đánh dấu không thu hồi",
@@ -741,19 +678,6 @@ export function AdvancesPage() {
         recovered_at: recoveryStatus === "recovered" ? new Date().toISOString() : "",
       };
       await updateRow(row.id, after);
-      await createStaffActionLog({
-        actor: user,
-        targetUserId: row.user,
-        targetCollection: "advances",
-        targetRecord: row.id,
-        action: "update",
-        before: { recovery_status: row.recovery_status || "none" },
-        after,
-        note:
-          recoveryStatus === "recovered"
-            ? "Admin đánh dấu đã thu hồi"
-            : "Admin đánh dấu không thể thu hồi",
-      });
       toast.success(
         recoveryStatus === "recovered" ? "Đã đánh dấu thu hồi" : "Đã đánh dấu không thể thu hồi",
       );
@@ -774,26 +698,6 @@ export function AdvancesPage() {
         current && current.id === row.id ? { ...current, ...after } : current,
       );
       load();
-
-      try {
-        await createStaffActionLog({
-          actor: user,
-          targetUserId: row.user,
-          targetCollection: "advances",
-          targetRecord: row.id,
-          action: "update",
-          before: { disbursed: Boolean(row.disbursed) },
-          after,
-          note: disbursed ? "Admin đánh dấu đã giải ngân" : "Admin hoàn tác giải ngân",
-        });
-      } catch {
-        toast.warning(
-          disbursed
-            ? "Đã cập nhật giải ngân nhưng chưa ghi được nhật ký"
-            : "Đã hoàn tác giải ngân nhưng chưa ghi được nhật ký",
-        );
-        return false;
-      }
 
       toast.success(disbursed ? "Đã đánh dấu giải ngân" : "Đã hoàn tác giải ngân");
       return true;
@@ -819,16 +723,6 @@ export function AdvancesPage() {
         original_amount: row.original_amount || row.amount,
       };
       await updateRow(row.id, payload);
-      await createStaffActionLog({
-        actor: user,
-        targetUserId: row.user,
-        targetCollection: "advances",
-        targetRecord: row.id,
-        action: "update",
-        before: { amount: row.amount },
-        after: { amount: newAmount, original_amount: row.original_amount || row.amount },
-        note: `Admin sửa số tiền ứng: ${formatMoney(row.amount)} → ${formatMoney(newAmount)}`,
-      });
       toast.success("Đã cập nhật số tiền");
       setEditingAmountId(null);
       load();
@@ -844,16 +738,6 @@ export function AdvancesPage() {
         resolved_at: new Date().toISOString(),
       };
       await updateRow(row.id, after);
-      await createStaffActionLog({
-        actor: user,
-        targetUserId: row.user,
-        targetCollection: "advances",
-        targetRecord: row.id,
-        action: "update",
-        before: { status: row.status || "recruiter_approved" },
-        after,
-        note: newStatus === "accepted" ? "Admin tiếp nhận ứng lương" : "Admin từ chối ứng lương",
-      });
       toast.success(newStatus === "accepted" ? "Đã tiếp nhận" : "Đã từ chối");
       load();
     } catch (error: unknown) {
@@ -879,23 +763,6 @@ export function AdvancesPage() {
           recovered_at: "",
         };
         await updateRow(row.id, after);
-        await createStaffActionLog({
-          actor: user,
-          targetUserId: row.user,
-          targetCollection: "advances",
-          targetRecord: row.id,
-          action: "update",
-          before: {
-            status: row.status || "accepted",
-            recovery_status: previousRecovery,
-            recovered_at: row.recovered_at || "",
-          },
-          after,
-          note:
-            previousRecovery === "recovered"
-              ? "Admin hoàn tác đã thu hồi về đã tiếp nhận"
-              : "Admin hoàn tác không thể thu hồi về đã tiếp nhận",
-        });
         toast.success("Đã hoàn tác về trạng thái Đã tiếp nhận");
       } else {
         const after: Partial<AdvanceRecord> = {
@@ -903,16 +770,6 @@ export function AdvancesPage() {
           resolved_at: "",
         };
         await updateRow(row.id, after);
-        await createStaffActionLog({
-          actor: user,
-          targetUserId: row.user,
-          targetCollection: "advances",
-          targetRecord: row.id,
-          action: "update",
-          before: { status: row.status || "rejected", resolved_at: row.resolved_at || "" },
-          after,
-          note: "Admin hoàn tác từ chối ứng lương về chờ duyệt",
-        });
         toast.success("Đã đưa yêu cầu về trạng thái Chờ duyệt");
       }
       setUndoRequest(null);
@@ -964,7 +821,7 @@ export function AdvancesPage() {
     );
   };
 
-  if (!isAdmin && !isStaff) {
+  if (!isAdmin) {
     return (
       <PageContainer title="Ứng lương" subtitle="Xin ứng lương & xem lịch sử">
         <AdvanceRulesCard rules={settings.advance_rules} />
@@ -1194,10 +1051,7 @@ export function AdvancesPage() {
     );
   }
 
-  if (isStaff && !isAdmin) {
-    return <Navigate to="/staff/advances" />;
-  }
-
+  // Admin view
   return (
     <PageContainer
       title="Ứng lương"
@@ -1213,32 +1067,6 @@ export function AdvancesPage() {
         </button>
       }
     >
-      <div className="flex gap-1 rounded-lg bg-muted p-1">
-        <button
-          type="button"
-          className={cn(
-            "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-            adminSegment === "workers"
-              ? "bg-background shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-          onClick={() => setAdminSegment("workers")}
-        >
-          Ứng NLĐ
-        </button>
-        <button
-          type="button"
-          className={cn(
-            "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-            adminSegment === "staff"
-              ? "bg-background shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-          onClick={() => setAdminSegment("staff")}
-        >
-          Ứng Staff
-        </button>
-      </div>
       <button
         type="button"
         onClick={() => setShowMobileStats((current) => !current)}
@@ -1253,10 +1081,10 @@ export function AdvancesPage() {
         className={showMobileStats ? "space-y-2" : "hidden space-y-2 md:block"}
       >
         <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2 desktop:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2 desktop:grid-cols-5">
             <StatCard
               label="Chờ duyệt"
-              value={statValue(stats.recruiter_approved)}
+              value={statValue(stats.pending)}
               icon={Clock}
               tone="warning"
               className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
@@ -1340,7 +1168,7 @@ export function AdvancesPage() {
         onSearchChange={setSearch}
         placeholder="Tìm theo tên, mã NV, số tiền?"
         chips={[
-          { key: "pending", label: `Chờ duyệt (${stats.recruiter_approved.count})` },
+          { key: "pending", label: `Chờ duyệt (${stats.pending.count})` },
           { key: "accepted", label: `Đã tiếp nhận (${stats.accepted.count})` },
           { key: "recovered", label: `Đã thu hồi (${stats.recovered.count})` },
           { key: "unrecoverable", label: `Không thu hồi (${stats.unrecoverable.count})` },

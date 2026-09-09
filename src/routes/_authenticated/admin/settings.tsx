@@ -246,9 +246,7 @@ function CompanyTab() {
         <Label className="text-xs">Phạm vi nhà máy khi tạo/báo đi làm</Label>
         <Select
           value={form.staff_employment_factory_scope || "assigned"}
-          onValueChange={(value) =>
-            setForm({ ...form, staff_employment_factory_scope: value })
-          }
+          onValueChange={(value) => setForm({ ...form, staff_employment_factory_scope: value })}
         >
           <SelectTrigger className="mt-1 rounded-xl">
             <SelectValue />
@@ -341,7 +339,8 @@ function CompanyTab() {
         Yêu cầu collection PocketBase tên <code>app_settings</code> với các field: company_name,
         slogan, address, hotline, email, about (text), advance_limit (number), advance_rules (text),
         logo (file), install_guide_images (multiple files), staff_employment_factory_scope (select:
-        assigned/all). Collection <code>factories</code> cần thêm field attendance_cutoff_day (number).
+        assigned/all). Collection <code>factories</code> cần thêm field attendance_cutoff_day
+        (number).
       </p>
     </Card>
   );

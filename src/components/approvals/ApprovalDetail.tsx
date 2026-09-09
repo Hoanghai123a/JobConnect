@@ -6,7 +6,7 @@ import {
   withdrawApprovalRequest,
   getRequestFileUrl,
 } from "@/lib/approval-requests";
-import { userDisplayName } from "@/lib/delegations";
+import { userDisplayName } from "@/lib/pocketbase-utils";
 import { formatMoneyInput } from "@/lib/money";
 import type { UserRecord } from "@/lib/pocketbase";
 import { StatusChip, type ChipTone } from "@/components/ui/status-chip";

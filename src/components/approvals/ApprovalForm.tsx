@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { createApprovalRequest } from "@/lib/approval-requests";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
-import { userDisplayName } from "@/lib/delegations";
+import { userDisplayName } from "@/lib/pocketbase-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

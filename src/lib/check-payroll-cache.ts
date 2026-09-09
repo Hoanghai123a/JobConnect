@@ -1,5 +1,5 @@
 import { pb } from "@/lib/pocketbase";
-import { escapePb } from "@/lib/delegations";
+import { escapePb } from "@/lib/pocketbase-utils";
 import type {
   WorkerAttendanceCheckItem,
   WorkerSalaryCheckItem,

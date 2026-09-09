@@ -10,10 +10,8 @@ import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { isUserApproved } from "@/lib/user-approval";
 import { BottomNav } from "@/components/layout/BottomNav";
-import { StaffRealtimeSyncGate } from "@/components/staff/StaffRealtimeSyncGate";
 import { DesktopAppShell } from "@/components/layout/DesktopAppShell";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
-import { StaffExcelExportProvider } from "@/components/staff/StaffExcelExportProvider";
 
 const GUEST_ACCESSIBLE_PATHS = new Set(["/news", "/transport", "/counter", "/attendance"]);
 
@@ -66,26 +64,21 @@ function AuthLayout() {
 
   if (!user && guestAttendance) {
     return (
-      <StaffExcelExportProvider>
-        <div className="pb-nav">
-          <Outlet />
-          <BottomNav />
-        </div>
-      </StaffExcelExportProvider>
+      <div className="pb-nav">
+        <Outlet />
+        <BottomNav />
+      </div>
     );
   }
 
   if (!user) return <DataLoadingState variant="page" label="Đang mở ứng dụng..." rows={4} />;
 
   return (
-    <StaffExcelExportProvider>
-      <div className="pb-nav">
-        <StaffRealtimeSyncGate />
-        <DesktopAppShell>
-          <Outlet />
-        </DesktopAppShell>
-        <BottomNav />
-      </div>
-    </StaffExcelExportProvider>
+    <div className="pb-nav">
+      <DesktopAppShell>
+        <Outlet />
+      </DesktopAppShell>
+      <BottomNav />
+    </div>
   );
 }

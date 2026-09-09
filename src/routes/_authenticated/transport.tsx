@@ -11,7 +11,7 @@ import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { escapePb } from "@/lib/delegations";
+import { escapePb } from "@/lib/pocketbase-utils";
 import { cn } from "@/lib/utils";
 import { BusFront, Clock3, Pencil, Phone, Plus, Search } from "lucide-react";
 import { toast } from "@/lib/toast";
@@ -159,83 +159,83 @@ function TransportPage() {
   return (
     <PageContainer title="Tìm nhà xe" subtitle="Thông tin do mọi người đóng góp">
       {user ? (
-      <Card className="rounded-2xl border-border/70 p-3 shadow-soft">
-        <button
-          type="button"
-          onClick={openCreateForm}
-          className="flex w-full items-center gap-3 rounded-xl text-left transition active:scale-[0.99]"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Plus className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">Đóng góp nhà xe</div>
-            <div className="text-[11px] text-muted-foreground">
-              Tiêu đề và Số điện thoại là bắt buộc
+        <Card className="rounded-2xl border-border/70 p-3 shadow-soft">
+          <button
+            type="button"
+            onClick={openCreateForm}
+            className="flex w-full items-center gap-3 rounded-xl text-left transition active:scale-[0.99]"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Plus className="h-4 w-4" />
             </div>
-          </div>
-        </button>
-
-        {formOpen && (
-          <form onSubmit={submit} className="mt-3 space-y-3 border-t border-border pt-3">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <Label>Tên nhà xe</Label>
-                <span className="text-[11px] text-muted-foreground">Có thể để trống</span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold">Đóng góp nhà xe</div>
+              <div className="text-[11px] text-muted-foreground">
+                Tiêu đề và Số điện thoại là bắt buộc
               </div>
-              <Input
-                value={carrierName}
-                onChange={(event) => setCarrierName(event.target.value)}
-                placeholder="VD: Hoàng Long"
-              />
             </div>
-            <div className="space-y-1">
-              <Label>Tiêu đề (những nơi xe đi qua)</Label>
-              <Input
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="VD: Lào Cai - Phú Thọ - Hà Nội"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Thời gian chạy</Label>
-              <Textarea
-                rows={3}
-                value={runTime}
-                onChange={(event) => setRunTime(event.target.value)}
-                placeholder="VD: 7:30 từ Hà Nội, 17:30 từ Lào Cai"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Số điện thoại nhà xe</Label>
-              <Input
-                value={phone}
-                onChange={(event) => setPhone(event.target.value.replace(/\D/g, "").slice(0, 10))}
-                inputMode="numeric"
-                maxLength={10}
-                pattern="\d{10}"
-                placeholder="VD: 0987654321"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  resetForm();
-                  setFormOpen(false);
-                }}
-              >
-                Huỷ
-              </Button>
-              <Button type="submit" disabled={saving}>
-                <Plus className="h-4 w-4" />{" "}
-                {saving ? "Đang lưu..." : editing ? "Cập nhật" : "Đăng ký"}
-              </Button>
-            </div>
-          </form>
-        )}
-      </Card>
+          </button>
+
+          {formOpen && (
+            <form onSubmit={submit} className="mt-3 space-y-3 border-t border-border pt-3">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Tên nhà xe</Label>
+                  <span className="text-[11px] text-muted-foreground">Có thể để trống</span>
+                </div>
+                <Input
+                  value={carrierName}
+                  onChange={(event) => setCarrierName(event.target.value)}
+                  placeholder="VD: Hoàng Long"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Tiêu đề (những nơi xe đi qua)</Label>
+                <Input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="VD: Lào Cai - Phú Thọ - Hà Nội"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Thời gian chạy</Label>
+                <Textarea
+                  rows={3}
+                  value={runTime}
+                  onChange={(event) => setRunTime(event.target.value)}
+                  placeholder="VD: 7:30 từ Hà Nội, 17:30 từ Lào Cai"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Số điện thoại nhà xe</Label>
+                <Input
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value.replace(/\D/g, "").slice(0, 10))}
+                  inputMode="numeric"
+                  maxLength={10}
+                  pattern="\d{10}"
+                  placeholder="VD: 0987654321"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    resetForm();
+                    setFormOpen(false);
+                  }}
+                >
+                  Huỷ
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  <Plus className="h-4 w-4" />{" "}
+                  {saving ? "Đang lưu..." : editing ? "Cập nhật" : "Đăng ký"}
+                </Button>
+              </div>
+            </form>
+          )}
+        </Card>
       ) : null}
 
       <div className="relative">

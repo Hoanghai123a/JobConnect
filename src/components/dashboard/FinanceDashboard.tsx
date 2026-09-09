@@ -80,14 +80,9 @@ const financeChartConfig = {
 
 const statusMeta: Record<AdvanceStatus, { label: string; color: string; className: string }> = {
   pending: {
-    label: "Chờ người tuyển duyệt",
+    label: "Chờ admin duyệt",
     color: "oklch(0.75 0.16 75)",
     className: "bg-amber-100 text-amber-800",
-  },
-  recruiter_approved: {
-    label: "Chờ Admin duyệt",
-    color: "oklch(0.65 0.19 255)",
-    className: "bg-blue-100 text-blue-800",
   },
   accepted: {
     label: "Đã tiếp nhận",
@@ -264,9 +259,7 @@ export function FinanceDashboard({
     if (!activeRange) return null;
 
     const requestedRows = rows.filter((row) => isInRange(row.created, activeRange));
-    const waitingApprovalRows = requestedRows.filter(
-      (row) => statusOf(row) === "recruiter_approved",
-    );
+    const waitingApprovalRows = requestedRows.filter((row) => statusOf(row) === "pending");
     const waitingDisbursement = requestedRows.filter(isAwaitingDisbursement);
     const disbursedRows = rows.filter(
       (row) => row.disbursed === true && isInRange(row.disbursed_at, activeRange),
@@ -298,7 +291,6 @@ export function FinanceDashboard({
 
     const statusSlices = [
       { key: "pending", ...statusMeta.pending },
-      { key: "recruiter_approved", ...statusMeta.recruiter_approved },
       { key: "accepted", ...statusMeta.accepted },
       { key: "recovered", label: "Đã thu hồi", color: "oklch(0.7 0.16 75)" },
       { key: "unrecoverable", label: "Không thể thu hồi", color: "oklch(0.62 0.22 25)" },

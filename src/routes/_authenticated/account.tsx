@@ -49,11 +49,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { resolveBankName } from "@/lib/vn-banks";
-import { BankPicker } from "@/components/staff/BankNameInput";
+import { BankPicker } from "@/components/ui/BankPicker";
 import { FactoryPicker, UserPicker } from "@/components/workforce/UserPicker";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { normalizeDate } from "@/lib/date-utils";
-import { escapePb } from "@/lib/delegations";
+import { escapePb } from "@/lib/pocketbase-utils";
 import { isUserApproved } from "@/lib/user-approval";
 import { StatusChip } from "@/components/ui/status-chip";
 import {

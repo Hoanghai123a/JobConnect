@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
-import { escapePb, relationInFilter } from "@/lib/delegations";
+import { escapePb, relationInFilter } from "@/lib/pocketbase-utils";
 import type { EmploymentHistoryRecord } from "@/lib/employment";
 import { exportToExcel } from "@/lib/excel";
 import {

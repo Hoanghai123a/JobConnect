@@ -1,4 +1,4 @@
-import { relationInFilter } from "./delegations";
+import { relationInFilter } from "./pocketbase-utils";
 import { getPBUpstream } from "./pocketbase-config";
 import type { UserRecord } from "./pocketbase";
 import {
