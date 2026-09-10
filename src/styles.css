@@ -633,4 +633,55 @@
       transform: rotate(4deg);
     }
   }
+
+  /* Game layout với desktop rail sidebar */
+  .worker-game-layout {
+    display: flex;
+    gap: 1rem;
+  }
+
+  .worker-game-desktop-rail {
+    display: none;
+  }
+
+  .worker-game-main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Chỉ hiển thị desktop rail trên màn hình lớn */
+  @media (min-width: 1024px) {
+    .worker-game-desktop-rail {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      width: 14rem;
+      flex-shrink: 0;
+    }
+
+    .worker-game-rail-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+      color: var(--color-muted-foreground);
+      padding: 0.5rem 0;
+    }
+
+    .worker-game-stat {
+      padding: 0.75rem;
+    }
+
+    .worker-game-stat-label {
+      font-size: 0.75rem;
+      color: var(--color-muted-foreground);
+      margin-bottom: 0.25rem;
+    }
+
+    .worker-game-stat-value {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--color-foreground);
+    }
+  }
 }

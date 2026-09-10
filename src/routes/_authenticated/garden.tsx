@@ -528,37 +528,6 @@ function GardenPage() {
           ) : null}
 
           <TabsContent value="garden" className="mt-0 space-y-4">
-            <div className="worker-game-layout">
-              <aside className="worker-game-desktop-rail" aria-label="Chỉ số khu vườn">
-                <div className="worker-game-rail-title">Chỉ số khu vườn</div>
-                <Card className="worker-game-stat">
-                  <div className="worker-game-stat-label">Xu hiện tại</div>
-                  <div className="worker-game-stat-value">{coins}</div>
-                </Card>
-                <Card className="worker-game-stat">
-                  <div className="worker-game-stat-label">Ô đất</div>
-                  <div className="worker-game-stat-value">
-                    {state.unlockedPlots}/{PLOT_MAX}
-                  </div>
-                </Card>
-                <Card className="worker-game-stat">
-                  <div className="worker-game-stat-label">Đang trồng</div>
-                  <div className="worker-game-stat-value">{plantedPlots}</div>
-                </Card>
-                <Card className="worker-game-stat">
-                  <div className="worker-game-stat-label">Sẵn thu hoạch</div>
-                  <div className="worker-game-stat-value">{readyPlots}</div>
-                </Card>
-                <Card className="worker-game-stat">
-                  <div className="worker-game-stat-label">Tổng thu hoạch</div>
-                  <div className="worker-game-stat-value">{state.totalHarvested}</div>
-                </Card>
-                <Card className="worker-game-stat">
-                  <div className="worker-game-stat-label">No bụng thú cưng</div>
-                  <div className="worker-game-stat-value">{hungerPct}%</div>
-                </Card>
-              </aside>
-              <div className="worker-game-main space-y-4">
                 {/* Khu thú cưng */}
                 <section className="gradient-hero relative overflow-hidden rounded-3xl p-4 text-white shadow-soft">
                   <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
@@ -815,8 +784,6 @@ function GardenPage() {
                     Chạm ô trống để trồng hoa · chạm hoa đã nở để thu hoạch lấy xu
                   </p>
                 </section>
-              </div>
-            </div>
           </TabsContent>
 
           <TabsContent value="food" className="mt-0 space-y-3">

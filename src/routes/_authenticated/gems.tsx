@@ -770,36 +770,6 @@ function GemsGamePage() {
         </TabsList>
 
         <TabsContent value="play" className="mt-0 flex flex-col gap-3">
-          <div className="worker-game-layout">
-            <aside className="worker-game-desktop-rail" aria-label="Chỉ số xếp kim cương">
-              <div className="worker-game-rail-title">Chỉ số</div>
-              <Card className="worker-game-stat">
-                <div className="worker-game-stat-label">Điểm</div>
-                <div className="worker-game-stat-value">{score}</div>
-              </Card>
-              <Card className="worker-game-stat">
-                <div className="worker-game-stat-label">Kỷ lục</div>
-                <div
-                  className={cn(
-                    "worker-game-stat-value",
-                    score >= bestScore && bestScore > 0 && "text-amber-600",
-                  )}
-                >
-                  {bestScore}
-                </div>
-              </Card>
-              <Card className="worker-game-stat">
-                <div className="worker-game-stat-label">Mục tiêu</div>
-                <div className="worker-game-stat-value">
-                  {config.threshold ? config.threshold : "∞"}
-                </div>
-              </Card>
-              <Card className="worker-game-stat">
-                <div className="worker-game-stat-label">Xu hôm nay</div>
-                <div className="worker-game-stat-value">{dailyEarned}</div>
-              </Card>
-            </aside>
-            <div className="worker-game-main flex flex-col gap-3">
               <section className="gradient-hero overflow-hidden rounded-3xl p-4 text-white shadow-soft">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -940,8 +910,6 @@ function GemsGamePage() {
                   </div>
                 </div>
               </Card>
-            </div>
-          </div>
         </TabsContent>
 
         <TabsContent value="rank" className="mt-0 flex flex-col gap-3">
