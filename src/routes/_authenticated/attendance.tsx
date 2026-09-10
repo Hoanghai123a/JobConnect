@@ -596,10 +596,11 @@ function AuthenticatedUserAttendance() {
       setRows((r) => r.filter((x) => x.id !== id));
       toast.success("Đã xóa ngày công");
     } catch (e: any) {
-      // Nếu record không tồn tại (404), vẫn xóa khỏi state frontend
+      // PocketBase trả về 404 khi không có quyền truy cập hoặc record không tồn tại
       if (e?.status === 404) {
-        setRows((r) => r.filter((x) => x.id !== id));
-        toast.warning("Ngày công đã được xóa trước đó");
+        // Refresh lại data từ server để đảm bảo đồng bộ
+        fetchMonth();
+        toast.error("Không thể xóa ngày công này");
       } else {
         toast.error(e?.message || "Lỗi xóa ngày công");
       }

@@ -61,6 +61,22 @@ export const Route = createFileRoute("/")({
     if (!pb.authStore.isValid) return;
     const u = pb.authStore.record as UserRecord | null;
     if (u && !isUserApproved(u)) throw redirect({ to: "/pending" });
+    if (u?.role !== "user") return;
+
+    const today = localDateKey(new Date());
+    let hasTodayAttendance: boolean;
+    try {
+      const result = await pb.collection("attendance").getList(1, 1, {
+        filter: `user="${u.id}" && date~"${today}"`,
+        fields: "id",
+      });
+      hasTodayAttendance = result.totalItems > 0;
+    } catch {
+      // Keep the dashboard available if PocketBase cannot verify today's attendance.
+      return;
+    }
+
+    if (!hasTodayAttendance) throw redirect({ to: "/attendance" });
   },
   component: DashboardPage,
 });
