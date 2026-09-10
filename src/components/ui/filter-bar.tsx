@@ -65,13 +65,13 @@ export function MobileListToolbar({
       )}
     >
       <div
-        className={cn(desktopSearchAfterChips && "desktop:flex desktop:items-center desktop:gap-3")}
+        className={cn(desktopSearchAfterChips && "desktop:flex")}
       >
         {onSearchChange && (
           <div
             className={cn(
               "flex items-center gap-2",
-              desktopSearchAfterChips && "desktop:order-2 desktop:ml-auto desktop:w-[22rem]",
+              desktopSearchAfterChips && "desktop:order-2",
               searchClassName,
             )}
           >
@@ -108,7 +108,7 @@ export function MobileListToolbar({
           <div
             className={cn(
               "-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 scrollbar-none",
-              desktopSearchAfterChips && "desktop:order-1 desktop:min-w-0 desktop:flex-1",
+              desktopSearchAfterChips && "desktop:order-1",
             )}
           >
             {chips.map((chip) => {

@@ -45,7 +45,7 @@ export function DataLoadingState({
         aria-live="polite"
         aria-busy="true"
         className={cn(
-          "mobile-page min-h-[60dvh] space-y-4 px-4 py-5 desktop:mx-auto desktop:w-full desktop:max-w-[90rem] desktop:px-8 desktop:py-6",
+          "mobile-page min-h-[60dvh] space-y-4 px-4 py-5",
           className,
         )}
       >

@@ -24,6 +24,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { getUserErrorMessage } from "@/lib/toast";
+import { GUEST_LOCAL_OWNER_ID } from "@/lib/guest-storage";
 import {
   FLOWERS,
   PETS,
@@ -102,11 +103,34 @@ type MainTab = "garden" | "food" | "exchange" | "admin";
 type GardenOwner = { id?: string; full_name?: string; username?: string };
 type VisitedGarden = GardenBalance & { expand?: { user?: GardenOwner } };
 
+const OFFLINE_PET_FOODS: GardenFood[] = [
+  {
+    id: "guest-food-seed",
+    name: "Hạt dinh dưỡng",
+    emoji: "🌾",
+    price: 2,
+    fullness: 25,
+    active: true,
+    petType: "all",
+  },
+  {
+    id: "guest-food-treat",
+    name: "Bánh thưởng",
+    emoji: "🍪",
+    price: 4,
+    fullness: 50,
+    active: true,
+    petType: "all",
+  },
+];
+
 function errorMessage(error: unknown, fallback: string) {
   return getUserErrorMessage(error, fallback);
 }
 function GardenPage() {
   const { user, isAdmin } = useAuth();
+  const isGuest = !user;
+  const ownerId = user?.id || GUEST_LOCAL_OWNER_ID;
   const isStaff = user?.role === "staff";
   const [state, setState] = useState<GardenState | null>(null);
   const [balance, setBalance] = useState<GardenBalance | null>(null);
@@ -141,7 +165,7 @@ function GardenPage() {
   const [curtainPhase, setCurtainPhase] = useState<"idle" | "close" | "open">("idle");
 
   const loadServerData = useCallback(async () => {
-    if (!user?.id) return;
+    if (isGuest || !user?.id) return;
     try {
       const [bal, foodList, tierList] = await Promise.all([
         fetchBalance(user.id),
@@ -192,25 +216,30 @@ function GardenPage() {
       setFoods([]);
       setTiers([]);
     }
-  }, [user?.id]);
+  }, [isGuest, user?.id]);
 
   const loadVisitSaves = useCallback(async () => {
-    if (!user?.id) return;
+    if (isGuest || !user?.id) return;
     try {
       const saved = await fetchGardenVisitSaves(user.id);
       setVisitSaves(saved);
     } catch {
       setVisitSaves([]);
     }
-  }, [user?.id]);
+  }, [isGuest, user?.id]);
 
   useEffect(() => {
-    if (user?.id) {
-      setState(loadGarden(user.id));
-      loadServerData();
-      loadVisitSaves();
+    setState(loadGarden(ownerId));
+    if (isGuest) {
+      setBalance(null);
+      setFoods(OFFLINE_PET_FOODS);
+      setTiers([]);
+      setVisitSaves([]);
+      return;
     }
-  }, [user?.id, loadServerData, loadVisitSaves]);
+    loadServerData();
+    loadVisitSaves();
+  }, [ownerId, isGuest, loadServerData, loadVisitSaves]);
 
   useEffect(() => {
     const t = window.setInterval(() => setTick((n) => n + 1), 30000);
@@ -233,8 +262,8 @@ function GardenPage() {
   const commit = useCallback(
     (next: GardenState) => {
       setState(next);
-      saveGarden(user?.id, next);
-      if (balance) {
+      saveGarden(ownerId, next);
+      if (!isGuest && balance) {
         updateBalance(balance.id, {
           coins: next.coins,
           plots: next.plots as any,
@@ -247,7 +276,7 @@ function GardenPage() {
           .catch(() => {});
       }
     },
-    [user?.id, balance],
+    [ownerId, isGuest, balance],
   );
 
   const now = Date.now();
@@ -375,6 +404,10 @@ function GardenPage() {
 
   const visitGarden = async (username: string) => {
     if (!username.trim()) return;
+    if (isGuest) {
+      toast.info("Ghé vườn người khác cần đăng nhập");
+      return;
+    }
     // Nếu đã có vườn → curtain close → fetch → curtain open
     if (visitedGarden) {
       setCurtainPhase("close");
@@ -461,11 +494,18 @@ function GardenPage() {
     <div className="pb-nav">
       <AppHeader
         title="Vườn của tôi"
-        subtitle="Trồng hoa, nuôi thú, thư giãn chút nha"
+        subtitle={
+          isGuest
+            ? "Offline - tiến trình lưu trên thiết bị"
+            : "Trồng hoa, nuôi thú, thư giãn chút nha"
+        }
         right={
           <button
             type="button"
-            onClick={() => !isStaff && setExchangeOpen(true)}
+            onClick={() => {
+              if (isGuest) toast.info("Đổi xu cần đăng nhập");
+              else if (!isStaff) setExchangeOpen(true);
+            }}
             className="flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-sm font-semibold text-amber-700 transition active:scale-95"
           >
             <Coins className="h-4 w-4" />
@@ -783,7 +823,7 @@ function GardenPage() {
             <FoodShopTab foods={petFoods} coins={coins} petName={state.pet.name} onBuy={buyFood} />
           </TabsContent>
 
-          {!isStaff && (
+          {!isStaff && !isGuest && (
             <TabsContent value="exchange" className="mt-0 space-y-3">
               <ExchangeTab
                 user={user!}
@@ -886,7 +926,7 @@ function GardenPage() {
       </Dialog>
 
       {/* Quy đổi xu */}
-      {!isStaff && (
+      {!isStaff && !isGuest && (
         <Dialog open={exchangeOpen} onOpenChange={setExchangeOpen}>
           <DialogContent className="max-h-[80vh] overflow-y-auto rounded-3xl">
             <DialogHeader>

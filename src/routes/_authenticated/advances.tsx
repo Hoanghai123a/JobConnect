@@ -76,6 +76,12 @@ import { markSeen } from "@/lib/seen";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { fetchFactories, type FactoryRecord } from "@/lib/factories";
 import {
+  readGuestAdvances,
+  saveGuestAdvance,
+  submitGuestAdvance,
+  type GuestAdvancePayload,
+} from "@/lib/guest-requests";
+import {
   assertAdvanceInteractionAllowed,
   isAdvanceInteractionAllowed,
   resolveAdvancePolicy,
@@ -212,7 +218,7 @@ async function loadAdvanceSummary(filter: string): Promise<AdvanceSummary> {
 }
 
 export function AdvancesPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isGuest } = useAuth();
   const queryClient = useQueryClient();
   const { data: settings } = useAppSettings();
   const [storedFilters] = useState(readStoredAdvanceFilters);
@@ -230,6 +236,13 @@ export function AdvancesPage() {
     bank_name: "",
     bank_account_number: "",
     bank_account_name: "",
+  });
+  const [guestForm, setGuestForm] = useState({
+    employee_code: "",
+    full_name: "",
+    company: "",
+    phone: "",
+    join_date: "",
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<BulkAction | null>(null);
@@ -363,6 +376,11 @@ export function AdvancesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      if (isGuest) {
+        setItems(readGuestAdvances());
+        setStats(emptyAdvanceSummaries());
+        return;
+      }
       const baseFilter = buildAdvanceFilter({
         isAdmin,
         userId: user?.id,
@@ -406,6 +424,7 @@ export function AdvancesPage() {
     disbursementFilter,
     handleAdvancesFilterError,
     isAdmin,
+    isGuest,
     debouncedSearch,
     selectedFactoryName,
     tab,
@@ -413,6 +432,10 @@ export function AdvancesPage() {
   ]);
 
   const loadStats = useCallback(async () => {
+    if (isGuest) {
+      setStats(emptyAdvanceSummaries());
+      return;
+    }
     const base = buildAdvanceFilter({
       isAdmin,
       userId: user?.id,
@@ -447,6 +470,7 @@ export function AdvancesPage() {
     disbursementFilter,
     handleAdvancesFilterError,
     isAdmin,
+    isGuest,
     debouncedSearch,
     selectedFactoryName,
     user?.id,
@@ -458,7 +482,7 @@ export function AdvancesPage() {
   }, [load, loadStats]);
 
   useEffect(() => {
-    if (!selectedAdvanceUser?.id || isAdmin) {
+    if (!selectedAdvanceUser?.id || isAdmin || isGuest) {
       setAdvancePolicy(null);
       setAdvancePolicyError("");
       return;
@@ -483,7 +507,7 @@ export function AdvancesPage() {
     return () => {
       active = false;
     };
-  }, [isAdmin, selectedAdvanceUser?.id, settings.allow_advance_after_leave, user?.role]);
+  }, [isAdmin, isGuest, selectedAdvanceUser?.id, settings.allow_advance_after_leave, user?.role]);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -549,6 +573,48 @@ export function AdvancesPage() {
     if (!reason.trim()) {
       toast.error("Lý do ứng không được để trống");
       return false;
+    }
+    if (isGuest) {
+      if (
+        !guestForm.employee_code.trim() ||
+        !guestForm.full_name.trim() ||
+        !guestForm.company.trim() ||
+        !guestForm.phone.trim()
+      ) {
+        toast.error("Vui lòng nhập đủ thông tin cá nhân và nhà máy.");
+        return false;
+      }
+
+      setSending(true);
+      try {
+        const payload: GuestAdvancePayload = {
+          ...guestForm,
+          employee_code: guestForm.employee_code.trim(),
+          full_name: guestForm.full_name.trim(),
+          company: guestForm.company.trim(),
+          phone: guestForm.phone.trim(),
+          bank_name: payoutMethod === "cash" ? "" : bankForm.bank_name.trim(),
+          bank_account_number:
+            payoutMethod === "cash" ? "" : bankForm.bank_account_number.trim(),
+          bank_account_name: payoutMethod === "cash" ? "" : bankForm.bank_account_name.trim(),
+          payout_method: payoutMethod,
+          amount,
+          reason: reason.trim(),
+        };
+        const created = await submitGuestAdvance(payload);
+        saveGuestAdvance(created);
+        toast.success("Đã gửi Ứng lương");
+        setAmountText("");
+        setReason("");
+        setPayoutMethod("bank_transfer");
+        await load();
+        return true;
+      } catch (error: unknown) {
+        toast.error(getUserErrorMessage(error, "Lỗi gửi Ứng lương"));
+        return false;
+      } finally {
+        setSending(false);
+      }
     }
     if (!selectedAdvanceUser?.id) {
       toast.error("Chọn người báo ứng");
@@ -823,7 +889,10 @@ export function AdvancesPage() {
 
   if (!isAdmin) {
     return (
-      <PageContainer title="Ứng lương" subtitle="Xin ứng lương & xem lịch sử">
+      <PageContainer
+        title="Ứng lương"
+        subtitle={isGuest ? "Nhập đủ thông tin để gửi yêu cầu" : "Xin ứng lương & xem lịch sử"}
+      >
         <AdvanceRulesCard rules={settings.advance_rules} />
         {!interactionAllowed && <AdvanceReadOnlyNotice />}
 
@@ -853,26 +922,94 @@ export function AdvancesPage() {
             className="min-w-0 space-y-3"
           >
             <div className="min-w-0 space-y-3">
-              <UserProfileCollapsible user={selectedAdvanceUser} policy={advancePolicy} />
+              {isGuest ? (
+                <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-3">
+                  <div className="text-sm font-semibold">Thông tin người đề nghị</div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label>Mã nhân viên</Label>
+                      <Input
+                        value={guestForm.employee_code}
+                        onChange={(event) =>
+                          setGuestForm((current) => ({
+                            ...current,
+                            employee_code: event.target.value,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Họ và tên</Label>
+                      <Input
+                        value={guestForm.full_name}
+                        onChange={(event) =>
+                          setGuestForm((current) => ({
+                            ...current,
+                            full_name: event.target.value,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Nhà máy</Label>
+                      <Input
+                        value={guestForm.company}
+                        onChange={(event) =>
+                          setGuestForm((current) => ({ ...current, company: event.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Số điện thoại</Label>
+                      <Input
+                        value={guestForm.phone}
+                        inputMode="tel"
+                        onChange={(event) =>
+                          setGuestForm((current) => ({ ...current, phone: event.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1 sm:col-span-2">
+                      <Label>Ngày vào làm</Label>
+                      <DateInput
+                        value={guestForm.join_date}
+                        onChange={(value) =>
+                          setGuestForm((current) => ({ ...current, join_date: value }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    Thông tin được gửi kèm yêu cầu để admin đối chiếu. Bản hiển thị trên thiết bị
+                    chỉ lưu lịch sử yêu cầu của bạn.
+                  </p>
+                </div>
+              ) : (
+                <UserProfileCollapsible user={selectedAdvanceUser} policy={advancePolicy} />
+              )}
               {!interactionAllowed && <AdvanceReadOnlyNotice />}
 
-              {advancePolicyLoading && (
+              {!isGuest && advancePolicyLoading && (
                 <div className="rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
                   Đang kiểm tra nhà máy và hạn mức ứng tiền...
                 </div>
               )}
-              {!advancePolicyLoading && advancePolicyError && (
+              {!isGuest && !advancePolicyLoading && advancePolicyError && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
                   {advancePolicyError}
                 </div>
               )}
-              {advancePolicyError.includes("chưa có mã nhân viên") && (
+              {!isGuest && advancePolicyError.includes("chưa có mã nhân viên") && (
                 <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                   <div className="font-semibold">Chưa đủ thông tin để báo ứng</div>
                   <div className="mt-1">{advancePolicyError}</div>
                 </div>
               )}
-              {advancePolicy && (
+              {!isGuest && advancePolicy && (
                 <div className="flex flex-wrap items-center gap-1.5 rounded-xl border bg-primary/5 p-3 text-xs">
                   <span className="text-muted-foreground">Nhà máy áp dụng:</span>
                   <span className="font-semibold">{advancePolicy.factoryName}</span>
@@ -882,7 +1019,8 @@ export function AdvancesPage() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-2">
+              {!isGuest && (
+                <div className="grid grid-cols-2 gap-2">
                 <StatCard
                   label="Hạn mức"
                   value={limit > 0 ? formatMoney(limit) : "Chưa cài"}
@@ -895,13 +1033,16 @@ export function AdvancesPage() {
                   icon={Banknote}
                   tone="warning"
                 />
-              </div>
-              <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2 text-xs text-muted-foreground">
-                Còn có thể báo ứng:{" "}
-                <span className="font-semibold text-foreground">
-                  {limit > 0 ? formatMoney(available) : "—"}
-                </span>
-              </div>
+                </div>
+              )}
+              {!isGuest && (
+                <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2 text-xs text-muted-foreground">
+                  Còn có thể báo ứng:{" "}
+                  <span className="font-semibold text-foreground">
+                    {limit > 0 ? formatMoney(available) : "—"}
+                  </span>
+                </div>
+              )}
 
               <AdvancePayoutMethodPicker value={payoutMethod} onChange={setPayoutMethod} />
 
@@ -960,7 +1101,11 @@ export function AdvancesPage() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={sending || advancePolicyLoading || !advancePolicy || !interactionAllowed}
+                disabled={
+                  sending ||
+                  (!isGuest && (advancePolicyLoading || !advancePolicy)) ||
+                  !interactionAllowed
+                }
               >
                 <Send className="h-4 w-4" /> {sending ? "Đang gửi…" : "Gửi Ứng lương"}
               </Button>
@@ -970,7 +1115,9 @@ export function AdvancesPage() {
 
         <div className="flex items-center gap-2 px-1 pt-2">
           <History className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-semibold">Lịch sử của bạn ({items.length})</span>
+          <span className="text-sm font-semibold">
+            {isGuest ? "Lịch sử trên thiết bị" : "Lịch sử của bạn"} ({items.length})
+          </span>
         </div>
         {loading && items.length > 0 && (
           <DataLoadingState variant="inline" label="Đang cập nhật lịch sử ứng lương..." />
@@ -1081,7 +1228,7 @@ export function AdvancesPage() {
         className={showMobileStats ? "space-y-2" : "hidden space-y-2 md:block"}
       >
         <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2 desktop:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2">
             <StatCard
               label="Chờ duyệt"
               value={statValue(stats.pending)}
@@ -1096,7 +1243,7 @@ export function AdvancesPage() {
               tone="success"
               className="desktop:!p-2.5 desktop:[&>div:first-child>div:first-child]:!text-[10px] desktop:[&>div:first-child>div:last-child]:!h-6 desktop:[&>div:first-child>div:last-child]:!w-6 desktop:[&>div:first-child>div:last-child>svg]:!h-3 desktop:[&>div:first-child>div:last-child>svg]:!w-3 desktop:[&>div:nth-child(2)]:!mt-0.5 desktop:[&>div:nth-child(2)]:!text-sm desktop:[&>div:nth-child(2)>span]:!text-sm"
             />
-            <div className={showMobileStats ? "contents" : "hidden desktop:contents"}>
+            <div className={showMobileStats ? "contents" : "hidden"}>
               <StatCard
                 label="Từ chối"
                 value={statValue(stats.rejected)}
@@ -1163,7 +1310,7 @@ export function AdvancesPage() {
 
       <FilterBar
         desktopSearchAfterChips
-        searchClassName="hidden desktop:flex"
+        searchClassName="hidden"
         search={search}
         onSearchChange={setSearch}
         placeholder="Tìm theo tên, mã NV, số tiền?"
@@ -1187,7 +1334,7 @@ export function AdvancesPage() {
               search={search}
               onSearchChange={setSearch}
               placeholder="Tìm theo tên, mã NV, số tiền…"
-              className="static -mx-0 bg-transparent px-0 py-0 backdrop-blur-0 desktop:hidden"
+              className="static -mx-0 bg-transparent px-0 py-0 backdrop-blur-0"
             />
 
             <div className="space-y-1">

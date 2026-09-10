@@ -128,7 +128,7 @@ export function ApprovalDetail({
       title={request.title}
       description={`${STATUS_LABEL[request.status]} · ${formatTime(request.created)}`}
       presentation="full"
-      className="desktop:max-w-lg"
+      className=""
       contentProps={{
         onEscapeKeyDown: (event) => {
           if (document.body.dataset.approvalImageViewerOpen === "true") event.preventDefault();

@@ -105,7 +105,7 @@ export function ApprovalForm({
       title="Tạo yêu cầu phê duyệt"
       description="Nhập nội dung, tệp đính kèm và chọn quản trị viên xử lý."
       presentation="full"
-      className="desktop:max-w-lg"
+      className=""
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">

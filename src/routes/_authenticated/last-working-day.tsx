@@ -245,14 +245,14 @@ function LastWorkingDayPage() {
         </div>
       </Card>
 
-      <Card className="rounded-3xl p-4 desktop:p-6">
+      <Card className="rounded-3xl p-4">
         <div className="space-y-5">
           <div>
             <Label className="text-base">1. Chọn dạng dữ liệu</Label>
             <RadioGroup
               value={layout}
               onValueChange={(value) => changeLayout(value as LastWorkingDayLayout)}
-              className="mt-3 grid gap-3 desktop:grid-cols-3"
+              className="mt-3 grid gap-3"
             >
               {LAYOUTS.map((item) => (
                 <label
@@ -271,7 +271,7 @@ function LastWorkingDayPage() {
             </RadioGroup>
           </div>
 
-          <div className="grid gap-4 desktop:grid-cols-2">
+          <div className="grid gap-4">
             <div className="space-y-2">
               <Label>2. Chọn file Excel</Label>
               <Button
@@ -317,7 +317,7 @@ function LastWorkingDayPage() {
           </div>
 
           {mappingConfirmed && mapping && (
-            <div className="grid gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm desktop:grid-cols-2">
+            <div className="grid gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm">
               <div>
                 <span className="text-muted-foreground">Mã NV:</span>{" "}
                 <strong>{columnLabel(mapping.employeeCodeColumn)}</strong>
@@ -356,7 +356,7 @@ function LastWorkingDayPage() {
             </div>
           )}
 
-          <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/30 p-4 desktop:flex-row desktop:items-center desktop:justify-between">
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/30 p-4">
             <div className="flex items-start gap-3 text-sm">
               {file && mappingConfirmed ? (
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />

@@ -368,7 +368,7 @@ export function FinanceDashboard({
           className={
             compactMobile
               ? "grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-xs"
-              : "flex w-full items-center gap-2 overflow-x-auto text-xs desktop:ml-auto desktop:w-auto"
+              : "flex w-full items-center gap-2 overflow-x-auto text-xs"
           }
         >
           <input
@@ -674,7 +674,7 @@ function FinanceKpi({
   }[tone];
 
   return (
-    <section className="rounded-3xl border border-border/70 bg-card p-3 shadow-soft desktop:p-4">
+    <section className="rounded-3xl border border-border/70 bg-card p-3 shadow-soft">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium text-muted-foreground">{label}</p>

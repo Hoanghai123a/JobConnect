@@ -58,7 +58,7 @@ export function BottomNav() {
     <>
       <nav
         aria-label="Điều hướng chính"
-        className="mobile-bottom-nav fixed bottom-0 left-1/2 z-40 w-full max-w-[30rem] -translate-x-1/2 border-t border-border/70 bg-card/95 backdrop-blur-xl desktop:hidden"
+        className="mobile-bottom-nav fixed bottom-0 left-1/2 z-40 w-full max-w-[30rem] -translate-x-1/2 border-t border-border/70 bg-card/95 backdrop-blur-xl"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <ul
@@ -143,7 +143,7 @@ export function AppHeader({
 
   return (
     <header
-      className="mobile-app-header sticky top-0 z-30 flex min-h-14 shrink-0 items-center gap-2 border-b border-border/60 bg-card/92 px-3 backdrop-blur-xl desktop:static desktop:z-auto desktop:mx-6 desktop:mt-3 desktop:rounded-2xl desktop:border desktop:px-5 desktop:shadow-soft"
+      className="mobile-app-header sticky top-0 z-30 flex min-h-14 shrink-0 items-center gap-2 border-b border-border/60 bg-card/92 px-3 backdrop-blur-xl"
       style={{ paddingTop: "max(env(safe-area-inset-top), 0.25rem)", paddingBottom: "0.25rem" }}
     >
       {showBack && (

@@ -10,7 +10,6 @@ export type MobilePageScaffoldProps = {
   children: ReactNode;
   showNavigation?: boolean;
   className?: string;
-  desktopWidth?: "default" | "wide" | "full";
   bottomAction?: ReactNode;
 };
 
@@ -22,23 +21,15 @@ export function MobilePageScaffold({
   children,
   showNavigation = false,
   className,
-  desktopWidth = "default",
   bottomAction,
 }: MobilePageScaffoldProps) {
-  const desktopWidthClass = {
-    default: "desktop:max-w-[90rem]",
-    wide: "desktop:max-w-[110rem]",
-    full: "desktop:max-w-none",
-  }[desktopWidth];
-
   return (
     <div className={cn(bottomAction ? "page-action-shell" : "pb-nav")}>
       <AppHeader title={title} subtitle={subtitle} right={right} back={back} />
       <main
         className={cn(
-          "mobile-page space-y-4 px-4 pt-4 desktop:mx-auto desktop:w-full desktop:px-8 desktop:pt-6",
+          "mobile-page space-y-4 px-4 pt-4",
           bottomAction && "page-action-main",
-          desktopWidthClass,
           className,
         )}
       >

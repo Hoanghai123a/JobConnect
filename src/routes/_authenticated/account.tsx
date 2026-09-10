@@ -146,7 +146,7 @@ function AccountPage() {
       />
 
       <div className="space-y-4 p-4">
-        <Card className="overflow-hidden desktop:hidden">
+        <Card className="overflow-hidden">
           <div className="gradient-primary p-5 text-primary-foreground">
             <div className="flex items-center gap-3">
               <div className="rounded-full bg-white/20 p-3">
@@ -334,7 +334,7 @@ function UserProfileForm() {
         </Card>
       )}
       <Section title={isAdmin ? "Thông tin admin" : "Thông tin chung"}>
-        <div className="hidden justify-end desktop:flex">
+        <div className="hidden justify-end">
           <PushNotificationSettingsCard buttonOnly />
         </div>
         <div className="flex flex-col items-center gap-2">
@@ -1281,13 +1281,13 @@ function AdminUsersPanel() {
 
   return (
     <Card className="space-y-3 p-4">
-      <div className="hidden justify-end desktop:flex">
+      <div className="hidden justify-end">
         <PushNotificationSettingsCard buttonOnly />
       </div>
 
       <Link
         to="/admin/logs"
-        className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/30 p-3 transition hover:bg-muted/50 desktop:hidden"
+        className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/30 p-3 transition hover:bg-muted/50"
       >
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
           <ClipboardList className="h-4 w-4" />
@@ -1397,11 +1397,11 @@ function AdminUsersPanel() {
               <Link
                 to="/admin/imports"
                 onClick={() => setActionSheetOpen(false)}
-                className="hidden h-11 items-center gap-2 rounded-2xl border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent desktop:flex"
+                className="hidden h-11 items-center gap-2 rounded-2xl border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent"
               >
                 <FileSpreadsheet className="h-4 w-4" /> Mở Trung tâm dữ liệu
               </Link>
-              <div className="space-y-2 desktop:hidden">
+              <div className="space-y-2">
                 <label
                   className={
                     "flex h-11 cursor-pointer items-center gap-2 rounded-2xl border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent " +
@@ -1592,17 +1592,17 @@ function AdminUsersPanel() {
                 className={
                   "list-card cursor-pointer flex items-start gap-3 " +
                   tone +
-                  " desktop:grid desktop:grid-cols-[auto_minmax(12rem,1.35fr)_minmax(8rem,.95fr)_minmax(10rem,1.15fr)_minmax(6rem,.7fr)_minmax(9rem,1fr)_minmax(6.5rem,.75fr)_auto] desktop:items-center desktop:gap-3 desktop:px-3 desktop:py-2"
+                  " desktop:grid-cols-[auto_minmax(12rem,1.35fr)_minmax(8rem,.95fr)_minmax(10rem,1.15fr)_minmax(6rem,.7fr)_minmax(9rem,1fr)_minmax(6.5rem,.75fr)_auto]"
                 }
               >
                 <Checkbox
                   checked={isSel}
                   onClick={(event) => event.stopPropagation()}
                   onCheckedChange={() => toggle(u.id)}
-                  className="mt-1 desktop:mt-0"
+                  className="mt-1"
                 />
 
-                <div className="min-w-0 flex-1 desktop:flex-none">
+                <div className="min-w-0 flex-1">
                   <div title={displayName} className="truncate text-sm font-semibold">
                     {displayName}
                   </div>
@@ -1612,16 +1612,16 @@ function AdminUsersPanel() {
                   >
                     @{username}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground desktop:hidden">
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {"SĐT " + phone}
                   </div>
-                  <div className="text-[11px] text-muted-foreground desktop:hidden">
+                  <div className="text-[11px] text-muted-foreground">
                     {"Mã NV " + employeeCode + " · " + company}
                   </div>
-                  <div className="text-[11px] text-muted-foreground desktop:hidden">
+                  <div className="text-[11px] text-muted-foreground">
                     {"Ngày tạo " + createdAt}
                   </div>
-                  <div className="mt-1 flex flex-wrap gap-1 desktop:hidden">
+                  <div className="mt-1 flex flex-wrap gap-1">
                     <span className={"chip " + (approved ? "chip-success" : "chip-danger")}>
                       {approved ? "Hoạt động" : "Vô hiệu hoá"}
                     </span>
@@ -1635,7 +1635,7 @@ function AdminUsersPanel() {
                 <AccountListCell label="Nhà máy" value={company} />
                 <AccountListCell label="Mã NV" value={employeeCode} />
 
-                <div className="hidden min-w-0 desktop:block">
+                <div className="hidden min-w-0">
                   <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     Trạng thái
                   </div>
@@ -1649,7 +1649,7 @@ function AdminUsersPanel() {
                   </div>
                 </div>
 
-                <div className="hidden min-w-0 desktop:block">
+                <div className="hidden min-w-0">
                   <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     Ngày tạo
                   </div>
@@ -1658,7 +1658,7 @@ function AdminUsersPanel() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-1 desktop:flex-row desktop:gap-0.5 desktop:justify-self-end">
+                <div className="flex flex-col gap-1">
                   <button
                     onClick={(event) => {
                       event.stopPropagation();
@@ -1888,7 +1888,7 @@ function AdminUsersPanel() {
       <Dialog open={!!detailUser} onOpenChange={(open) => !open && closeDetailUser()}>
         <DialogContent
           layout="raw"
-          className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border-border/70 bg-card p-0 shadow-xl desktop:max-w-5xl"
+          className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border-border/70 bg-card p-0 shadow-xl"
         >
           {detailUser && (
             <>
@@ -1920,8 +1920,8 @@ function AdminUsersPanel() {
                 </div>
               </DialogHeader>
 
-              <div className="max-h-[calc(90dvh-13rem)] overflow-y-auto p-4 sm:p-5 desktop:p-6">
-                <div className="grid gap-4 desktop:grid-cols-[minmax(0,1.15fr)_minmax(17rem,0.85fr)] desktop:items-start">
+              <div className="max-h-[calc(90dvh-13rem)] overflow-y-auto p-4 sm:p-5">
+                <div className="grid gap-4 desktop:grid-cols-[minmax(0,1.15fr)_minmax(17rem,0.85fr)]">
                   <DetailSection
                     title="Thông tin cá nhân"
                     action={
@@ -1983,7 +1983,7 @@ function AdminUsersPanel() {
                     </DetailSection>
 
                     <DetailSection title="Thông tin hệ thống">
-                      <div className="grid gap-2 sm:grid-cols-2 desktop:grid-cols-1">
+                      <div className="grid gap-2 sm:grid-cols-2">
                         <DetailField label="Mã tài khoản (UID)" value={detailUser.uid} />
                         <DetailField
                           label="Vai trò"
@@ -2033,14 +2033,14 @@ function AdminUsersPanel() {
         open={detailProfileEditing}
         onOpenChange={(open) => !detailProfileSaving && setDetailProfileEditing(open)}
       >
-        <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border-border/70 bg-card p-0 shadow-xl desktop:max-w-3xl">
+        <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border-border/70 bg-card p-0 shadow-xl">
           <DialogHeader className="border-b border-border/70 bg-card px-5 pb-4 pt-5 text-left sm:px-6">
             <DialogTitle>Sửa thông tin cá nhân</DialogTitle>
             <DialogDescription>
               Cập nhật thông tin của {detailUser?.full_name || detailUser?.username || "tài khoản"}.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 px-5 py-4 sm:px-6 desktop:grid-cols-2">
+          <div className="grid gap-4 px-5 py-4 sm:px-6">
             <DetailEditorField label="Họ và tên">
               <Input
                 value={detailProfileForm.full_name}
@@ -2141,7 +2141,7 @@ function AdminUsersPanel() {
         open={detailBankEditing}
         onOpenChange={(open) => !detailBankSaving && setDetailBankEditing(open)}
       >
-        <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border-border/70 bg-card p-0 shadow-xl desktop:max-w-xl">
+        <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border-border/70 bg-card p-0 shadow-xl">
           <DialogHeader className="border-b border-border/70 bg-card px-5 pb-4 pt-5 text-left sm:px-6">
             <DialogTitle>Sửa tài khoản ngân hàng</DialogTitle>
             <DialogDescription>
@@ -2967,7 +2967,7 @@ function EditStaffStatusDialog({
 
 function AccountListCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="hidden min-w-0 desktop:block">
+    <div className="hidden min-w-0">
       <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </div>

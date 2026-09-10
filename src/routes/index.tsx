@@ -11,7 +11,6 @@ import { MobileSection } from "@/components/layout/MobileSection";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { FeatureTile } from "@/components/dashboard/FeatureTile";
 import { LoginRequiredDialog } from "@/components/auth/LoginRequiredDialog";
-import { DesktopAppShell } from "@/components/layout/DesktopAppShell";
 import { Button } from "@/components/ui/button";
 import {
   Newspaper,
@@ -37,6 +36,11 @@ import {
   NotebookPen,
   ClipboardCheck,
   LogIn,
+  Wallet,
+  Users,
+  ListOrdered,
+  Gem,
+  Bomb,
 } from "lucide-react";
 import {
   Dialog,
@@ -279,7 +283,7 @@ function DashboardPage() {
 
   return (
     <div className="pb-nav">
-      <div className="px-4 pb-2 pt-3 desktop:hidden">
+      <div className="px-4 pb-2 pt-3">
         <div className="gradient-hero relative overflow-hidden rounded-3xl px-4 py-4 text-white shadow-soft">
           <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-white/20 blur-2xl" />
           <div className="absolute -bottom-16 -left-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
@@ -330,7 +334,7 @@ function DashboardPage() {
         </div>
       </div>
 
-      <div className="space-y-5 px-4 pt-2 desktop:hidden">
+      <div className="space-y-5 px-4 pt-2">
         {isAdmin ? (
           <>
             <MobileSection title="Nhóm chính" description="Quản lý tài chính và nghiệp vụ">
@@ -508,7 +512,7 @@ function DashboardPage() {
       <BottomNav />
 
       <Dialog open={openUtil !== null} onOpenChange={(open) => !open && setOpenUtil(null)}>
-        <DialogContent className="rounded-3xl desktop:hidden">
+        <DialogContent className="rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {openUtil === "utilities" ? (
@@ -642,8 +646,8 @@ function GuestDashboard({
   redirectTo: string;
 }) {
   return (
-    <div className="pb-nav desktop:mx-auto desktop:max-w-6xl">
-      <section className="gradient-hero relative overflow-hidden px-5 py-8 text-white desktop:mx-6 desktop:mt-6 desktop:rounded-3xl desktop:px-10 desktop:py-12">
+    <div className="pb-nav">
+      <section className="gradient-hero relative overflow-hidden px-5 py-8 text-white">
         <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/20 blur-3xl" />
         <div className="absolute -bottom-16 -left-8 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
         <div className="relative mx-auto flex max-w-3xl flex-col items-center text-center">
@@ -655,13 +659,11 @@ function GuestDashboard({
             )}
           </div>
           <p className="mt-4 text-sm font-medium text-white/80">Chào mừng bạn đến</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight desktop:text-3xl">
-            {settings.company_name}
-          </h1>
-          {settings.slogan && <p className="mt-2 text-sm text-white/80">{settings.slogan}</p>}
+          <h1 className="mt-1 text-2xl font-bold tracking-tight">Chấm công</h1>
+          <p className="mt-2 text-sm text-white/80">Kết nối nhà tuyển dụng & người lao động</p>
           <p className="mt-5 max-w-xl text-sm leading-6 text-white/90">
-            Khám phá các tiện ích dành cho người lao động. Đăng nhập để xem và sử dụng thông tin của
-            bạn.
+            Bạn đang ở trạng thái Offline. Đăng nhập để có trải nghiệm tốt nhất và đồng bộ thông tin
+            của bạn.
           </p>
           <Button
             type="button"
@@ -675,7 +677,7 @@ function GuestDashboard({
         </div>
       </section>
 
-      <main className="space-y-6 px-4 py-5 desktop:px-6 desktop:py-8">
+      <main className="space-y-6 px-4 py-5">
         <GuestSection
           title="Dành cho người lao động"
           description="Theo dõi công việc và các quyền lợi của bạn"
@@ -694,6 +696,7 @@ function GuestDashboard({
             description="Kiểm tra bảng công"
             icon={CalendarCheck}
             variant="accent"
+            allowGuest
           />
           <FeatureTile
             to="/advances"
@@ -701,6 +704,7 @@ function GuestDashboard({
             description="Gửi và theo dõi yêu cầu"
             icon={Wallet}
             variant="accent"
+            allowGuest
           />
           <FeatureTile
             to="/complaints"
@@ -708,6 +712,7 @@ function GuestDashboard({
             description="Gửi phản ánh"
             icon={MessageSquareWarning}
             variant="accent"
+            allowGuest
           />
         </GuestSection>
 
@@ -720,16 +725,22 @@ function GuestDashboard({
             size="compact"
             allowGuest
           />
-          <FeatureTile to="/chat" label="Trò chuyện" icon={MessagesSquare} size="compact" />
-          <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" />
-          <FeatureTile to="/notebook" label="Sổ tay" icon={NotebookPen} size="compact" />
+          <FeatureTile
+            to="/chat"
+            label="Trò chuyện"
+            icon={MessagesSquare}
+            size="compact"
+            allowGuest
+          />
+          <FeatureTile to="/guides" label="Hướng dẫn" icon={BookOpen} size="compact" allowGuest />
+          <FeatureTile to="/notebook" label="Sổ tay" icon={NotebookPen} size="compact" allowGuest />
           <FeatureTile to="/counter" label="Bộ đếm" icon={ListOrdered} size="compact" allowGuest />
         </GuestSection>
 
         <GuestSection title="Giải trí" description="Thư giãn sau giờ làm" compact>
-          <FeatureTile to="/garden" label="Vườn cây" icon={Sprout} size="compact" />
-          <FeatureTile to="/gems" label="Xếp kim cương" icon={Gem} size="compact" />
-          <FeatureTile to="/minesweeper" label="Dò mìn" icon={Bomb} size="compact" />
+          <FeatureTile to="/garden" label="Vườn cây" icon={Sprout} size="compact" allowGuest />
+          <FeatureTile to="/gems" label="Xếp kim cương" icon={Gem} size="compact" allowGuest />
+          <FeatureTile to="/minesweeper" label="Dò mìn" icon={Bomb} size="compact" allowGuest />
         </GuestSection>
       </main>
 
@@ -760,13 +771,7 @@ function GuestSection({
         <h2 className="text-base font-bold tracking-tight">{title}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       </div>
-      <div
-        className={
-          compact
-            ? "grid grid-cols-3 gap-3 desktop:grid-cols-6"
-            : "grid grid-cols-2 gap-3 desktop:grid-cols-5"
-        }
-      >
+      <div className={compact ? "grid grid-cols-3 gap-3" : "grid grid-cols-2 gap-3"}>
         {children}
       </div>
     </section>

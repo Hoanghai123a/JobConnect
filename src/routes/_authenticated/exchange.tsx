@@ -33,6 +33,7 @@ function ExchangeHubPage() {
             description="Các phòng chat của bạn"
             icon={MessageCircleMore}
             variant="accent"
+            allowGuest
           />
           <FeatureTile
             to="/news"
@@ -40,18 +41,21 @@ function ExchangeHubPage() {
             description="Cơ hội mới nhất"
             icon={Newspaper}
             variant="accent"
+            allowGuest
           />
           <FeatureTile
             to="/complaints"
             label="Khiếu nại"
             description="Gửi phản ánh và xem lịch sử"
             icon={MessageSquareWarning}
+            allowGuest
           />
           <FeatureTile
             to="/guides"
             label="Hướng dẫn"
             description="Cách sử dụng ứng dụng"
             icon={BookOpen}
+            allowGuest
           />
         </div>
       </MobileSection>
@@ -62,21 +66,29 @@ function ExchangeHubPage() {
             label="Tìm nhà xe"
             description="Tra cứu tuyến xe"
             icon={BusFront}
+            allowGuest
           />
           <FeatureTile
             to="/notebook"
             label="Sổ tay"
             description="Ghi chú công việc"
             icon={NotebookPen}
+            allowGuest
           />
-          <FeatureTile to="/counter" label="Bộ đếm" description="Công cụ nhanh" icon={Users} />
+          <FeatureTile
+            to="/counter"
+            label="Bộ đếm"
+            description="Công cụ nhanh"
+            icon={Users}
+            allowGuest
+          />
         </div>
       </MobileSection>
       <MobileSection title="Giải trí" description="Thư giãn sau giờ làm">
         <div className="grid grid-cols-3 gap-3">
-          <FeatureTile to="/garden" label="Vườn cây" icon={Sprout} size="compact" />
-          <FeatureTile to="/gems" label="Xếp kim cương" icon={Gem} size="compact" />
-          <FeatureTile to="/minesweeper" label="Dò mìn" icon={Gamepad2} size="compact" />
+          <FeatureTile to="/garden" label="Vườn cây" icon={Sprout} size="compact" allowGuest />
+          <FeatureTile to="/gems" label="Xếp kim cương" icon={Gem} size="compact" allowGuest />
+          <FeatureTile to="/minesweeper" label="Dò mìn" icon={Gamepad2} size="compact" allowGuest />
         </div>
       </MobileSection>
     </PageContainer>

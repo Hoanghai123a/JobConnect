@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { markSeen, getSeen } from "@/lib/seen";
+import { GUEST_LOCAL_OWNER_ID, readGuestStorage, writeGuestStorage } from "@/lib/guest-storage";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,9 +88,25 @@ type ChatMessage = {
 
 const PAGE_SIZE = 50;
 const QUICK_EMOJIS = ["😀", "😂", "❤️", "👍", "🙏", "🎉", "😢", "😮", "🔥", "✅"];
+const GUEST_CHAT_ROOM: ChatRoom = {
+  id: "guest-offline-room",
+  name: "Trò chuyện Offline",
+  description: "Tin nhắn chỉ lưu trên thiết bị này.",
+  is_default: true,
+};
+const GUEST_CHAT_STORAGE_KEY = "jobconnect.guestChatMessages.v1";
 
 function sortMessages(items: ChatMessage[]) {
   return [...items].sort((a, b) => new Date(a.created).getTime() - new Date(b.created).getTime());
+}
+
+function readGuestChatMessages(roomId?: string) {
+  const items = readGuestStorage<ChatMessage[]>(GUEST_CHAT_STORAGE_KEY, []);
+  return sortMessages(roomId ? items.filter((item) => item.room === roomId) : items);
+}
+
+function writeGuestChatMessages(items: ChatMessage[]) {
+  writeGuestStorage(GUEST_CHAT_STORAGE_KEY, items.slice(-200));
 }
 
 function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]) {
@@ -113,6 +130,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 function GroupChatPage() {
   const { user, isAdmin } = useAuth();
+  const isGuest = !user;
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [memberships, setMemberships] = useState<ChatRoomMember[]>([]);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
@@ -153,7 +171,10 @@ function GroupChatPage() {
   );
 
   const loadMe = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setMeFresh(null);
+      return;
+    }
     try {
       const mine = (await pb.collection("users").getOne(user.id)) as ChatUser;
       setMeFresh(mine);
@@ -163,16 +184,23 @@ function GroupChatPage() {
   }, [user?.id]);
 
   const loadRooms = useCallback(async () => {
+    if (isGuest) {
+      setRooms([GUEST_CHAT_ROOM]);
+      return;
+    }
     try {
       const res = await pb.collection("chat_rooms").getFullList({ sort: "-is_default,name" });
       setRooms(res as unknown as ChatRoom[]);
     } catch (error) {
       toast.error(getErrorMessage(error, "Lỗi tải danh sách phòng"));
     }
-  }, []);
+  }, [isGuest]);
 
   const loadMemberships = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setMemberships([]);
+      return;
+    }
     try {
       const filter = isAdmin ? "" : `user = "${user.id}"`;
       const res = await pb.collection("chat_room_members").getFullList({
@@ -185,7 +213,11 @@ function GroupChatPage() {
   }, [user?.id, isAdmin]);
 
   const loadJoinRequests = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setPendingRequests([]);
+      setMyRequests([]);
+      return;
+    }
     try {
       if (isAdmin) {
         const res = await pb.collection("chat_join_requests").getFullList({
@@ -234,11 +266,13 @@ function GroupChatPage() {
   }, [loadMemberships, loadJoinRequests]);
 
   const visibleRooms = useMemo(() => {
+    if (isGuest) return rooms;
     if (isAdmin) return rooms;
     return rooms.filter((r) => myMemberRoomIds.has(r.id));
-  }, [rooms, myMemberRoomIds, isAdmin]);
+  }, [rooms, myMemberRoomIds, isAdmin, isGuest]);
 
   const searchResults = useMemo(() => {
+    if (isGuest) return [];
     const q = debouncedSearch.trim().toLowerCase();
     if (!q) return [];
     return rooms.filter(
@@ -246,7 +280,7 @@ function GroupChatPage() {
         !myMemberRoomIds.has(r.id) &&
         (r.name.toLowerCase().includes(q) || (r.description || "").toLowerCase().includes(q)),
     );
-  }, [debouncedSearch, rooms, myMemberRoomIds]);
+  }, [debouncedSearch, rooms, myMemberRoomIds, isGuest]);
 
   const openRoom = (room: ChatRoom) => {
     setActiveRoomId(room.id);
@@ -404,15 +438,17 @@ function GroupChatPage() {
       <div className="space-y-3 px-3 py-3">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Tìm phòng chat để xin tham gia..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="rounded-2xl pl-10"
-          />
+          {!isGuest && (
+            <Input
+              placeholder="Tìm phòng chat để xin tham gia..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="rounded-2xl pl-10"
+            />
+          )}
         </div>
 
-        {search.trim() && (
+        {!isGuest && search.trim() && (
           <Card className="space-y-2 rounded-2xl p-3">
             <div className="text-xs font-semibold text-muted-foreground">
               Kết quả tìm kiếm ({searchResults.length})
@@ -494,6 +530,7 @@ function GroupChatPage() {
                 key={room.id}
                 room={room}
                 userId={user?.id}
+                isGuest={isGuest}
                 isAdmin={isAdmin}
                 onOpen={() => openRoom(room)}
                 onEdit={() => openEditRoom(room)}
@@ -642,12 +679,14 @@ function GroupChatPage() {
 function RoomListItem({
   room,
   userId,
+  isGuest,
   isAdmin,
   onOpen,
   onEdit,
 }: {
   room: ChatRoom;
   userId?: string;
+  isGuest: boolean;
   isAdmin: boolean;
   onOpen: () => void;
   onEdit: () => void;
@@ -661,6 +700,12 @@ function RoomListItem({
     if (previewInFlightRef.current) return;
     previewInFlightRef.current = true;
     try {
+      if (isGuest) {
+        const items = readGuestChatMessages(room.id);
+        setLastMessage(items[items.length - 1] || null);
+        setUnreadCount(0);
+        return;
+      }
       const res = await pb.collection("group_chat_messages").getList(1, 1, {
         filter: `room = "${room.id}"`,
         sort: "-created",
@@ -684,7 +729,7 @@ function RoomListItem({
     } finally {
       previewInFlightRef.current = false;
     }
-  }, [room.id, userId]);
+  }, [room.id, userId, isGuest]);
 
   useEffect(() => {
     const refreshPreview = () => {
@@ -788,9 +833,21 @@ function RoomChatView({
   const pageRef = useRef(1);
   const latestPageIdsRef = useRef<Set<string>>(new Set());
   const refreshInFlightRef = useRef(false);
+  const isGuest = !user;
 
   const fetchMessagePage = useCallback(
     async (pageNo: number) => {
+      if (isGuest) {
+        const items = readGuestChatMessages(room.id);
+        const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+        const start = (pageNo - 1) * PAGE_SIZE;
+        const pageItems = items.slice(start, start + PAGE_SIZE);
+        return {
+          items: pageItems,
+          totalItems: items.length,
+          totalPages,
+        };
+      }
       const res = await pb.collection("group_chat_messages").getList(pageNo, PAGE_SIZE, {
         filter: `room = "${room.id}"`,
         sort: "-created",
@@ -802,35 +859,38 @@ function RoomChatView({
         totalPages: res.totalPages || 1,
       };
     },
-    [room.id],
+    [room.id, isGuest],
   );
 
   const loadInitial = useCallback(async () => {
     setLoading(true);
     try {
       const pageData = await fetchMessagePage(1);
-      await onRefreshMe();
+      if (!isGuest) await onRefreshMe();
       setMessages(pageData.items);
       setTotalCount(pageData.totalItems);
       setHasMore(pageData.totalPages > 1);
       setPage(1);
       pageRef.current = 1;
       const latest = pageData.items[pageData.items.length - 1];
-      markSeen(
-        chatSeenScope(room.id),
-        user?.id,
-        latest ? new Date(latest.created).getTime() : Date.now(),
-      );
+      if (!isGuest) {
+        markSeen(
+          chatSeenScope(room.id),
+          user?.id,
+          latest ? new Date(latest.created).getTime() : Date.now(),
+        );
+      }
       window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "auto" }), 0);
     } catch (error) {
       toast.error(getErrorMessage(error, "Lỗi tải trò chuyện"));
     } finally {
       setLoading(false);
     }
-  }, [fetchMessagePage, onRefreshMe, room.id, user?.id]);
+  }, [fetchMessagePage, isGuest, onRefreshMe, room.id, user?.id]);
 
   const refreshLatest = useCallback(async () => {
     if (refreshInFlightRef.current) return;
+    if (isGuest) return;
     if (document.visibilityState !== "visible" || !window.navigator.onLine) return;
     refreshInFlightRef.current = true;
     try {
@@ -850,7 +910,7 @@ function RoomChatView({
     } finally {
       refreshInFlightRef.current = false;
     }
-  }, [fetchMessagePage, room.id, user?.id]);
+  }, [fetchMessagePage, isGuest, room.id, user?.id]);
 
   useEffect(() => {
     loadInitial();
@@ -906,7 +966,6 @@ function RoomChatView({
       toast.error("Nội dung không được để trống");
       return;
     }
-    if (!user?.id) return;
     if (!isAdmin && blocked) {
       toast.error("Bạn đang bị chặn trong trò chuyện");
       return;
@@ -914,6 +973,31 @@ function RoomChatView({
 
     setSending(true);
     try {
+      if (isGuest) {
+        const message: ChatMessage = {
+          id: `guest-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          user: GUEST_LOCAL_OWNER_ID,
+          room: room.id,
+          content: text,
+          created: new Date().toISOString(),
+          expand: {
+            user: {
+              id: GUEST_LOCAL_OWNER_ID,
+              username: "guest",
+              full_name: "Bạn",
+              role: "user",
+            } as ChatUser,
+          },
+        };
+        const next = [...readGuestChatMessages(room.id), message];
+        writeGuestChatMessages(next);
+        setMessages(next);
+        setTotalCount(next.length);
+        setContent("");
+        setShowEmojis(false);
+        window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 0);
+        return;
+      }
       await pb.collection("group_chat_messages").create({
         user: user.id,
         room: room.id,
@@ -938,6 +1022,16 @@ function RoomChatView({
   const deleteMessage = async (id: string) => {
     if (!confirm("Xoá tin nhắn này?")) return;
     try {
+      if (isGuest) {
+        const next = readGuestStorage<ChatMessage[]>(GUEST_CHAT_STORAGE_KEY, []).filter(
+          (message) => message.id !== id,
+        );
+        writeGuestChatMessages(next);
+        setMessages((current) => current.filter((row) => row.id !== id));
+        setTotalCount((count) => Math.max(0, count - 1));
+        setActionMessage(null);
+        return;
+      }
       await pb.collection("group_chat_messages").delete(id);
       setActionMessage(null);
       await refreshLatest();
@@ -970,7 +1064,13 @@ function RoomChatView({
     pressTimerRef.current = null;
   };
 
-  const titleBadge = isAdmin ? "Admin" : blocked ? "Đang bị chặn" : "Hoạt động";
+  const titleBadge = isGuest
+    ? "Offline"
+    : isAdmin
+      ? "Admin"
+      : blocked
+        ? "Đang bị chặn"
+        : "Hoạt động";
 
   return (
     <div
@@ -1033,7 +1133,7 @@ function RoomChatView({
             ) : (
               messages.map((m) => {
                 const author = m.expand?.user;
-                const mine = m.user === user?.id;
+                const mine = m.user === (user?.id || GUEST_LOCAL_OWNER_ID);
                 const actionOpen = actionMessage?.id === m.id;
                 const time = new Date(m.created).toLocaleString("vi-VN");
                 return (

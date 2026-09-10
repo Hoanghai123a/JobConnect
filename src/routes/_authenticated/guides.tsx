@@ -454,11 +454,11 @@ function GuidesPage() {
         onValueChange={(value) => setActiveTab(value as "guides" | "documents")}
         className="space-y-3"
       >
-        <TabsList className="grid w-full grid-cols-2 rounded-xl desktop:grid desktop:grid-cols-2">
-          <TabsTrigger value="guides" className="gap-1.5 desktop:min-w-0">
+        <TabsList className="grid w-full grid-cols-2 rounded-xl">
+          <TabsTrigger value="guides" className="gap-1.5">
             <BookOpen className="h-4 w-4" /> Hướng dẫn
           </TabsTrigger>
-          <TabsTrigger value="documents" className="gap-1.5 desktop:min-w-0">
+          <TabsTrigger value="documents" className="gap-1.5">
             <FolderOpen className="h-4 w-4" /> Tài liệu
           </TabsTrigger>
         </TabsList>

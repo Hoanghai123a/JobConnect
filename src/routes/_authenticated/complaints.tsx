@@ -10,6 +10,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,6 +22,11 @@ import {
 } from "@/components/ui/dialog";
 import { exportToExcel, formatDateOnly } from "@/lib/excel";
 import { escapePb } from "@/lib/pocketbase-utils";
+import {
+  readGuestComplaints,
+  saveGuestComplaint,
+  submitGuestComplaint,
+} from "@/lib/guest-requests";
 import { toast } from "@/lib/toast";
 import {
   Phone,
@@ -90,7 +96,7 @@ async function countComplaints(filter: string) {
 }
 
 function ComplaintsPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isGuest } = useAuth();
   const [items, setItems] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -115,6 +121,21 @@ function ComplaintsPage() {
   const load = async () => {
     setLoading(true);
     try {
+      if (isGuest) {
+        const query = debouncedSearch.trim().toLocaleLowerCase("vi-VN");
+        const rows = readGuestComplaints().filter((row) => {
+          const statusMatches = tab === "all" || (row.status || "pending") === tab;
+          const searchMatches =
+            !query ||
+            [row.full_name, row.phone, row.content, row.admin_note]
+              .join(" ")
+              .toLocaleLowerCase("vi-VN")
+              .includes(query);
+          return statusMatches && searchMatches;
+        });
+        setItems(rows);
+        return;
+      }
       const filter = buildComplaintFilter({
         isAdmin,
         phone: user?.phone,
@@ -134,6 +155,15 @@ function ComplaintsPage() {
   };
 
   const loadStats = async () => {
+    if (isGuest) {
+      const rows = readGuestComplaints();
+      setStats({
+        pending: rows.filter((row) => (row.status || "pending") === "pending").length,
+        accepted: rows.filter((row) => row.status === "accepted").length,
+        rejected: rows.filter((row) => row.status === "rejected").length,
+      });
+      return;
+    }
     const base = buildComplaintFilter({
       isAdmin,
       phone: user?.phone,
@@ -152,12 +182,28 @@ function ComplaintsPage() {
     load();
     loadStats().catch(() => {});
     /* eslint-disable-next-line */
-  }, [debouncedSearch, isAdmin, user?.phone, tab]);
+  }, [debouncedSearch, isAdmin, isGuest, user?.phone, tab]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSending(true);
     try {
+      if (isGuest) {
+        if (!form.full_name.trim() || !form.phone.trim() || !form.content.trim()) {
+          toast.error("Vui lòng nhập họ tên, số điện thoại và nội dung.");
+          return;
+        }
+        const created = await submitGuestComplaint({
+          full_name: form.full_name.trim(),
+          phone: form.phone.trim(),
+          content: form.content.trim(),
+        });
+        saveGuestComplaint(created);
+        toast.success("Đã gửi khiếu nại");
+        setForm((current) => ({ ...current, content: "" }));
+        await load();
+        return;
+      }
       await pb.collection("complaints").create({
         full_name: user?.full_name || "",
         employee_code: "",
@@ -216,7 +262,10 @@ function ComplaintsPage() {
   /* ─── User view ─── */
   if (!isAdmin) {
     return (
-      <PageContainer title="Khiếu nại" subtitle="Gửi phản ánh & xem lịch sử">
+      <PageContainer
+        title="Khiếu nại"
+        subtitle={isGuest ? "Nhập đủ thông tin để gửi phản ánh" : "Gửi phản ánh & xem lịch sử"}
+      >
         <form onSubmit={submit} className="space-y-3">
           <div className="card-soft space-y-3 rounded-2xl border bg-card p-4">
             <button
@@ -229,15 +278,37 @@ function ComplaintsPage() {
                 {showProfile ? "Thu gọn" : "Xem"}
               </span>
             </button>
-            {showProfile && (
+            {isGuest ? (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label>Họ và tên</Label>
+                  <Input
+                    value={form.full_name}
+                    onChange={(event) => setForm({ ...form, full_name: event.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Số điện thoại</Label>
+                  <Input
+                    value={form.phone}
+                    inputMode="tel"
+                    onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+            ) : (
+              showProfile && (
               <div className="space-y-3">
                 <ReadOnlyField label="Họ và tên" value={user?.full_name} />
                 <ReadOnlyField
                   label="Nhà máy đang làm"
-                  value={currentEmployment?.expand?.factory?.name || "Chưa có lịch sử đi làm"}
+                  value={(user as any)?.company || "Chưa có lịch sử đi làm"}
                 />
                 <ReadOnlyField label="Số điện thoại liên hệ" value={user?.phone} />
               </div>
+              )
             )}
             <div className="space-y-1">
               <Label>Nội dung khiếu nại</Label>
@@ -257,7 +328,9 @@ function ComplaintsPage() {
         {/* Lịch sử cá nhân */}
         <div className="flex items-center gap-2 px-1 pt-2">
           <History className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-semibold">Lịch sử của bạn ({items.length})</span>
+          <span className="text-sm font-semibold">
+            {isGuest ? "Lịch sử trên thiết bị" : "Lịch sử của bạn"} ({items.length})
+          </span>
         </div>
         {loading && items.length > 0 && (
           <DataLoadingState variant="inline" label="Đang cập nhật lịch sử khiếu nại..." />

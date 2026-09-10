@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { fetchAppSettingsRecord, getAppLogoFileUrl } from "@/lib/server-app-brand";
 
-const FALLBACK_ICON = "/icons/app-icon.svg";
+const FALLBACK_ICON = "/icons/logo.png";
 
 function fallback() {
   return new Response(null, {

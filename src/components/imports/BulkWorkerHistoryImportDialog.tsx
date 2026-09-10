@@ -277,7 +277,7 @@ export function BulkWorkerHistoryImportCard({ actor }: { actor: UserRecord }) {
   };
   return (
     <>
-      <Card className="relative overflow-hidden rounded-3xl border-primary/25 bg-gradient-to-br from-primary/10 via-card to-emerald-500/10 p-5 shadow-soft desktop:col-span-2">
+      <Card className="relative overflow-hidden rounded-3xl border-primary/25 bg-gradient-to-br from-primary/10 via-card to-emerald-500/10 p-5 shadow-soft">
         <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-primary/10 blur-3xl" />
         <div className="relative space-y-4">
           <div className="flex items-start gap-3">
@@ -380,7 +380,7 @@ function BulkWorkerHistoryImportDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl desktop:max-w-2xl"
+        className="max-h-[90dvh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl"
         onEscapeKeyDown={(event) => busy && event.preventDefault()}
         onInteractOutside={(event) => busy && event.preventDefault()}
       >

@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
+import { GUEST_LOCAL_OWNER_ID, readGuestStorage, writeGuestStorage } from "@/lib/guest-storage";
 import { cn } from "@/lib/utils";
 import {
   fetchBalance,
@@ -66,6 +67,7 @@ const DAILY_COIN_CAP = 20;
 const COIN_STOP_THRESHOLD = 500;
 const DAILY_PLAY_LIMIT = 5;
 const SWIPE_THRESHOLD = 20;
+const GUEST_GEMS_COINS_KEY = "jobconnect.guestGemsCoins.v1";
 
 const SWAP_MS = 220;
 const EXPLODE_MS = 320;
@@ -362,6 +364,8 @@ function SparkleBurst() {
 
 function GemsGamePage() {
   const { user } = useAuth();
+  const isGuest = !user;
+  const ownerId = user?.id || GUEST_LOCAL_OWNER_ID;
   const isStaff = (user as any)?.role === "staff";
   const [balance, setBalance] = useState<GardenBalance | null>(null);
   const [cells, setCells] = useState<Cell[]>([]);
@@ -403,6 +407,10 @@ function GemsGamePage() {
 
   // Fetch leaderboard
   useEffect(() => {
+    if (isGuest) {
+      setRankAll([]);
+      return;
+    }
     let alive = true;
     fetchAllBalances()
       .then((balances) => {
@@ -422,7 +430,7 @@ function GemsGamePage() {
     return () => {
       alive = false;
     };
-  }, [bestScore]);
+  }, [bestScore, isGuest]);
 
   const myRank = useMemo(() => {
     if (!user?.id) return null;
@@ -433,27 +441,39 @@ function GemsGamePage() {
   const rankTop = showFullRank ? rankAll : rankAll.slice(0, LEADERBOARD_TOP);
 
   useEffect(() => {
-    if (!user?.id) return;
-    const daily = readDaily(user.id);
-    const progress = readProgress(user.id);
+    const daily = readDaily(ownerId);
+    const progress = readProgress(ownerId);
     setDailyEarned(daily.earned);
     setDailyPlays(daily.plays);
-    setBestScore(readBest(user.id));
+    setBestScore(readBest(ownerId));
     setLevel(progress.level);
     setScore(progress.score);
+    if (isGuest) {
+      const guestCoins = readGuestStorage(GUEST_GEMS_COINS_KEY, 30);
+      setBalance({
+        id: ownerId,
+        user: ownerId,
+        coins: guestCoins,
+        reserve_balance: 0,
+      });
+      setCells(createBoard(progress.level, guestCoins, daily.earned));
+      return;
+    }
+    if (!user?.id) return;
+    const userId = user.id;
 
     let alive = true;
-    fetchBalance(user.id)
+    fetchBalance(userId)
       .then((nextBalance) => {
         if (!alive) return;
         setBalance(nextBalance);
         const serverBest = nextBalance.gemsBestScore ?? 0;
-        const localBest = readBest(user.id);
+        const localBest = readBest(userId);
         const trueBest = Math.max(serverBest, localBest);
         setBestScore(trueBest);
         if (trueBest > serverBest)
           updateBalance(nextBalance.id, { gemsBestScore: trueBest }).catch(() => {});
-        if (trueBest > localBest) writeBest(user.id, trueBest);
+        if (trueBest > localBest) writeBest(userId, trueBest);
         setCells(createBoard(progress.level, nextBalance.coins, daily.earned));
       })
       .catch(() => {
@@ -463,19 +483,19 @@ function GemsGamePage() {
     return () => {
       alive = false;
     };
-  }, [user?.id]);
+  }, [isGuest, ownerId, user?.id]);
 
   useEffect(() => {
-    if (!user?.id || score <= bestScore) return;
+    if (score <= bestScore) return;
     setBestScore(score);
-    writeBest(user.id, score);
+    writeBest(ownerId, score);
+    if (isGuest) return;
     const bal = balanceRef.current;
     if (bal?.id) updateBalance(bal.id, { gemsBestScore: score }).catch(() => {});
-  }, [bestScore, score, user?.id]);
+  }, [bestScore, score, ownerId, isGuest]);
 
   // Level up
   useEffect(() => {
-    if (!user?.id) return;
     const threshold = config.threshold;
     if (threshold === null) return;
     if (score < threshold) return;
@@ -488,9 +508,9 @@ function GemsGamePage() {
       icon: <Star className="h-4 w-4" />,
     });
     setLevel(nextLevel);
-    writeProgress(user.id, { level: nextLevel, score });
+    writeProgress(ownerId, { level: nextLevel, score });
     setCells(createBoard(nextLevel, coinsRef.current, dailyEarnedRef.current));
-  }, [score, level, config.threshold, user?.id]);
+  }, [score, level, config.threshold, ownerId]);
 
   // Measure cell size responsively
   useEffect(() => {
@@ -510,7 +530,6 @@ function GemsGamePage() {
   const playsLeft = DAILY_PLAY_LIMIT - dailyPlays;
 
   const startRound = () => {
-    if (!user?.id) return;
     if (playsLeft <= 0) {
       toast.warning("Hôm nay đã hết lượt chơi, quay lại vào ngày mai nhé!");
       return;
@@ -518,17 +537,17 @@ function GemsGamePage() {
     const nextPlays = dailyPlays + 1;
     setDailyPlays(nextPlays);
     const nextDaily = { date: TODAY, earned: dailyEarnedRef.current, plays: nextPlays };
-    writeDaily(user.id, nextDaily);
+    writeDaily(ownerId, nextDaily);
     setScore(0);
     setLevel("easy");
-    writeProgress(user.id, { level: "easy", score: 0 });
+    writeProgress(ownerId, { level: "easy", score: 0 });
     setCells(createBoard("easy", coinsRef.current, dailyEarnedRef.current));
   };
 
   const awardCoins = async (rawReward: number) => {
-    const uid = user?.id;
+    const uid = ownerId;
     const bal = balanceRef.current;
-    if (!uid || !bal?.id || rawReward <= 0) return 0;
+    if (rawReward <= 0) return 0;
     const dailyRemaining = Math.max(0, DAILY_COIN_CAP - dailyEarnedRef.current);
     const reward = Math.min(rawReward, dailyRemaining);
     if (reward <= 0) {
@@ -543,6 +562,19 @@ function GemsGamePage() {
       earned: dailyEarnedRef.current + reward,
       plays: currentDaily.plays,
     };
+    if (isGuest) {
+      const nextBalance: GardenBalance = {
+        ...(bal || { id: uid, user: uid, reserve_balance: 0 }),
+        coins: nextCoins,
+      };
+      setBalance(nextBalance);
+      setDailyEarned(nextDaily.earned);
+      writeGuestStorage(GUEST_GEMS_COINS_KEY, nextCoins);
+      writeDaily(uid, nextDaily);
+      toast.success(`Ăn đúng kim cương thưởng, nhận +${reward} xu`);
+      return reward;
+    }
+    if (!bal?.id) return 0;
     const updated = await updateBalance(bal.id, { coins: nextCoins });
     setBalance(updated);
     setDailyEarned(nextDaily.earned);
@@ -659,14 +691,14 @@ function GemsGamePage() {
         const gained = result.matchedCount * 10 + awarded * 50;
         const newScore = score + gained;
         setScore(newScore);
-        if (user?.id) writeProgress(user.id, { level, score: newScore });
+        writeProgress(ownerId, { level, score: newScore });
       } catch {
         toast.error("Có lỗi, vui lòng thử lại");
       } finally {
         setBusy(false);
       }
     },
-    [busy, cells, boardSize, level, resolveChain, score, user?.id],
+    [busy, cells, boardSize, level, resolveChain, score, ownerId, awardCoins],
   );
 
   const handlePointerDown = (row: number, col: number, e: React.PointerEvent) => {

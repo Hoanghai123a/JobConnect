@@ -79,7 +79,7 @@ export function ApprovalDashboard({
     <div className="space-y-4">
       <div
         className={`rounded-3xl border border-border/70 bg-card shadow-soft ${
-          compactMobile ? "p-3" : "p-4 desktop:p-5"
+          compactMobile ? "p-3" : "p-4"
         }`}
       >
         <div className="mb-4 flex items-center justify-between gap-3">

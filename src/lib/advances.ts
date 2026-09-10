@@ -96,7 +96,7 @@ export function joinPbFilters(parts: Array<string | false | null | undefined>) {
 
 export function buildAdminAdvanceSegmentFilter(segment: AdminAdvanceSegment) {
   // Staff segment removed - only workers remain
-  return '(user.role="user" || user.role="")';
+  return '(user.role="user" || user.role="" || user="")';
 }
 
 export function containsAny(fields: string[], keyword: string) {

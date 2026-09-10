@@ -10,13 +10,37 @@ import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { isUserApproved } from "@/lib/user-approval";
 import { BottomNav } from "@/components/layout/BottomNav";
-import { DesktopAppShell } from "@/components/layout/DesktopAppShell";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
+import { startGuestLogSync, stopGuestLogSync } from "@/lib/guest-logger";
 
-const GUEST_ACCESSIBLE_PATHS = new Set(["/news", "/transport", "/counter", "/attendance"]);
+function isGuestMode() {
+  return (
+    typeof window !== "undefined" && window.localStorage.getItem("jobconnect:guest-mode") === "true"
+  );
+}
+
+const GUEST_ACCESS_PATHS = new Set([
+  "/attendance",
+  "/check-attendance",
+  "/advances",
+  "/complaints",
+  "/news",
+  "/transport",
+  "/chat",
+  "/guides",
+  "/notebook",
+  "/counter",
+  "/exchange",
+  "/garden",
+  "/gems",
+  "/minesweeper",
+]);
 
 function canGuestAccess(pathname: string) {
-  return GUEST_ACCESSIBLE_PATHS.has(pathname);
+  if (!isGuestMode()) return false;
+  return [...GUEST_ACCESS_PATHS].some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
 }
 
 export const Route = createFileRoute("/_authenticated")({
@@ -43,26 +67,28 @@ export const Route = createFileRoute("/_authenticated")({
 });
 
 function AuthLayout() {
-  const { loading, user } = useAuth();
+  const { loading, user, isGuest } = useAuth();
   const nav = useNavigate();
 
-  const guestAttendance =
-    !user &&
-    !loading &&
-    typeof window !== "undefined" &&
-    window.location.pathname === "/attendance";
+  // Khởi động guest log sync khi ở guest mode
+  useEffect(() => {
+    if (isGuest) {
+      startGuestLogSync();
+      return () => stopGuestLogSync();
+    }
+  }, [isGuest]);
 
   useEffect(() => {
-    if (!loading && !user && !guestAttendance) {
+    if (!loading && !user && !isGuest) {
       nav({ to: "/", search: { login: "1", redirect: window.location.pathname } as any });
     }
-  }, [guestAttendance, loading, nav, user]);
+  }, [isGuest, loading, nav, user]);
 
   if (loading) {
     return <DataLoadingState variant="page" label="Đang xác thực tài khoản..." rows={4} />;
   }
 
-  if (!user && guestAttendance) {
+  if (!user && isGuest) {
     return (
       <div className="pb-nav">
         <Outlet />
@@ -75,9 +101,7 @@ function AuthLayout() {
 
   return (
     <div className="pb-nav">
-      <DesktopAppShell>
-        <Outlet />
-      </DesktopAppShell>
+      <Outlet />
       <BottomNav />
     </div>
   );

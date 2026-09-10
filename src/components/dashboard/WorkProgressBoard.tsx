@@ -334,19 +334,19 @@ export function WorkProgressBoard({ compact = false }: { compact?: boolean }) {
       <section
         className={cn(
           "overflow-hidden rounded-3xl border border-border/70 bg-card shadow-soft",
-          compact ? "p-4 desktop:p-5" : "p-4 desktop:p-6",
+          compact ? "p-4" : "p-4",
         )}
       >
-        <div className="flex flex-col gap-4 border-b border-border/60 pb-4 desktop:flex-row desktop:items-center desktop:justify-between">
+        <div className="flex flex-col gap-4 border-b border-border/60 pb-4">
           <div className="flex items-start gap-3">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600">
               <ClipboardList className="h-5 w-5" />
             </span>
             <div>
-              <h3 className="text-base font-bold tracking-tight desktop:text-lg">
+              <h3 className="text-base font-bold tracking-tight">
                 Tiến độ công việc
               </h3>
-              <p className="mt-0.5 text-xs leading-5 text-muted-foreground desktop:text-sm">
+              <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
                 Theo dõi công việc dùng chung và cập nhật trạng thái theo từng tab.
               </p>
             </div>
@@ -576,7 +576,7 @@ function ProgressSummary({
           Thêm trạng thái để bắt đầu theo dõi.
         </div>
       ) : (
-        <div className="mt-4 grid grid-cols-1 justify-items-center gap-4 desktop:grid-cols-[9rem_minmax(0,1fr)] desktop:items-center desktop:justify-items-stretch desktop:gap-3">
+        <div className="mt-4 grid grid-cols-1 justify-items-center gap-4 desktop:grid-cols-[9rem_minmax(0,1fr)]">
           <ChartContainer config={config} className="h-36 w-36 max-w-full">
             <PieChart>
               <Pie
@@ -652,7 +652,7 @@ function StatusTasksDialog({
 }) {
   return (
     <Dialog open={Boolean(status)} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-3xl desktop:max-w-lg">
+      <DialogContent className="rounded-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: status?.color }} />
@@ -707,14 +707,14 @@ function StatusManager({
 }) {
   return (
     <section className="min-w-0 max-w-full rounded-2xl border border-border/70 bg-background p-4">
-      <div className="flex min-w-0 flex-col gap-3 desktop:flex-row desktop:items-center desktop:justify-between">
+      <div className="flex min-w-0 flex-col gap-3">
         <div className="min-w-0">
           <h4 className="text-sm font-semibold">Các trạng thái</h4>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Trạng thái cuối cùng luôn được tính là hoàn thành.
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={onAdd} className="w-full desktop:w-auto">
+        <Button size="sm" variant="outline" onClick={onAdd} className="w-full">
           <Plus /> Thêm trạng thái
         </Button>
       </div>
@@ -798,7 +798,7 @@ function TaskList({
 }) {
   return (
     <section className="rounded-2xl border border-border/70 bg-background p-4">
-      <div className="flex flex-col gap-3 desktop:flex-row desktop:items-center desktop:justify-between">
+      <div className="flex flex-col gap-3">
         <div>
           <h4 className="text-sm font-semibold">Danh sách công việc</h4>
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -833,7 +833,7 @@ function TaskList({
               <article
                 key={task.id}
                 className={cn(
-                  "rounded-2xl border p-3 transition desktop:p-4",
+                  "rounded-2xl border p-3 transition",
                   completed ? "border-emerald-300/70 bg-emerald-50/45" : "border-border/70 bg-card",
                 )}
               >
@@ -991,7 +991,7 @@ function EditorDialog({
   const meta = editor ? editorMeta(editor) : null;
   return (
     <Dialog open={Boolean(editor)} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-3xl desktop:max-w-md">
+      <DialogContent className="rounded-3xl">
         <DialogHeader>
           <DialogTitle>{meta?.title}</DialogTitle>
           <DialogDescription>{meta?.description}</DialogDescription>

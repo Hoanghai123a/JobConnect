@@ -861,7 +861,7 @@ function AdminImportsPage() {
       title="Nhập dữ liệu"
       subtitle="Tạo mới, nhập và cập nhật dữ liệu Excel tập trung cho quản trị viên"
     >
-      <div className="space-y-4 desktop:grid desktop:grid-cols-2 desktop:items-start desktop:gap-5 desktop:space-y-0">
+      <div className="space-y-4">
         <BulkUserUpdateImportCard actor={currentUser} />
 
         <BulkWorkerHistoryImportCard actor={currentUser} />
@@ -924,7 +924,7 @@ function AdminImportsPage() {
           {bulkEditResult && <ImportResult>{bulkEditResult}</ImportResult>}
         </Card>
 
-        <Card className="hidden space-y-3 rounded-2xl p-4 shadow-soft desktop:block">
+        <Card className="hidden space-y-3 rounded-2xl p-4 shadow-soft">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <UsersRound className="h-4 w-4 text-primary" /> Import tài khoản NLĐ
           </div>
@@ -947,7 +947,7 @@ function AdminImportsPage() {
           {accountImportResult && <ImportResult>{accountImportResult}</ImportResult>}
         </Card>
 
-        <Card className="hidden space-y-3 rounded-2xl p-4 shadow-soft desktop:block">
+        <Card className="hidden space-y-3 rounded-2xl p-4 shadow-soft">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <Building2 className="h-4 w-4 text-primary" /> Check công và bảng lương
           </div>
@@ -962,7 +962,7 @@ function AdminImportsPage() {
           </Button>
         </Card>
 
-        <Card className="space-y-2 rounded-2xl p-4 shadow-soft desktop:col-span-2">
+        <Card className="space-y-2 rounded-2xl p-4 shadow-soft">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <Workflow className="h-4 w-4 text-primary" /> Quy tắc import
           </div>

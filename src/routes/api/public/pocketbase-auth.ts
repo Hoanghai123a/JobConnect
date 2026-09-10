@@ -47,9 +47,9 @@ function escapePocketBaseString(value: string) {
 async function resolveCanonicalIdentity(identity: string) {
   const normalizedIdentity = identity.toLowerCase();
   const escapedIdentity = escapePocketBaseString(identity);
-  const filter = encodeURIComponent(`username~"${escapedIdentity}" || email~"${escapedIdentity}"`);
+  const filter = encodeURIComponent(`username~"${escapedIdentity}"`);
   const response = await fetch(
-    `${getPBUpstream()}/api/collections/users/records?page=1&perPage=25&filter=${filter}&fields=username,email`,
+    `${getPBUpstream()}/api/collections/users/records?page=1&perPage=25&filter=${filter}&fields=username`,
     {
       headers: {
         "ngrok-skip-browser-warning": "true",
@@ -60,17 +60,15 @@ async function resolveCanonicalIdentity(identity: string) {
   if (!response.ok) return null;
 
   const body = await response.json().catch(() => null);
-  const items: Array<{ username?: unknown; email?: unknown }> = Array.isArray(body?.items)
+  const items: Array<{ username?: unknown }> = Array.isArray(body?.items)
     ? body.items
     : [];
   const matched = items.find(
-    (item) =>
-      String(item?.username || "").toLowerCase() === normalizedIdentity ||
-      String(item?.email || "").toLowerCase() === normalizedIdentity,
+    (item) => String(item?.username || "").toLowerCase() === normalizedIdentity,
   );
 
   if (!matched) return null;
-  return String(matched.username || matched.email || "") || null;
+  return String(matched.username || "") || null;
 }
 
 function updateLastLogin(token: string, recordId: string) {

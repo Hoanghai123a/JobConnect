@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { GUEST_LOCAL_OWNER_ID, readGuestStorage, writeGuestStorage } from "@/lib/guest-storage";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import {
   fetchCachedStaffWorkspace,
@@ -95,6 +96,15 @@ const STATUS_TONES: Record<EntryStatus, string> = {
   other: "neutral",
 };
 
+const GUEST_NOTEBOOK_ENTRIES_KEY = "jobconnect.guestNotebookEntries.v1";
+const GUEST_NOTEBOOK_CATEGORIES_KEY = "jobconnect.guestNotebookCategories.v1";
+const GUEST_NOTEBOOK_DEFAULT_CATEGORY: CategoryRecord = {
+  id: "guest-notebook-general",
+  name: "Chung",
+  created_by: GUEST_LOCAL_OWNER_ID,
+  created: "1970-01-01T00:00:00.000Z",
+};
+
 function NotebookPage() {
   const { user } = useAuth();
   const isStaffOrAdmin = user?.role === "staff" || user?.role === "admin";
@@ -133,7 +143,13 @@ function NotebookPage() {
 
   const loadCategories = useCallback(async () => {
     if (!user?.id) {
-      setCategories([]);
+      const saved = readGuestStorage<CategoryRecord[]>(GUEST_NOTEBOOK_CATEGORIES_KEY, []);
+      if (saved.length === 0) {
+        setCategories([GUEST_NOTEBOOK_DEFAULT_CATEGORY]);
+        writeGuestStorage(GUEST_NOTEBOOK_CATEGORIES_KEY, [GUEST_NOTEBOOK_DEFAULT_CATEGORY]);
+      } else {
+        setCategories(saved);
+      }
       return;
     }
     try {
@@ -147,7 +163,41 @@ function NotebookPage() {
 
   const loadEntries = useCallback(async () => {
     if (!user?.id) {
-      setEntries([]);
+      setLoading(true);
+      const saved = readGuestStorage<NotebookEntry[]>(GUEST_NOTEBOOK_ENTRIES_KEY, []);
+      const query = debouncedSearch.trim().toLocaleLowerCase("vi-VN");
+      const filtered = saved
+        .filter((entry) => {
+          const date = entry.date ? entry.date.slice(0, 10) : "";
+          const searchText = [entry.other_person, entry.note, entry.category]
+            .join(" ")
+            .toLocaleLowerCase("vi-VN");
+          return (
+            (statusTab === "all" || entry.status === statusTab) &&
+            (!catFilter || entry.category === catFilter) &&
+            (!dateFrom || (date && date >= dateFrom)) &&
+            (!dateTo || (date && date <= dateTo)) &&
+            (!query || searchText.includes(query))
+          );
+        })
+        .sort((a, b) => {
+          const dateDiff = (b.date || "").localeCompare(a.date || "");
+          return dateDiff || (b.created || "").localeCompare(a.created || "");
+        });
+      const categoryMap = new Map(
+        readGuestStorage<CategoryRecord[]>(GUEST_NOTEBOOK_CATEGORIES_KEY, [
+          GUEST_NOTEBOOK_DEFAULT_CATEGORY,
+        ]).map((category) => [category.id, category]),
+      );
+      setEntries(
+        filtered.map((entry) => ({
+          ...entry,
+          expand: {
+            ...entry.expand,
+            category: categoryMap.get(entry.category) || entry.expand?.category,
+          },
+        })),
+      );
       setLoading(false);
       return;
     }
@@ -255,6 +305,33 @@ function NotebookPage() {
     }
     setSending(true);
     try {
+      if (!user?.id) {
+        const now = new Date().toISOString();
+        const localEntry: NotebookEntry = {
+          id:
+            editingEntry?.id ||
+            `guest-note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          date: fDate ? `${fDate} 12:00:00` : "",
+          category: fCategory,
+          worker: "",
+          other_person: fOtherPerson.trim(),
+          amount: amount || 0,
+          note: fNote.trim(),
+          status: editingEntry?.status || "pending",
+          created_by: GUEST_LOCAL_OWNER_ID,
+          created: editingEntry?.created || now,
+          expand: editingEntry?.expand,
+        };
+        const saved = readGuestStorage<NotebookEntry[]>(GUEST_NOTEBOOK_ENTRIES_KEY, []);
+        const next = editingEntry
+          ? saved.map((entry) => (entry.id === editingEntry.id ? localEntry : entry))
+          : [localEntry, ...saved];
+        writeGuestStorage(GUEST_NOTEBOOK_ENTRIES_KEY, next);
+        toast.success(editingEntry ? "Đã cập nhật" : "Đã thêm mới");
+        setShowForm(false);
+        await loadEntries();
+        return;
+      }
       const data: any = {
         date: fDate ? `${fDate} 12:00:00` : null,
         category: fCategory || null,
@@ -283,6 +360,16 @@ function NotebookPage() {
 
   const updateStatus = async (entry: NotebookEntry, status: EntryStatus) => {
     try {
+      if (!user?.id) {
+        const saved = readGuestStorage<NotebookEntry[]>(GUEST_NOTEBOOK_ENTRIES_KEY, []);
+        writeGuestStorage(
+          GUEST_NOTEBOOK_ENTRIES_KEY,
+          saved.map((item) => (item.id === entry.id ? { ...item, status } : item)),
+        );
+        toast.success(`Đã chuyển: ${STATUS_LABELS[status]}`);
+        await loadEntries();
+        return;
+      }
       await pb.collection("notebook_entries").update(entry.id, { status });
       toast.success(`Đã chuyển: ${STATUS_LABELS[status]}`);
       loadEntries();
@@ -294,6 +381,16 @@ function NotebookPage() {
   const deleteEntry = async (entry: NotebookEntry) => {
     if (!confirm("Xoá bản ghi này?")) return;
     try {
+      if (!user?.id) {
+        const saved = readGuestStorage<NotebookEntry[]>(GUEST_NOTEBOOK_ENTRIES_KEY, []);
+        writeGuestStorage(
+          GUEST_NOTEBOOK_ENTRIES_KEY,
+          saved.filter((item) => item.id !== entry.id),
+        );
+        toast.success("Đã xoá");
+        await loadEntries();
+        return;
+      }
       await pb.collection("notebook_entries").delete(entry.id);
       toast.success("Đã xoá");
       loadEntries();
@@ -306,6 +403,22 @@ function NotebookPage() {
     if (!newCatName.trim()) return;
     setCatSending(true);
     try {
+      if (!user?.id) {
+        const category: CategoryRecord = {
+          id: `guest-category-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: newCatName.trim(),
+          created_by: GUEST_LOCAL_OWNER_ID,
+          created: new Date().toISOString(),
+        };
+        const saved = readGuestStorage<CategoryRecord[]>(GUEST_NOTEBOOK_CATEGORIES_KEY, [
+          GUEST_NOTEBOOK_DEFAULT_CATEGORY,
+        ]);
+        writeGuestStorage(GUEST_NOTEBOOK_CATEGORIES_KEY, [...saved, category]);
+        setNewCatName("");
+        await loadCategories();
+        toast.success("Đã tạo danh mục");
+        return;
+      }
       await pb.collection("notebook_categories").create({
         name: newCatName.trim(),
         created_by: user!.id,
@@ -323,6 +436,26 @@ function NotebookPage() {
   const deleteCategory = async (cat: CategoryRecord) => {
     if (!confirm(`Xoá danh mục "${cat.name}"?`)) return;
     try {
+      if (!user?.id) {
+        const categoriesSaved = readGuestStorage<CategoryRecord[]>(
+          GUEST_NOTEBOOK_CATEGORIES_KEY,
+          [],
+        );
+        const entriesSaved = readGuestStorage<NotebookEntry[]>(GUEST_NOTEBOOK_ENTRIES_KEY, []);
+        writeGuestStorage(
+          GUEST_NOTEBOOK_CATEGORIES_KEY,
+          categoriesSaved.filter((item) => item.id !== cat.id),
+        );
+        writeGuestStorage(
+          GUEST_NOTEBOOK_ENTRIES_KEY,
+          entriesSaved.map((entry) =>
+            entry.category === cat.id ? { ...entry, category: "" } : entry,
+          ),
+        );
+        await Promise.all([loadCategories(), loadEntries()]);
+        toast.success("Đã xoá danh mục");
+        return;
+      }
       await pb.collection("notebook_categories").delete(cat.id);
       loadCategories();
       toast.success("Đã xoá danh mục");
@@ -354,6 +487,23 @@ function NotebookPage() {
 
     setCatUpdating(true);
     try {
+      if (!user?.id) {
+        const categoriesSaved = readGuestStorage<CategoryRecord[]>(
+          GUEST_NOTEBOOK_CATEGORIES_KEY,
+          [],
+        );
+        writeGuestStorage(
+          GUEST_NOTEBOOK_CATEGORIES_KEY,
+          categoriesSaved.map((category) =>
+            category.id === editingCategory.id ? { ...category, name } : category,
+          ),
+        );
+        await Promise.all([loadCategories(), loadEntries()]);
+        setEditingCategory(null);
+        setEditingCatName("");
+        toast.success("Đã cập nhật tên danh mục");
+        return;
+      }
       await pb.collection("notebook_categories").update(editingCategory.id, { name });
       await Promise.all([loadCategories(), loadEntries()]);
       setEditingCategory(null);
@@ -377,7 +527,7 @@ function NotebookPage() {
   return (
     <PageContainer
       title="Sổ tay"
-      subtitle="Ghi chú, ghi nợ theo ngày"
+      subtitle={user ? "Ghi chú, ghi nợ theo ngày" : "Offline - chỉ lưu trên thiết bị"}
       right={
         <div className="flex gap-1.5">
           <Button
@@ -395,7 +545,7 @@ function NotebookPage() {
       }
     >
       {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-2.5 desktop:mx-auto desktop:w-full desktop:max-w-4xl desktop:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5">
         <StatCard
           label="Đang xử lý"
           value={stats.pending.toLocaleString("vi-VN")}

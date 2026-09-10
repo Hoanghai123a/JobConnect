@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
+import { GUEST_LOCAL_OWNER_ID, readGuestStorage, writeGuestStorage } from "@/lib/guest-storage";
 import { cn } from "@/lib/utils";
 import {
   fetchBalance,
@@ -41,6 +42,7 @@ const DAILY_PLAY_LIMIT = 5;
 const LEADERBOARD_TOP = 5;
 const LEADERBOARD_MAX = 50;
 const TODAY = new Date().toISOString().slice(0, 10);
+const GUEST_MINES_COINS_KEY = "jobconnect.guestMinesweeperCoins.v1";
 
 const NUMBER_COLORS: Record<number, string> = {
   1: "text-blue-600",
@@ -223,6 +225,8 @@ function writeBest(userId: string, best: BestTimes) {
 
 function MinesweeperPage() {
   const { user } = useAuth();
+  const isGuest = !user;
+  const ownerId = user?.id || GUEST_LOCAL_OWNER_ID;
   const isStaff = (user as any)?.role === "staff";
 
   const [board, setBoard] = useState<MineCell[]>([]);
@@ -257,17 +261,29 @@ function MinesweeperPage() {
   }, [dailyEarned]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    const daily = readDaily(user.id);
+    const daily = readDaily(ownerId);
     setDailyEarned(daily.earned);
     setDailyPlays(daily.plays);
-    setBestTimes(readBest(user.id));
+    setBestTimes(readBest(ownerId));
+    if (isGuest) {
+      const guestCoins = readGuestStorage(GUEST_MINES_COINS_KEY, 30);
+      setBalance({
+        id: ownerId,
+        user: ownerId,
+        coins: guestCoins,
+        reserve_balance: 0,
+      });
+      setRankAll([]);
+      return;
+    }
+    if (!user?.id) return;
+    const userId = user.id;
     let alive = true;
-    fetchBalance(user.id)
+    fetchBalance(userId)
       .then((b) => {
         if (!alive) return;
         setBalance(b);
-        const localBest = readBest(user.id);
+        const localBest = readBest(userId);
         const serverTimes = b.minesweeperBestTimes ?? {};
         // Migrate old single-field data if new field is empty
         if (
@@ -295,7 +311,7 @@ function MinesweeperPage() {
         }
         if (changed) {
           setBestTimes({ ...localBest });
-          writeBest(user.id, localBest);
+          writeBest(userId, localBest);
           updateBalance(b.id, { minesweeperBestTimes: serverTimes }).catch(() => {});
         }
       })
@@ -336,7 +352,7 @@ function MinesweeperPage() {
     return () => {
       alive = false;
     };
-  }, [user?.id]);
+  }, [isGuest, ownerId, user?.id]);
 
   useEffect(() => {
     if (gameState === "playing") {
@@ -381,42 +397,54 @@ function MinesweeperPage() {
 
   const awardCoins = useCallback(
     async (reward: number) => {
-      const uid = user?.id;
+      const uid = ownerId;
       const bal = balanceRef.current;
-      if (!uid || !bal?.id || reward <= 0) return;
-      if (bal.coins >= COIN_STOP_THRESHOLD) return;
+      if (reward <= 0) return;
+      if ((bal?.coins ?? 0) >= COIN_STOP_THRESHOLD) return;
       const dailyRemaining = Math.max(0, DAILY_COIN_CAP - dailyEarnedRef.current);
       const actual = Math.min(reward, dailyRemaining);
       if (actual <= 0) {
         toast.info("Hôm nay đã đạt giới hạn xu");
         return;
       }
-      const nextCoins = (bal.coins ?? 0) + actual;
+      const nextCoins = (bal?.coins ?? 0) + actual;
       const nextDaily = {
         date: TODAY,
         earned: dailyEarnedRef.current + actual,
         plays: readDaily(uid).plays,
       };
+      if (isGuest) {
+        const nextBalance: GardenBalance = {
+          ...(bal || { id: uid, user: uid, reserve_balance: 0 }),
+          coins: nextCoins,
+        };
+        setBalance(nextBalance);
+        setDailyEarned(nextDaily.earned);
+        writeGuestStorage(GUEST_MINES_COINS_KEY, nextCoins);
+        writeDaily(uid, nextDaily);
+        toast.success("Thắng! Nhận +" + actual + " xu");
+        return;
+      }
+      if (!bal?.id) return;
       const updated = await updateBalance(bal.id, { coins: nextCoins });
       setBalance(updated);
       setDailyEarned(nextDaily.earned);
       writeDaily(uid, nextDaily);
       toast.success("Thắng! Nhận +" + actual + " xu");
     },
-    [user?.id],
+    [ownerId, isGuest],
   );
 
   const handleWin = useCallback(
     (currentBoard: MineCell[], elapsed: number) => {
-      if (!user?.id) return;
       setGameState("won");
-      const best = readBest(user.id);
+      const best = readBest(ownerId);
       if (best[difficulty] === null || elapsed < best[difficulty]!) {
         best[difficulty] = elapsed;
         setBestTimes({ ...best });
-        writeBest(user.id, best);
+        writeBest(ownerId, best);
         const bal = balanceRef.current;
-        if (bal?.id) {
+        if (!isGuest && bal?.id) {
           const serverTimes = bal.minesweeperBestTimes ?? {};
           const currentBest = serverTimes[difficulty] ?? 0;
           if (currentBest === 0 || elapsed < currentBest) {
@@ -430,7 +458,7 @@ function MinesweeperPage() {
       }
       awardCoins(config.coinReward);
     },
-    [user?.id, difficulty, config.coinReward, awardCoins],
+    [ownerId, isGuest, difficulty, config.coinReward, awardCoins],
   );
 
   const handleLose = useCallback((currentBoard: MineCell[]) => {
@@ -449,14 +477,13 @@ function MinesweeperPage() {
 
       if (gameState === "idle") {
         if (isFlag) return;
-        if (!user?.id) return;
         if (playsLeft <= 0) {
           toast.warning("Hôm nay đã hết lượt chơi!");
           return;
         }
         const nextPlays = dailyPlays + 1;
         setDailyPlays(nextPlays);
-        writeDaily(user.id, { date: TODAY, earned: dailyEarnedRef.current, plays: nextPlays });
+        writeDaily(ownerId, { date: TODAY, earned: dailyEarnedRef.current, plays: nextPlays });
         currentBoard = generateBoard(rows, cols, mines, row, col);
         currentBoard = floodFill(currentBoard, row, col, rows, cols);
         setBoard(currentBoard);
@@ -530,7 +557,7 @@ function MinesweeperPage() {
       setBoard(currentBoard);
       if (checkWin(currentBoard)) handleWin(currentBoard, timer);
     },
-    [board, gameState, config, timer, user?.id, dailyPlays, playsLeft, handleWin, handleLose],
+    [board, gameState, config, timer, ownerId, dailyPlays, playsLeft, handleWin, handleLose],
   );
 
   const handlePointerDown = useCallback((_row: number, _col: number, e: React.PointerEvent) => {

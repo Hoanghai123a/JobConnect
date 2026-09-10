@@ -15,7 +15,9 @@ interface AuthCtx {
   user: UserRecord | null;
   loading: boolean;
   isAdmin: boolean;
+  isGuest: boolean;
   login: (identity: string, password: string) => Promise<UserRecord>;
+  loginAsGuest: () => void;
   logout: () => void;
   refresh: () => Promise<void>;
 }
@@ -88,10 +90,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const isRedirectingForPasswordReauth = useRef(false);
 
+  const loginAsGuest = useCallback(() => {
+    // Đánh dấu là guest mode trong localStorage
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("jobconnect:guest-mode", "true");
+    }
+    // Không set pb.authStore, giữ user = null
+    setUser(null);
+    setLoading(false);
+  }, []);
+
   const logout = useCallback(() => {
     const userId = (pb.authStore.record as UserRecord | null)?.id;
     clearPasswordVerifiedAt(userId);
     pb.authStore.clear();
+    // Xóa guest mode flag
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("jobconnect:guest-mode");
+    }
   }, []);
 
   const expirePasswordReauth = useCallback(
@@ -204,6 +220,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (payload?.token && payload?.record) {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("jobconnect:guest-mode");
+      }
       pb.authStore.save(payload.token, payload.record);
       savePasswordVerifiedAt(payload.record.id);
     }
@@ -217,13 +236,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const isGuest =
+    typeof window !== "undefined" &&
+    window.localStorage.getItem("jobconnect:guest-mode") === "true" &&
+    !user;
+
   return (
     <Ctx.Provider
       value={{
         user,
         loading,
         isAdmin: user?.role === "admin",
+        isGuest,
         login,
+        loginAsGuest,
         logout,
         refresh,
       }}

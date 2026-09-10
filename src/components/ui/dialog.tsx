@@ -20,7 +20,7 @@ const DialogOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     className={cn(
-      "fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 desktop:duration-150 desktop:ease-out",
+      "fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,
     )}
     {...props}
@@ -106,7 +106,7 @@ const DialogContent = React.forwardRef<
         {...props}
         aria-describedby={props["aria-describedby"] ?? (hasDescription ? undefined : descriptionId)}
         className={cn(
-          "fixed left-[50%] top-[50%] z-50 max-h-[88dvh] w-[calc(100%-2rem)] max-w-[26rem] translate-x-[-50%] translate-y-[-50%] rounded-2xl border border-border/70 bg-background shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 desktop:duration-150 desktop:ease-out desktop:max-w-3xl",
+          "fixed left-[50%] top-[50%] z-50 max-h-[88dvh] w-[calc(100%-2rem)] max-w-[26rem] translate-x-[-50%] translate-y-[-50%] rounded-2xl border border-border/70 bg-background shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           layout === "raw"
             ? "grid gap-4 overflow-y-auto p-5"
             : isStructured

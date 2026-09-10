@@ -41,10 +41,13 @@ import { Route as ApiPushSubscriptionRouteImport } from './routes/api/push/subsc
 import { Route as ApiPushPublicKeyRouteImport } from './routes/api/push/public-key'
 import { Route as ApiPushApprovalRouteImport } from './routes/api/push/approval'
 import { Route as ApiPublicPocketbaseAuthRouteImport } from './routes/api/public/pocketbase-auth'
+import { Route as ApiPublicComplaintRouteImport } from './routes/api/public/complaint'
+import { Route as ApiPublicCheckPayrollRouteImport } from './routes/api/public/check-payroll'
 import { Route as ApiPublicAppLogoRouteImport } from './routes/api/public/app-logo'
 import { Route as ApiPublicAppIcon512RouteImport } from './routes/api/public/app-icon-512'
 import { Route as ApiPublicAppIcon192RouteImport } from './routes/api/public/app-icon-192'
 import { Route as ApiPublicAppIconRouteImport } from './routes/api/public/app-icon'
+import { Route as ApiPublicAdvanceRequestRouteImport } from './routes/api/public/advance-request'
 import { Route as AuthenticatedAdminWorkProgressRouteImport } from './routes/_authenticated/admin/work-progress'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminManageRouteImport } from './routes/_authenticated/admin/manage'
@@ -223,6 +226,16 @@ const ApiPublicPocketbaseAuthRoute = ApiPublicPocketbaseAuthRouteImport.update({
   path: '/api/public/pocketbase-auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicComplaintRoute = ApiPublicComplaintRouteImport.update({
+  id: '/api/public/complaint',
+  path: '/api/public/complaint',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicCheckPayrollRoute = ApiPublicCheckPayrollRouteImport.update({
+  id: '/api/public/check-payroll',
+  path: '/api/public/check-payroll',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicAppLogoRoute = ApiPublicAppLogoRouteImport.update({
   id: '/api/public/app-logo',
   path: '/api/public/app-logo',
@@ -241,6 +254,11 @@ const ApiPublicAppIcon192Route = ApiPublicAppIcon192RouteImport.update({
 const ApiPublicAppIconRoute = ApiPublicAppIconRouteImport.update({
   id: '/api/public/app-icon',
   path: '/api/public/app-icon',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicAdvanceRequestRoute = ApiPublicAdvanceRequestRouteImport.update({
+  id: '/api/public/advance-request',
+  path: '/api/public/advance-request',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAdminWorkProgressRoute =
@@ -358,10 +376,13 @@ export interface FileRoutesByFullPath {
   '/admin/manage': typeof AuthenticatedAdminManageRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/work-progress': typeof AuthenticatedAdminWorkProgressRoute
+  '/api/public/advance-request': typeof ApiPublicAdvanceRequestRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
   '/api/public/app-icon-512': typeof ApiPublicAppIcon512Route
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
+  '/api/public/check-payroll': typeof ApiPublicCheckPayrollRoute
+  '/api/public/complaint': typeof ApiPublicComplaintRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
   '/api/push/approval': typeof ApiPushApprovalRoute
   '/api/push/public-key': typeof ApiPushPublicKeyRoute
@@ -408,10 +429,13 @@ export interface FileRoutesByTo {
   '/admin/manage': typeof AuthenticatedAdminManageRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/work-progress': typeof AuthenticatedAdminWorkProgressRoute
+  '/api/public/advance-request': typeof ApiPublicAdvanceRequestRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
   '/api/public/app-icon-512': typeof ApiPublicAppIcon512Route
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
+  '/api/public/check-payroll': typeof ApiPublicCheckPayrollRoute
+  '/api/public/complaint': typeof ApiPublicComplaintRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
   '/api/push/approval': typeof ApiPushApprovalRoute
   '/api/push/public-key': typeof ApiPushPublicKeyRoute
@@ -461,10 +485,13 @@ export interface FileRoutesById {
   '/_authenticated/admin/manage': typeof AuthenticatedAdminManageRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/work-progress': typeof AuthenticatedAdminWorkProgressRoute
+  '/api/public/advance-request': typeof ApiPublicAdvanceRequestRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
   '/api/public/app-icon-192': typeof ApiPublicAppIcon192Route
   '/api/public/app-icon-512': typeof ApiPublicAppIcon512Route
   '/api/public/app-logo': typeof ApiPublicAppLogoRoute
+  '/api/public/check-payroll': typeof ApiPublicCheckPayrollRoute
+  '/api/public/complaint': typeof ApiPublicComplaintRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
   '/api/push/approval': typeof ApiPushApprovalRoute
   '/api/push/public-key': typeof ApiPushPublicKeyRoute
@@ -514,10 +541,13 @@ export interface FileRouteTypes {
     | '/admin/manage'
     | '/admin/settings'
     | '/admin/work-progress'
+    | '/api/public/advance-request'
     | '/api/public/app-icon'
     | '/api/public/app-icon-192'
     | '/api/public/app-icon-512'
     | '/api/public/app-logo'
+    | '/api/public/check-payroll'
+    | '/api/public/complaint'
     | '/api/public/pocketbase-auth'
     | '/api/push/approval'
     | '/api/push/public-key'
@@ -564,10 +594,13 @@ export interface FileRouteTypes {
     | '/admin/manage'
     | '/admin/settings'
     | '/admin/work-progress'
+    | '/api/public/advance-request'
     | '/api/public/app-icon'
     | '/api/public/app-icon-192'
     | '/api/public/app-icon-512'
     | '/api/public/app-logo'
+    | '/api/public/check-payroll'
+    | '/api/public/complaint'
     | '/api/public/pocketbase-auth'
     | '/api/push/approval'
     | '/api/push/public-key'
@@ -616,10 +649,13 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/manage'
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/work-progress'
+    | '/api/public/advance-request'
     | '/api/public/app-icon'
     | '/api/public/app-icon-192'
     | '/api/public/app-icon-512'
     | '/api/public/app-logo'
+    | '/api/public/check-payroll'
+    | '/api/public/complaint'
     | '/api/public/pocketbase-auth'
     | '/api/push/approval'
     | '/api/push/public-key'
@@ -644,10 +680,13 @@ export interface RootRouteChildren {
   PendingRoute: typeof PendingRoute
   RegisterRoute: typeof RegisterRoute
   ApiUidCounterRoute: typeof ApiUidCounterRoute
+  ApiPublicAdvanceRequestRoute: typeof ApiPublicAdvanceRequestRoute
   ApiPublicAppIconRoute: typeof ApiPublicAppIconRoute
   ApiPublicAppIcon192Route: typeof ApiPublicAppIcon192Route
   ApiPublicAppIcon512Route: typeof ApiPublicAppIcon512Route
   ApiPublicAppLogoRoute: typeof ApiPublicAppLogoRoute
+  ApiPublicCheckPayrollRoute: typeof ApiPublicCheckPayrollRoute
+  ApiPublicComplaintRoute: typeof ApiPublicComplaintRoute
   ApiPublicPocketbaseAuthRoute: typeof ApiPublicPocketbaseAuthRoute
   ApiPushApprovalRoute: typeof ApiPushApprovalRoute
   ApiPushPublicKeyRoute: typeof ApiPushPublicKeyRoute
@@ -886,6 +925,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPocketbaseAuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/complaint': {
+      id: '/api/public/complaint'
+      path: '/api/public/complaint'
+      fullPath: '/api/public/complaint'
+      preLoaderRoute: typeof ApiPublicComplaintRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/check-payroll': {
+      id: '/api/public/check-payroll'
+      path: '/api/public/check-payroll'
+      fullPath: '/api/public/check-payroll'
+      preLoaderRoute: typeof ApiPublicCheckPayrollRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/app-logo': {
       id: '/api/public/app-logo'
       path: '/api/public/app-logo'
@@ -912,6 +965,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/app-icon'
       fullPath: '/api/public/app-icon'
       preLoaderRoute: typeof ApiPublicAppIconRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/advance-request': {
+      id: '/api/public/advance-request'
+      path: '/api/public/advance-request'
+      fullPath: '/api/public/advance-request'
+      preLoaderRoute: typeof ApiPublicAdvanceRequestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin/work-progress': {
@@ -1104,10 +1164,13 @@ const rootRouteChildren: RootRouteChildren = {
   PendingRoute: PendingRoute,
   RegisterRoute: RegisterRoute,
   ApiUidCounterRoute: ApiUidCounterRoute,
+  ApiPublicAdvanceRequestRoute: ApiPublicAdvanceRequestRoute,
   ApiPublicAppIconRoute: ApiPublicAppIconRoute,
   ApiPublicAppIcon192Route: ApiPublicAppIcon192Route,
   ApiPublicAppIcon512Route: ApiPublicAppIcon512Route,
   ApiPublicAppLogoRoute: ApiPublicAppLogoRoute,
+  ApiPublicCheckPayrollRoute: ApiPublicCheckPayrollRoute,
+  ApiPublicComplaintRoute: ApiPublicComplaintRoute,
   ApiPublicPocketbaseAuthRoute: ApiPublicPocketbaseAuthRoute,
   ApiPushApprovalRoute: ApiPushApprovalRoute,
   ApiPushPublicKeyRoute: ApiPushPublicKeyRoute,

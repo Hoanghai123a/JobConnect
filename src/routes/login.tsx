@@ -1,6 +1,6 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Loader2, LogIn } from "lucide-react";
+import { Eye, EyeOff, Loader2, LogIn, UserRound } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { PASSWORD_REAUTH_NOTICE_KEY, useAuth } from "@/lib/auth";
 import { normalizeAccountIdentity } from "@/lib/account-identity";
@@ -21,6 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { startGuestLogSync } from "@/lib/guest-logger";
 
 export const Route = createFileRoute("/login")({
   beforeLoad: () => {
@@ -39,12 +40,21 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
-  const { login } = useAuth();
+  const { login, loginAsGuest } = useAuth();
   const nav = useNavigate();
   const [identity, setIdentity] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const onGuestAccess = () => {
+    loginAsGuest();
+    startGuestLogSync();
+    toast.success("Chế độ truy cập không đăng nhập", {
+      description: "Dữ liệu của bạn sẽ được lưu trên thiết bị này.",
+    });
+    nav({ to: "/" });
+  };
 
   useEffect(() => {
     const notice = window.sessionStorage.getItem(PASSWORD_REAUTH_NOTICE_KEY);
@@ -145,13 +155,13 @@ function LoginPage() {
   };
 
   return (
-    <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-background desktop:fixed desktop:inset-0 desktop:z-40 desktop:grid desktop:grid-cols-[minmax(0,1.2fr)_minmax(32rem,0.8fr)]">
+    <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-background desktop:grid-cols-[minmax(0,1.2fr)_minmax(32rem,0.8fr)]">
       {loading ? <LoginLoadingOverlay /> : null}
 
       <MobileBrandHeader />
       <DesktopBrandPanel />
 
-      <section className="relative flex min-w-0 flex-1 desktop:items-center desktop:justify-center desktop:bg-muted/30 desktop:px-12">
+      <section className="relative flex min-w-0 flex-1">
         <LoginFormCard
           identity={identity}
           password={password}
@@ -161,6 +171,7 @@ function LoginPage() {
           onPasswordChange={setPassword}
           onTogglePassword={() => setShowPassword((visible) => !visible)}
           onSubmit={onSubmit}
+          onGuestAccess={onGuestAccess}
         />
       </section>
     </main>
@@ -184,7 +195,7 @@ function LoginLoadingOverlay() {
 
 function MobileBrandHeader() {
   return (
-    <header className="gradient-primary relative px-6 pb-16 pt-16 text-primary-foreground desktop:hidden">
+    <header className="gradient-primary relative px-6 pb-16 pt-16 text-primary-foreground">
       <BackButton className="absolute left-4 top-4 text-primary-foreground active:bg-white/15" />
       <h1 className="text-3xl font-bold tracking-tight">Hoàng Long DJC</h1>
       <p className="mt-1 text-sm text-primary-foreground/80">
@@ -196,7 +207,7 @@ function MobileBrandHeader() {
 
 function DesktopBrandPanel() {
   return (
-    <section className="relative hidden min-h-[100dvh] overflow-hidden border-r border-border bg-background desktop:flex desktop:flex-col">
+    <section className="relative hidden min-h-[100dvh] overflow-hidden border-r border-border bg-background">
       <header className="relative z-10 flex items-center gap-4 px-12 py-10 xl:px-16">
         <BackButton className="border border-border bg-card shadow-soft hover:bg-muted" />
         <DesktopAppLogo />
@@ -273,6 +284,7 @@ function LoginFormCard({
   onPasswordChange,
   onTogglePassword,
   onSubmit,
+  onGuestAccess,
 }: {
   identity: string;
   password: string;
@@ -282,18 +294,19 @@ function LoginFormCard({
   onPasswordChange: (value: string) => void;
   onTogglePassword: () => void;
   onSubmit: (event: React.FormEvent) => void;
+  onGuestAccess: () => void;
 }) {
   return (
-    <Card className="mx-4 -mt-8 flex w-[calc(100%-2rem)] min-w-0 flex-none rounded-[1.75rem] border-border/70 bg-card/95 shadow-soft backdrop-blur desktop:mx-0 desktop:mt-0 desktop:w-full desktop:max-w-[460px] desktop:flex-none desktop:rounded-2xl">
+    <Card className="mx-4 -mt-8 flex w-[calc(100%-2rem)] min-w-0 flex-none rounded-[1.75rem] border-border/70 bg-card/95 shadow-soft backdrop-blur">
       <form onSubmit={onSubmit} noValidate className="flex h-full w-full min-w-0 flex-col">
-        <CardHeader className="hidden px-8 pb-2 pt-8 text-center desktop:flex">
+        <CardHeader className="hidden px-8 pb-2 pt-8 text-center">
           <CardTitle className="text-3xl font-bold tracking-tight">Chào mừng trở lại</CardTitle>
           <CardDescription className="text-base">
             Đăng nhập để tiếp tục công việc của bạn.
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="flex flex-col gap-5 p-6 desktop:px-8 desktop:pb-6 desktop:pt-6">
+        <CardContent className="flex flex-col gap-5 p-6">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="identity">Tên đăng nhập</Label>
             <Input
@@ -343,10 +356,27 @@ function LoginFormCard({
             )}
             {loading ? "Đang đăng nhập..." : "Đăng nhập"}
           </Button>
+
+          <div className="relative my-4">
+            <Separator />
+            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+              hoặc
+            </span>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={loading}
+            onClick={onGuestAccess}
+          >
+            <UserRound data-icon="inline-start" aria-hidden="true" />
+            Truy cập không đăng nhập
+          </Button>
         </CardContent>
 
-        <CardFooter className="flex flex-col px-6 pb-6 pt-0 desktop:px-8 desktop:pb-8">
-          <Separator className="mb-5 hidden desktop:block" />
+        <CardFooter className="flex flex-col px-6 pb-6 pt-0">
           <p className="text-center text-sm text-muted-foreground">
             Chưa có tài khoản?{" "}
             <Link

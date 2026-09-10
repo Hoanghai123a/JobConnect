@@ -24,6 +24,7 @@ import { exportToExcel } from "@/lib/excel";
 import { escapePb } from "@/lib/pocketbase-utils";
 import { accountIdentityKey } from "@/lib/account-identity";
 import { fetchEmploymentHistories, type EmploymentHistoryRecord } from "@/lib/employment";
+import { lookupGuestPayroll } from "@/lib/guest-requests";
 import { markSeen } from "@/lib/seen";
 import {
   buildPayrollCalendarCells,
@@ -1190,13 +1191,18 @@ function AdminBatchHistory({
 }
 
 function UserCheckAttendance() {
-  const { user } = useAuth();
+  const { user, isGuest } = useAuth();
   const [items, setItems] = useState<CheckItemRecord[]>([]);
   const [salaryItems, setSalaryItems] = useState<SalaryItemRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [employeeCode, setEmployeeCode] = useState("");
+  const [company, setCompany] = useState("");
 
   const load = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const attendanceRes = await pb.collection("check_attendance_items").getList(1, 100, {
@@ -1240,11 +1246,79 @@ function UserCheckAttendance() {
   }, [user?.id]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!isGuest) void load();
+    else setLoading(false);
+  }, [isGuest, load]);
+
+  const lookup = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const code = employeeCode.trim();
+    if (!code) {
+      toast.error("Vui lòng nhập mã nhân viên.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await lookupGuestPayroll(code, company.trim());
+      const normalized = (result.attendance as CheckItemRecord[]).map((item) => ({
+        ...item,
+        rows: Array.isArray(item.rows) ? item.rows : [],
+      }));
+      const normalizedSalary = (result.salary as SalaryItemRecord[]).map((item) => ({
+        ...item,
+        wage_lines: Array.isArray(item.wage_lines) ? item.wage_lines : [],
+        allowance_lines: Array.isArray(item.allowance_lines) ? item.allowance_lines : [],
+        deduction_lines: Array.isArray(item.deduction_lines) ? item.deduction_lines : [],
+        totals: item.totals || { wage: 0, allowance: 0, deduction: 0, net: 0 },
+      }));
+      setItems(normalized);
+      setSalaryItems(normalizedSalary);
+    } catch (error: unknown) {
+      setItems([]);
+      setSalaryItems([]);
+      toast.error(getUserErrorMessage(error, "Không tra cứu được bảng check công/lương."));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <PageContainer title="Check công/lương" subtitle="Bảng check công admin gửi">
+    <PageContainer
+      title="Check công/lương"
+      subtitle={isGuest ? "Nhập mã nhân viên để tra cứu dữ liệu admin đã gửi" : "Bảng check công admin gửi"}
+    >
+      {isGuest && (
+        <Card className="space-y-3 border-primary/20 bg-primary/5 p-4">
+          <form onSubmit={lookup} className="space-y-3">
+            <div className="space-y-1">
+              <Label>Mã nhân viên</Label>
+              <Input
+                value={employeeCode}
+                onChange={(event) => setEmployeeCode(event.target.value)}
+                placeholder="Ví dụ: NV001"
+                autoComplete="off"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Nhà máy (nếu cần phân biệt)</Label>
+              <Input
+                value={company}
+                onChange={(event) => setCompany(event.target.value)}
+                placeholder="Có thể bỏ trống"
+              />
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              Dữ liệu được tra cứu từ bảng admin đã tải lên. Không cần đăng nhập và không lưu mã
+              nhân viên lên thiết bị.
+            </p>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Đang tra cứu..." : "Tra cứu bảng công/lương"}
+            </Button>
+          </form>
+        </Card>
+      )}
       {loading && items.length === 0 && salaryItems.length === 0 ? (
         <DataLoadingState variant="list" label="Đang tải bảng check công và lương..." rows={3} />
       ) : (
