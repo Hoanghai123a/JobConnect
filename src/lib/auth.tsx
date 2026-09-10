@@ -88,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<UserRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [guestModeActive, setGuestModeActive] = useState(false);
   const isRedirectingForPasswordReauth = useRef(false);
 
   const loginAsGuest = useCallback(() => {
@@ -98,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Không set pb.authStore, giữ user = null
     setUser(null);
     setLoading(false);
+    setGuestModeActive(true);
   }, []);
 
   const logout = useCallback(() => {
@@ -108,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("jobconnect:guest-mode");
     }
+    setGuestModeActive(false);
   }, []);
 
   const expirePasswordReauth = useCallback(

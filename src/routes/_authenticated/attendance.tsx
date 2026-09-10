@@ -1003,7 +1003,11 @@ function LocalAttendance() {
               <button
                 type="button"
                 onClick={() => setProfileOpen(true)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 transition hover:bg-white/30"
+                className={`flex h-9 w-9 items-center justify-center rounded-full transition ${
+                  !state.profile
+                    ? "animate-pulse bg-amber-400/90 text-amber-950 shadow-lg ring-2 ring-amber-300 hover:bg-amber-400"
+                    : "bg-white/20 hover:bg-white/30"
+                }`}
                 aria-label="Cài đặt hồ sơ local"
               >
                 <Settings className="h-4 w-4" />
@@ -1015,12 +1019,23 @@ function LocalAttendance() {
             <div className="mt-0.5 text-xs opacity-80">
               Lương theo giờ: {formatVND(salary.wage)} • Phụ cấp: {formatVND(salary.allowance)}
             </div>
+            {!state.profile && (
+              <div className="mt-3 rounded-lg bg-amber-400/20 px-3 py-2 text-xs leading-relaxed text-amber-950 backdrop-blur-sm">
+                <div className="font-semibold">⚠️ Chưa có thông tin hồ sơ</div>
+                <div className="mt-1 opacity-90">
+                  Vui lòng bổ sung thông tin để hệ thống giúp tính lương chính xác hơn
+                </div>
+              </div>
+            )}
           </div>
           <div className="worker-attendance-rate-grid grid grid-cols-4 gap-1.5 bg-card p-3 text-[10px] sm:gap-2 sm:text-sm">
             {visibleRateCells.map((cell) => (
               <RateCell key={cell.label} label={cell.label} hours={cell.hours} />
             ))}
             <RateCell label="LCB" hours={profile.lcb} suffix="₫" className="col-span-2" />
+          </div>
+          <div className="border-t bg-card px-3 py-2 text-center text-[11px] text-muted-foreground">
+            💡 Đây là mức lương tạm tính, không có tác dụng thay thế quy định của công ty
           </div>
         </Card>
 
@@ -1128,10 +1143,7 @@ function LocalAttendance() {
 
       <LocalAttendanceProfileDialog
         open={profileOpen}
-        onOpenChange={(open) => {
-          if (!open && !state.profile) return;
-          setProfileOpen(open);
-        }}
+        onOpenChange={setProfileOpen}
         profile={profile}
         onSave={saveProfile}
       />

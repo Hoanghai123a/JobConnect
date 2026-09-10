@@ -645,37 +645,81 @@ function GuestDashboard({
   onLoginOpenChange: (open: boolean) => void;
   redirectTo: string;
 }) {
+  const { isGuest, loginAsGuest } = useAuth();
+
   return (
     <div className="pb-nav">
-      <section className="gradient-hero relative overflow-hidden px-5 py-8 text-white">
-        <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/20 blur-3xl" />
-        <div className="absolute -bottom-16 -left-8 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
-        <div className="relative mx-auto flex max-w-3xl flex-col items-center text-center">
-          <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-3xl bg-white/95 shadow-soft">
-            {logoUrl ? (
-              <img src={logoUrl} alt={`Logo ${settings.company_name}`} className="logo-fit" />
-            ) : (
-              <Building2 className="h-8 w-8 text-primary" />
-            )}
+      {!isGuest ? (
+        <section className="gradient-hero relative overflow-hidden px-5 py-8 text-white">
+          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/20 blur-3xl" />
+          <div className="absolute -bottom-16 -left-8 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
+          <div className="relative mx-auto flex max-w-3xl flex-col items-center text-center">
+            <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-3xl bg-white/95 shadow-soft">
+              {logoUrl ? (
+                <img src={logoUrl} alt={`Logo ${settings.company_name}`} className="logo-fit" />
+              ) : (
+                <Building2 className="h-8 w-8 text-primary" />
+              )}
+            </div>
+            <p className="mt-4 text-sm font-medium text-white/80">Chào mừng bạn đến</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight">Chấm công</h1>
+            <p className="mt-2 text-sm text-white/80">Kết nối nhà tuyển dụng & người lao động</p>
+            <p className="mt-5 max-w-xl text-sm leading-6 text-white/90">
+              Chọn cách bạn muốn sử dụng ứng dụng. Bạn có thể đăng nhập để đồng bộ dữ liệu hoặc dùng
+              ngay một số tiện ích mà không cần tài khoản.
+            </p>
+            <div className="mt-5 grid w-full max-w-sm gap-2.5 sm:grid-cols-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full bg-white text-primary hover:bg-white/90"
+                onClick={() => onLoginOpenChange(true)}
+              >
+                <LogIn aria-hidden="true" />
+                Đăng nhập
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-white/60 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                onClick={loginAsGuest}
+              >
+                <User aria-hidden="true" />
+                Dùng không cần đăng nhập
+              </Button>
+            </div>
           </div>
-          <p className="mt-4 text-sm font-medium text-white/80">Chào mừng bạn đến</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight">Chấm công</h1>
-          <p className="mt-2 text-sm text-white/80">Kết nối nhà tuyển dụng & người lao động</p>
-          <p className="mt-5 max-w-xl text-sm leading-6 text-white/90">
-            Bạn đang ở trạng thái Offline. Đăng nhập để có trải nghiệm tốt nhất và đồng bộ thông tin
-            của bạn.
-          </p>
-          <Button
-            type="button"
-            variant="secondary"
-            className="mt-5 bg-white text-primary hover:bg-white/90"
-            onClick={() => onLoginOpenChange(true)}
-          >
-            <LogIn aria-hidden="true" />
-            Đăng nhập
-          </Button>
-        </div>
-      </section>
+        </section>
+      ) : (
+        <section className="gradient-hero relative overflow-hidden px-4 py-3 text-white">
+          <div className="relative flex items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/95 shadow-soft">
+                {logoUrl ? (
+                  <img src={logoUrl} alt="logo" className="logo-fit" />
+                ) : (
+                  <Building2 className="h-5 w-5 text-primary" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">
+                  Đang dùng không cần đăng nhập
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="shrink-0 bg-white text-primary hover:bg-white/90"
+              onClick={() => onLoginOpenChange(true)}
+            >
+              <LogIn className="h-4 w-4" />
+              Đăng nhập
+            </Button>
+          </div>
+        </section>
+      )}
 
       <main className="space-y-6 px-4 py-5">
         <GuestSection
