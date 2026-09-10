@@ -3,7 +3,17 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  // Earlier versions of this worker precached hashed build assets. After a deploy
+  // those entries point at chunks that no longer exist, so the installed app
+  // crashes on open. Drop every cache we own on activation to heal those clients
+  // without asking the user to reinstall.
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+      await self.clients.claim();
+    })(),
+  );
 });
 
 self.addEventListener("fetch", () => {

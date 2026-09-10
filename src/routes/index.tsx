@@ -7,6 +7,7 @@ import { useAppSettings } from "@/lib/app-settings";
 import { isUserApproved } from "@/lib/user-approval";
 import { getSeen } from "@/lib/seen";
 import { getClientDeviceProfile } from "@/lib/device-profile";
+import { hardReload } from "@/lib/hard-reload";
 import { MobileSection } from "@/components/layout/MobileSection";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { FeatureTile } from "@/components/dashboard/FeatureTile";
@@ -120,11 +121,7 @@ function DashboardPage() {
   const handleReload = async () => {
     if (reloading) return;
     setReloading(true);
-    if ("caches" in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((k) => caches.delete(k)));
-    }
-    window.location.reload();
+    await hardReload();
   };
 
   useEffect(() => {

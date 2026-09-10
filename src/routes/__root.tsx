@@ -2,12 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   createRootRouteWithContext,
-  useRouter,
   HeadContent,
   Scripts,
   Link,
 } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/lib/auth";
@@ -19,8 +18,7 @@ import { BrandHeadLinks } from "@/components/layout/BrandHeadLinks";
 import { PushPermissionPrompt } from "@/components/layout/PushPermissionPrompt";
 import { InstallFloatingBanner } from "@/components/layout/InstallFloatingBanner";
 import { DEVICE_PROFILE_BOOTSTRAP } from "@/lib/device-profile";
-
-const CHUNK_RELOAD_KEY = "jobconnect.chunk-reload-path";
+import { didHardReload, hardReload } from "@/lib/hard-reload";
 
 function isChunkLoadError(error: Error) {
   return /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Load failed for module/i.test(
@@ -45,42 +43,42 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  const router = useRouter();
+function ErrorComponent({ error }: { error: Error; reset: () => void }) {
   const chunkLoadFailed = isChunkLoadError(error);
   const userMessage = getUserErrorMessage(error);
+  const [clearing, setClearing] = useState(false);
+  // A stale service worker in the installed app serves chunks from a previous
+  // deploy, so retrying in place cannot recover — only a hard reload can.
+  const alreadyCleared = didHardReload();
 
   useEffect(() => {
-    if (import.meta.env.DEV) console.error("[JobConnect] L?i giao di?n g?c:", error);
+    if (import.meta.env.DEV) console.error("[JobConnect] Lỗi giao diện gốc:", error);
   }, [error]);
 
   useEffect(() => {
-    if (!chunkLoadFailed) return;
-
-    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    if (sessionStorage.getItem(CHUNK_RELOAD_KEY) === currentPath) return;
-
-    sessionStorage.setItem(CHUNK_RELOAD_KEY, currentPath);
-    window.location.reload();
-  }, [chunkLoadFailed]);
+    if (!chunkLoadFailed || alreadyCleared) return;
+    setClearing(true);
+    void hardReload();
+  }, [chunkLoadFailed, alreadyCleared]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold">Đã có lỗi xảy ra</h1>
         <p className="mt-2 text-sm text-muted-foreground">{userMessage}</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Bấm tải lại để xoá dữ liệu tạm của ứng dụng và tải lại từ máy chủ. Thông tin đăng nhập và
+          dữ liệu chấm công đã lưu trên máy vẫn được giữ.
+        </p>
         <button
+          disabled={clearing}
           onClick={() => {
-            if (chunkLoadFailed) {
-              window.location.reload();
-              return;
-            }
-            router.invalidate();
-            reset();
+            setClearing(true);
+            void hardReload();
           }}
-          className="mt-6 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+          className="mt-6 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
         >
-          Thử lại
+          {clearing ? "Đang xoá dữ liệu tạm…" : "Xoá dữ liệu tạm và tải lại"}
         </button>
       </div>
     </div>
@@ -137,10 +135,14 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useEffect(() => {
-    sessionStorage.removeItem(CHUNK_RELOAD_KEY);
     const removePwaListeners = installPwaPromptListeners();
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+      // updateViaCache: "none" forces a fresh sw.js on every load so installed
+      // clients still running an older worker pick up the cache-clearing one.
+      navigator.serviceWorker
+        .register("/sw.js", { updateViaCache: "none" })
+        .then((registration) => registration.update())
+        .catch(() => undefined);
     }
     return removePwaListeners;
   }, []);
