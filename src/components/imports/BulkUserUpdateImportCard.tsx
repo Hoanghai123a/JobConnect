@@ -39,18 +39,6 @@ const FIELD_SPECS: FieldSpec[] = [
     kind: "text",
   },
   {
-    field: "default_hc_hours",
-    label: "S\u1ed1 gi\u1edd h\u00e0nh ch\u00ednh m\u1eb7c \u0111\u1ecbnh",
-    kind: "number",
-    min: 0,
-  },
-  {
-    field: "default_ot_hours",
-    label: "S\u1ed1 gi\u1edd t\u0103ng ca m\u1eb7c \u0111\u1ecbnh",
-    kind: "number",
-    min: 0,
-  },
-  {
     field: "attendance_cutoff_day",
     label: "Ng\u00e0y ch\u1ed1t c\u00f4ng",
     kind: "number",

@@ -10,8 +10,6 @@ export interface LocalAttendanceProfile {
   chuyen_can: number;
   doi_song: number;
   tham_nien: number;
-  default_hc_hours: number;
-  default_ot_hours: number;
 }
 
 export type LocalAttendanceItem = AttendanceRow & { id: string };
@@ -29,8 +27,6 @@ export const DEFAULT_LOCAL_ATTENDANCE_PROFILE: LocalAttendanceProfile = {
   chuyen_can: 0,
   doi_song: 0,
   tham_nien: 0,
-  default_hc_hours: 8,
-  default_ot_hours: 0,
 };
 
 export function createEmptyLocalAttendanceState(): LocalAttendanceState {
@@ -91,14 +87,6 @@ function normalizeProfile(value: unknown): LocalAttendanceProfile | null {
       0,
       numberOrDefault(source.tham_nien, DEFAULT_LOCAL_ATTENDANCE_PROFILE.tham_nien),
     ),
-    default_hc_hours: Math.max(
-      0,
-      numberOrDefault(source.default_hc_hours, DEFAULT_LOCAL_ATTENDANCE_PROFILE.default_hc_hours),
-    ),
-    default_ot_hours: Math.max(
-      0,
-      numberOrDefault(source.default_ot_hours, DEFAULT_LOCAL_ATTENDANCE_PROFILE.default_ot_hours),
-    ),
   };
 }
 
@@ -150,4 +138,39 @@ export function upsertLocalAttendanceRow(
 
 export function removeLocalAttendanceRow(state: LocalAttendanceState, id: string) {
   return { ...state, rows: state.rows.filter((row) => row.id !== id) };
+}
+
+// Lưu giờ HC/OT từ lần nhập cuối cùng
+const LAST_HOURS_KEY = "jobconnect.lastHours.v1";
+
+export interface LastHours {
+  hc_hours: number;
+  ot_hours: number;
+}
+
+export function saveLastHours(hc: number, ot: number) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      LAST_HOURS_KEY,
+      JSON.stringify({ hc_hours: hc, ot_hours: ot }),
+    );
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+export function readLastHours(): LastHours {
+  if (typeof window === "undefined") return { hc_hours: 8, ot_hours: 0 };
+  try {
+    const raw = window.localStorage.getItem(LAST_HOURS_KEY);
+    if (!raw) return { hc_hours: 8, ot_hours: 0 };
+    const parsed = JSON.parse(raw);
+    return {
+      hc_hours: Number.isFinite(Number(parsed.hc_hours)) ? Math.max(0, Number(parsed.hc_hours)) : 8,
+      ot_hours: Number.isFinite(Number(parsed.ot_hours)) ? Math.max(0, Number(parsed.ot_hours)) : 0,
+    };
+  } catch {
+    return { hc_hours: 8, ot_hours: 0 };
+  }
 }

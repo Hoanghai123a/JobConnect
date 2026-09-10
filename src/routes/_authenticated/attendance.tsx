@@ -53,6 +53,8 @@ import {
   removeLocalAttendanceRow,
   upsertLocalAttendanceRow,
   writeLocalAttendance,
+  saveLastHours,
+  readLastHours,
   type LocalAttendanceProfile,
   type LocalAttendanceState,
 } from "@/lib/local-attendance";
@@ -453,8 +455,8 @@ function AuthenticatedUserAttendance() {
   const [shift, setShift] = useState<Shift>("day");
   const [isHoliday, setIsHoliday] = useState(false);
   const [attendanceType, setAttendanceType] = useState<AttendanceType>("work");
-  const [hcHours, setHcHours] = useState<number>(user?.default_hc_hours ?? 8);
-  const [otHours, setOtHours] = useState<number>(user?.default_ot_hours ?? 0);
+  const [hcHours, setHcHours] = useState<number>(() => readLastHours().hc_hours);
+  const [otHours, setOtHours] = useState<number>(() => readLastHours().ot_hours);
   const [entryOpen, setEntryOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -471,11 +473,6 @@ function AuthenticatedUserAttendance() {
       alive = false;
     };
   }, [user?.id]);
-
-  useEffect(() => {
-    setHcHours(user?.default_hc_hours ?? 8);
-    setOtHours(user?.default_ot_hours ?? 0);
-  }, [user?.id, user?.default_hc_hours, user?.default_ot_hours]);
 
   const userCutoffDay = useMemo(
     () => normalizeCutoffDay(user?.attendance_cutoff_day),
@@ -574,6 +571,12 @@ function AuthenticatedUserAttendance() {
       };
       if (existing) await pb.collection("attendance").update(existing.id, payload);
       else await pb.collection("attendance").create(payload);
+
+      // Lưu giờ HC/OT vào localStorage nếu là loại "work"
+      if (attendanceType === "work") {
+        saveLastHours(normalizedPayload.hc_hours, normalizedPayload.ot_hours);
+      }
+
       toast.success("Đã lưu chấm công");
       setEntryOpen(false);
       fetchMonth();
@@ -609,12 +612,13 @@ function AuthenticatedUserAttendance() {
 
   const openEntryForDate = (nextDate: string) => {
     const existing = rows.find((r) => r.date === nextDate);
+    const lastHours = readLastHours();
     setDate(nextDate);
     setShift(existing?.shift ?? "day");
     setIsHoliday(existing?.is_holiday ?? false);
     setAttendanceType(existing?.attendance_type ?? "work");
-    setHcHours(existing?.hc_hours ?? user?.default_hc_hours ?? 8);
-    setOtHours(existing?.ot_hours ?? user?.default_ot_hours ?? 0);
+    setHcHours(existing?.hc_hours ?? lastHours.hc_hours);
+    setOtHours(existing?.ot_hours ?? lastHours.ot_hours);
     setEntryOpen(true);
   };
 
@@ -631,8 +635,9 @@ function AuthenticatedUserAttendance() {
       setOtHours(0);
       setIsHoliday(false);
     } else {
-      setHcHours(user?.default_hc_hours ?? 8);
-      setOtHours(user?.default_ot_hours ?? 0);
+      const lastHours = readLastHours();
+      setHcHours(lastHours.hc_hours);
+      setOtHours(lastHours.ot_hours);
     }
   };
 
@@ -851,8 +856,8 @@ function LocalAttendance() {
   const [shift, setShift] = useState<Shift>("day");
   const [isHoliday, setIsHoliday] = useState(false);
   const [attendanceType, setAttendanceType] = useState<AttendanceType>("work");
-  const [hcHours, setHcHours] = useState(8);
-  const [otHours, setOtHours] = useState(0);
+  const [hcHours, setHcHours] = useState(() => readLastHours().hc_hours);
+  const [otHours, setOtHours] = useState(() => readLastHours().ot_hours);
   const [saving, setSaving] = useState(false);
 
   const profile = state.profile || DEFAULT_LOCAL_ATTENDANCE_PROFILE;
@@ -899,12 +904,13 @@ function LocalAttendance() {
 
   const openEntryForDate = (nextDate: string) => {
     const existing = state.rows.find((row) => row.date === nextDate);
+    const lastHours = readLastHours();
     setDate(nextDate);
     setShift(existing?.shift ?? "day");
     setIsHoliday(existing?.is_holiday ?? false);
     setAttendanceType(existing?.attendance_type ?? "work");
-    setHcHours(existing?.hc_hours ?? profile.default_hc_hours);
-    setOtHours(existing?.ot_hours ?? profile.default_ot_hours);
+    setHcHours(existing?.hc_hours ?? lastHours.hc_hours);
+    setOtHours(existing?.ot_hours ?? lastHours.ot_hours);
     setEntryOpen(true);
   };
 
@@ -921,8 +927,9 @@ function LocalAttendance() {
       setOtHours(0);
       setIsHoliday(false);
     } else {
-      setHcHours(profile.default_hc_hours);
-      setOtHours(profile.default_ot_hours);
+      const lastHours = readLastHours();
+      setHcHours(lastHours.hc_hours);
+      setOtHours(lastHours.ot_hours);
     }
   };
 
@@ -947,6 +954,10 @@ function LocalAttendance() {
     });
     if (!writeLocalAttendance(nextState)) toast.error("Không thể lưu dữ liệu trên thiết bị");
     else {
+      // Lưu giờ HC/OT vào localStorage nếu là loại "work"
+      if (attendanceType === "work") {
+        saveLastHours(normalizedPayload.hc_hours, normalizedPayload.ot_hours);
+      }
       setState(nextState);
       setEntryOpen(false);
       toast.success("Đã lưu chấm công trên máy");
@@ -1236,18 +1247,6 @@ function LocalAttendanceProfileDialog({
           value={form.tham_nien}
           onChange={(value) => setForm({ ...form, tham_nien: value })}
         />
-        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-          <SettingsNumberField
-            label="Giờ HC mặc định"
-            value={form.default_hc_hours}
-            onChange={(value) => setForm({ ...form, default_hc_hours: value })}
-          />
-          <SettingsNumberField
-            label="Giờ TC mặc định"
-            value={form.default_ot_hours}
-            onChange={(value) => setForm({ ...form, default_ot_hours: value })}
-          />
-        </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Đóng
@@ -1456,8 +1455,6 @@ function AttendanceSettingsDialog({
     chuyen_can: 0,
     doi_song: 0,
     tham_nien: 0,
-    default_hc_hours: 8,
-    default_ot_hours: 0,
   });
   const [saving, setSaving] = useState(false);
 
@@ -1469,8 +1466,6 @@ function AttendanceSettingsDialog({
         chuyen_can: user.chuyen_can ?? 0,
         doi_song: user.doi_song ?? 0,
         tham_nien: user.tham_nien ?? 0,
-        default_hc_hours: user.default_hc_hours ?? 8,
-        default_ot_hours: user.default_ot_hours ?? 0,
       });
     }
   }, [open, user?.id]);
@@ -1486,8 +1481,6 @@ function AttendanceSettingsDialog({
         chuyen_can: Number(form.chuyen_can) || 0,
         doi_song: Number(form.doi_song) || 0,
         tham_nien: Number(form.tham_nien) || 0,
-        default_hc_hours: Number(form.default_hc_hours) || 0,
-        default_ot_hours: Number(form.default_ot_hours) || 0,
       });
       await onSaved();
       toast.success("Đã lưu cài đặt");
@@ -1543,19 +1536,6 @@ function AttendanceSettingsDialog({
           value={form.tham_nien}
           onChange={(v) => setForm({ ...form, tham_nien: v })}
         />
-
-        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-          <SettingsNumberField
-            label="Giờ HC mặc định"
-            value={form.default_hc_hours}
-            onChange={(v) => setForm({ ...form, default_hc_hours: v })}
-          />
-          <SettingsNumberField
-            label="Giờ TC mặc định"
-            value={form.default_ot_hours}
-            onChange={(v) => setForm({ ...form, default_ot_hours: v })}
-          />
-        </div>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

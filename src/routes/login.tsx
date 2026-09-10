@@ -1,12 +1,16 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Loader2, LogIn, UserRound } from "lucide-react";
+import { Eye, EyeOff, Loader2, LogIn, UserRound, Download } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { PASSWORD_REAUTH_NOTICE_KEY, useAuth } from "@/lib/auth";
 import { normalizeAccountIdentity } from "@/lib/account-identity";
 import { pb } from "@/lib/pocketbase";
 import { isProfileComplete } from "@/lib/profile";
 import { isUserApproved } from "@/lib/user-approval";
+import { usePwaInstallPrompt, isStandaloneMode, isIosDevice, isAndroidDevice } from "@/lib/pwa-install";
+import { IosInstallGuideDialog } from "@/components/layout/IosInstallGuideDialog";
+import { AndroidInstallGuideDialog } from "@/components/layout/AndroidInstallGuideDialog";
+import { DesktopInstallGuideDialog } from "@/components/layout/DesktopInstallGuideDialog";
 import { getClientDeviceProfile } from "@/lib/device-profile";
 import { BackButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/button";
@@ -47,6 +51,14 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // PWA install
+  const { installPrompt, installApp, isAndroid, isIos } = usePwaInstallPrompt();
+  const [showIosGuide, setShowIosGuide] = useState(false);
+  const [showAndroidGuide, setShowAndroidGuide] = useState(false);
+  const [showDesktopGuide, setShowDesktopGuide] = useState(false);
+  const isInstalled = isStandaloneMode();
+  const showInstallPrompt = !isInstalled && (installPrompt || isIos || (!isAndroid && !isIos));
+
   const onGuestAccess = () => {
     loginAsGuest();
     startGuestLogSync();
@@ -54,6 +66,18 @@ function LoginPage() {
       description: "Dữ liệu của bạn sẽ được lưu trên thiết bị này.",
     });
     nav({ to: "/" });
+  };
+
+  const handleInstallClick = () => {
+    if (isAndroid && installPrompt) {
+      installApp();
+    } else if (isIos) {
+      setShowIosGuide(true);
+    } else if (!isAndroid && !isIos) {
+      setShowDesktopGuide(true);
+    } else {
+      setShowAndroidGuide(true);
+    }
   };
 
   useEffect(() => {
@@ -172,8 +196,14 @@ function LoginPage() {
           onTogglePassword={() => setShowPassword((visible) => !visible)}
           onSubmit={onSubmit}
           onGuestAccess={onGuestAccess}
+          showInstallPrompt={showInstallPrompt}
+          onInstallClick={handleInstallClick}
         />
       </section>
+
+      <IosInstallGuideDialog open={showIosGuide} onOpenChange={setShowIosGuide} />
+      <AndroidInstallGuideDialog open={showAndroidGuide} onOpenChange={setShowAndroidGuide} />
+      <DesktopInstallGuideDialog open={showDesktopGuide} onOpenChange={setShowDesktopGuide} />
     </main>
   );
 }
@@ -285,6 +315,8 @@ function LoginFormCard({
   onTogglePassword,
   onSubmit,
   onGuestAccess,
+  showInstallPrompt,
+  onInstallClick,
 }: {
   identity: string;
   password: string;
@@ -295,6 +327,8 @@ function LoginFormCard({
   onTogglePassword: () => void;
   onSubmit: (event: React.FormEvent) => void;
   onGuestAccess: () => void;
+  showInstallPrompt?: boolean;
+  onInstallClick?: () => void;
 }) {
   return (
     <Card className="mx-4 -mt-8 flex w-[calc(100%-2rem)] min-w-0 flex-none rounded-[1.75rem] border-border/70 bg-card/95 shadow-soft backdrop-blur">
@@ -386,6 +420,19 @@ function LoginFormCard({
               Đăng ký
             </Link>
           </p>
+
+          {showInstallPrompt && onInstallClick && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-3 w-full text-muted-foreground hover:text-foreground"
+              onClick={onInstallClick}
+            >
+              <Download className="size-4" aria-hidden="true" />
+              Cài đặt ứng dụng
+            </Button>
+          )}
         </CardFooter>
       </form>
     </Card>

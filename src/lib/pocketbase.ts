@@ -19,8 +19,6 @@ export interface UserRecord {
   approved?: boolean | string;
   approvalStatus?: "pending" | "approved" | "rejected";
   status?: "active" | "disabled";
-  default_hc_hours?: number;
-  default_ot_hours?: number;
   attendance_cutoff_day?: number;
   lcb?: number;
   chuyen_can?: number;

@@ -80,8 +80,6 @@ async function createUser(userData) {
     doi_song: userData.doi_song || 0,
     tham_nien: userData.tham_nien || 0,
     attendance_cutoff_day: userData.attendance_cutoff_day || 30,
-    default_hc_hours: userData.default_hc_hours || 8,
-    default_ot_hours: userData.default_ot_hours || 3,
     bank_name: userData.bank_name || "",
     bank_account_number: userData.bank_account_number || "",
     bank_account_name: userData.bank_account_name || "",

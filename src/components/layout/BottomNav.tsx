@@ -43,6 +43,7 @@ export function BottomNav() {
         ? [
             { to: "/", label: "Trang chủ", icon: Home, exact: true },
             { to: "/about", label: "Về chúng tôi", icon: Info },
+            { to: "/account", label: "Tài khoản", icon: User },
             { to: "/login", label: "Đăng xuất", icon: LogOut, action: "logout" },
           ]
         : [
