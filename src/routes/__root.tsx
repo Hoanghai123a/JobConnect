@@ -66,9 +66,15 @@ function ErrorComponent({ error }: { error: Error; reset: () => void }) {
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold">Đã có lỗi xảy ra</h1>
         <p className="mt-2 text-sm text-muted-foreground">{userMessage}</p>
+        {alreadyCleared && (
+          <p className="mt-2 text-xs font-medium text-destructive">
+            Đã thử xóa dữ liệu tạm nhưng lỗi vẫn còn. Bấm nút bên dưới để thử lại hoặc liên hệ hỗ
+            trợ.
+          </p>
+        )}
         <p className="mt-2 text-xs text-muted-foreground">
-          Bấm tải lại để xoá dữ liệu tạm của ứng dụng và tải lại từ máy chủ. Thông tin đăng nhập và
-          dữ liệu chấm công đã lưu trên máy vẫn được giữ.
+          Bấm tải lại để xoá dữ liệu tạm của ứng dụng (service worker, cache, session) và tải lại
+          từ máy chủ. Thông tin đăng nhập và dữ liệu chấm công đã lưu trên máy vẫn được giữ.
         </p>
         <button
           disabled={clearing}

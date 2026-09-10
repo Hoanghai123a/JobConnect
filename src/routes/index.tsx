@@ -42,6 +42,8 @@ import {
   ListOrdered,
   Gem,
   Bomb,
+  LayoutGrid,
+  Gamepad2,
 } from "lucide-react";
 import {
   Dialog,
