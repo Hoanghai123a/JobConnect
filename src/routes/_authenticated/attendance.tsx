@@ -594,8 +594,15 @@ function AuthenticatedUserAttendance() {
     try {
       await pb.collection("attendance").delete(id);
       setRows((r) => r.filter((x) => x.id !== id));
+      toast.success("Đã xóa ngày công");
     } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
+      // Nếu record không tồn tại (404), vẫn xóa khỏi state frontend
+      if (e?.status === 404) {
+        setRows((r) => r.filter((x) => x.id !== id));
+        toast.warning("Ngày công đã được xóa trước đó");
+      } else {
+        toast.error(e?.message || "Lỗi xóa ngày công");
+      }
     }
   };
 

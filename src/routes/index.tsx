@@ -61,26 +61,6 @@ export const Route = createFileRoute("/")({
     if (!pb.authStore.isValid) return;
     const u = pb.authStore.record as UserRecord | null;
     if (u && !isUserApproved(u)) throw redirect({ to: "/pending" });
-    if (u?.role !== "user") return;
-    if (getClientDeviceProfile() === "desktop") {
-      throw redirect({ to: "/attendance" });
-    }
-
-    const today = localDateKey(new Date());
-    const tomorrow = localDateKey(addLocalDays(new Date(), 1));
-    let hasTodayAttendance: boolean;
-    try {
-      const result = await pb.collection("attendance").getList(1, 1, {
-        filter: `user="${u.id}" && date>="${today}" && date<"${tomorrow}"`,
-        fields: "id",
-      });
-      hasTodayAttendance = result.totalItems > 0;
-    } catch {
-      // Keep the dashboard available if PocketBase cannot verify today's attendance.
-      return;
-    }
-
-    if (!hasTodayAttendance) throw redirect({ to: "/attendance" });
   },
   component: DashboardPage,
 });
@@ -129,10 +109,6 @@ function DashboardPage() {
   useEffect(() => {
     if (loading) return;
     if (!user) return;
-    if (user.role === "user" && getClientDeviceProfile() === "desktop") {
-      nav({ to: "/attendance" });
-      return;
-    }
     if (!isUserApproved(user)) {
       nav({ to: "/pending" });
     }

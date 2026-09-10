@@ -4,6 +4,7 @@ import { Download, Monitor, Smartphone, X } from "lucide-react";
 import { isStandaloneMode, usePwaInstallPrompt } from "@/lib/pwa-install";
 import { IosInstallGuideDialog } from "./IosInstallGuideDialog";
 import { DesktopInstallGuideDialog } from "./DesktopInstallGuideDialog";
+import { AndroidInstallGuideDialog } from "./AndroidInstallGuideDialog";
 
 const HIDE_FLAG_KEY = "hideInstallBanner";
 const HIDE_UNTIL_KEY = "hideInstallBannerUntil";
@@ -23,6 +24,7 @@ export function InstallFloatingBanner() {
   const [hidden, setHidden] = useState(true);
   const [guideOpen, setGuideOpen] = useState(false);
   const [desktopGuideOpen, setDesktopGuideOpen] = useState(false);
+  const [androidGuideOpen, setAndroidGuideOpen] = useState(false);
   const [hasUsedEnough, setHasUsedEnough] = useState(false);
   const [focused, setFocused] = useState(false);
   const [forceOpen, setForceOpen] = useState(false);
@@ -117,6 +119,8 @@ export function InstallFloatingBanner() {
     }
     if (isDesktop) {
       setDesktopGuideOpen(true);
+    } else if (isAndroid) {
+      setAndroidGuideOpen(true);
     }
   };
 
@@ -127,7 +131,7 @@ export function InstallFloatingBanner() {
 
   return (
     <>
-      {!guideOpen && !desktopGuideOpen && (
+      {!guideOpen && !desktopGuideOpen && !androidGuideOpen && (
         <div
           data-install-banner="visible"
           className="fixed left-1/2 z-50 w-[calc(100%-1rem)] max-w-[29rem] -translate-x-1/2 rounded-2xl border border-border/70 bg-card/95 px-3 py-2 shadow-[0_18px_45px_-20px_rgba(15,23,42,0.38)] backdrop-blur-xl"
@@ -194,6 +198,7 @@ export function InstallFloatingBanner() {
 
       <IosInstallGuideDialog open={guideOpen} onOpenChange={setGuideOpen} />
       <DesktopInstallGuideDialog open={desktopGuideOpen} onOpenChange={setDesktopGuideOpen} />
+      <AndroidInstallGuideDialog open={androidGuideOpen} onOpenChange={setAndroidGuideOpen} />
     </>
   );
 }
