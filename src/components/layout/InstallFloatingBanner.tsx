@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { Download, Monitor, Smartphone, X } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import { isStandaloneMode, usePwaInstallPrompt } from "@/lib/pwa-install";
 import { IosInstallGuideDialog } from "./IosInstallGuideDialog";
 import { DesktopInstallGuideDialog } from "./DesktopInstallGuideDialog";
@@ -19,6 +20,7 @@ function isTemporarilyHidden(now: number) {
 
 export function InstallFloatingBanner() {
   const { installPrompt, installApp, isAndroid, isIos } = usePwaInstallPrompt();
+  const { loading: authLoading, user, isGuest } = useAuth();
   const { pathname } = useLocation();
   const [ready, setReady] = useState(false);
   const [hidden, setHidden] = useState(true);
@@ -31,6 +33,7 @@ export function InstallFloatingBanner() {
   const [autoPromptTriggered, setAutoPromptTriggered] = useState(false);
 
   const isDesktop = !isIos && !isAndroid;
+  const isInitialChoiceScreen = pathname === "/" && !authLoading && !user && !isGuest;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -169,7 +172,8 @@ export function InstallFloatingBanner() {
   const allowedRoute =
     pathname === "/" || pathname === "/attendance" || (pathname === "/account" && forceOpen);
 
-  if (!ready || hidden || !hasUsedEnough || focused || !allowedRoute) return null;
+  if (!ready || hidden || (!hasUsedEnough && !isInitialChoiceScreen) || focused || !allowedRoute)
+    return null;
 
   return (
     <>
