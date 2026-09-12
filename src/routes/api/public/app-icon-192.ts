@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { fetchAppSettingsRecord, getAppLogoFileUrl } from "@/lib/server-app-brand";
 import sharp from "sharp";
 
-const FALLBACK_ICON = "/icons/app-icon-192.png";
+const FALLBACK_ICON = "/icons/logo.png";
 const SIZE = 192;
 
 function fallback() {

@@ -30,7 +30,6 @@ export function InstallFloatingBanner() {
   const [hasUsedEnough, setHasUsedEnough] = useState(false);
   const [focused, setFocused] = useState(false);
   const [forceOpen, setForceOpen] = useState(false);
-  const [autoPromptTriggered, setAutoPromptTriggered] = useState(false);
 
   const isDesktop = !isIos && !isAndroid;
   const isInitialChoiceScreen = pathname === "/" && !authLoading && !user && !isGuest;
@@ -105,42 +104,6 @@ export function InstallFloatingBanner() {
     };
   }, []);
 
-  // Tự động trigger prompt cài đặt trên Android khi có installPrompt
-  useEffect(() => {
-    if (!ready || hidden || !hasUsedEnough || focused || autoPromptTriggered) return;
-    if (!isAndroid || !installPrompt) return;
-
-    const allowedRoute =
-      pathname === "/" || pathname === "/attendance" || (pathname === "/account" && forceOpen);
-    if (!allowedRoute) return;
-
-    setAutoPromptTriggered(true);
-
-    const triggerInstall = async () => {
-      const choice = await installApp();
-      if (choice === "accepted") {
-        setHidden(true);
-        setForceOpen(false);
-      } else if (choice === "dismissed") {
-        // Người dùng từ chối prompt tự động, hiển thị hướng dẫn thủ công
-        setAndroidGuideOpen(true);
-      }
-    };
-
-    triggerInstall();
-  }, [
-    ready,
-    hidden,
-    hasUsedEnough,
-    focused,
-    autoPromptTriggered,
-    isAndroid,
-    installPrompt,
-    installApp,
-    pathname,
-    forceOpen,
-  ]);
-
   const close = () => {
     window.localStorage.setItem(HIDE_FLAG_KEY, "true");
     window.localStorage.setItem(HIDE_UNTIL_KEY, String(Date.now() + HIDE_MS));
@@ -150,15 +113,18 @@ export function InstallFloatingBanner() {
 
   const install = async () => {
     if (installPrompt) {
-      const choice = await installApp();
-      if (choice === "accepted") {
-        setHidden(true);
-        setForceOpen(false);
-      } else if (choice === "dismissed") {
-        // Người dùng dismiss prompt native, hiển thị hướng dẫn thủ công
-        if (isAndroid) {
+      try {
+        const choice = await installApp();
+        if (choice === "accepted") {
+          setHidden(true);
+          setForceOpen(false);
+        } else if (choice === "dismissed" && isAndroid) {
+          // Người dùng từ chối prompt native, hiển thị hướng dẫn thủ công
           setAndroidGuideOpen(true);
         }
+      } catch {
+        // Một số Chrome chỉ cho prompt chạy sau thao tác chạm trực tiếp.
+        if (isAndroid) setAndroidGuideOpen(true);
       }
       return;
     }

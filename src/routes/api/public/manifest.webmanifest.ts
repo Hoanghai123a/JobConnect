@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { fetchAppSettingsRecord } from "@/lib/server-app-brand";
 
-const FALLBACK_ICON = "/icons/app-icon.svg";
+const FALLBACK_ICON = "/icons/logo.png";
 
 export const Route = createFileRoute("/api/public/manifest/webmanifest")({
   server: {
@@ -30,25 +30,25 @@ export const Route = createFileRoute("/api/public/manifest/webmanifest")({
             orientation: "portrait-primary",
             icons: [
               {
-                src: "/icons/app-icon-192.png",
+                src: "/api/public/app-icon-192",
                 sizes: "192x192",
                 type: "image/png",
                 purpose: "any",
               },
               {
-                src: "/icons/app-icon-512.png",
+                src: "/api/public/app-icon-512",
                 sizes: "512x512",
                 type: "image/png",
                 purpose: "any",
               },
               {
-                src: "/icons/app-icon-192.png",
+                src: "/api/public/app-icon-192",
                 sizes: "192x192",
                 type: "image/png",
                 purpose: "maskable",
               },
               {
-                src: "/icons/app-icon-512.png",
+                src: "/api/public/app-icon-512",
                 sizes: "512x512",
                 type: "image/png",
                 purpose: "maskable",
