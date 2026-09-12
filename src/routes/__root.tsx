@@ -73,8 +73,8 @@ function ErrorComponent({ error }: { error: Error; reset: () => void }) {
           </p>
         )}
         <p className="mt-2 text-xs text-muted-foreground">
-          Bấm tải lại để xoá dữ liệu tạm của ứng dụng (service worker, cache, session) và tải lại
-          từ máy chủ. Thông tin đăng nhập và dữ liệu chấm công đã lưu trên máy vẫn được giữ.
+          Bấm tải lại để xoá dữ liệu tạm của ứng dụng (service worker, cache, session) và tải lại từ
+          máy chủ. Thông tin đăng nhập và dữ liệu chấm công đã lưu trên máy vẫn được giữ.
         </p>
         <button
           disabled={clearing}

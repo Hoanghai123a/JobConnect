@@ -287,7 +287,7 @@ export function AdvancesPage() {
   useEffect(() => {
     setAdminNoteDraft(advanceDetail?.admin_note || "");
     setRecoveryNoteDraft(advanceDetail?.recovery_note || "");
-  }, [advanceDetail?.id]);
+  }, [advanceDetail?.admin_note, advanceDetail?.id, advanceDetail?.recovery_note]);
 
   useEffect(() => {
     try {
@@ -334,6 +334,7 @@ export function AdvancesPage() {
       bank_account_name: selectedAdvanceUser.bank_account_name || "",
     });
   }, [
+    selectedAdvanceUser,
     selectedAdvanceUser?.id,
     selectedAdvanceUser?.bank_name,
     selectedAdvanceUser?.bank_account_number,
@@ -594,8 +595,7 @@ export function AdvancesPage() {
           company: guestForm.company.trim(),
           phone: guestForm.phone.trim(),
           bank_name: payoutMethod === "cash" ? "" : bankForm.bank_name.trim(),
-          bank_account_number:
-            payoutMethod === "cash" ? "" : bankForm.bank_account_number.trim(),
+          bank_account_number: payoutMethod === "cash" ? "" : bankForm.bank_account_number.trim(),
           bank_account_name: payoutMethod === "cash" ? "" : bankForm.bank_account_name.trim(),
           payout_method: payoutMethod,
           amount,
@@ -1021,18 +1021,18 @@ export function AdvancesPage() {
 
               {!isGuest && (
                 <div className="grid grid-cols-2 gap-2">
-                <StatCard
-                  label="Hạn mức"
-                  value={limit > 0 ? formatMoney(limit) : "Chưa cài"}
-                  icon={Wallet}
-                  tone="primary"
-                />
-                <StatCard
-                  label="Đã báo ứng chưa thu hồi"
-                  value={formatMoney(outstanding)}
-                  icon={Banknote}
-                  tone="warning"
-                />
+                  <StatCard
+                    label="Hạn mức"
+                    value={limit > 0 ? formatMoney(limit) : "Chưa cài"}
+                    icon={Wallet}
+                    tone="primary"
+                  />
+                  <StatCard
+                    label="Đã báo ứng chưa thu hồi"
+                    value={formatMoney(outstanding)}
+                    icon={Banknote}
+                    tone="warning"
+                  />
                 </div>
               )}
               {!isGuest && (

@@ -715,9 +715,7 @@ function GuestDashboard({
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">
-                  Đang dùng không cần đăng nhập
-                </p>
+                <p className="truncate text-sm font-semibold">Đang dùng không cần đăng nhập</p>
               </div>
             </div>
             <Button

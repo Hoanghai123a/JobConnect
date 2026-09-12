@@ -12,10 +12,7 @@ interface AndroidInstallGuideDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function AndroidInstallGuideDialog({
-  open,
-  onOpenChange,
-}: AndroidInstallGuideDialogProps) {
+export function AndroidInstallGuideDialog({ open, onOpenChange }: AndroidInstallGuideDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88dvh] max-w-[26rem] overflow-y-auto">
@@ -70,8 +67,8 @@ export function AndroidInstallGuideDialog({
             </div>
           </div>
           <div className="rounded-xl bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
-            Sau khi cài, biểu tượng app sẽ xuất hiện trên màn hình chính. Chạm vào để mở như một
-            ứng dụng độc lập.
+            Sau khi cài, biểu tượng app sẽ xuất hiện trên màn hình chính. Chạm vào để mở như một ứng
+            dụng độc lập.
           </div>
         </div>
       </DialogContent>

@@ -544,44 +544,47 @@ function GemsGamePage() {
     setCells(createBoard("easy", coinsRef.current, dailyEarnedRef.current));
   };
 
-  const awardCoins = async (rawReward: number) => {
-    const uid = ownerId;
-    const bal = balanceRef.current;
-    if (rawReward <= 0) return 0;
-    const dailyRemaining = Math.max(0, DAILY_COIN_CAP - dailyEarnedRef.current);
-    const reward = Math.min(rawReward, dailyRemaining);
-    if (reward <= 0) {
-      toast.info("Hôm nay đã đạt giới hạn xu từ kim cương");
-      return 0;
-    }
+  const awardCoins = useCallback(
+    async (rawReward: number) => {
+      const uid = ownerId;
+      const bal = balanceRef.current;
+      if (rawReward <= 0) return 0;
+      const dailyRemaining = Math.max(0, DAILY_COIN_CAP - dailyEarnedRef.current);
+      const reward = Math.min(rawReward, dailyRemaining);
+      if (reward <= 0) {
+        toast.info("Hôm nay đã đạt giới hạn xu từ kim cương");
+        return 0;
+      }
 
-    const nextCoins = coinsRef.current + reward;
-    const currentDaily = readDaily(uid);
-    const nextDaily = {
-      date: TODAY,
-      earned: dailyEarnedRef.current + reward,
-      plays: currentDaily.plays,
-    };
-    if (isGuest) {
-      const nextBalance: GardenBalance = {
-        ...(bal || { id: uid, user: uid, reserve_balance: 0 }),
-        coins: nextCoins,
+      const nextCoins = coinsRef.current + reward;
+      const currentDaily = readDaily(uid);
+      const nextDaily = {
+        date: TODAY,
+        earned: dailyEarnedRef.current + reward,
+        plays: currentDaily.plays,
       };
-      setBalance(nextBalance);
+      if (isGuest) {
+        const nextBalance: GardenBalance = {
+          ...(bal || { id: uid, user: uid, reserve_balance: 0 }),
+          coins: nextCoins,
+        };
+        setBalance(nextBalance);
+        setDailyEarned(nextDaily.earned);
+        writeGuestStorage(GUEST_GEMS_COINS_KEY, nextCoins);
+        writeDaily(uid, nextDaily);
+        toast.success(`Ăn đúng kim cương thưởng, nhận +${reward} xu`);
+        return reward;
+      }
+      if (!bal?.id) return 0;
+      const updated = await updateBalance(bal.id, { coins: nextCoins });
+      setBalance(updated);
       setDailyEarned(nextDaily.earned);
-      writeGuestStorage(GUEST_GEMS_COINS_KEY, nextCoins);
       writeDaily(uid, nextDaily);
       toast.success(`Ăn đúng kim cương thưởng, nhận +${reward} xu`);
       return reward;
-    }
-    if (!bal?.id) return 0;
-    const updated = await updateBalance(bal.id, { coins: nextCoins });
-    setBalance(updated);
-    setDailyEarned(nextDaily.earned);
-    writeDaily(uid, nextDaily);
-    toast.success(`Ăn đúng kim cương thưởng, nhận +${reward} xu`);
-    return reward;
-  };
+    },
+    [isGuest, ownerId],
+  );
 
   // ---- Animation pipeline ----
 
@@ -770,146 +773,146 @@ function GemsGamePage() {
         </TabsList>
 
         <TabsContent value="play" className="mt-0 flex flex-col gap-3">
-              <section className="gradient-hero overflow-hidden rounded-3xl p-4 text-white shadow-soft">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-xs uppercase tracking-wide text-white/70">
-                      Màn chơi: {config.label}
-                    </div>
-                    <div className="mt-1 text-xl font-semibold leading-tight">
-                      Săn kim cương thưởng xu
-                    </div>
-                    <div className="mt-1 text-sm text-white/80">
-                      {config.threshold
-                        ? `Đạt ${config.threshold} điểm để qua ải tiếp theo`
-                        : "Chế độ khó — điểm tích lũy không giới hạn"}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl bg-white/15 p-3 backdrop-blur">
-                    <Gem className="h-6 w-6" />
-                  </div>
+          <section className="gradient-hero overflow-hidden rounded-3xl p-4 text-white shadow-soft">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs uppercase tracking-wide text-white/70">
+                  Màn chơi: {config.label}
                 </div>
-              </section>
-
-              <div className="worker-game-mobile-stats grid grid-cols-4 gap-2">
-                <Card className="p-3 text-center">
-                  <div className="text-[11px] text-muted-foreground">Điểm</div>
-                  <div className="text-lg font-semibold">{score}</div>
-                </Card>
-                <Card className="p-3 text-center">
-                  <div className="text-[11px] text-muted-foreground">Kỷ lục</div>
-                  <div
-                    className={cn(
-                      "text-lg font-semibold",
-                      score >= bestScore && bestScore > 0 && "text-amber-600",
-                    )}
-                  >
-                    {bestScore}
-                  </div>
-                </Card>
-                <Card className="p-3 text-center">
-                  <div className="text-[11px] text-muted-foreground">Mục tiêu</div>
-                  <div className="text-lg font-semibold">
-                    {config.threshold ? `${config.threshold}` : "∞"}
-                  </div>
-                </Card>
-                <Card className="p-3 text-center">
-                  <div className="text-[11px] text-muted-foreground">Xu hôm nay</div>
-                  <div className="text-lg font-semibold">{dailyEarned}</div>
-                </Card>
+                <div className="mt-1 text-xl font-semibold leading-tight">
+                  Săn kim cương thưởng xu
+                </div>
+                <div className="mt-1 text-sm text-white/80">
+                  {config.threshold
+                    ? `Đạt ${config.threshold} điểm để qua ải tiếp theo`
+                    : "Chế độ khó — điểm tích lũy không giới hạn"}
+                </div>
               </div>
+              <div className="rounded-2xl bg-white/15 p-3 backdrop-blur">
+                <Gem className="h-6 w-6" />
+              </div>
+            </div>
+          </section>
 
-              {config.threshold && (
-                <div className="relative h-2 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-full bg-primary transition-all duration-500"
-                    style={{ width: `${Math.min(100, (score / config.threshold) * 100)}%` }}
-                  />
-                </div>
-              )}
+          <div className="worker-game-mobile-stats grid grid-cols-4 gap-2">
+            <Card className="p-3 text-center">
+              <div className="text-[11px] text-muted-foreground">Điểm</div>
+              <div className="text-lg font-semibold">{score}</div>
+            </Card>
+            <Card className="p-3 text-center">
+              <div className="text-[11px] text-muted-foreground">Kỷ lục</div>
+              <div
+                className={cn(
+                  "text-lg font-semibold",
+                  score >= bestScore && bestScore > 0 && "text-amber-600",
+                )}
+              >
+                {bestScore}
+              </div>
+            </Card>
+            <Card className="p-3 text-center">
+              <div className="text-[11px] text-muted-foreground">Mục tiêu</div>
+              <div className="text-lg font-semibold">
+                {config.threshold ? `${config.threshold}` : "∞"}
+              </div>
+            </Card>
+            <Card className="p-3 text-center">
+              <div className="text-[11px] text-muted-foreground">Xu hôm nay</div>
+              <div className="text-lg font-semibold">{dailyEarned}</div>
+            </Card>
+          </div>
 
-              <Card className="worker-game-board-card flex flex-col gap-3 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-semibold">Bàn kim cương</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {hiddenByThreshold
-                        ? "Bạn đã đạt ngưỡng, bàn này không còn kim cương chứa xu."
-                        : visibleCoinTiles > 0
-                          ? `Có khoảng ${visibleCoinTiles} viên chứa xu.`
-                          : "Hôm nay đã hết lượt nhận xu, vẫn có thể chơi lấy điểm."}
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={startRound}
-                    disabled={busy || playsLeft <= 0}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" /> Chơi lại ({playsLeft})
-                  </Button>
-                </div>
+          {config.threshold && (
+            <div className="relative h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className="absolute inset-y-0 left-0 rounded-full bg-primary transition-all duration-500"
+                style={{ width: `${Math.min(100, (score / config.threshold) * 100)}%` }}
+              />
+            </div>
+          )}
 
-                <div className="worker-game-board mx-auto w-full max-w-[420px] touch-none select-none">
-                  <div
-                    ref={boardRef}
-                    className="relative w-full overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 p-0"
-                    style={{ height: boardPixelSize, aspectRatio: "1 / 1" }}
-                    onPointerUp={handlePointerUp}
-                    onPointerLeave={handlePointerUp}
-                  >
-                    {cells.map((cell) => {
-                      const left = cell.col * (cellSize + gap);
-                      const top = cell.row * (cellSize + gap);
-                      const spawnTop = -(cellSize + gap) * (cell.row + 2);
-                      const isMatched = cell.state === "matched";
-                      const initial = cell.spawn
-                        ? { left, top: spawnTop, opacity: 0, scale: 0.85 }
-                        : false;
-                      return (
-                        <motion.button
-                          key={cell.id}
-                          type="button"
-                          disabled={busy}
-                          onPointerDown={(e) => handlePointerDown(cell.row, cell.col, e)}
-                          className={cn(
-                            "absolute grid place-items-center rounded-xl border border-white/60 bg-white/95 shadow-sm",
-                          )}
-                          style={{ width: cellSize, height: cellSize, left, top }}
-                          initial={initial}
-                          animate={{
-                            left,
-                            top,
-                            scale: isMatched ? [1, 1.25, 0] : 1,
-                            opacity: isMatched ? [1, 1, 0] : 1,
-                          }}
-                          transition={{
-                            left: { type: "spring", stiffness: 420, damping: 34 },
-                            top: isMatched
-                              ? { duration: 0 }
-                              : { type: "spring", stiffness: 260, damping: 20, mass: 1.1 },
-                            scale: isMatched
-                              ? { duration: EXPLODE_MS / 1000, ease: "easeOut" }
-                              : { type: "spring", stiffness: 400, damping: 20 },
-                            opacity: { duration: EXPLODE_MS / 1000, ease: "easeOut" },
-                          }}
-                          aria-label={
-                            cell.coin ? `Kim cương có ${cell.coin} xu` : `Kim cương ${cell.type}`
-                          }
-                        >
-                          <GemPiece type={cell.type} />
-                          {cell.coin ? (
-                            <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-100 px-1 text-[9px] font-bold text-amber-700 shadow">
-                              +{cell.coin}
-                            </span>
-                          ) : null}
-                          {isMatched ? <SparkleBurst /> : null}
-                        </motion.button>
-                      );
-                    })}
-                  </div>
+          <Card className="worker-game-board-card flex flex-col gap-3 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold">Bàn kim cương</div>
+                <div className="text-[11px] text-muted-foreground">
+                  {hiddenByThreshold
+                    ? "Bạn đã đạt ngưỡng, bàn này không còn kim cương chứa xu."
+                    : visibleCoinTiles > 0
+                      ? `Có khoảng ${visibleCoinTiles} viên chứa xu.`
+                      : "Hôm nay đã hết lượt nhận xu, vẫn có thể chơi lấy điểm."}
                 </div>
-              </Card>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={startRound}
+                disabled={busy || playsLeft <= 0}
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Chơi lại ({playsLeft})
+              </Button>
+            </div>
+
+            <div className="worker-game-board mx-auto w-full max-w-[420px] touch-none select-none">
+              <div
+                ref={boardRef}
+                className="relative w-full overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 p-0"
+                style={{ height: boardPixelSize, aspectRatio: "1 / 1" }}
+                onPointerUp={handlePointerUp}
+                onPointerLeave={handlePointerUp}
+              >
+                {cells.map((cell) => {
+                  const left = cell.col * (cellSize + gap);
+                  const top = cell.row * (cellSize + gap);
+                  const spawnTop = -(cellSize + gap) * (cell.row + 2);
+                  const isMatched = cell.state === "matched";
+                  const initial = cell.spawn
+                    ? { left, top: spawnTop, opacity: 0, scale: 0.85 }
+                    : false;
+                  return (
+                    <motion.button
+                      key={cell.id}
+                      type="button"
+                      disabled={busy}
+                      onPointerDown={(e) => handlePointerDown(cell.row, cell.col, e)}
+                      className={cn(
+                        "absolute grid place-items-center rounded-xl border border-white/60 bg-white/95 shadow-sm",
+                      )}
+                      style={{ width: cellSize, height: cellSize, left, top }}
+                      initial={initial}
+                      animate={{
+                        left,
+                        top,
+                        scale: isMatched ? [1, 1.25, 0] : 1,
+                        opacity: isMatched ? [1, 1, 0] : 1,
+                      }}
+                      transition={{
+                        left: { type: "spring", stiffness: 420, damping: 34 },
+                        top: isMatched
+                          ? { duration: 0 }
+                          : { type: "spring", stiffness: 260, damping: 20, mass: 1.1 },
+                        scale: isMatched
+                          ? { duration: EXPLODE_MS / 1000, ease: "easeOut" }
+                          : { type: "spring", stiffness: 400, damping: 20 },
+                        opacity: { duration: EXPLODE_MS / 1000, ease: "easeOut" },
+                      }}
+                      aria-label={
+                        cell.coin ? `Kim cương có ${cell.coin} xu` : `Kim cương ${cell.type}`
+                      }
+                    >
+                      <GemPiece type={cell.type} />
+                      {cell.coin ? (
+                        <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-100 px-1 text-[9px] font-bold text-amber-700 shadow">
+                          +{cell.coin}
+                        </span>
+                      ) : null}
+                      {isMatched ? <SparkleBurst /> : null}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+          </Card>
         </TabsContent>
 
         <TabsContent value="rank" className="mt-0 flex flex-col gap-3">

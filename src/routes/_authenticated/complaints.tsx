@@ -300,14 +300,14 @@ function ComplaintsPage() {
               </div>
             ) : (
               showProfile && (
-              <div className="space-y-3">
-                <ReadOnlyField label="Họ và tên" value={user?.full_name} />
-                <ReadOnlyField
-                  label="Nhà máy đang làm"
-                  value={(user as any)?.company || "Chưa có lịch sử đi làm"}
-                />
-                <ReadOnlyField label="Số điện thoại liên hệ" value={user?.phone} />
-              </div>
+                <div className="space-y-3">
+                  <ReadOnlyField label="Họ và tên" value={user?.full_name} />
+                  <ReadOnlyField
+                    label="Nhà máy đang làm"
+                    value={(user as any)?.company || "Chưa có lịch sử đi làm"}
+                  />
+                  <ReadOnlyField label="Số điện thoại liên hệ" value={user?.phone} />
+                </div>
               )
             )}
             <div className="space-y-1">

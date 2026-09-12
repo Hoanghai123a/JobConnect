@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
@@ -133,7 +133,7 @@ function AdminAttendance() {
   const debouncedSearch = useDebouncedSearch(search);
   const [detailUser, setDetailUser] = useState<any | null>(null);
 
-  const fetchMonth = async () => {
+  const fetchMonth = useCallback(async () => {
     setLoading(true);
     try {
       const first = ym(monthDate) + "-01";
@@ -167,10 +167,10 @@ function AdminAttendance() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [monthDate]);
   useEffect(() => {
-    fetchMonth();
-  }, [monthDate.getTime()]);
+    void fetchMonth();
+  }, [fetchMonth]);
 
   /* Group by user */
   const grouped = useMemo(() => {
@@ -188,11 +188,14 @@ function AdminAttendance() {
     );
   }, [rows]);
 
-  const getFactoryNameAtDate = (userId: string, date: string) =>
-    getEmploymentHistoryAtDate(
-      employmentHistories.filter((history) => history.user === userId),
-      new Date(`${date}T00:00:00`),
-    )?.expand?.factory?.name || "";
+  const getFactoryNameAtDate = useCallback(
+    (userId: string, date: string) =>
+      getEmploymentHistoryAtDate(
+        employmentHistories.filter((history) => history.user === userId),
+        new Date(`${date}T00:00:00`),
+      )?.expand?.factory?.name || "",
+    [employmentHistories],
+  );
 
   const filtered = useMemo(() => {
     if (!debouncedSearch) return grouped;
@@ -207,7 +210,7 @@ function AdminAttendance() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q)),
     );
-  }, [grouped, debouncedSearch, employmentHistories]);
+  }, [grouped, debouncedSearch, getFactoryNameAtDate]);
 
   const totals = useMemo(() => {
     let hc = 0,
@@ -484,7 +487,7 @@ function AuthenticatedUserAttendance() {
     [monthDate, userCutoffDay],
   );
 
-  const fetchMonth = async () => {
+  const fetchMonth = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
@@ -511,10 +514,10 @@ function AuthenticatedUserAttendance() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [payrollPeriod.end, payrollPeriod.start, user?.id]);
   useEffect(() => {
-    fetchMonth();
-  }, [user?.id, payrollPeriod.start, payrollPeriod.end]);
+    void fetchMonth();
+  }, [fetchMonth]);
 
   const buckets = useMemo(() => aggregate(rows), [rows]);
   const salary = useMemo(
@@ -1468,7 +1471,7 @@ function AttendanceSettingsDialog({
         tham_nien: user.tham_nien ?? 0,
       });
     }
-  }, [open, user?.id]);
+  }, [open, user]);
 
   const save = async () => {
     if (!user) return;
@@ -1598,7 +1601,7 @@ function SettingsMoneyField({
     const formatted = Number.isFinite(value) ? new Intl.NumberFormat("vi-VN").format(value) : "";
     const currentDigits = text.replace(/\D/g, "");
     if (currentDigits !== String(value)) setText(formatted);
-  }, [value]);
+  }, [text, value]);
   return (
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>

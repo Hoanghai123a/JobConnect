@@ -44,10 +44,7 @@ export function DataLoadingState({
         role="status"
         aria-live="polite"
         aria-busy="true"
-        className={cn(
-          "mobile-page min-h-[60dvh] space-y-4 px-4 py-5",
-          className,
-        )}
+        className={cn("mobile-page min-h-[60dvh] space-y-4 px-4 py-5", className)}
       >
         <span className="sr-only">{label}</span>
         <div className="flex items-center justify-between gap-4">

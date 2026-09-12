@@ -447,7 +447,7 @@ function AdminCheckAttendance() {
   const [uploading, setUploading] = useState(false);
   const [salaryUploading, setSalaryUploading] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const [batchRes, userRes, historyRows] = await Promise.all([
       pb.collection("check_attendance_batches").getList(1, 100, {
         filter: `month="${month}"`,
@@ -467,11 +467,11 @@ function AdminCheckAttendance() {
     } catch {
       setSalaryBatches([]);
     }
-  };
+  }, [month, salaryMonth]);
 
   useEffect(() => {
     load().catch((error) => toast.error(error?.message || "Không tải được dữ liệu check công"));
-  }, [month, salaryMonth]);
+  }, [load]);
 
   const monthBatches = batches.filter((batch) => batch.month === month);
   const nextRound =
@@ -1286,7 +1286,9 @@ function UserCheckAttendance() {
   return (
     <PageContainer
       title="Check công/lương"
-      subtitle={isGuest ? "Nhập mã nhân viên để tra cứu dữ liệu admin đã gửi" : "Bảng check công admin gửi"}
+      subtitle={
+        isGuest ? "Nhập mã nhân viên để tra cứu dữ liệu admin đã gửi" : "Bảng check công admin gửi"
+      }
     >
       {isGuest && (
         <Card className="space-y-3 border-primary/20 bg-primary/5 p-4">

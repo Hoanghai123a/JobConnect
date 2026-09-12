@@ -528,262 +528,255 @@ function GardenPage() {
           ) : null}
 
           <TabsContent value="garden" className="mt-0 space-y-4">
-                {/* Khu thú cưng */}
-                <section className="gradient-hero relative overflow-hidden rounded-3xl p-4 text-white shadow-soft">
-                  <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
-                  <div className="relative flex items-center gap-4">
+            {/* Khu thú cưng */}
+            <section className="gradient-hero relative overflow-hidden rounded-3xl p-4 text-white shadow-soft">
+              <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
+              <div className="relative flex items-center gap-4">
+                <div
+                  className={cn(
+                    "relative grid h-20 w-20 shrink-0 place-items-center rounded-2xl bg-white/20 backdrop-blur",
+                    playHearts && "animate-wiggle",
+                  )}
+                >
+                  {pet.sprite ? (
                     <div
                       className={cn(
-                        "relative grid h-20 w-20 shrink-0 place-items-center rounded-2xl bg-white/20 backdrop-blur",
-                        playHearts && "animate-wiggle",
+                        "h-14 w-14",
+                        mood === "great" && "animate-bounce",
+                        mood === "sad" && "opacity-70",
+                      )}
+                      style={{
+                        backgroundImage: `url(${pet.sprite})`,
+                        backgroundSize: "400% 100%",
+                        backgroundPosition: "0 0",
+                        backgroundRepeat: "no-repeat",
+                        imageRendering: "pixelated",
+                      }}
+                    />
+                  ) : (
+                    <span
+                      className={cn(
+                        "inline-block text-5xl",
+                        mood === "great" && "animate-bounce",
+                        mood === "sad" && "opacity-70",
                       )}
                     >
-                      {pet.sprite ? (
-                        <div
-                          className={cn(
-                            "h-14 w-14",
-                            mood === "great" && "animate-bounce",
-                            mood === "sad" && "opacity-70",
-                          )}
-                          style={{
-                            backgroundImage: `url(${pet.sprite})`,
-                            backgroundSize: "400% 100%",
-                            backgroundPosition: "0 0",
-                            backgroundRepeat: "no-repeat",
-                            imageRendering: "pixelated",
+                      {pet.emoji}
+                    </span>
+                  )}
+                  {playHearts && <FloatingHearts />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    {renamingPet ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const trimmed = petNameInput.trim();
+                          if (trimmed) {
+                            const newPet = { ...state.pet, name: trimmed };
+                            commit({ ...state, pet: newPet });
+                            if (balance?.id)
+                              updateBalance(balance.id, { pet: newPet }).catch(() => {});
+                          }
+                          setRenamingPet(false);
+                        }}
+                        className="flex items-center gap-1"
+                      >
+                        <input
+                          autoFocus
+                          value={petNameInput}
+                          onChange={(e) => setPetNameInput(e.target.value)}
+                          maxLength={20}
+                          className="w-28 rounded-lg bg-white/30 px-2 py-0.5 text-sm font-semibold text-white placeholder-white/60 outline-none ring-2 ring-white/60"
+                          onBlur={() => {
+                            const trimmed = petNameInput.trim();
+                            if (trimmed) {
+                              const newPet = { ...state.pet, name: trimmed };
+                              commit({ ...state, pet: newPet });
+                              if (balance?.id)
+                                updateBalance(balance.id, { pet: newPet }).catch(() => {});
+                            }
+                            setRenamingPet(false);
                           }}
                         />
-                      ) : (
-                        <span
-                          className={cn(
-                            "inline-block text-5xl",
-                            mood === "great" && "animate-bounce",
-                            mood === "sad" && "opacity-70",
-                          )}
-                        >
-                          {pet.emoji}
-                        </span>
-                      )}
-                      {playHearts && <FloatingHearts />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        {renamingPet ? (
-                          <form
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              const trimmed = petNameInput.trim();
-                              if (trimmed) {
-                                const newPet = { ...state.pet, name: trimmed };
-                                commit({ ...state, pet: newPet });
-                                if (balance?.id)
-                                  updateBalance(balance.id, { pet: newPet }).catch(() => {});
-                              }
-                              setRenamingPet(false);
-                            }}
-                            className="flex items-center gap-1"
-                          >
-                            <input
-                              autoFocus
-                              value={petNameInput}
-                              onChange={(e) => setPetNameInput(e.target.value)}
-                              maxLength={20}
-                              className="w-28 rounded-lg bg-white/30 px-2 py-0.5 text-sm font-semibold text-white placeholder-white/60 outline-none ring-2 ring-white/60"
-                              onBlur={() => {
-                                const trimmed = petNameInput.trim();
-                                if (trimmed) {
-                                  const newPet = { ...state.pet, name: trimmed };
-                                  commit({ ...state, pet: newPet });
-                                  if (balance?.id)
-                                    updateBalance(balance.id, { pet: newPet }).catch(() => {});
-                                }
-                                setRenamingPet(false);
-                              }}
-                            />
-                          </form>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPetNameInput(state.pet.name);
-                              setRenamingPet(true);
-                            }}
-                            className="flex items-center gap-1 text-lg font-semibold hover:underline"
-                          >
-                            {state.pet.name}
-                            <Pencil className="h-3.5 w-3.5 opacity-60" />
-                          </button>
-                        )}
-                        <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] uppercase tracking-wide backdrop-blur">
-                          {pet.name}
-                        </span>
-                      </div>
-                      <Meter
-                        label="No bụng"
-                        value={hungerPct}
-                        icon={<Drumstick className="h-3 w-3" />}
-                      />
-                      <Meter
-                        label="Vui vẻ"
-                        value={happyPct}
-                        icon={<Sparkles className="h-3 w-3" />}
-                      />
-                    </div>
-                  </div>
-                  <div className="relative mt-3 grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => setFeedOpen(true)}
-                      className="flex items-center justify-center gap-1.5 rounded-xl bg-white/90 py-2 text-sm font-medium text-emerald-700 transition active:scale-95"
-                    >
-                      <Drumstick className="h-4 w-4" /> Cho ăn
-                    </button>
-                    <button
-                      onClick={playPet}
-                      className="flex items-center justify-center gap-1.5 rounded-xl bg-white/90 py-2 text-sm font-medium text-emerald-700 transition active:scale-95"
-                    >
-                      <Hand className="h-4 w-4" /> Vuốt ve
-                    </button>
-                  </div>
-                </section>
-
-                {/* Hành động phụ */}
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setShopOpen(true)}
-                    className="flex items-center justify-center gap-2 rounded-2xl bg-card py-3 text-sm font-medium shadow-soft transition active:scale-95"
-                  >
-                    <Store className="h-4 w-4 text-primary" /> Cửa hàng thú
-                  </button>
-                  <div className="flex items-center justify-between gap-2 rounded-2xl bg-card px-3 py-3 text-sm font-medium shadow-soft">
-                    <span className="flex items-center gap-2">
-                      <Leaf className="h-4 w-4 text-primary" /> Đi dạo
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPetNameInput(state.pet.name);
+                          setRenamingPet(true);
+                        }}
+                        className="flex items-center gap-1 text-lg font-semibold hover:underline"
+                      >
+                        {state.pet.name}
+                        <Pencil className="h-3.5 w-3.5 opacity-60" />
+                      </button>
+                    )}
+                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] uppercase tracking-wide backdrop-blur">
+                      {pet.name}
                     </span>
-                    <Switch
-                      checked={state.roamingEnabled}
-                      onCheckedChange={(v) => commit({ ...state, roamingEnabled: v })}
-                    />
+                  </div>
+                  <Meter
+                    label="No bụng"
+                    value={hungerPct}
+                    icon={<Drumstick className="h-3 w-3" />}
+                  />
+                  <Meter label="Vui vẻ" value={happyPct} icon={<Sparkles className="h-3 w-3" />} />
+                </div>
+              </div>
+              <div className="relative mt-3 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setFeedOpen(true)}
+                  className="flex items-center justify-center gap-1.5 rounded-xl bg-white/90 py-2 text-sm font-medium text-emerald-700 transition active:scale-95"
+                >
+                  <Drumstick className="h-4 w-4" /> Cho ăn
+                </button>
+                <button
+                  onClick={playPet}
+                  className="flex items-center justify-center gap-1.5 rounded-xl bg-white/90 py-2 text-sm font-medium text-emerald-700 transition active:scale-95"
+                >
+                  <Hand className="h-4 w-4" /> Vuốt ve
+                </button>
+              </div>
+            </section>
+
+            {/* Hành động phụ */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setShopOpen(true)}
+                className="flex items-center justify-center gap-2 rounded-2xl bg-card py-3 text-sm font-medium shadow-soft transition active:scale-95"
+              >
+                <Store className="h-4 w-4 text-primary" /> Cửa hàng thú
+              </button>
+              <div className="flex items-center justify-between gap-2 rounded-2xl bg-card px-3 py-3 text-sm font-medium shadow-soft">
+                <span className="flex items-center gap-2">
+                  <Leaf className="h-4 w-4 text-primary" /> Đi dạo
+                </span>
+                <Switch
+                  checked={state.roamingEnabled}
+                  onCheckedChange={(v) => commit({ ...state, roamingEnabled: v })}
+                />
+              </div>
+            </div>
+
+            {/* Khu vườn */}
+            <section className="rounded-3xl bg-card p-4 shadow-soft">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold tracking-tight">Luống hoa</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {state.unlockedPlots} ô · Thu hoạch: {state.totalHarvested}
                   </div>
                 </div>
-
-                {/* Khu vườn */}
-                <section className="rounded-3xl bg-card p-4 shadow-soft">
-                  <div className="mb-3 flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-semibold tracking-tight">Luống hoa</div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {state.unlockedPlots} ô · Thu hoạch: {state.totalHarvested}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {Array.from({ length: state.unlockedPlots }).map((_, i) => {
-                      const plot = state.plots[i];
-                      const flower = flowerById(plot?.flowerId ?? null);
-                      const ready = isReady(plot ?? { flowerId: null, plantedAt: null }, now);
-                      const progress = growthProgress(
-                        plot ?? { flowerId: null, plantedAt: null },
-                        now,
-                      );
-                      return (
-                        <button
-                          key={i}
-                          onClick={() => {
-                            if (!flower) setSeedPickerFor(i);
-                            else if (ready) harvest(i);
-                          }}
-                          className={cn(
-                            "relative flex aspect-square flex-col items-center justify-center gap-0 rounded-lg border border-dashed text-center transition active:scale-95",
-                            flower
-                              ? ready
-                                ? "border-amber-400 bg-amber-50"
-                                : "border-emerald-200 bg-emerald-50"
-                              : "border-border bg-muted/40",
-                          )}
+              </div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {Array.from({ length: state.unlockedPlots }).map((_, i) => {
+                  const plot = state.plots[i];
+                  const flower = flowerById(plot?.flowerId ?? null);
+                  const ready = isReady(plot ?? { flowerId: null, plantedAt: null }, now);
+                  const progress = growthProgress(plot ?? { flowerId: null, plantedAt: null }, now);
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        if (!flower) setSeedPickerFor(i);
+                        else if (ready) harvest(i);
+                      }}
+                      className={cn(
+                        "relative flex aspect-square flex-col items-center justify-center gap-0 rounded-lg border border-dashed text-center transition active:scale-95",
+                        flower
+                          ? ready
+                            ? "border-amber-400 bg-amber-50"
+                            : "border-emerald-200 bg-emerald-50"
+                          : "border-border bg-muted/40",
+                      )}
+                    >
+                      {harvestAnim?.plotIndex === i && (
+                        <span
+                          key={harvestAnim.key}
+                          className="pointer-events-none absolute left-1/2 -top-2 -translate-x-1/2 text-xl animate-float-up"
                         >
-                          {harvestAnim?.plotIndex === i && (
-                            <span
-                              key={harvestAnim.key}
-                              className="pointer-events-none absolute left-1/2 -top-2 -translate-x-1/2 text-xl animate-float-up"
-                            >
-                              {harvestAnim.emoji}
+                          {harvestAnim.emoji}
+                        </span>
+                      )}
+                      {!flower ? (
+                        <span className="text-lg text-muted-foreground/50">+</span>
+                      ) : (
+                        <>
+                          <span
+                            className={cn(
+                              "text-base leading-none inline-block",
+                              ready && "animate-bounce",
+                            )}
+                            style={{
+                              transform: `scale(${ready ? 1 : (0.35 + progress * 0.65).toFixed(2)})`,
+                              transformOrigin: "center bottom",
+                              transition: "transform 0.4s ease",
+                            }}
+                          >
+                            {flower.emoji}
+                          </span>
+                          <span className="text-[9px] font-medium text-foreground/80 leading-tight truncate w-full text-center px-0.5">
+                            {flower.name}
+                          </span>
+                          {ready ? (
+                            <span className="text-[9px] font-semibold text-amber-600 leading-tight">
+                              Thu hoạch
                             </span>
-                          )}
-                          {!flower ? (
-                            <span className="text-lg text-muted-foreground/50">+</span>
                           ) : (
                             <>
-                              <span
-                                className={cn(
-                                  "text-base leading-none inline-block",
-                                  ready && "animate-bounce",
-                                )}
-                                style={{
-                                  transform: `scale(${ready ? 1 : (0.35 + progress * 0.65).toFixed(2)})`,
-                                  transformOrigin: "center bottom",
-                                  transition: "transform 0.4s ease",
-                                }}
-                              >
-                                {flower.emoji}
+                              <div className="h-1 w-7 overflow-hidden rounded-full bg-emerald-200">
+                                <div
+                                  className="h-full bg-emerald-500 transition-all"
+                                  style={{ width: `${Math.round(progress * 100)}%` }}
+                                />
+                              </div>
+                              <span className="text-[9px] text-muted-foreground leading-tight">
+                                {readyInMinutes(plot, now) >= 60
+                                  ? `${Math.floor(readyInMinutes(plot, now) / 60)}h${readyInMinutes(plot, now) % 60}p`
+                                  : `${readyInMinutes(plot, now)}p`}
                               </span>
-                              <span className="text-[9px] font-medium text-foreground/80 leading-tight truncate w-full text-center px-0.5">
-                                {flower.name}
-                              </span>
-                              {ready ? (
-                                <span className="text-[9px] font-semibold text-amber-600 leading-tight">
-                                  Thu hoạch
-                                </span>
-                              ) : (
-                                <>
-                                  <div className="h-1 w-7 overflow-hidden rounded-full bg-emerald-200">
-                                    <div
-                                      className="h-full bg-emerald-500 transition-all"
-                                      style={{ width: `${Math.round(progress * 100)}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-[9px] text-muted-foreground leading-tight">
-                                    {readyInMinutes(plot, now) >= 60
-                                      ? `${Math.floor(readyInMinutes(plot, now) / 60)}h${readyInMinutes(plot, now) % 60}p`
-                                      : `${readyInMinutes(plot, now)}p`}
-                                  </span>
-                                </>
-                              )}
                             </>
                           )}
-                        </button>
-                      );
-                    })}
+                        </>
+                      )}
+                    </button>
+                  );
+                })}
 
-                    {/* Nút mở ô tiếp theo */}
-                    {state.unlockedPlots < PLOT_MAX &&
-                      (() => {
-                        const cost = plotUnlockCost(state.unlockedPlots);
-                        const canAfford = coins >= (cost ?? Infinity);
-                        return (
-                          <button
-                            onClick={unlockPlot}
-                            className={cn(
-                              "flex aspect-square flex-col items-center justify-center gap-px rounded-lg border border-dashed text-center transition active:scale-95",
-                              canAfford
-                                ? "border-primary/40 bg-primary/5 hover:bg-primary/10"
-                                : "border-border bg-muted/20 opacity-60",
-                            )}
-                          >
-                            <span className="text-sm text-primary leading-none">🔒</span>
-                            <span className="text-[8px] font-semibold text-primary leading-none">
-                              Mở ô
-                            </span>
-                            <span className="flex items-center gap-0.5 text-[8px] font-medium text-amber-700 leading-none">
-                              <Coins className="h-2 w-2 shrink-0" />
-                              {cost}
-                            </span>
-                          </button>
-                        );
-                      })()}
-                  </div>
-                  <p className="mt-3 text-center text-[11px] text-muted-foreground">
-                    Chạm ô trống để trồng hoa · chạm hoa đã nở để thu hoạch lấy xu
-                  </p>
-                </section>
+                {/* Nút mở ô tiếp theo */}
+                {state.unlockedPlots < PLOT_MAX &&
+                  (() => {
+                    const cost = plotUnlockCost(state.unlockedPlots);
+                    const canAfford = coins >= (cost ?? Infinity);
+                    return (
+                      <button
+                        onClick={unlockPlot}
+                        className={cn(
+                          "flex aspect-square flex-col items-center justify-center gap-px rounded-lg border border-dashed text-center transition active:scale-95",
+                          canAfford
+                            ? "border-primary/40 bg-primary/5 hover:bg-primary/10"
+                            : "border-border bg-muted/20 opacity-60",
+                        )}
+                      >
+                        <span className="text-sm text-primary leading-none">🔒</span>
+                        <span className="text-[8px] font-semibold text-primary leading-none">
+                          Mở ô
+                        </span>
+                        <span className="flex items-center gap-0.5 text-[8px] font-medium text-amber-700 leading-none">
+                          <Coins className="h-2 w-2 shrink-0" />
+                          {cost}
+                        </span>
+                      </button>
+                    );
+                  })()}
+              </div>
+              <p className="mt-3 text-center text-[11px] text-muted-foreground">
+                Chạm ô trống để trồng hoa · chạm hoa đã nở để thu hoạch lấy xu
+              </p>
+            </section>
           </TabsContent>
 
           <TabsContent value="food" className="mt-0 space-y-3">

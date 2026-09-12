@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X, ZoomIn } from "lucide-react";
 
@@ -14,24 +14,24 @@ export function ImageViewer({
   const activeImage = viewIdx !== null ? images[viewIdx] : null;
   const canBrowse = images.length > 1;
 
-  const closeViewer = () => {
+  const closeViewer = useCallback(() => {
     setViewIdx(null);
     setTouchStartX(null);
-  };
+  }, []);
 
-  const showPrev = () => {
+  const showPrev = useCallback(() => {
     setViewIdx((current) => {
       if (current === null) return current;
       return current === 0 ? images.length - 1 : current - 1;
     });
-  };
+  }, [images.length]);
 
-  const showNext = () => {
+  const showNext = useCallback(() => {
     setViewIdx((current) => {
       if (current === null) return current;
       return current === images.length - 1 ? 0 : current + 1;
     });
-  };
+  }, [images.length]);
 
   useEffect(() => {
     if (!activeImage) return;
@@ -48,7 +48,7 @@ export function ImageViewer({
       delete document.body.dataset.approvalImageViewerOpen;
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [activeImage, canBrowse, images.length]);
+  }, [activeImage, canBrowse, closeViewer, showNext, showPrev]);
 
   function handleTouchEnd(event: React.TouchEvent<HTMLDivElement>) {
     if (touchStartX === null) return;

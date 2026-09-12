@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { pb, fileUrl } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
@@ -312,7 +312,7 @@ function NewsPage() {
   const [productionQcFilter, setProductionQcFilter] = useState("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await pb.collection("recruitments").getList(1, 200, {
@@ -340,19 +340,20 @@ function NewsPage() {
     } finally {
       setLoading(false);
     }
-  };
-  useEffect(() => {
-    load();
   }, [
-    isAdmin,
-    debouncedSearch,
-    filter,
     areaFilter,
+    debouncedSearch,
     employmentTypeFilter,
     environmentFilter,
+    filter,
+    isAdmin,
     postureFilter,
     productionQcFilter,
+    user?.id,
   ]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const visibleItems = items;
 

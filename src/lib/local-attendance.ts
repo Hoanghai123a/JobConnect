@@ -151,10 +151,7 @@ export interface LastHours {
 export function saveLastHours(hc: number, ot: number) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(
-      LAST_HOURS_KEY,
-      JSON.stringify({ hc_hours: hc, ot_hours: ot }),
-    );
+    window.localStorage.setItem(LAST_HOURS_KEY, JSON.stringify({ hc_hours: hc, ot_hours: ot }));
   } catch {
     // Ignore storage errors
   }

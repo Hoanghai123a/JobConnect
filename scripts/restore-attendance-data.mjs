@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-import PocketBase from 'pocketbase';
-import fs from 'fs';
+import PocketBase from "pocketbase";
+import fs from "fs";
 
 async function connectPocketBase() {
-  const baseUrl = process.env.PB_URL || process.env.VITE_PB_URL || 'http://127.0.0.1:8090';
+  const baseUrl = process.env.PB_URL || process.env.VITE_PB_URL || "http://127.0.0.1:8090";
   const token = process.env.PB_ADMIN_TOKEN;
   const identity = process.env.PB_ADMIN_EMAIL;
   const password = process.env.PB_ADMIN_PASSWORD;
 
   if (!token && (!identity || !password)) {
-    throw new Error('Thiếu PB_ADMIN_TOKEN hoặc PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD');
+    throw new Error("Thiếu PB_ADMIN_TOKEN hoặc PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD");
   }
 
   const pb = new PocketBase(baseUrl);
@@ -18,7 +18,9 @@ async function connectPocketBase() {
   if (token) {
     pb.authStore.save(token, null);
   } else {
-    await pb.collection('_superusers').authWithPassword(identity, password)
+    await pb
+      .collection("_superusers")
+      .authWithPassword(identity, password)
       .catch(() => pb.admins.authWithPassword(identity, password));
   }
 
@@ -36,10 +38,9 @@ async function restoreAttendanceRecords(pb, data) {
   for (const record of data) {
     try {
       // Check if record exists
-      const existing = await pb.collection('attendance_records')
-        .getList(1, 1, {
-          filter: `user="${record.user}" && date="${record.date}"`
-        });
+      const existing = await pb.collection("attendance_records").getList(1, 1, {
+        filter: `user="${record.user}" && date="${record.date}"`,
+      });
 
       if (existing.items.length > 0) {
         console.log(`  ⏭️  Skip existing: ${record.date} - User ${record.user}`);
@@ -49,13 +50,12 @@ async function restoreAttendanceRecords(pb, data) {
 
       // Create new record (exclude id, created, updated)
       const { id, created, updated, collectionId, collectionName, expand, ...cleanData } = record;
-      await pb.collection('attendance_records').create(cleanData);
+      await pb.collection("attendance_records").create(cleanData);
 
       restored++;
       if (restored % 50 === 0) {
         console.log(`  → Restored ${restored}/${data.length}`);
       }
-
     } catch (error) {
       console.error(`  ❌ Error: ${record.date} - ${error.message}`);
       errors++;
@@ -72,7 +72,7 @@ async function main() {
   const backupFile = process.argv[2];
 
   if (!backupFile) {
-    console.error('❌ Usage: node restore-attendance-data.mjs <backup-file.json>');
+    console.error("❌ Usage: node restore-attendance-data.mjs <backup-file.json>");
     process.exit(1);
   }
 
@@ -82,19 +82,18 @@ async function main() {
   }
 
   try {
-    console.log('🚀 Bắt đầu restore attendance_records...\n');
+    console.log("🚀 Bắt đầu restore attendance_records...\n");
     console.log(`📁 Backup file: ${backupFile}`);
 
-    const data = JSON.parse(fs.readFileSync(backupFile, 'utf8'));
+    const data = JSON.parse(fs.readFileSync(backupFile, "utf8"));
     console.log(`📊 Số records trong backup: ${data.length}`);
 
     const pb = await connectPocketBase();
     await restoreAttendanceRecords(pb, data);
 
-    console.log('\n✅ HOÀN TẤT RESTORE!\n');
-
+    console.log("\n✅ HOÀN TẤT RESTORE!\n");
   } catch (error) {
-    console.error('\n❌ Lỗi:', error.message);
+    console.error("\n❌ Lỗi:", error.message);
     process.exit(1);
   }
 }

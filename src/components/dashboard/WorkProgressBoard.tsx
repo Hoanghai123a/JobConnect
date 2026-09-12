@@ -343,9 +343,7 @@ export function WorkProgressBoard({ compact = false }: { compact?: boolean }) {
               <ClipboardList className="h-5 w-5" />
             </span>
             <div>
-              <h3 className="text-base font-bold tracking-tight">
-                Tiến độ công việc
-              </h3>
+              <h3 className="text-base font-bold tracking-tight">Tiến độ công việc</h3>
               <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
                 Theo dõi công việc dùng chung và cập nhật trạng thái theo từng tab.
               </p>

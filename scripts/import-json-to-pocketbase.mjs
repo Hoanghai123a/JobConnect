@@ -136,25 +136,17 @@ async function main() {
 
   // Đọc dữ liệu
   console.log("📖 Đọc file JSON...");
-  const userCuc = JSON.parse(
-    await fs.readFile(path.join(DOWNLOAD_DIR, "userCuc.json"), "utf-8"),
-  );
+  const userCuc = JSON.parse(await fs.readFile(path.join(DOWNLOAD_DIR, "userCuc.json"), "utf-8"));
   const userThang = JSON.parse(
     await fs.readFile(path.join(DOWNLOAD_DIR, "userThang.json"), "utf-8"),
   );
-  const attenCuc = JSON.parse(
-    await fs.readFile(path.join(DOWNLOAD_DIR, "attenCuc.json"), "utf-8"),
-  );
+  const attenCuc = JSON.parse(await fs.readFile(path.join(DOWNLOAD_DIR, "attenCuc.json"), "utf-8"));
   const attenThang = JSON.parse(
     await fs.readFile(path.join(DOWNLOAD_DIR, "attenThang.json"), "utf-8"),
   );
 
-  console.log(
-    `   ✅ ${attenCuc.length} bản ghi chấm công của ${userCuc.full_name}`,
-  );
-  console.log(
-    `   ✅ ${attenThang.length} bản ghi chấm công của ${userThang.full_name}\n`,
-  );
+  console.log(`   ✅ ${attenCuc.length} bản ghi chấm công của ${userCuc.full_name}`);
+  console.log(`   ✅ ${attenThang.length} bản ghi chấm công của ${userThang.full_name}\n`);
 
   // Authenticate
   await authenticateAdmin();
@@ -196,14 +188,10 @@ async function main() {
       successCount++;
 
       if (successCount % 10 === 0) {
-        process.stdout.write(
-          `   📊 Đang xử lý: ${successCount}/${allAttendance.length}\r`,
-        );
+        process.stdout.write(`   📊 Đang xử lý: ${successCount}/${allAttendance.length}\r`);
       }
     } catch (error) {
-      console.log(
-        `\n   ❌ Lỗi: ${att.userName} - ${att.date}: ${error.message}`,
-      );
+      console.log(`\n   ❌ Lỗi: ${att.userName} - ${att.date}: ${error.message}`);
       failCount++;
     }
   }

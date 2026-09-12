@@ -279,7 +279,7 @@ function UserProfileForm() {
     setAvatarFile(null);
     setAvatarPreview(user?.avatar ? fileUrl(user, user.avatar) : "");
     setRemoveAvatar(false);
-  }, [user?.id, user?.avatar]);
+  }, [user]);
 
   const save = async () => {
     if (!user) return;
@@ -1612,15 +1612,11 @@ function AdminUsersPanel() {
                   >
                     @{username}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    {"SĐT " + phone}
-                  </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">{"SĐT " + phone}</div>
                   <div className="text-[11px] text-muted-foreground">
                     {"Mã NV " + employeeCode + " · " + company}
                   </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {"Ngày tạo " + createdAt}
-                  </div>
+                  <div className="text-[11px] text-muted-foreground">{"Ngày tạo " + createdAt}</div>
                   <div className="mt-1 flex flex-wrap gap-1">
                     <span className={"chip " + (approved ? "chip-success" : "chip-danger")}>
                       {approved ? "Hoạt động" : "Vô hiệu hoá"}

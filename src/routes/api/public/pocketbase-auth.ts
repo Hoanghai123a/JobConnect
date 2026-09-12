@@ -60,9 +60,7 @@ async function resolveCanonicalIdentity(identity: string) {
   if (!response.ok) return null;
 
   const body = await response.json().catch(() => null);
-  const items: Array<{ username?: unknown }> = Array.isArray(body?.items)
-    ? body.items
-    : [];
+  const items: Array<{ username?: unknown }> = Array.isArray(body?.items) ? body.items : [];
   const matched = items.find(
     (item) => String(item?.username || "").toLowerCase() === normalizedIdentity,
   );

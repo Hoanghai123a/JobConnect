@@ -64,9 +64,7 @@ export function MobileListToolbar({
         className,
       )}
     >
-      <div
-        className={cn(desktopSearchAfterChips && "desktop:flex")}
-      >
+      <div className={cn(desktopSearchAfterChips && "desktop:flex")}>
         {onSearchChange && (
           <div
             className={cn(

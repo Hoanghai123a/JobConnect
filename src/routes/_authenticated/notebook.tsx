@@ -257,7 +257,7 @@ function NotebookPage() {
       if (ws) setWorkers(ws.workers.map((w) => w.user));
     }, 150);
     return () => clearTimeout(timer);
-  }, [cacheSignal, isStaffOrAdmin, user?.id]);
+  }, [cacheSignal, isStaffOrAdmin, user]);
 
   useEffect(() => {
     loadEntries();

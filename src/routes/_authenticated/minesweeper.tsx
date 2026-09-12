@@ -627,160 +627,160 @@ function MinesweeperPage() {
         </TabsList>
 
         <TabsContent value="play" className="mt-0 flex flex-col gap-3">
-              <div className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] z-20 -mx-4 space-y-2 bg-background px-4 pb-2 pt-1">
-                <div className="flex gap-2">
-                  {DIFFICULTIES.map((d) => (
-                    <Button
-                      key={d}
-                      size="sm"
-                      variant={difficulty === d ? "default" : "outline"}
-                      className="flex-1 text-xs"
-                      onClick={() => startNewGame(d)}
-                    >
-                      {DIFFICULTY_CONFIG[d].label}
-                    </Button>
-                  ))}
-                </div>
-
-                <div className="worker-game-mobile-stats grid grid-cols-4 gap-2">
-                  <Card className="p-2 text-center">
-                    <div className="text-[10px] text-muted-foreground">
-                      <Clock className="mx-auto h-3 w-3" />
-                    </div>
-                    <div className="text-sm font-semibold">{formatTime(timer)}</div>
-                  </Card>
-                  <Card className="p-2 text-center">
-                    <div className="text-[10px] text-muted-foreground">
-                      <Bomb className="mx-auto h-3 w-3" />
-                    </div>
-                    <div className="text-sm font-semibold">{minesLeft}</div>
-                  </Card>
-                  <Card className="p-2 text-center">
-                    <div className="text-[10px] text-muted-foreground">Lượt</div>
-                    <div className="text-sm font-semibold">{playsLeft}</div>
-                  </Card>
-                  <Card className="p-2 text-center">
-                    <div className="text-[10px] text-muted-foreground">Xu</div>
-                    <div className="text-sm font-semibold">{dailyEarned}</div>
-                  </Card>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant={flagMode ? "default" : "outline"}
-                    className={cn("gap-1 text-xs", flagMode && "bg-red-500 hover:bg-red-600")}
-                    onClick={() => setFlagMode(!flagMode)}
-                  >
-                    <Flag className="h-3.5 w-3.5" /> {flagMode ? "Đang cắm cờ" : "Cắm cờ"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-1 text-xs"
-                    onClick={() => startNewGame()}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" /> Chơi lại
-                  </Button>
-                  {bestTimes[difficulty] !== null && (
-                    <div className="ml-auto text-xs text-muted-foreground">
-                      Kỷ lục: {formatTime(bestTimes[difficulty]!)}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <Card className="worker-game-board-card flex flex-col items-center gap-2 overflow-hidden p-3">
-                <div
-                  ref={boardContainerRef}
-                  className="worker-game-board w-full select-none overflow-auto"
-                  style={{ touchAction: "pan-x pan-y" }}
+          <div className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] z-20 -mx-4 space-y-2 bg-background px-4 pb-2 pt-1">
+            <div className="flex gap-2">
+              {DIFFICULTIES.map((d) => (
+                <Button
+                  key={d}
+                  size="sm"
+                  variant={difficulty === d ? "default" : "outline"}
+                  className="flex-1 text-xs"
+                  onClick={() => startNewGame(d)}
                 >
-                  <div
-                    className="relative"
-                    style={{ width: boardPixelW, height: boardPixelH, minWidth: boardPixelW }}
-                  >
-                    {(board.length > 0
-                      ? board
-                      : Array.from({ length: config.rows * config.cols }, (_, i) => ({
-                          row: Math.floor(i / config.cols),
-                          col: i % config.cols,
-                          isMine: false,
-                          adjacentMines: 0,
-                          status: "hidden" as CellStatus,
-                        }))
-                    ).map((cell, i) => {
-                      const left = cell.col * (cellSize + gap);
-                      const top = cell.row * (cellSize + gap);
-                      const isRevealed = cell.status === "revealed";
-                      const isFlagged = cell.status === "flagged";
-                      const isExploded = cell.status === "exploded";
-                      const isMineRevealed = isRevealed && cell.isMine;
+                  {DIFFICULTY_CONFIG[d].label}
+                </Button>
+              ))}
+            </div>
 
-                      return (
-                        <motion.button
-                          key={i}
-                          type="button"
-                          className={cn(
-                            "absolute grid place-items-center rounded-sm border text-xs font-bold",
-                            !isRevealed &&
-                              !isFlagged &&
-                              !isExploded &&
-                              "border-slate-400/50 bg-slate-300/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] active:bg-slate-400/80",
-                            isRevealed && !isMineRevealed && "border-slate-200 bg-white/90",
-                            isFlagged && "border-red-300 bg-slate-300/80",
-                            isExploded && "border-red-500 bg-red-500",
-                            isMineRevealed && "border-red-200 bg-red-100",
-                          )}
-                          style={{
-                            width: cellSize,
-                            height: cellSize,
-                            left,
-                            top,
-                            fontSize: Math.max(10, cellSize * 0.4),
-                          }}
-                          onPointerDown={(e) => handlePointerDown(cell.row, cell.col, e)}
-                          onPointerUp={(e) => handlePointerUp(cell.row, cell.col, e)}
-                          onPointerLeave={handlePointerLeave}
-                          initial={false}
-                          animate={{
-                            scale: isRevealed || isExploded ? [0.85, 1] : 1,
-                            opacity: 1,
-                          }}
-                          transition={{ duration: 0.15 }}
-                        >
-                          {isFlagged && <Flag className="h-3.5 w-3.5 text-red-500" />}
-                          {isExploded && <Bomb className="h-4 w-4 text-white" />}
-                          {isMineRevealed && <Bomb className="h-3.5 w-3.5 text-red-600" />}
-                          {isRevealed && !cell.isMine && cell.adjacentMines > 0 && (
-                            <span className={NUMBER_COLORS[cell.adjacentMines] || ""}>
-                              {cell.adjacentMines}
-                            </span>
-                          )}
-                        </motion.button>
-                      );
-                    })}
-                  </div>
+            <div className="worker-game-mobile-stats grid grid-cols-4 gap-2">
+              <Card className="p-2 text-center">
+                <div className="text-[10px] text-muted-foreground">
+                  <Clock className="mx-auto h-3 w-3" />
                 </div>
-
-                {gameState === "won" && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="rounded-xl bg-green-50 px-4 py-2 text-center text-sm font-semibold text-green-700"
-                  >
-                    Chúc mừng! Bạn đã phá hết mìn trong {formatTime(timer)}
-                  </motion.div>
-                )}
-                {gameState === "lost" && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="rounded-xl bg-red-50 px-4 py-2 text-center text-sm font-semibold text-red-700"
-                  >
-                    Thua rồi! Bấm "Chơi lại" để thử lần nữa.
-                  </motion.div>
-                )}
+                <div className="text-sm font-semibold">{formatTime(timer)}</div>
               </Card>
+              <Card className="p-2 text-center">
+                <div className="text-[10px] text-muted-foreground">
+                  <Bomb className="mx-auto h-3 w-3" />
+                </div>
+                <div className="text-sm font-semibold">{minesLeft}</div>
+              </Card>
+              <Card className="p-2 text-center">
+                <div className="text-[10px] text-muted-foreground">Lượt</div>
+                <div className="text-sm font-semibold">{playsLeft}</div>
+              </Card>
+              <Card className="p-2 text-center">
+                <div className="text-[10px] text-muted-foreground">Xu</div>
+                <div className="text-sm font-semibold">{dailyEarned}</div>
+              </Card>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant={flagMode ? "default" : "outline"}
+                className={cn("gap-1 text-xs", flagMode && "bg-red-500 hover:bg-red-600")}
+                onClick={() => setFlagMode(!flagMode)}
+              >
+                <Flag className="h-3.5 w-3.5" /> {flagMode ? "Đang cắm cờ" : "Cắm cờ"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1 text-xs"
+                onClick={() => startNewGame()}
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Chơi lại
+              </Button>
+              {bestTimes[difficulty] !== null && (
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Kỷ lục: {formatTime(bestTimes[difficulty]!)}
+                </div>
+              )}
+            </div>
+          </div>
+          <Card className="worker-game-board-card flex flex-col items-center gap-2 overflow-hidden p-3">
+            <div
+              ref={boardContainerRef}
+              className="worker-game-board w-full select-none overflow-auto"
+              style={{ touchAction: "pan-x pan-y" }}
+            >
+              <div
+                className="relative"
+                style={{ width: boardPixelW, height: boardPixelH, minWidth: boardPixelW }}
+              >
+                {(board.length > 0
+                  ? board
+                  : Array.from({ length: config.rows * config.cols }, (_, i) => ({
+                      row: Math.floor(i / config.cols),
+                      col: i % config.cols,
+                      isMine: false,
+                      adjacentMines: 0,
+                      status: "hidden" as CellStatus,
+                    }))
+                ).map((cell, i) => {
+                  const left = cell.col * (cellSize + gap);
+                  const top = cell.row * (cellSize + gap);
+                  const isRevealed = cell.status === "revealed";
+                  const isFlagged = cell.status === "flagged";
+                  const isExploded = cell.status === "exploded";
+                  const isMineRevealed = isRevealed && cell.isMine;
+
+                  return (
+                    <motion.button
+                      key={i}
+                      type="button"
+                      className={cn(
+                        "absolute grid place-items-center rounded-sm border text-xs font-bold",
+                        !isRevealed &&
+                          !isFlagged &&
+                          !isExploded &&
+                          "border-slate-400/50 bg-slate-300/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] active:bg-slate-400/80",
+                        isRevealed && !isMineRevealed && "border-slate-200 bg-white/90",
+                        isFlagged && "border-red-300 bg-slate-300/80",
+                        isExploded && "border-red-500 bg-red-500",
+                        isMineRevealed && "border-red-200 bg-red-100",
+                      )}
+                      style={{
+                        width: cellSize,
+                        height: cellSize,
+                        left,
+                        top,
+                        fontSize: Math.max(10, cellSize * 0.4),
+                      }}
+                      onPointerDown={(e) => handlePointerDown(cell.row, cell.col, e)}
+                      onPointerUp={(e) => handlePointerUp(cell.row, cell.col, e)}
+                      onPointerLeave={handlePointerLeave}
+                      initial={false}
+                      animate={{
+                        scale: isRevealed || isExploded ? [0.85, 1] : 1,
+                        opacity: 1,
+                      }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {isFlagged && <Flag className="h-3.5 w-3.5 text-red-500" />}
+                      {isExploded && <Bomb className="h-4 w-4 text-white" />}
+                      {isMineRevealed && <Bomb className="h-3.5 w-3.5 text-red-600" />}
+                      {isRevealed && !cell.isMine && cell.adjacentMines > 0 && (
+                        <span className={NUMBER_COLORS[cell.adjacentMines] || ""}>
+                          {cell.adjacentMines}
+                        </span>
+                      )}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {gameState === "won" && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-xl bg-green-50 px-4 py-2 text-center text-sm font-semibold text-green-700"
+              >
+                Chúc mừng! Bạn đã phá hết mìn trong {formatTime(timer)}
+              </motion.div>
+            )}
+            {gameState === "lost" && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-xl bg-red-50 px-4 py-2 text-center text-sm font-semibold text-red-700"
+              >
+                Thua rồi! Bấm "Chơi lại" để thử lần nữa.
+              </motion.div>
+            )}
+          </Card>
         </TabsContent>
         <TabsContent value="rank" className="mt-0 flex flex-col gap-3">
           <Card className="flex flex-col gap-3 p-3">

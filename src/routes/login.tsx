@@ -7,7 +7,12 @@ import { normalizeAccountIdentity } from "@/lib/account-identity";
 import { pb } from "@/lib/pocketbase";
 import { isProfileComplete } from "@/lib/profile";
 import { isUserApproved } from "@/lib/user-approval";
-import { usePwaInstallPrompt, isStandaloneMode, isIosDevice, isAndroidDevice } from "@/lib/pwa-install";
+import {
+  usePwaInstallPrompt,
+  isStandaloneMode,
+  isIosDevice,
+  isAndroidDevice,
+} from "@/lib/pwa-install";
 import { IosInstallGuideDialog } from "@/components/layout/IosInstallGuideDialog";
 import { AndroidInstallGuideDialog } from "@/components/layout/AndroidInstallGuideDialog";
 import { DesktopInstallGuideDialog } from "@/components/layout/DesktopInstallGuideDialog";
