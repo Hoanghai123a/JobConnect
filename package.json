@@ -118,6 +118,7 @@
     "eventsource": "^4.1.0",
     "globals": "^15.15.0",
     "nitro": "npm:nitro-nightly@^3.0.260522-beta",
+    "ponytail": "^1.0.0",
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",

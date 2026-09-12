@@ -15,7 +15,7 @@ export type RoleNavigationItem = {
 };
 
 function isItemActive(item: RoleNavigationItem, pathname: string) {
-  if (item.to === "/") return pathname === "/";
+  if (item.to === "/home") return pathname === "/home" || pathname === "/";
   if (item.exact) return pathname === item.to;
   return pathname === item.to || pathname.startsWith(item.to + "/");
 }
@@ -34,20 +34,20 @@ export function BottomNav() {
   const items: readonly RoleNavigationItem[] =
     user?.role === "admin"
       ? [
-          { to: "/", label: "Trang chủ", icon: Home, exact: true },
+          { to: "/home", label: "Trang chủ", icon: Home, exact: true },
           { to: "/admin/settings", label: "Cài đặt", icon: Settings },
           { to: "/admin/imports", label: "Nhập liệu", icon: Upload },
           { to: "/account", label: "Tài khoản", icon: User },
         ]
       : user
         ? [
-            { to: "/", label: "Trang chủ", icon: Home, exact: true },
+            { to: "/home", label: "Trang chủ", icon: Home, exact: true },
             { to: "/about", label: "Về chúng tôi", icon: Info },
             { to: "/account", label: "Tài khoản", icon: User },
             { to: "/login", label: "Đăng xuất", icon: LogOut, action: "logout" },
           ]
         : [
-            { to: "/", label: "Trang chủ", icon: Home, exact: true },
+            { to: "/home", label: "Trang chủ", icon: Home, exact: true },
             { to: "/login", label: "Đăng nhập", icon: LogIn, requiresLogin: true },
             { to: "/about", label: "Về chúng tôi", icon: Info },
           ];
@@ -132,14 +132,14 @@ export function AppHeader({
 }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const showBack = back ?? pathname !== "/";
+  const showBack = back ?? (pathname !== "/" && pathname !== "/home");
 
   const goBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) {
       window.history.back();
       return;
     }
-    navigate({ to: "/" });
+    navigate({ to: "/home" });
   };
 
   return (

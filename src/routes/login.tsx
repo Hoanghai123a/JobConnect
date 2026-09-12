@@ -27,6 +27,17 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { startGuestLogSync } from "@/lib/guest-logger";
 
+function getLocalDateKey() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+function attendanceRedirectStorageKey(userId: string) {
+  return `jobconnect:first-attendance-redirect:${userId}`;
+}
+
 export const Route = createFileRoute("/login")({
   beforeLoad: () => {
     if (typeof window === "undefined") return;
@@ -37,7 +48,7 @@ export const Route = createFileRoute("/login")({
       if (role === "staff") {
         throw redirect({ to: isDesktop ? "/staff/workers" : "/staff" });
       }
-      throw redirect({ to: "/" });
+      throw redirect({ to: "/home" });
     }
   },
   component: LoginPage,
@@ -65,7 +76,7 @@ function LoginPage() {
     toast.success("Chế độ truy cập không đăng nhập", {
       description: "Dữ liệu của bạn sẽ được lưu trên thiết bị này.",
     });
-    nav({ to: "/" });
+    nav({ to: "/home" });
   };
 
   const handleInstallClick = () => {
@@ -155,7 +166,17 @@ function LoginPage() {
         return;
       }
 
-      nav({ to: "/attendance" });
+      // Chỉ chuyển đến chấm công ở lần đăng nhập đầu tiên của từng tài khoản trong ngày.
+      const today = getLocalDateKey();
+      const redirectKey = attendanceRedirectStorageKey(loggedInUser.id);
+      const lastLoginDate = window.localStorage.getItem(redirectKey);
+
+      if (lastLoginDate !== today) {
+        window.localStorage.setItem(redirectKey, today);
+        nav({ to: "/attendance" });
+      } else {
+        nav({ to: "/home" });
+      }
     } catch (error: any) {
       console.error("[login] error", error, error?.data);
       const status = error?.status;

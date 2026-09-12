@@ -1,4 +1,4 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { pb, type UserRecord } from "@/lib/pocketbase";
@@ -28,6 +28,7 @@ import {
   MessagesSquare,
   BusFront,
   Bell,
+  CircleAlert,
   ShieldCheck,
   Sprout,
   History,
@@ -56,28 +57,6 @@ import {
 type UtilKey = "utilities" | "entertainment" | null;
 
 export const Route = createFileRoute("/")({
-  beforeLoad: async () => {
-    if (typeof window === "undefined") return;
-    if (!pb.authStore.isValid) return;
-    const u = pb.authStore.record as UserRecord | null;
-    if (u && !isUserApproved(u)) throw redirect({ to: "/pending" });
-    if (u?.role !== "user") return;
-
-    const today = localDateKey(new Date());
-    let hasTodayAttendance: boolean;
-    try {
-      const result = await pb.collection("attendance").getList(1, 1, {
-        filter: `user="${u.id}" && date~"${today}"`,
-        fields: "id",
-      });
-      hasTodayAttendance = result.totalItems > 0;
-    } catch {
-      // Keep the dashboard available if PocketBase cannot verify today's attendance.
-      return;
-    }
-
-    if (!hasTodayAttendance) throw redirect({ to: "/attendance" });
-  },
   component: DashboardPage,
 });
 
@@ -90,21 +69,24 @@ type ApprovalRequestSummary = {
   amount?: number | string;
 };
 
-function localDateKey(date: Date) {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
 function addLocalDays(date: Date, days: number) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
-function DashboardPage() {
+function getLocalDateKey() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+export function DashboardPage() {
   const { loading, user, isAdmin } = useAuth();
   const { data: settings, logoUrl } = useAppSettings();
   const [pendingComplaintCount, setPendingComplaintCount] = useState(0);
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
   const [unread, setUnread] = useState({ news: 0, chat: 0, check: 0, advances: 0 });
+  const [hasAttendanceToday, setHasAttendanceToday] = useState<boolean | null>(null);
   const [openUtil, setOpenUtil] = useState<UtilKey>(null);
   const [reloading, setReloading] = useState(false);
   const nav = useNavigate();
@@ -235,6 +217,30 @@ function DashboardPage() {
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id || isAdmin) {
+      setHasAttendanceToday(null);
+      return;
+    }
+
+    let alive = true;
+    const today = getLocalDateKey();
+    pb.collection("attendance")
+      .getList(1, 1, {
+        filter: `user="${user.id}" && date>="${today}" && date<"${today} 23:59:59"`,
+      })
+      .then((result) => {
+        if (alive) setHasAttendanceToday(result.totalItems > 0);
+      })
+      .catch(() => {
+        if (alive) setHasAttendanceToday(null);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin, user?.id]);
+
   if (loading) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center px-4 text-sm text-muted-foreground">
@@ -275,6 +281,22 @@ function DashboardPage() {
   return (
     <div className="pb-nav">
       <div className="px-4 pb-2 pt-3">
+        {hasAttendanceToday === false && (
+          <button
+            type="button"
+            onClick={() => nav({ to: "/attendance" })}
+            className="mb-2 flex w-full items-center gap-2 rounded-xl border border-[color:var(--status-warning)]/30 bg-[color:var(--status-warning)]/10 px-3 py-2 text-left text-sm text-foreground transition active:scale-[0.99]"
+          >
+            <CircleAlert
+              className="h-4 w-4 shrink-0 text-[color:var(--status-warning-fg)]"
+              aria-hidden="true"
+            />
+            <span className="min-w-0 flex-1">
+              Hôm nay bạn chưa chấm công. Chạm để nhập chấm công.
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          </button>
+        )}
         <div className="gradient-hero relative overflow-hidden rounded-3xl px-4 py-4 text-white shadow-soft">
           <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-white/20 blur-2xl" />
           <div className="absolute -bottom-16 -left-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />

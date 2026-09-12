@@ -49,7 +49,7 @@ export const Route = createFileRoute("/_authenticated")({
     if (typeof window === "undefined") return;
     if (!pb.authStore.isValid) {
       if (canGuestAccess(location.pathname)) return;
-      throw redirect({ to: "/", search: { login: "1", redirect: location.href } as any });
+      throw redirect({ to: "/home", search: { login: "1", redirect: location.href } as any });
     }
     const u = pb.authStore.record as any;
     if (u?.status === "disabled") {
@@ -80,7 +80,7 @@ function AuthLayout() {
 
   useEffect(() => {
     if (!loading && !user && !isGuest) {
-      nav({ to: "/", search: { login: "1", redirect: window.location.pathname } as any });
+      nav({ to: "/home", search: { login: "1", redirect: window.location.pathname } as any });
     }
   }, [isGuest, loading, nav, user]);
 

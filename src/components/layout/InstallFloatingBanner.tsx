@@ -151,6 +151,11 @@ export function InstallFloatingBanner() {
       if (choice === "accepted") {
         setHidden(true);
         setForceOpen(false);
+      } else if (choice === "dismissed") {
+        // Người dùng dismiss prompt native, hiển thị hướng dẫn thủ công
+        if (isAndroid) {
+          setAndroidGuideOpen(true);
+        }
       }
       return;
     }

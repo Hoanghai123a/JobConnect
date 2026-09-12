@@ -40,7 +40,7 @@ function PendingPage() {
             if (!isUserApproved(refreshedUser)) return;
 
             if (refreshedUser.role === "admin") {
-              nav({ to: "/" });
+              nav({ to: "/home" });
             } else if (refreshedUser.role === "staff") {
               nav({ to: "/staff" });
             } else if (!isProfileComplete(refreshedUser)) {
