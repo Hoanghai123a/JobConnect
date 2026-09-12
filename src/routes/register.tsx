@@ -1,11 +1,13 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { pb } from "@/lib/pocketbase";
+import { generateUid } from "@/lib/uid";
+import { findUserByUsernameInsensitive, normalizeAccountUsername } from "@/lib/account-identity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BackButton } from "@/components/layout/BackButton";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   CheckCircle2,
   Clock,
@@ -27,8 +29,8 @@ export const Route = createFileRoute("/register")({
 
 async function fetchRequireApproval(): Promise<boolean> {
   try {
-    const list = await pb.collection("settings").getList(1, 1);
-    return Boolean(list.items[0]?.require_approval ?? true);
+    const list = await pb.collection("app_settings").getList(1, 1);
+    return Boolean(list.items[0]?.requireApproval ?? true);
   } catch {
     return true;
   }
@@ -73,32 +75,32 @@ function RegisterPage() {
       return;
     }
 
-    const username = form.username.trim().toLowerCase();
+    const username = normalizeAccountUsername(form.username);
     if (!/^[a-z0-9_.]{4,30}$/.test(username)) {
       toast.error("Tên đăng nhập 4-30 ký tự, chỉ chữ/số/._");
       return;
     }
 
-    if (form.phone && !/^[0-9]{9,11}$/.test(form.phone)) {
-      toast.error("Số điện thoại không hợp lệ");
+    const phoneDigits = form.phone.replace(/\D/g, "");
+    if (form.phone && phoneDigits.length !== 10) {
+      toast.error("Số điện thoại phải có đúng 10 chữ số; có thể thêm ký tự phía sau");
       return;
     }
 
     setLoading(true);
     try {
-      const userTaken = await pb
-        .collection("users")
-        .getList(1, 1, { filter: `username="${username}"` })
-        .catch(() => ({ items: [] as any[] }));
+      const userTaken = await findUserByUsernameInsensitive(username);
 
-      if (userTaken.items.length) {
+      if (userTaken) {
         throw new Error("Tên đăng nhập đã tồn tại");
       }
 
       const requireApproval = await fetchRequireApproval();
+      const uid = await generateUid();
 
       await pb.collection("users").create({
         username,
+        uid,
         emailVisibility: false,
         password: form.password,
         passwordConfirm: form.passwordConfirm,
@@ -173,7 +175,7 @@ function RegisterPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background">
+    <div className="min-h-[100dvh] bg-background desktop:grid-cols-[minmax(22rem,0.85fr)_minmax(28rem,1fr)]">
       <div className="gradient-primary relative px-6 pb-16 pt-16 text-primary-foreground">
         <BackButton className="absolute left-4 top-4 text-primary-foreground active:bg-white/15" />
         <h1 className="text-2xl font-bold">Tạo tài khoản</h1>

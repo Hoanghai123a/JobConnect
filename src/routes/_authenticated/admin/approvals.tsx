@@ -1,15 +1,17 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { pb } from "@/lib/pocketbase";
+import { pb, type UserRecord } from "@/lib/pocketbase";
 import { isUserApproved } from "@/lib/user-approval";
+import { assignUidIfMissing } from "@/lib/uid";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusChip, toneBorder } from "@/components/ui/status-chip";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { exportToExcel } from "@/lib/excel";
-import { toast } from "sonner";
+import { exportToExcel, formatDateOnly } from "@/lib/excel";
+import { toast } from "@/lib/toast";
 import { Check, FileDown, X, Users, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,17 +25,21 @@ export const Route = createFileRoute("/_authenticated/admin/approvals")({
 
 function ApprovalsPage() {
   const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const load = async () => {
+    setLoading(true);
     try {
-      const res = await pb.collection("users").getFullList({
+      const res = await pb.collection("users").getList(1, 300, {
         filter: `approvalStatus = "pending" || approved = "false"`,
         sort: "-created",
       });
-      setUsers(res);
+      setUsers(res.items);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải");
+    } finally {
+      setLoading(false);
     }
   };
   useEffect(() => {
@@ -43,7 +49,8 @@ function ApprovalsPage() {
   const toggle = (id: string) => {
     setSelected((s) => {
       const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
   };
@@ -51,13 +58,17 @@ function ApprovalsPage() {
   const approveSelected = async (approve: boolean) => {
     if (!selected.size) return;
     for (const id of selected) {
-      if (approve)
-        await pb.collection("users").update(id, {
-          approvalStatus: "approved",
-          approved: "true",
-          status: "active",
-        });
-      else await pb.collection("users").delete(id);
+      if (approve) {
+        const after = { approvalStatus: "approved", approved: "true", status: "active" };
+        await pb.collection("users").update(id, after);
+        try {
+          await assignUidIfMissing(id);
+        } catch {
+          // UID assignment failed, but approval succeeded
+        }
+      } else {
+        await pb.collection("users").delete(id);
+      }
     }
     toast.success(approve ? "Đã duyệt" : "Đã từ chối");
     setSelected(new Set());
@@ -68,28 +79,34 @@ function ApprovalsPage() {
     const all = await pb.collection("users").getFullList({ sort: "-created" });
     const rows = all.map((u: any) => ({
       "Họ tên": u.full_name,
-      "SĐT": u.phone,
-      Email: u.email,
+      "Mã tài khoản (UID)": u.uid || "",
+      "Số điện thoại": u.phone,
+      "Địa chỉ email": u.email,
       "Vai trò": u.role,
       "Đã duyệt": isUserApproved(u) ? "Có" : "Không",
-      "Nhà máy": u.company,
-      LCB: u.lcb,
+      "Lương cơ bản": u.lcb,
       "Ngân hàng": u.bank_name,
-      "Số TK": u.bank_account_number,
-      "Tên TK": u.bank_account_name,
-      "Tạo lúc": u.created,
+      "Số tài khoản": u.bank_account_number,
+      "Tên chủ tài khoản": u.bank_account_name,
+      "Ghi chú STK": u.bank_account_note,
+      "Tạo lúc": formatDateOnly(u.created),
     }));
-    exportToExcel(`danh_sach_user_${Date.now()}`, { Users: rows });
+    exportToExcel(
+      `danh_sach_user_${Date.now()}`,
+      { "Tài khoản chờ duyệt": rows },
+      { "Tài khoản chờ duyệt": ["Tạo lúc"] },
+    );
   };
 
   return (
     <PageContainer
       title="Quản lý duyệt"
-      subtitle={`${users.length} chờ duyệt`}
+      subtitle={loading && users.length === 0 ? "Đang tải dữ liệu..." : `${users.length} chờ duyệt`}
       right={
         <button
           onClick={exportUsers}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-muted-foreground border border-border hover:bg-muted"
+          disabled={loading}
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-muted-foreground border border-border hover:bg-muted"
           aria-label="Xuất Excel"
         >
           <FileDown className="h-4 w-4" />
@@ -125,7 +142,12 @@ function ApprovalsPage() {
         </label>
       )}
 
-      {users.length === 0 ? (
+      {loading && users.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật tài khoản chờ duyệt..." />
+      )}
+      {loading && users.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải tài khoản chờ duyệt..." rows={3} />
+      ) : users.length === 0 ? (
         <EmptyState
           icon={Users}
           title="Không có yêu cầu"

@@ -1,40 +1,43 @@
-import { pb, type UserRecord } from "./pocketbase";
+/**
+ * Stub file for staff-log - staff functionality removed
+ */
 
-export type StaffActionType =
-  | "create"
-  | "update"
-  | "delete"
-  | "export"
-  | "import"
-  | "report_advance"
-  | "report_leave"
-  | "report_join"
-  | "update_bank"
-  | "check_payroll";
-
-export interface StaffActionLogInput {
-  actor?: Partial<UserRecord> | null;
+export interface StaffActionLog {
+  id?: string;
+  actor?: any;
   targetUserId?: string;
-  targetCollection: string;
+  targetCollection?: string;
   targetRecord?: string;
-  action: StaffActionType;
-  before?: unknown;
-  after?: unknown;
+  action?: string;
+  before?: any;
+  after?: any;
   note?: string;
 }
 
-export async function createStaffActionLog(input: StaffActionLogInput) {
-  if (!input.actor?.id) return;
+/**
+ * Stub: Does nothing
+ */
+export async function createStaffActionLog(data: StaffActionLog) {
+  // No-op stub
+  return null;
+}
 
-  await pb.collection("staff_action_logs").create({
-    actor: input.actor.id,
-    actor_role_snapshot: input.actor.role || "user",
-    target_user: input.targetUserId || null,
-    target_collection: input.targetCollection,
-    target_record: input.targetRecord || "",
-    action: input.action,
-    before: input.before ?? null,
-    after: input.after ?? null,
-    note: input.note || "",
-  });
+export const ACTION_TYPE_LABELS: Record<string, string> = {
+  create: "Tạo mới",
+  update: "Cập nhật",
+  delete: "Xóa",
+};
+
+/**
+ * Stub: Returns empty string
+ */
+export function formatStaffActionDateTime(date: string | Date): string {
+  return "";
+}
+
+/**
+ * Stub: Returns empty string
+ */
+export function getWorkerActionSummary(log: StaffActionLog): string {
+  return "";
 }

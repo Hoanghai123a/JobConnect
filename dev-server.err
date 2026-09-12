@@ -98,3 +98,6 @@ Error: Error transforming route file D:/My App/JobConnect/src/routes/_authentica
     at async EnvironmentPluginContainer.watchChange (file:///D:/My%20App/JobConnect/node_modules/vite/dist/node/chunks/config.js:28841:3)
     at async Promise.all (index 0)
     at async FSWatcher.<anonymous> (file:///D:/My%20App/JobConnect/node_modules/vite/dist/node/chunks/config.js:25598:3)
+[tanstack-router] These exports from "D:/My App/JobConnect/src/routes/_authenticated/advances.tsx" will not be code-split and will increase your bundle size:
+- AdvancesPage
+For the best optimization, these items should either have their export statements removed, or be imported from another location that is not a route file.

@@ -1,19 +1,43 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { StatusChip, toneBorder, ChipTone } from "@/components/ui/status-chip";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { exportToExcel } from "@/lib/excel";
-import { toast } from "sonner";
-import { Phone, Send, FileDown, MessageSquareWarning, Check, X, History, Clock } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { exportToExcel, formatDateOnly } from "@/lib/excel";
+import { escapePb } from "@/lib/pocketbase-utils";
+import {
+  readGuestComplaints,
+  saveGuestComplaint,
+  submitGuestComplaint,
+} from "@/lib/guest-requests";
+import { toast } from "@/lib/toast";
+import {
+  Phone,
+  Send,
+  FileDown,
+  MessageSquareWarning,
+  Check,
+  X,
+  History,
+  Clock,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/complaints")({
@@ -41,16 +65,52 @@ const STATUS_META: Record<Status, { label: string; tone: ChipTone }> = {
   rejected: { label: "Đã từ chối", tone: "danger" },
 };
 
+type ComplaintTab = Status | "all";
+
+function joinPbFilters(parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" && ");
+}
+
+function buildComplaintFilter(input: {
+  isAdmin: boolean;
+  phone?: string;
+  tab: ComplaintTab;
+  search: string;
+}) {
+  const q = escapePb(input.search.trim());
+  const searchFilter = q
+    ? `(${["full_name", "employee_code", "company", "phone", "content", "admin_note"]
+        .map((field) => `${field}~"${q}"`)
+        .join(" || ")})`
+    : "";
+  return joinPbFilters([
+    input.isAdmin ? "" : `phone="${escapePb(input.phone || "")}"`,
+    input.tab === "all" ? "" : `status="${input.tab}"`,
+    searchFilter,
+  ]);
+}
+
+async function countComplaints(filter: string) {
+  const res = await pb.collection("complaints").getList(1, 1, { filter, fields: "id" });
+  return res.totalItems || 0;
+}
+
 function ComplaintsPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isGuest } = useAuth();
   const [items, setItems] = useState<Complaint[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"pending" | "accepted" | "rejected" | "all">("pending");
+  const debouncedSearch = useDebouncedSearch(search);
+  const [tab, setTab] = useState<ComplaintTab>("pending");
+  const [stats, setStats] = useState<Record<Status, number>>({
+    pending: 0,
+    accepted: 0,
+    rejected: 0,
+  });
   const [resolving, setResolving] = useState<{ row: Complaint; status: Status } | null>(null);
   const [note, setNote] = useState("");
   const [form, setForm] = useState({
     full_name: user?.full_name || "",
-    company: user?.company || "",
     phone: user?.phone || "",
     content: "",
   });
@@ -59,25 +119,95 @@ function ComplaintsPage() {
   const [expandedComplaintId, setExpandedComplaintId] = useState<string | null>(null);
 
   const load = async () => {
+    setLoading(true);
     try {
-      const filter = isAdmin ? "" : `phone="${user?.phone || ""}"`;
-      const res = await pb.collection("complaints").getFullList({
+      if (isGuest) {
+        const query = debouncedSearch.trim().toLocaleLowerCase("vi-VN");
+        const rows = readGuestComplaints().filter((row) => {
+          const statusMatches = tab === "all" || (row.status || "pending") === tab;
+          const searchMatches =
+            !query ||
+            [row.full_name, row.phone, row.content, row.admin_note]
+              .join(" ")
+              .toLocaleLowerCase("vi-VN")
+              .includes(query);
+          return statusMatches && searchMatches;
+        });
+        setItems(rows);
+        return;
+      }
+      const filter = buildComplaintFilter({
+        isAdmin,
+        phone: user?.phone,
+        tab,
+        search: debouncedSearch,
+      });
+      const res = await pb.collection("complaints").getList(1, 200, {
         filter,
         sort: "-created",
       });
-      setItems(res as any);
-    } catch (e: any) { toast.error(e?.message || "Lỗi tải khiếu nại"); }
+      setItems(res.items as any);
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi tải khiếu nại");
+    } finally {
+      setLoading(false);
+    }
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [isAdmin, user?.phone]);
+
+  const loadStats = async () => {
+    if (isGuest) {
+      const rows = readGuestComplaints();
+      setStats({
+        pending: rows.filter((row) => (row.status || "pending") === "pending").length,
+        accepted: rows.filter((row) => row.status === "accepted").length,
+        rejected: rows.filter((row) => row.status === "rejected").length,
+      });
+      return;
+    }
+    const base = buildComplaintFilter({
+      isAdmin,
+      phone: user?.phone,
+      tab: "all",
+      search: debouncedSearch,
+    });
+    const [pending, accepted, rejected] = await Promise.all([
+      countComplaints(joinPbFilters([base, 'status="pending"'])),
+      countComplaints(joinPbFilters([base, 'status="accepted"'])),
+      countComplaints(joinPbFilters([base, 'status="rejected"'])),
+    ]);
+    setStats({ pending, accepted, rejected });
+  };
+
+  useEffect(() => {
+    load();
+    loadStats().catch(() => {});
+    /* eslint-disable-next-line */
+  }, [debouncedSearch, isAdmin, isGuest, user?.phone, tab]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSending(true);
     try {
+      if (isGuest) {
+        if (!form.full_name.trim() || !form.phone.trim() || !form.content.trim()) {
+          toast.error("Vui lòng nhập họ tên, số điện thoại và nội dung.");
+          return;
+        }
+        const created = await submitGuestComplaint({
+          full_name: form.full_name.trim(),
+          phone: form.phone.trim(),
+          content: form.content.trim(),
+        });
+        saveGuestComplaint(created);
+        toast.success("Đã gửi khiếu nại");
+        setForm((current) => ({ ...current, content: "" }));
+        await load();
+        return;
+      }
       await pb.collection("complaints").create({
         full_name: user?.full_name || "",
-        employee_code: user?.employee_code || "",
-        company: user?.company || "",
+        employee_code: "",
+        company: "",
         phone: user?.phone || "",
         content: form.content,
         status: "pending",
@@ -85,8 +215,11 @@ function ComplaintsPage() {
       toast.success("Đã gửi khiếu nại");
       setForm({ ...form, content: "" });
       load();
-    } catch (e: any) { toast.error(e?.message || "Lỗi"); }
-    finally { setSending(false); }
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi");
+    } finally {
+      setSending(false);
+    }
   };
 
   const resolve = async () => {
@@ -98,52 +231,41 @@ function ComplaintsPage() {
         resolved_at: new Date().toISOString(),
       });
       toast.success(resolving.status === "accepted" ? "Đã tiếp nhận" : "Đã từ chối");
-      setResolving(null); setNote("");
+      setResolving(null);
+      setNote("");
       load();
-    } catch (e: any) { toast.error(e?.message || "Lỗi"); }
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi");
+    }
   };
 
-  const stats = useMemo(() => ({
-    pending: items.filter((i) => (i.status || "pending") === "pending").length,
-    accepted: items.filter((i) => i.status === "accepted").length,
-    rejected: items.filter((i) => i.status === "rejected").length,
-  }), [items]);
-
-  const filtered = useMemo(
-    () =>
-      items.filter((i) => {
-        const s = i.status || "pending";
-        if (tab !== "all" && s !== tab) return false;
-        if (!search) return true;
-        const q = search.toLowerCase();
-        return (
-          i.full_name?.toLowerCase().includes(q) ||
-          i.company?.toLowerCase().includes(q) ||
-          i.phone?.toLowerCase().includes(q) ||
-          i.content?.toLowerCase().includes(q)
-        );
-      }),
-    [items, search, tab],
-  );
+  const filtered = items;
 
   const exportAll = () => {
     const rows = items.map((i) => ({
       "Họ tên": i.full_name,
       "Nhà máy": i.company,
-      "SĐT": i.phone,
+      "Số điện thoại": i.phone,
       "Nội dung": i.content,
       "Trạng thái": STATUS_META[(i.status || "pending") as Status].label,
       "Ghi chú admin": i.admin_note || "",
-      "Thời gian gửi": i.created,
-      "Thời gian xử lý": i.resolved_at || "",
+      "Thời gian gửi": formatDateOnly(i.created),
+      "Thời gian xử lý": formatDateOnly(i.resolved_at),
     }));
-    exportToExcel(`khieu_nai_${Date.now()}`, { "Khiếu nại": rows });
+    exportToExcel(
+      `khieu_nai_${Date.now()}`,
+      { "Khiếu nại": rows },
+      { "Khiếu nại": ["Thời gian gửi", "Thời gian xử lý"] },
+    );
   };
 
   /* ─── User view ─── */
   if (!isAdmin) {
     return (
-      <PageContainer title="Khiếu nại" subtitle="Gửi phản ánh & xem lịch sử">
+      <PageContainer
+        title="Khiếu nại"
+        subtitle={isGuest ? "Nhập đủ thông tin để gửi phản ánh" : "Gửi phản ánh & xem lịch sử"}
+      >
         <form onSubmit={submit} className="space-y-3">
           <div className="card-soft space-y-3 rounded-2xl border bg-card p-4">
             <button
@@ -152,15 +274,41 @@ function ComplaintsPage() {
               className="flex w-full items-center justify-between rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm font-medium"
             >
               <span>Thông tin cá nhân</span>
-              <span className="text-xs text-muted-foreground">{showProfile ? "Thu gọn" : "Xem"}</span>
+              <span className="text-xs text-muted-foreground">
+                {showProfile ? "Thu gọn" : "Xem"}
+              </span>
             </button>
-            {showProfile && (
+            {isGuest ? (
               <div className="space-y-3">
-                <ReadOnlyField label="Họ và tên" value={user?.full_name} />
-                <ReadOnlyField label="Mã NV" value={user?.employee_code} />
-                <ReadOnlyField label="Nhà máy đang làm" value={user?.company} />
-                <ReadOnlyField label="Số điện thoại liên hệ" value={user?.phone} />
+                <div className="space-y-1">
+                  <Label>Họ và tên</Label>
+                  <Input
+                    value={form.full_name}
+                    onChange={(event) => setForm({ ...form, full_name: event.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Số điện thoại</Label>
+                  <Input
+                    value={form.phone}
+                    inputMode="tel"
+                    onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                    required
+                  />
+                </div>
               </div>
+            ) : (
+              showProfile && (
+                <div className="space-y-3">
+                  <ReadOnlyField label="Họ và tên" value={user?.full_name} />
+                  <ReadOnlyField
+                    label="Nhà máy đang làm"
+                    value={(user as any)?.company || "Chưa có lịch sử đi làm"}
+                  />
+                  <ReadOnlyField label="Số điện thoại liên hệ" value={user?.phone} />
+                </div>
+              )
             )}
             <div className="space-y-1">
               <Label>Nội dung khiếu nại</Label>
@@ -172,7 +320,7 @@ function ComplaintsPage() {
               />
             </div>
             <Button type="submit" className="w-full" disabled={sending}>
-              <Send className="h-4 w-4" /> {sending ? "Đang gửi…" : "Gửi khiếu nại"}
+              <Send className="h-4 w-4" /> {sending ? "Đang gửi..." : "Gửi khiếu nại"}
             </Button>
           </div>
         </form>
@@ -180,10 +328,21 @@ function ComplaintsPage() {
         {/* Lịch sử cá nhân */}
         <div className="flex items-center gap-2 px-1 pt-2">
           <History className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-semibold">Lịch sử của bạn ({items.length})</span>
+          <span className="text-sm font-semibold">
+            {isGuest ? "Lịch sử trên thiết bị" : "Lịch sử của bạn"} ({items.length})
+          </span>
         </div>
-        {items.length === 0 ? (
-          <EmptyState icon={MessageSquareWarning} title="Chưa có khiếu nại" description="Phản ánh của bạn sẽ hiển thị tại đây." />
+        {loading && items.length > 0 && (
+          <DataLoadingState variant="inline" label="Đang cập nhật lịch sử khiếu nại..." />
+        )}
+        {loading && items.length === 0 ? (
+          <DataLoadingState variant="list" label="Đang tải lịch sử khiếu nại..." rows={2} />
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={MessageSquareWarning}
+            title="Chưa có khiếu nại"
+            description="Phản ánh của bạn sẽ hiển thị tại đây."
+          />
         ) : (
           items.map((c) => {
             const status = (c.status || "pending") as Status;
@@ -202,7 +361,12 @@ function ComplaintsPage() {
                   onClick={() => setExpandedComplaintId(isExpanded ? null : c.id)}
                   className="mt-2 block w-full text-left"
                 >
-                  <p className={cn("whitespace-pre-wrap text-[13px] leading-relaxed", !isExpanded && "line-clamp-2")}>
+                  <p
+                    className={cn(
+                      "whitespace-pre-wrap text-[13px] leading-relaxed",
+                      !isExpanded && "line-clamp-2",
+                    )}
+                  >
                     {c.content}
                   </p>
                   <div className="mt-1 text-[11px] font-medium text-primary">
@@ -227,10 +391,11 @@ function ComplaintsPage() {
   return (
     <PageContainer
       title="Khiếu nại"
-      subtitle={`${items.length} mục`}
+      subtitle={loading && items.length === 0 ? "Đang tải dữ liệu..." : `${items.length} mục`}
       right={
         <button
           onClick={exportAll}
+          disabled={loading}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-muted-foreground border border-border hover:bg-muted"
           aria-label="Xuất Excel"
         >
@@ -258,11 +423,16 @@ function ComplaintsPage() {
         onChipChange={(v) => setTab(v as any)}
       />
 
-      {filtered.length === 0 ? (
+      {loading && items.length > 0 && (
+        <DataLoadingState variant="inline" label="Đang cập nhật khiếu nại..." />
+      )}
+      {loading && items.length === 0 ? (
+        <DataLoadingState variant="list" label="Đang tải danh sách khiếu nại..." rows={3} />
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={MessageSquareWarning}
           title="Không có khiếu nại"
-          description={search ? "Không có kết quả phù hợp." : "Tin khiếu nại sẽ xuất hiện ở đây."}
+          description={search ? "Không có kết quả phù hợp." : "Tin khiếu nại sẽ xuất hiện tại đây."}
         />
       ) : (
         filtered.map((c) => {
@@ -286,7 +456,12 @@ function ComplaintsPage() {
                 onClick={() => setExpandedComplaintId(isExpanded ? null : c.id)}
                 className="mt-2 block w-full text-left"
               >
-                <p className={cn("whitespace-pre-wrap text-[13px] leading-relaxed", !isExpanded && "line-clamp-2")}>
+                <p
+                  className={cn(
+                    "whitespace-pre-wrap text-[13px] leading-relaxed",
+                    !isExpanded && "line-clamp-2",
+                  )}
+                >
                   {c.content}
                 </p>
                 <div className="mt-1 text-[11px] font-medium text-primary">
@@ -310,16 +485,36 @@ function ComplaintsPage() {
                 </a>
                 {status === "pending" && (
                   <>
-                    <Button size="sm" onClick={() => { setResolving({ row: c, status: "accepted" }); setNote(c.admin_note || ""); }}>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setResolving({ row: c, status: "accepted" });
+                        setNote(c.admin_note || "");
+                      }}
+                    >
                       <Check className="h-3.5 w-3.5" /> Tiếp nhận
                     </Button>
-                    <Button size="sm" variant="destructive" onClick={() => { setResolving({ row: c, status: "rejected" }); setNote(c.admin_note || ""); }}>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => {
+                        setResolving({ row: c, status: "rejected" });
+                        setNote(c.admin_note || "");
+                      }}
+                    >
                       <X className="h-3.5 w-3.5" /> Từ chối
                     </Button>
                   </>
                 )}
                 {status !== "pending" && (
-                  <Button size="sm" variant="outline" onClick={() => { setResolving({ row: c, status: "pending" }); setNote(""); }}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setResolving({ row: c, status: "pending" });
+                      setNote("");
+                    }}
+                  >
                     Mở lại
                   </Button>
                 )}
@@ -329,7 +524,15 @@ function ComplaintsPage() {
         })
       )}
 
-      <Dialog open={!!resolving} onOpenChange={(o) => { if (!o) { setResolving(null); setNote(""); } }}>
+      <Dialog
+        open={!!resolving}
+        onOpenChange={(o) => {
+          if (!o) {
+            setResolving(null);
+            setNote("");
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
@@ -340,10 +543,23 @@ function ComplaintsPage() {
           </DialogHeader>
           <div className="space-y-2">
             <Label>Ghi chú (tuỳ chọn)</Label>
-            <Textarea rows={4} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Phản hồi cho người gửi…" />
+            <Textarea
+              rows={4}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Phản hồi cho người gửi…"
+            />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setResolving(null); setNote(""); }}>Huỷ</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setResolving(null);
+                setNote("");
+              }}
+            >
+              Huỷ
+            </Button>
             <Button onClick={resolve}>Xác nhận</Button>
           </DialogFooter>
         </DialogContent>

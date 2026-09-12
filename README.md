@@ -53,7 +53,12 @@ Example `.env` for CentOS / PM2 / Cloudflare Tunnel:
 ```bash
 PB_URL=http://127.0.0.1:8090
 VITE_PB_URL=http://127.0.0.1:8090
+PB_ADMIN_EMAIL=your-pocketbase-superuser@example.com
+PB_ADMIN_PASSWORD=your-pocketbase-superuser-password
 ```
+
+Keep `.env` only on the server and never commit it. The PM2 configuration loads this file through
+Node's `--env-file` option, so production requires Node.js 20.6 or newer.
 
 ## PM2 Deploy
 
@@ -72,6 +77,7 @@ npm run deploy
 ```
 
 `npm run deploy` rebuilds the app, reloads PM2, and saves the PM2 process list.
+When `.env` changes, the same command reloads PM2 with the updated values.
 
 If dependencies changed, run the full deploy instead:
 

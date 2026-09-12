@@ -1,4 +1,13 @@
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+  useCallback,
+  useRef,
+} from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { pb, type UserRecord } from "./pocketbase";
 import { getPBUpstream } from "./pocketbase-config";
 
@@ -6,14 +15,46 @@ interface AuthCtx {
   user: UserRecord | null;
   loading: boolean;
   isAdmin: boolean;
+  isGuest: boolean;
   login: (identity: string, password: string) => Promise<UserRecord>;
+  loginAsGuest: () => void;
   logout: () => void;
   refresh: () => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
 const AUTH_REFRESH_TIMEOUT_MS = 3500;
+const PASSWORD_REAUTH_INTERVAL_MS = 96 * 60 * 60 * 1000;
+const PASSWORD_REAUTH_STORAGE_PREFIX = "jobconnect:password-verified-at:";
+export const PASSWORD_REAUTH_NOTICE_KEY = "jobconnect:password-reauth-notice";
+export const PASSWORD_REAUTH_NOTICE =
+  "Phiên đăng nhập đã hết hạn. Vui lòng nhập lại mật khẩu để tiếp tục.";
 let pendingAuthRefresh: Promise<unknown> | null = null;
+
+function passwordReauthStorageKey(userId: string) {
+  return `${PASSWORD_REAUTH_STORAGE_PREFIX}${userId}`;
+}
+
+function getPasswordVerifiedAt(userId: string): number | undefined | null {
+  if (typeof window === "undefined") return undefined;
+
+  const value = window.localStorage.getItem(passwordReauthStorageKey(userId));
+  if (value === null) return undefined;
+
+  const verifiedAt = Number(value);
+  if (!Number.isFinite(verifiedAt) || verifiedAt <= 0 || verifiedAt > Date.now()) return null;
+  return verifiedAt;
+}
+
+function savePasswordVerifiedAt(userId: string, verifiedAt = Date.now()) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(passwordReauthStorageKey(userId), String(verifiedAt));
+}
+
+function clearPasswordVerifiedAt(userId?: string) {
+  if (typeof window === "undefined" || !userId) return;
+  window.localStorage.removeItem(passwordReauthStorageKey(userId));
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -44,8 +85,45 @@ function refreshAuthOnce() {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<UserRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [guestModeActive, setGuestModeActive] = useState(false);
+  const isRedirectingForPasswordReauth = useRef(false);
+
+  const loginAsGuest = useCallback(() => {
+    // Đánh dấu là guest mode trong localStorage
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("jobconnect:guest-mode", "true");
+    }
+    // Không set pb.authStore, giữ user = null
+    setUser(null);
+    setLoading(false);
+    setGuestModeActive(true);
+  }, []);
+
+  const logout = useCallback(() => {
+    const userId = (pb.authStore.record as UserRecord | null)?.id;
+    clearPasswordVerifiedAt(userId);
+    pb.authStore.clear();
+    // Xóa guest mode flag
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("jobconnect:guest-mode");
+    }
+    setGuestModeActive(false);
+  }, []);
+
+  const expirePasswordReauth = useCallback(
+    (userId: string) => {
+      if (isRedirectingForPasswordReauth.current || typeof window === "undefined") return;
+      isRedirectingForPasswordReauth.current = true;
+      clearPasswordVerifiedAt(userId);
+      window.sessionStorage.setItem(PASSWORD_REAUTH_NOTICE_KEY, PASSWORD_REAUTH_NOTICE);
+      logout();
+      window.location.replace("/login");
+    },
+    [logout],
+  );
 
   useEffect(() => {
     const unsub = pb.authStore.onChange(() => {
@@ -55,8 +133,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         if (pb.authStore.isValid) {
+          const storedUser = pb.authStore.record as UserRecord | null;
+          const passwordVerifiedAt = storedUser?.id ? getPasswordVerifiedAt(storedUser.id) : null;
+
+          if (!storedUser?.id || passwordVerifiedAt === null) {
+            if (storedUser?.id) expirePasswordReauth(storedUser.id);
+            else pb.authStore.clear();
+            setUser(null);
+            return;
+          }
+
+          // Existing sessions receive their first 96-hour cycle after this feature is deployed.
+          if (passwordVerifiedAt === undefined) savePasswordVerifiedAt(storedUser.id);
+
           await refreshAuthOnce();
-          setUser((pb.authStore.record as UserRecord | null) ?? null);
+          const refreshedUser = pb.authStore.record as UserRecord | null;
+          if (refreshedUser?.status === "disabled") {
+            pb.authStore.clear();
+            setUser(null);
+          } else {
+            setUser(refreshedUser ?? null);
+          }
         } else {
           setUser(null);
         }
@@ -69,7 +166,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
     return () => unsub();
-  }, []);
+  }, [expirePasswordReauth]);
+
+  useEffect(() => {
+    if (loading || !user?.id || typeof window === "undefined") return;
+
+    const passwordVerifiedAt = getPasswordVerifiedAt(user.id);
+    if (passwordVerifiedAt === null) {
+      expirePasswordReauth(user.id);
+      return;
+    }
+
+    const verifiedAt = passwordVerifiedAt ?? Date.now();
+    if (passwordVerifiedAt === undefined) savePasswordVerifiedAt(user.id, verifiedAt);
+
+    const enforcePasswordReauth = () => {
+      if (Date.now() - verifiedAt >= PASSWORD_REAUTH_INTERVAL_MS) {
+        expirePasswordReauth(user.id);
+      }
+    };
+
+    enforcePasswordReauth();
+    const timeoutId = window.setTimeout(
+      enforcePasswordReauth,
+      Math.max(0, verifiedAt + PASSWORD_REAUTH_INTERVAL_MS - Date.now()),
+    );
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") enforcePasswordReauth();
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", enforcePasswordReauth);
+    return () => {
+      window.clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", enforcePasswordReauth);
+    };
+  }, [expirePasswordReauth, loading, user?.id]);
 
   const login = useCallback(async (identity: string, password: string) => {
     const res = await fetch("/api/public/pocketbase-auth", {
@@ -90,14 +223,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (payload?.token && payload?.record) {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("jobconnect:guest-mode");
+      }
       pb.authStore.save(payload.token, payload.record);
+      savePasswordVerifiedAt(payload.record.id);
     }
 
     return payload.record as UserRecord;
-  }, []);
-
-  const logout = useCallback(() => {
-    pb.authStore.clear();
   }, []);
 
   const refresh = useCallback(async () => {
@@ -106,13 +239,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const isGuest =
+    typeof window !== "undefined" &&
+    window.localStorage.getItem("jobconnect:guest-mode") === "true" &&
+    !user;
+
   return (
     <Ctx.Provider
       value={{
         user,
         loading,
         isAdmin: user?.role === "admin",
+        isGuest,
         login,
+        loginAsGuest,
         logout,
         refresh,
       }}
