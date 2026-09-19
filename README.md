@@ -103,6 +103,35 @@ npm run deploy:full
 3. Build command: `npm run build`
 4. Publish handled by the TanStack Start Netlify plugin.
 
+## Module Nông Trại Game
+
+Module game mini tích hợp trong JobConnect, do AI Engineer phát triển theo quy trình milestone nghiêm ngặt.
+
+### Tệp tin quản lý
+
+- `.codex/skills/nong-trai-game/SKILL.md` — Hướng dẫn kỹ thuật chi tiết
+- `.codex/game-status.md` — Trạng thái tiến độ hiện tại
+
+### Lệnh điều hành
+
+Prefix: `@nong-trai-game`
+
+- `status` — Báo cáo tiến độ
+- `implement milestone [X]` — Triển khai milestone X
+- `continue` — Tiếp tục công việc dở dang
+- `asset-spec crops` — Kiểm tra quy chuẩn asset cây trồng
+- `asset-audit` — Kiểm tra tính hợp lệ của asset
+- `qa` — Kiểm thử và rà soát lỗi
+
+### Milestones (theo thứ tự)
+
+1. Foundation → 2. UI → 3. Phaser world → 4. Crop system → 5. Economy → 6. Progression → 7. Quests → 8. Collection → 9. PocketBase → 10. Security → 11. Polish → 12. QA
+
+### Quy tắc Asset
+
+- Artwork từ Image Generation, tích hợp chính xác vào game logic
+- **KHÔNG** tự bịa filename hoặc dùng emoji/icon thay thế asset thật
+
 ## Git push
 
 ```bash

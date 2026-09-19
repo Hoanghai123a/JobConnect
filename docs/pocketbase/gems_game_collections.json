@@ -63,10 +63,7 @@
         "required": true,
         "system": false,
         "type": "select",
-        "values": [
-          "normal",
-          "solo"
-        ]
+        "values": ["normal", "solo"]
       },
       {
         "autogeneratePattern": "",
@@ -132,11 +129,7 @@
         "required": true,
         "system": false,
         "type": "select",
-        "values": [
-          "started",
-          "completed",
-          "rejected"
-        ]
+        "values": ["started", "completed", "rejected"]
       },
       {
         "help": "",
@@ -419,14 +412,7 @@
         "required": true,
         "system": false,
         "type": "select",
-        "values": [
-          "pending",
-          "accepted",
-          "playing",
-          "completed",
-          "cancelled",
-          "expired"
-        ]
+        "values": ["pending", "accepted", "playing", "completed", "cancelled", "expired"]
       },
       {
         "cascadeDelete": false,
@@ -596,14 +582,7 @@
         "required": true,
         "system": false,
         "type": "select",
-        "values": [
-          "gem_game",
-          "duel_stake",
-          "duel_win",
-          "duel_refund",
-          "duel_fee",
-          "admin_adjust"
-        ]
+        "values": ["gem_game", "duel_stake", "duel_win", "duel_refund", "duel_fee", "admin_adjust"]
       },
       {
         "help": "",

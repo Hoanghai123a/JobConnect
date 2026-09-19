@@ -72,7 +72,7 @@ export function BottomNav() {
             const active = isItemActive(item, pathname);
             const Icon = item.icon;
             const className = cn(
-              "relative mx-auto flex min-h-[62px] w-full min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-1.5 text-xs font-medium transition-colors",
+              "relative mx-auto flex min-h-[62px] w-full min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-1.5 text-xs font-medium transition-[background-color,color] motion-reduce:transition-none",
               active ? "bg-primary/12 text-primary" : "text-muted-foreground active:bg-muted",
             );
 
@@ -100,7 +100,7 @@ export function BottomNav() {
                   >
                     <Icon
                       className={cn(
-                        "h-[22px] w-[22px] transition-transform",
+                        "h-[22px] w-[22px] transition-transform motion-reduce:transition-none",
                         active && "scale-105",
                       )}
                     />

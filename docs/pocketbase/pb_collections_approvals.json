@@ -57,12 +57,7 @@
         "id": "file2497359498",
         "maxSelect": 5,
         "maxSize": 10485760,
-        "mimeTypes": [
-          "image/jpeg",
-          "image/png",
-          "image/webp",
-          "image/gif"
-        ],
+        "mimeTypes": ["image/jpeg", "image/png", "image/webp", "image/gif"],
         "name": "images",
         "presentable": false,
         "protected": false,
@@ -123,12 +118,7 @@
         "required": true,
         "system": false,
         "type": "select",
-        "values": [
-          "pending",
-          "approved",
-          "rejected",
-          "completed"
-        ]
+        "values": ["pending", "approved", "rejected", "completed"]
       },
       {
         "hidden": false,
@@ -224,11 +214,7 @@
         "required": true,
         "system": false,
         "type": "select",
-        "values": [
-          "pending",
-          "approved",
-          "rejected"
-        ]
+        "values": ["pending", "approved", "rejected"]
       },
       {
         "autogeneratePattern": "",

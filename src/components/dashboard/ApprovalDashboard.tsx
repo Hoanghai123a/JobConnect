@@ -125,7 +125,11 @@ export function ApprovalDashboard({
           </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+              <BarChart
+                data={chartData}
+                margin={{ top: 8, right: 8, left: -20, bottom: 0 }}
+                aria-label="Biểu đồ số lượng yêu cầu phê duyệt theo trạng thái"
+              >
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="label" axisLine={false} tickLine={false} fontSize={12} />
                 <YAxis axisLine={false} tickLine={false} allowDecimals={false} fontSize={12} />
@@ -153,7 +157,11 @@ export function ApprovalDashboard({
           </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
+              <BarChart
+                data={chartData}
+                margin={{ top: 8, right: 8, left: 4, bottom: 0 }}
+                aria-label="Biểu đồ số tiền yêu cầu phê duyệt theo trạng thái"
+              >
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="label" axisLine={false} tickLine={false} fontSize={12} />
                 <YAxis

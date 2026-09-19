@@ -1,14 +1,11 @@
 import { getPBUpstream } from "./pocketbase-config";
 
-export type UidCounterType = "user" | "employment_history";
+// UID counter chỉ dùng cho user, không còn employment_history
 
 type AuthUser = { id: string; role?: string };
 type CounterRecord = {
   id: string;
   counter_key: string;
-  counter_type: UidCounterType;
-  prefix: string;
-  period?: string;
   current_value: number;
   note?: string;
 };
@@ -16,11 +13,7 @@ type CounterRecord = {
 type CounterWritePayload = Omit<CounterRecord, "id"> & { updated_by?: string };
 
 type AllocateBody = {
-  action?: "allocate" | "observe";
-  type?: UidCounterType;
   count?: number;
-  referenceDate?: string;
-  uid?: string;
 };
 
 type UidCounterErrorCode =
@@ -31,7 +24,6 @@ type UidCounterErrorCode =
   | "PB_READ_FAILED"
   | "PB_WRITE_FAILED"
   | "PB_VALIDATION_FAILED"
-  | "UID_PREFIX_MISSING"
   | "UID_COUNTER_INVALID";
 
 type PocketBaseFieldErrors = Record<string, string>;
@@ -295,44 +287,15 @@ async function withCounterLock<T>(key: string, task: () => Promise<T>): Promise<
   }
 }
 
-async function getPrefix(token: string) {
-  const body = await requirePocketBaseJson<{ items?: Array<{ account_code_prefix?: string }> }>(
-    "/api/collections/app_settings/records?page=1&perPage=1&fields=account_code_prefix",
-    {},
-    token,
-    "read app_settings.account_code_prefix",
-    "Không đọc được tiền tố UID từ PocketBase.",
-  );
-  const prefix = String(body?.items?.[0]?.account_code_prefix || "")
-    .trim()
-    .toUpperCase();
-  if (!prefix) {
-    throw new UidCounterRequestError(
-      "PocketBase chưa cấu hình tiền tố UID.",
-      "UID_PREFIX_MISSING",
-      424,
-      "read app_settings.account_code_prefix",
-    );
-  }
-  return prefix;
-}
-
-function counterMeta(type: UidCounterType, prefix: string, referenceDate?: string) {
-  if (type === "user") return { key: `user:${prefix}`, period: "", limit: 999_999 };
-  const date = referenceDate ? new Date(referenceDate) : new Date();
-  if (Number.isNaN(date.getTime())) throw new Error("Ngày tham chiếu cấp UID không hợp lệ.");
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1;
+function counterMeta() {
   return {
-    key: `employment_history:${prefix}:${year}${String(month).padStart(2, "0")}`,
-    period: `${year}${String(month).padStart(2, "0")}`,
-    limit: 9_999,
+    key: "user_uid_counter",
+    limit: 9_999_999_999, // 10 chữ số
   };
 }
 
-function formatUid(type: UidCounterType, prefix: string, period: string, value: number) {
-  if (type === "user") return `${prefix}${String(value).padStart(6, "0")}`;
-  return `${prefix}${period.slice(2, 4)}${period.slice(4, 6)}${String(value).padStart(4, "0")}`;
+function formatUid(value: number): string {
+  return String(value);
 }
 
 async function getCounter(key: string, token: string): Promise<CounterRecord | null> {
@@ -363,27 +326,21 @@ async function getCounter(key: string, token: string): Promise<CounterRecord | n
   }
 }
 
-async function scanMaximum(type: UidCounterType, prefix: string, period: string, token: string) {
-  const collection = type === "user" ? "users" : "employment_histories";
+async function scanMaximum(token: string) {
   const body = await requirePocketBaseJson<{
     totalPages?: number;
     items?: Array<{ uid?: string }>;
   }>(
-    `/api/collections/${collection}/records?page=1&perPage=500&fields=uid`,
+    `/api/collections/users/records?page=1&perPage=500&fields=uid`,
     {},
     token,
-    `read ${collection}.uid`,
+    `read users.uid`,
     "Không thể khởi tạo bộ đếm từ dữ liệu UID hiện tại.",
   );
   const totalPages = Math.max(1, Number(body?.totalPages || 1));
   let max = 0;
   const inspect = (items: Array<{ uid?: string }>) => {
-    const pattern =
-      type === "user"
-        ? new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\d{6})$`)
-        : new RegExp(
-            `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${period.slice(2, 6)}(\\d{4})$`,
-          );
+    const pattern = /^(\d+)$/; // Chỉ match số nguyên
     for (const item of items || []) {
       const match = String(item.uid || "").match(pattern);
       if (match) max = Math.max(max, Number(match[1]));
@@ -392,10 +349,10 @@ async function scanMaximum(type: UidCounterType, prefix: string, period: string,
   inspect(body?.items || []);
   for (let page = 2; page <= totalPages; page += 1) {
     const nextBody = await requirePocketBaseJson<{ items?: Array<{ uid?: string }> }>(
-      `/api/collections/${collection}/records?page=${page}&perPage=500&fields=uid`,
+      `/api/collections/users/records?page=${page}&perPage=500&fields=uid`,
       {},
       token,
-      `read ${collection}.uid page ${page}`,
+      `read users.uid page ${page}`,
       "Không thể quét đầy đủ UID hiện tại.",
     );
     inspect(nextBody?.items || []);
@@ -458,24 +415,10 @@ async function saveCounter(input: CounterWritePayload, id: string | undefined, t
   }
 }
 
-function validateCounter(
-  counter: CounterRecord,
-  expected: { key: string; type: UidCounterType; prefix: string; period: string },
-) {
+function validateCounter(counter: CounterRecord, expected: { key: string }) {
   const currentValue = Number(counter.current_value);
-  const prefixMatches =
-    counter.prefix === undefined ||
-    counter.prefix === null ||
-    String(counter.prefix) === expected.prefix;
-  const periodMatches =
-    counter.period === undefined ||
-    counter.period === null ||
-    String(counter.period) === expected.period;
   if (
     counter.counter_key !== expected.key ||
-    counter.counter_type !== expected.type ||
-    !prefixMatches ||
-    !periodMatches ||
     !Number.isSafeInteger(currentValue) ||
     currentValue < 0
   ) {
@@ -485,9 +428,6 @@ function validateCounter(
       expected,
       actual: {
         counterKey: counter.counter_key,
-        counterType: counter.counter_type,
-        prefix: counter.prefix || "",
-        period: counter.period || "",
         currentValue: counter.current_value,
       },
     });
@@ -502,33 +442,23 @@ function validateCounter(
 }
 
 async function allocate(body: AllocateBody, actor: AuthUser | null, adminToken: string) {
-  const type = body.type;
-  if (type !== "user" && type !== "employment_history") return jsonError("Loại UID không hợp lệ.");
   const count = Math.trunc(Number(body.count || 1));
   if (count < 1 || count > 1_000) return jsonError("Số lượng UID phải từ 1 đến 1000.");
-  if (type === "employment_history" && !actor)
-    return jsonError("Cần đăng nhập để cấp UID lịch sử.", 401);
   if (count > 1 && !actor) return jsonError("Cần đăng nhập để cấp nhiều UID.", 401);
 
-  const prefix = await getPrefix(adminToken);
-  const meta = counterMeta(type, prefix, body.referenceDate);
+  const meta = counterMeta();
   return withCounterLock(meta.key, async () => {
     let counter = await getCounter(meta.key, adminToken);
     if (!counter) {
-      const current = await scanMaximum(type, prefix, meta.period, adminToken);
+      const current = await scanMaximum(adminToken);
       const payload: Omit<CounterRecord, "id"> & { updated_by?: string } = {
         counter_key: meta.key,
-        counter_type: type,
-        prefix,
-        period: meta.period,
         current_value: current,
         note: "Khởi tạo tự động từ dữ liệu hiện có",
       };
       try {
         counter = await saveCounter(payload, undefined, adminToken);
       } catch (error) {
-        // Another server process may have created the unique counter_key after
-        // our empty read. Re-read before returning a misleading create error.
         if (!(error instanceof UidCounterRequestError) || error.code !== "PB_VALIDATION_FAILED") {
           throw error;
         }
@@ -540,88 +470,20 @@ async function allocate(body: AllocateBody, actor: AuthUser | null, adminToken: 
         if (!counter) throw error;
       }
     }
-    const currentValue = validateCounter(counter, {
-      key: meta.key,
-      type,
-      prefix,
-      period: meta.period,
-    });
+    const currentValue = validateCounter(counter, { key: meta.key });
     const startValue = currentValue + 1;
     const endValue = startValue + count - 1;
-    if (endValue > meta.limit)
-      return jsonError(
-        type === "user"
-          ? "Đã vượt giới hạn 999999 UID theo tiền tố hiện tại."
-          : "Đã vượt giới hạn 9999 UID lịch sử trong tháng.",
-        409,
-      );
+    if (endValue > meta.limit) return jsonError("Đã vượt giới hạn 9999999999 UID.", 409);
     const payload: Omit<CounterRecord, "id"> & { updated_by?: string } = {
       counter_key: meta.key,
-      counter_type: type,
-      prefix,
-      period: meta.period,
       current_value: endValue,
       note: counter.note || "",
     };
     if (actor?.id) payload.updated_by = actor.id;
     await saveCounter(payload, counter.id, adminToken);
-    const uids = Array.from({ length: count }, (_, index) =>
-      formatUid(type, prefix, meta.period, startValue + index),
-    );
-    return Response.json({ type, prefix, period: meta.period, startValue, endValue, uids });
+    const uids = Array.from({ length: count }, (_, index) => formatUid(startValue + index));
+    return Response.json({ startValue, endValue, uids });
   });
-}
-
-async function observe(body: AllocateBody, actor: AuthUser | null, adminToken: string) {
-  if (!actor || (actor.role !== "admin" && actor.role !== "staff"))
-    return jsonError("Bạn không có quyền cập nhật bộ đếm UID.", 403);
-  const type = body.type;
-  const uid = String(body.uid || "")
-    .trim()
-    .toUpperCase();
-  if ((type !== "user" && type !== "employment_history") || !uid)
-    return jsonError("UID quan sát không hợp lệ.");
-  const prefix = await getPrefix(adminToken);
-  const meta = counterMeta(type, prefix, body.referenceDate);
-  const pattern =
-    type === "user"
-      ? new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\d{6})$`)
-      : new RegExp(
-          `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${meta.period.slice(2, 6)}(\\d{4})$`,
-        );
-  const match = uid.match(pattern);
-  if (!match) return Response.json({ observed: false });
-  const observed = Number(match[1]);
-  return withCounterLock(meta.key, async () => {
-    const counter = await getCounter(meta.key, adminToken);
-    if (counter) {
-      const currentValue = validateCounter(counter, {
-        key: meta.key,
-        type,
-        prefix,
-        period: meta.period,
-      });
-      if (currentValue >= observed) return Response.json({ observed: false });
-    }
-    await saveCounter(
-      {
-        counter_key: meta.key,
-        counter_type: type,
-        prefix,
-        period: meta.period,
-        current_value: observed,
-        updated_by: actor.id,
-        note: "Nâng bộ đếm theo UID nhập thủ công",
-      },
-      counter?.id,
-      adminToken,
-    );
-    return Response.json({ observed: true, currentValue: observed });
-  });
-}
-
-async function executeRequest(body: AllocateBody, actor: AuthUser | null, token: string) {
-  return body.action === "observe" ? observe(body, actor, token) : allocate(body, actor, token);
 }
 
 export async function handleUidCounterRequest(request: Request) {
@@ -633,7 +495,7 @@ export async function handleUidCounterRequest(request: Request) {
     if (!adminAuth.ok) return adminAuthError(adminAuth.reason);
 
     try {
-      return await executeRequest(body, actor, adminAuth.token);
+      return await allocate(body, actor, adminAuth.token);
     } catch (error) {
       if (
         !(error instanceof UidCounterRequestError) ||
@@ -642,11 +504,9 @@ export async function handleUidCounterRequest(request: Request) {
         throw error;
       }
       cachedAdminToken = "";
-      // A stale/user token can produce 403 (not only 401). Fall back to the
-      // configured superuser credentials exactly once before surfacing the error.
       const refreshed = await getAdminToken({ ignoreDirectToken: true });
       if (!refreshed.ok || refreshed.token === adminAuth.token) throw error;
-      return await executeRequest(body, actor, refreshed.token);
+      return await allocate(body, actor, refreshed.token);
     }
   } catch (error) {
     if (error instanceof UidCounterRequestError) {

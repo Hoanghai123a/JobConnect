@@ -111,7 +111,6 @@ function CompanyTab() {
       email: settings.email || "",
       about: settings.about || "",
       advance_rules: settings.advance_rules || "",
-      account_code_prefix: settings.account_code_prefix || "",
       staff_employment_factory_scope: settings.staff_employment_factory_scope || "assigned",
     });
     setLogoPreview(logoUrl);
@@ -200,28 +199,6 @@ function CompanyTab() {
         onChange={(v) => setForm({ ...form, hotline: v })}
       />
       <Field label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
-      <div>
-        <Label className="text-xs">Tiền tố UID</Label>
-        <Input
-          className="mt-1 rounded-xl uppercase"
-          placeholder="VD: HL"
-          maxLength={6}
-          value={form.account_code_prefix || ""}
-          onChange={(e) =>
-            setForm({
-              ...form,
-              account_code_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
-            })
-          }
-        />
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          UID sẽ có dạng{" "}
-          <span className="font-mono font-semibold">
-            {(form.account_code_prefix || "HL") + "000001"}
-          </span>{" "}
-          và tăng dần. Đổi tiền tố chỉ áp dụng cho UID cấp mới.
-        </p>
-      </div>
       <div>
         <Label className="text-xs">Hạn mức Ứng lương</Label>
         <Input

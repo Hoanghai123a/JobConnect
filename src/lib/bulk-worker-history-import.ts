@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { accountIdentityKey, normalizeAccountUsername } from "./account-identity";
 import { normalizeDate } from "./date-utils";
 import { deriveEmploymentStatus, type EmploymentStatus } from "./employment";
-import { allocateEmploymentHistoryUids, allocateUserUids } from "./uid-counter";
+import { allocateUserUids } from "./uid-counter";
 import { exportToExcel } from "./excel";
 import { fetchFactories, type FactoryRecord } from "./factories";
 import { fetchMainHouses, type MainHouseRecord } from "./main-houses";
@@ -1034,20 +1034,13 @@ export async function prepareBulkWorkerImport(file: File): Promise<PreparedBulkW
   }
 
   if (preparedWorkers.length) {
-    const historyCount = preparedWorkers.reduce(
-      (total, worker) => total + worker.histories.length,
-      0,
-    );
-    const [userUids, historyUids] = await Promise.all([
-      allocateUserUids(preparedWorkers.length),
-      allocateEmploymentHistoryUids(historyCount),
-    ]);
-    let historyIndex = 0;
+    const userUids = await allocateUserUids(preparedWorkers.length);
     preparedWorkers.forEach((worker, workerIndex) => {
       worker.uid = userUids[workerIndex];
       worker.userPayload.uid = worker.uid;
+      // Employment history UIDs không còn sử dụng
       worker.histories.forEach((history) => {
-        history.uid = historyUids[historyIndex++];
+        history.uid = ""; // Để trống, không cấp UID cho history
         history.payload.uid = history.uid;
       });
     });

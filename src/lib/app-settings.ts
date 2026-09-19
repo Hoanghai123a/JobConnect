@@ -15,7 +15,6 @@ export interface AppSettings {
   allow_advance_after_leave?: boolean;
   advance_reporting_enabled?: boolean;
   staff_employment_factory_scope?: "assigned" | "all";
-  account_code_prefix?: string;
   logo?: string;
   updated?: string;
   install_guide_images?: string[];

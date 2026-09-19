@@ -39,7 +39,7 @@ import {
   normalizeAccountUsername,
 } from "@/lib/account-identity";
 import { generateUid } from "@/lib/uid";
-import { allocateEmploymentHistoryUids } from "@/lib/uid-counter";
+import { allocateUserUids } from "@/lib/uid-counter";
 import { resolveBankName } from "@/lib/vn-banks";
 import { getUserErrorMessage } from "@/lib/toast";
 
@@ -463,8 +463,7 @@ function AdminImportsPage() {
       const workbook = XLSX.read(buffer);
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-      const reservedHistoryUids = await allocateEmploymentHistoryUids(rows.length);
-      let historyUidIndex = 0;
+      // Employment history UIDs không còn sử dụng
 
       let created = 0;
       let updated = 0;
@@ -650,7 +649,7 @@ function AdminImportsPage() {
             updated++;
           } else {
             const createdHistory = await createEmploymentHistory(payload, {
-              uid: reservedHistoryUids[historyUidIndex++],
+              uid: "", // Employment history UIDs không còn sử dụng
             });
             created++;
             existingHistories.push(createdHistory);

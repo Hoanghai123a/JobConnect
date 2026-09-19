@@ -26,24 +26,24 @@
 
 ## 1. Tech stack & quyết định kiến trúc
 
-| Lớp | Công nghệ | Ghi chú |
-|---|---|---|
-| Frontend | **React 19.2** | JSX transform mới |
-| Routing | **TanStack Router 1.168** (file-based) | Sinh `src/routeTree.gen.ts` tự động qua `@tanstack/router-plugin` |
-| SSR / server | **TanStack Start 1.167** trên **Nitro** | `server.handlers` cho API routes; không có tRPC/Express/Hono |
-| Server-state | **TanStack Query 5.83** | Dùng rất ít — chủ yếu cho `useAppSettings` |
-| Backend | **PocketBase 0.26** (BaaS, SQLite) | Là ORM/DB/auth/realtime duy nhất, truy cập qua SDK `pocketbase@0.26.9` |
-| UI | **shadcn/ui** (style "new-york") + **Radix UI** (~30 gói) | Icon: `lucide-react` |
-| CSS | **Tailwind CSS v4** qua `@tailwindcss/vite` | Không có `tailwind.config`; biến CSS trong `src/styles.css` |
-| Animation | **framer-motion 12** | |
-| Toast | **sonner** | `<Toaster richColors position="top-center">` |
-| Charts | **recharts** (qua `ui/chart.tsx`) | |
-| Excel | **xlsx (SheetJS)** + `file-saver` + `jszip` | Import/export chấm công, lương, lịch sử |
-| QR | **jsqr** | Đọc QR CCCD |
-| Push | **web-push** (VAPID) | PWA notifications |
-| Validation | **zod 3.24** | Chỉ dùng 1 chỗ (login schema); phần còn lại validate thủ công |
-| Build | **Vite 7.3** + `@lovable.dev/vite-tanstack-config` | App scaffold từ Lovable |
-| Deploy | **PM2** (Node server) sau Cloudflare Tunnel; **Netlify** phụ | Cloudflare Workers scaffold có nhưng tắt |
+| Lớp          | Công nghệ                                                    | Ghi chú                                                                |
+| ------------ | ------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Frontend     | **React 19.2**                                               | JSX transform mới                                                      |
+| Routing      | **TanStack Router 1.168** (file-based)                       | Sinh `src/routeTree.gen.ts` tự động qua `@tanstack/router-plugin`      |
+| SSR / server | **TanStack Start 1.167** trên **Nitro**                      | `server.handlers` cho API routes; không có tRPC/Express/Hono           |
+| Server-state | **TanStack Query 5.83**                                      | Dùng rất ít — chủ yếu cho `useAppSettings`                             |
+| Backend      | **PocketBase 0.26** (BaaS, SQLite)                           | Là ORM/DB/auth/realtime duy nhất, truy cập qua SDK `pocketbase@0.26.9` |
+| UI           | **shadcn/ui** (style "new-york") + **Radix UI** (~30 gói)    | Icon: `lucide-react`                                                   |
+| CSS          | **Tailwind CSS v4** qua `@tailwindcss/vite`                  | Không có `tailwind.config`; biến CSS trong `src/styles.css`            |
+| Animation    | **framer-motion 12**                                         |                                                                        |
+| Toast        | **sonner**                                                   | `<Toaster richColors position="top-center">`                           |
+| Charts       | **recharts** (qua `ui/chart.tsx`)                            |                                                                        |
+| Excel        | **xlsx (SheetJS)** + `file-saver` + `jszip`                  | Import/export chấm công, lương, lịch sử                                |
+| QR           | **jsqr**                                                     | Đọc QR CCCD                                                            |
+| Push         | **web-push** (VAPID)                                         | PWA notifications                                                      |
+| Validation   | **zod 3.24**                                                 | Chỉ dùng 1 chỗ (login schema); phần còn lại validate thủ công          |
+| Build        | **Vite 7.3** + `@lovable.dev/vite-tanstack-config`           | App scaffold từ Lovable                                                |
+| Deploy       | **PM2** (Node server) sau Cloudflare Tunnel; **Netlify** phụ | Cloudflare Workers scaffold có nhưng tắt                               |
 
 **Quyết định kiến trúc quan trọng (phải giữ khi dựng lại):**
 
@@ -125,11 +125,11 @@ sequenceDiagram
 
 Ba vai trò trong field `users.role`:
 
-| Role | Nghĩa | Nav dưới cùng |
-|---|---|---|
-| `admin` | Quản trị viên | Trang chủ / Cài đặt / Nhập liệu / Tài khoản |
-| `staff` | Người tuyển / NVTD (HR) | Staff / Lao động / Tài khoản / Xuất file |
-| `user` (hoặc rỗng) | Người lao động (NLĐ) | Trang chủ / Tài khoản / Về chúng tôi |
+| Role               | Nghĩa                   | Nav dưới cùng                               |
+| ------------------ | ----------------------- | ------------------------------------------- |
+| `admin`            | Quản trị viên           | Trang chủ / Cài đặt / Nhập liệu / Tài khoản |
+| `staff`            | Người tuyển / NVTD (HR) | Staff / Lao động / Tài khoản / Xuất file    |
+| `user` (hoặc rỗng) | Người lao động (NLĐ)    | Trang chủ / Tài khoản / Về chúng tôi        |
 
 > Không có role "recruiter" riêng — **người tuyển là staff**. Quan hệ "người tuyển" được mã hóa qua `employment_histories.recruiter_staff` và `advances.recruiter_id`.
 
@@ -390,6 +390,7 @@ flowchart LR
 ### 8.1 Tạm ứng (Advances) — luồng 3 bước
 
 **Status model** (`src/lib/advances.ts`):
+
 - `AdvanceStatus = pending | recruiter_approved | accepted | rejected`.
 - `RecoveryStatus = none | recovered | unrecoverable` (trục riêng, chỉ có nghĩa sau khi `accepted`).
 - `disbursed` (bool) + `disbursed_at`: theo dõi giải ngân thực tế, độc lập status.
@@ -469,15 +470,15 @@ Status `received → approved → disbursed`, hoặc `→ rejected` / `→ cance
 
 ## 9. Server API (Nitro handlers)
 
-| Route | File | Vai trò |
-|---|---|---|
-| `POST /api/public/pocketbase-auth` | `api/public/pocketbase-auth.ts` | Login proxy: zod validate → PB `auth-with-password` → canonicalize identity → patch `last_login` |
-| `ALL /api/public/pb/*` | `api/public/pb.$.ts` | **Reverse proxy** PocketBase: CORS + `ngrok-skip-browser-warning` + SSE passthrough + map 5xx → thông báo offline tiếng Việt |
-| `GET /api/push/public-key` | `api/push/public-key.ts` | Trả VAPID public key |
-| `POST /api/push/subscription` | `api/push/subscription.ts` | `savePushSubscription` |
-| `POST /api/push/approval` | `api/push/approval.ts` | `sendApprovalPush` (web-push VAPID) |
-| `GET /api/public/app-logo`, `app-icon`, `app-icon-192/512` | tương ứng | Branding động từ `app_settings` |
-| `GET /api/public/manifest.webmanifest` | `manifest.webmanifest.ts` | PWA manifest động |
+| Route                                                      | File                            | Vai trò                                                                                                                      |
+| ---------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/public/pocketbase-auth`                         | `api/public/pocketbase-auth.ts` | Login proxy: zod validate → PB `auth-with-password` → canonicalize identity → patch `last_login`                             |
+| `ALL /api/public/pb/*`                                     | `api/public/pb.$.ts`            | **Reverse proxy** PocketBase: CORS + `ngrok-skip-browser-warning` + SSE passthrough + map 5xx → thông báo offline tiếng Việt |
+| `GET /api/push/public-key`                                 | `api/push/public-key.ts`        | Trả VAPID public key                                                                                                         |
+| `POST /api/push/subscription`                              | `api/push/subscription.ts`      | `savePushSubscription`                                                                                                       |
+| `POST /api/push/approval`                                  | `api/push/approval.ts`          | `sendApprovalPush` (web-push VAPID)                                                                                          |
+| `GET /api/public/app-logo`, `app-icon`, `app-icon-192/512` | tương ứng                       | Branding động từ `app_settings`                                                                                              |
+| `GET /api/public/manifest.webmanifest`                     | `manifest.webmanifest.ts`       | PWA manifest động                                                                                                            |
 
 > Đây là **toàn bộ** server function thực sự. Không có `createServerFn`; mọi CRUD khác đi qua PB SDK ở client.
 
@@ -601,4 +602,7 @@ Deploy phụ: Netlify (`netlify.toml`, publish `dist/client`, Node 22, `NETLIFY=
 - Log import **chỉ 1 dòng summary**, không log từng record.
 - Advances/salary-holds: `disbursed`/status là hai trục độc lập; recovery chỉ có nghĩa sau `accepted`.
 - Unique index "one active job per user" — logic thêm/sửa history phải tôn trọng.
+
+```
+
 ```

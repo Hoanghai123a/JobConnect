@@ -14,6 +14,7 @@ This migration removes all Staff-related functionality from JobConnect, simplify
 ## What Gets Deleted
 
 ### Collections (5 total)
+
 1. ✅ **staff_action_logs** - Staff activity logs
 2. ✅ **factory_managers** - Staff-to-factory assignments
 3. ✅ **recruitment_entities** - Recruitment partners (main_houses)
@@ -21,6 +22,7 @@ This migration removes all Staff-related functionality from JobConnect, simplify
 5. ✅ **cccd_versions** - CCCD history managed by Staff
 
 ### What Gets Kept
+
 - ✅ **employment_histories** - Still needed for check-attendance functionality
 - ✅ **advances** - Simplified: User → Admin (removed Staff approval step)
 - ✅ **users** - Role field restricted to "admin" | "user"
@@ -40,7 +42,7 @@ npm run lint
 
 ### Step 2: Access PocketBase Admin
 
-1. Open: http://localhost:8090/_/
+1. Open: http://localhost:8090/\_/
 2. Login with admin credentials
 3. Go to **Collections** tab
 
@@ -49,7 +51,7 @@ npm run lint
 For each collection, click "..." → "Delete":
 
 1. **staff_action_logs**
-2. **factory_managers**  
+2. **factory_managers**
 3. **recruitment_entities**
 4. **salary_holds**
 5. **cccd_versions**
@@ -62,11 +64,13 @@ PocketBase handles relations, indexes, and metadata cleanup automatically.
 Go to: Collections → **users** → "..." → "Edit collection"
 
 Option A: Convert staff to users (RECOMMENDED)
+
 ```sql
 UPDATE users SET role = 'user' WHERE role = 'staff';
 ```
 
 Option B: Delete staff users (CAREFUL!)
+
 ```sql
 DELETE FROM users WHERE role = 'staff';
 ```
@@ -78,6 +82,7 @@ Run via Admin UI: Settings → Backups → Console
 Go to: Collections → **advances** → "..." → "Edit collection"
 
 Remove these fields (no longer used):
+
 - `recruiter_id`
 - `recruiter_staff`
 - `recruiter_partner`
@@ -110,6 +115,7 @@ FROM advances;
 ## Post-Migration Testing
 
 ### User Flow Test
+
 1. Login as User
 2. ✅ Check attendance → Should work
 3. ✅ Check salary → Should work (uses employment_histories)
@@ -118,6 +124,7 @@ FROM advances;
 6. ✅ View news, transport, notebook → Should work
 
 ### Admin Flow Test
+
 1. Login as Admin
 2. ✅ View all advances → Should show pending/accepted/rejected
 3. ✅ Approve/reject advance → Should work (direct, no Staff)
@@ -126,8 +133,9 @@ FROM advances;
 6. ✅ Settings → Should work
 
 ### UI Verification
+
 - [ ] Dashboard: No Staff/Workers tiles
-- [ ] Bottom Nav: No /staff/* links
+- [ ] Bottom Nav: No /staff/\* links
 - [ ] Advances page: No "Người tuyển duyệt" step
 - [ ] No 404 errors on any page
 - [ ] No console errors
@@ -152,6 +160,7 @@ If something goes wrong:
 ## Files Changed
 
 ### Deleted (~40 files)
+
 - `src/routes/_authenticated/staff.tsx` + all sub-routes
 - `src/components/staff/*` - All Staff components
 - `src/components/employment/*` - Employment management components
@@ -160,6 +169,7 @@ If something goes wrong:
 - `src/lib/staff-*.ts` - All Staff logic files
 
 ### Modified (~10 files)
+
 - `src/lib/advances.ts` - Removed recruiter_approved status
 - `src/routes/_authenticated/advances.tsx` - Simplified workflow
 - `src/components/dashboard/FinanceDashboard.tsx` - Updated status chart
@@ -167,6 +177,7 @@ If something goes wrong:
 - `src/routes/_authenticated.tsx` - Removed Staff guards
 
 ### Created Stubs (~8 files)
+
 - `src/lib/employment.ts` - Stub for check-attendance
 - `src/lib/staff-permissions.ts` - Empty workspace stubs
 - `src/lib/staff-log.ts` - No-op logging stubs
@@ -198,10 +209,10 @@ If you encounter issues:
 
 ---
 
-**Migration Date**: _________________
+**Migration Date**: ********\_********
 
-**Performed By**: _________________
+**Performed By**: ********\_********
 
-**Backup Location**: _________________
+**Backup Location**: ********\_********
 
 **Notes**:

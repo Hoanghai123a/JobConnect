@@ -135,6 +135,7 @@ export function ApprovalForm({
             onChange={(e) => setAmountText(formatMoneyInput(e.target.value))}
             placeholder="Nhập số tiền nếu có"
             inputMode="numeric"
+            autoComplete="off"
             className="rounded-xl"
           />
           <p className="text-xs text-muted-foreground">Đơn vị: đồng</p>
@@ -145,11 +146,16 @@ export function ApprovalForm({
           <div className="flex flex-wrap gap-2">
             {images.map((f, i) => (
               <div key={i} className="group relative h-14 w-14 overflow-hidden rounded-lg border">
-                <img src={URL.createObjectURL(f)} alt="" className="h-full w-full object-cover" />
+                <img
+                  src={URL.createObjectURL(f)}
+                  alt={f.name}
+                  className="h-full w-full object-cover"
+                />
                 <button
                   type="button"
                   onClick={() => setImages((prev) => prev.filter((_, j) => j !== i))}
-                  className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition group-hover:opacity-100"
+                  className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity motion-reduce:transition-none group-hover:opacity-100"
+                  aria-label={`Xóa ảnh ${f.name}`}
                 >
                   <X className="h-4 w-4 text-white" />
                 </button>
@@ -159,7 +165,8 @@ export function ApprovalForm({
               <button
                 type="button"
                 onClick={() => imgRef.current?.click()}
-                className="flex h-14 w-14 items-center justify-center rounded-lg border-2 border-dashed bg-white text-muted-foreground transition hover:border-primary hover:text-primary"
+                className="flex h-14 w-14 items-center justify-center rounded-lg border-2 border-dashed bg-white text-muted-foreground transition-[border-color,color] motion-reduce:transition-none hover:border-primary hover:text-primary"
+                aria-label="Thêm ảnh"
               >
                 <ImagePlus className="h-5 w-5" />
               </button>
@@ -198,7 +205,7 @@ export function ApprovalForm({
               <button
                 type="button"
                 onClick={() => excelRef.current?.click()}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border-2 border-dashed bg-white py-2 text-xs text-muted-foreground transition hover:border-primary hover:text-primary"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border-2 border-dashed bg-white py-2 text-xs text-muted-foreground transition-[border-color,color] motion-reduce:transition-none hover:border-primary hover:text-primary"
               >
                 <FileSpreadsheet className="h-4 w-4" />
                 Thêm file Excel

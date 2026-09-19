@@ -13,7 +13,6 @@ import { AuthProvider } from "@/lib/auth";
 import { getUserErrorMessage } from "@/lib/toast";
 import { Toaster } from "@/components/ui/sonner";
 import { installPwaPromptListeners } from "@/lib/pwa-install";
-import { RoamingPet } from "@/components/garden/RoamingPet";
 import { BrandHeadLinks } from "@/components/layout/BrandHeadLinks";
 import { PushPermissionPrompt } from "@/components/layout/PushPermissionPrompt";
 import { InstallFloatingBanner } from "@/components/layout/InstallFloatingBanner";
@@ -161,7 +160,6 @@ function RootComponent() {
         <div className="app-shell">
           <Outlet />
           <InstallFloatingBanner />
-          <RoamingPet />
           <Toaster richColors position="top-center" />
         </div>
       </AuthProvider>

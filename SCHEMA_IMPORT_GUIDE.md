@@ -11,23 +11,27 @@
 Schema này bao gồm các collections sau (không có Staff-related collections):
 
 ### Core Collections
+
 1. ✅ **users** - User accounts (admin/user only, no staff)
 2. ✅ **factories** - Factory/company list
 3. ✅ **employment_histories** - Employment records (admin-managed)
 
 ### Feature Collections
+
 4. ✅ **advances** - Salary advances (User → Admin workflow)
 5. ✅ **complaints** - User complaints
 6. ✅ **news** - News articles
 7. ✅ **attendance_records** - Attendance tracking
 
 ### Check Collections
+
 8. ✅ **check_attendance_batches** - Attendance batch uploads
 9. ✅ **check_attendance_items** - Individual attendance records
 10. ✅ **check_salary_batches** - Salary batch uploads
 11. ✅ **check_salary_items** - Individual salary records
 
 ### Settings Collections
+
 12. ✅ **app_settings** - Application settings
 13. ✅ **transport_routes** - Transport routes
 
@@ -46,6 +50,7 @@ These collections are NOT included in this schema:
 ### Method 1: Via Admin UI (RECOMMENDED)
 
 1. **Backup existing data**:
+
    ```bash
    cp -r pb_data pb_data_backup_$(date +%Y%m%d_%H%M%S)
    ```
@@ -53,10 +58,11 @@ These collections are NOT included in this schema:
 2. **Stop PocketBase** (if running)
 
 3. **Open PocketBase Admin UI**:
+
    ```bash
    # Start PocketBase
    ./pocketbase serve
-   
+
    # Open in browser
    http://localhost:8090/_/
    ```
@@ -127,6 +133,7 @@ Check in Admin UI → Collections:
 ### 2. Create Initial Data
 
 #### Create Admin User
+
 Go to: Collections → **users** → **+ New record**
 
 ```json
@@ -141,6 +148,7 @@ Go to: Collections → **users** → **+ New record**
 ```
 
 #### Create App Settings
+
 Go to: Collections → **app_settings** → **+ New record**
 
 ```json
@@ -154,6 +162,7 @@ Go to: Collections → **app_settings** → **+ New record**
 ```
 
 #### Create Sample Factory
+
 Go to: Collections → **factories** → **+ New record**
 
 ```json
@@ -199,15 +208,18 @@ Go to: Collections → **employment_histories** → **+ New record**
 ## Key Changes from Previous Schema
 
 ### Users Collection
+
 - ❌ Removed: `role = "staff"` option
 - ✅ Only: `admin` and `user` roles
 
 ### Advances Collection
+
 - ❌ Removed: `recruiter_approved` status
 - ❌ Removed: Staff approval workflow
 - ✅ Simplified: `pending` → `accepted` / `rejected`
 
 ### Employment Histories
+
 - ✅ Kept for check-attendance functionality
 - ✅ Admin-managed (no Staff workflow)
 
@@ -233,7 +245,8 @@ SELECT DISTINCT status FROM advances;
 
 **Error**: "Collection already exists"
 
-**Solution**: 
+**Solution**:
+
 1. Delete existing collections first via Admin UI
 2. Or import into fresh PocketBase instance
 
@@ -242,6 +255,7 @@ SELECT DISTINCT status FROM advances;
 **Error**: Fields missing after import
 
 **Solution**:
+
 1. Verify JSON file is valid
 2. Check PocketBase version compatibility (need 0.38.0+)
 3. Re-import schema
@@ -251,6 +265,7 @@ SELECT DISTINCT status FROM advances;
 **Error**: Cannot create records
 
 **Solution**:
+
 1. Check collection rules in Admin UI
 2. Verify admin user exists and is logged in
 3. Check role is set correctly

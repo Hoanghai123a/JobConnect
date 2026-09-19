@@ -148,7 +148,8 @@ export function InstallFloatingBanner() {
           data-install-banner="visible"
           className="fixed left-1/2 z-50 w-[calc(100%-1rem)] max-w-[29rem] -translate-x-1/2 rounded-2xl border border-border/70 bg-card/95 px-3 py-2 shadow-[0_18px_45px_-20px_rgba(15,23,42,0.38)] backdrop-blur-xl"
           style={{ bottom: "calc(var(--mobile-nav-h) + 0.5rem + env(safe-area-inset-bottom))" }}
-          role="status"
+          role="complementary"
+          aria-label="Gợi ý cài đặt ứng dụng"
         >
           <button
             type="button"

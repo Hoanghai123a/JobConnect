@@ -1,11 +1,6 @@
 ﻿import { pb } from "./pocketbase";
 
-export type UidCounterType = "user" | "employment_history";
-
 export interface AllocateUidResponse {
-  type: UidCounterType;
-  prefix: string;
-  period: string;
   startValue: number;
   endValue: number;
   uids: string[];
@@ -26,7 +21,6 @@ const UID_ERROR_MESSAGES: Record<string, string> = {
   PB_READ_FAILED: "Không đọc được bộ đếm UID từ PocketBase.",
   PB_WRITE_FAILED: "Không cập nhật được bộ đếm UID trong PocketBase.",
   PB_VALIDATION_FAILED: "PocketBase từ chối dữ liệu cập nhật bộ đếm UID.",
-  UID_PREFIX_MISSING: "PocketBase chưa cấu hình tiền tố UID.",
   UID_COUNTER_INVALID: "Bản ghi bộ đếm UID trong PocketBase không hợp lệ.",
 };
 
@@ -74,36 +68,6 @@ async function requestCounter(body: Record<string, unknown>) {
 }
 
 export async function allocateUserUids(count = 1): Promise<string[]> {
-  const result = (await requestCounter({
-    action: "allocate",
-    type: "user",
-    count,
-  })) as AllocateUidResponse;
+  const result = (await requestCounter({ count })) as AllocateUidResponse;
   return result.uids;
-}
-
-export async function allocateEmploymentHistoryUids(
-  count = 1,
-  referenceDate = new Date(),
-): Promise<string[]> {
-  const result = (await requestCounter({
-    action: "allocate",
-    type: "employment_history",
-    count,
-    referenceDate: referenceDate.toISOString(),
-  })) as AllocateUidResponse;
-  return result.uids;
-}
-
-export async function observeManualUid(
-  type: UidCounterType,
-  uid: string,
-  referenceDate = new Date(),
-) {
-  await requestCounter({
-    action: "observe",
-    type,
-    uid,
-    referenceDate: referenceDate.toISOString(),
-  });
 }

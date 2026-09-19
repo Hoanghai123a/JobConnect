@@ -101,10 +101,7 @@
         "required": true,
         "system": false,
         "type": "select",
-        "values": [
-          "active",
-          "inactive"
-        ]
+        "values": ["active", "inactive"]
       },
       {
         "autogeneratePattern": "",
@@ -228,10 +225,7 @@
         "required": true,
         "system": false,
         "type": "select",
-        "values": [
-          "active",
-          "inactive"
-        ]
+        "values": ["active", "inactive"]
       },
       {
         "autogeneratePattern": "",
@@ -514,10 +508,7 @@
         "required": true,
         "system": false,
         "type": "select",
-        "values": [
-          "working",
-          "left"
-        ]
+        "values": ["working", "left"]
       },
       {
         "autogeneratePattern": "",
@@ -622,19 +613,13 @@
         "id": "file_cccdver_front",
         "maxSelect": 1,
         "maxSize": 5242880,
-        "mimeTypes": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ],
+        "mimeTypes": ["image/jpeg", "image/png", "image/webp"],
         "name": "front_image",
         "presentable": false,
         "protected": false,
         "required": false,
         "system": false,
-        "thumbs": [
-          "300x200"
-        ],
+        "thumbs": ["300x200"],
         "type": "file"
       },
       {
@@ -642,19 +627,13 @@
         "id": "file_cccdver_back",
         "maxSelect": 1,
         "maxSize": 5242880,
-        "mimeTypes": [
-          "image/jpeg",
-          "image/png",
-          "image/webp"
-        ],
+        "mimeTypes": ["image/jpeg", "image/png", "image/webp"],
         "name": "back_image",
         "presentable": false,
         "protected": false,
         "required": false,
         "system": false,
-        "thumbs": [
-          "300x200"
-        ],
+        "thumbs": ["300x200"],
         "type": "file"
       },
       {
@@ -1079,13 +1058,7 @@
         "required": true,
         "system": false,
         "type": "select",
-        "values": [
-          "received",
-          "approved",
-          "rejected",
-          "disbursed",
-          "cancelled"
-        ]
+        "values": ["received", "approved", "rejected", "disbursed", "cancelled"]
       },
       {
         "cascadeDelete": false,

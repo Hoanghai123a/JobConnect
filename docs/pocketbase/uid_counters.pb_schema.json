@@ -49,10 +49,7 @@
         "required": true,
         "system": false,
         "type": "select",
-        "values": [
-          "user",
-          "employment_history"
-        ]
+        "values": ["user", "employment_history"]
       },
       {
         "autogeneratePattern": "",
@@ -147,9 +144,7 @@
         "type": "autodate"
       }
     ],
-    "indexes": [
-      "CREATE UNIQUE INDEX `idx_uid_counters_key` ON `uid_counters` (`counter_key`)"
-    ],
+    "indexes": ["CREATE UNIQUE INDEX `idx_uid_counters_key` ON `uid_counters` (`counter_key`)"],
     "system": false
   }
 ]

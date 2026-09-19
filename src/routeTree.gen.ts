@@ -27,6 +27,7 @@ import { Route as AuthenticatedGuidesRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedGemsRouteImport } from './routes/_authenticated/gems'
 import { Route as AuthenticatedGardenRouteImport } from './routes/_authenticated/garden'
 import { Route as AuthenticatedForceChangePasswordRouteImport } from './routes/_authenticated/force-change-password'
+import { Route as AuthenticatedFarmRouteImport } from './routes/_authenticated/farm'
 import { Route as AuthenticatedExchangeRouteImport } from './routes/_authenticated/exchange'
 import { Route as AuthenticatedCounterRouteImport } from './routes/_authenticated/counter'
 import { Route as AuthenticatedComplaintsRouteImport } from './routes/_authenticated/complaints'
@@ -156,6 +157,11 @@ const AuthenticatedForceChangePasswordRoute =
     path: '/force-change-password',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedFarmRoute = AuthenticatedFarmRouteImport.update({
+  id: '/farm',
+  path: '/farm',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedExchangeRoute = AuthenticatedExchangeRouteImport.update({
   id: '/exchange',
   path: '/exchange',
@@ -365,6 +371,7 @@ export interface FileRoutesByFullPath {
   '/complaints': typeof AuthenticatedComplaintsRoute
   '/counter': typeof AuthenticatedCounterRoute
   '/exchange': typeof AuthenticatedExchangeRoute
+  '/farm': typeof AuthenticatedFarmRoute
   '/force-change-password': typeof AuthenticatedForceChangePasswordRoute
   '/garden': typeof AuthenticatedGardenRoute
   '/gems': typeof AuthenticatedGemsRoute
@@ -420,6 +427,7 @@ export interface FileRoutesByTo {
   '/complaints': typeof AuthenticatedComplaintsRoute
   '/counter': typeof AuthenticatedCounterRoute
   '/exchange': typeof AuthenticatedExchangeRoute
+  '/farm': typeof AuthenticatedFarmRoute
   '/force-change-password': typeof AuthenticatedForceChangePasswordRoute
   '/garden': typeof AuthenticatedGardenRoute
   '/gems': typeof AuthenticatedGemsRoute
@@ -476,6 +484,7 @@ export interface FileRoutesById {
   '/_authenticated/complaints': typeof AuthenticatedComplaintsRoute
   '/_authenticated/counter': typeof AuthenticatedCounterRoute
   '/_authenticated/exchange': typeof AuthenticatedExchangeRoute
+  '/_authenticated/farm': typeof AuthenticatedFarmRoute
   '/_authenticated/force-change-password': typeof AuthenticatedForceChangePasswordRoute
   '/_authenticated/garden': typeof AuthenticatedGardenRoute
   '/_authenticated/gems': typeof AuthenticatedGemsRoute
@@ -533,6 +542,7 @@ export interface FileRouteTypes {
     | '/complaints'
     | '/counter'
     | '/exchange'
+    | '/farm'
     | '/force-change-password'
     | '/garden'
     | '/gems'
@@ -588,6 +598,7 @@ export interface FileRouteTypes {
     | '/complaints'
     | '/counter'
     | '/exchange'
+    | '/farm'
     | '/force-change-password'
     | '/garden'
     | '/gems'
@@ -643,6 +654,7 @@ export interface FileRouteTypes {
     | '/_authenticated/complaints'
     | '/_authenticated/counter'
     | '/_authenticated/exchange'
+    | '/_authenticated/farm'
     | '/_authenticated/force-change-password'
     | '/_authenticated/garden'
     | '/_authenticated/gems'
@@ -838,6 +850,13 @@ declare module '@tanstack/react-router' {
       path: '/force-change-password'
       fullPath: '/force-change-password'
       preLoaderRoute: typeof AuthenticatedForceChangePasswordRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/farm': {
+      id: '/_authenticated/farm'
+      path: '/farm'
+      fullPath: '/farm'
+      preLoaderRoute: typeof AuthenticatedFarmRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/exchange': {
@@ -1125,6 +1144,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedComplaintsRoute: typeof AuthenticatedComplaintsRoute
   AuthenticatedCounterRoute: typeof AuthenticatedCounterRoute
   AuthenticatedExchangeRoute: typeof AuthenticatedExchangeRoute
+  AuthenticatedFarmRoute: typeof AuthenticatedFarmRoute
   AuthenticatedForceChangePasswordRoute: typeof AuthenticatedForceChangePasswordRoute
   AuthenticatedGardenRoute: typeof AuthenticatedGardenRoute
   AuthenticatedGemsRoute: typeof AuthenticatedGemsRoute
@@ -1153,6 +1173,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedComplaintsRoute: AuthenticatedComplaintsRoute,
   AuthenticatedCounterRoute: AuthenticatedCounterRoute,
   AuthenticatedExchangeRoute: AuthenticatedExchangeRoute,
+  AuthenticatedFarmRoute: AuthenticatedFarmRoute,
   AuthenticatedForceChangePasswordRoute: AuthenticatedForceChangePasswordRoute,
   AuthenticatedGardenRoute: AuthenticatedGardenRoute,
   AuthenticatedGemsRoute: AuthenticatedGemsRoute,

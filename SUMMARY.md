@@ -11,18 +11,21 @@ Loại bỏ toàn bộ quy trình tuyển dụng và vai trò Staff từ hệ th
 #### 1. Code Changes (40+ files)
 
 **Deleted Components** (~20 files):
+
 - ❌ `components/staff/*` - Toàn bộ folder Staff components
 - ❌ `components/employment/*` - Employment management UI
 - ❌ `components/cccd/*` - CCCD management UI
 - ❌ `components/workforce/*` - Recruitment UI
 
 **Deleted Routes** (~15 files):
+
 - ❌ `routes/_authenticated/staff.tsx` + nested routes
 - ❌ `routes/_authenticated/admin/staff.tsx`
 - ❌ `routes/_authenticated/admin/workforce.tsx`
 - ❌ `routes/_authenticated/work-history.tsx`
 
 **Deleted Libraries** (~10 files):
+
 - ❌ `lib/staff-permissions.ts` - Staff workspace permissions
 - ❌ `lib/staff-cache.ts` - IndexedDB caching
 - ❌ `lib/staff-log.ts` - Activity logging
@@ -31,6 +34,7 @@ Loại bỏ toàn bộ quy trình tuyển dụng và vai trò Staff từ hệ th
 - ❌ `lib/cccd-qr.ts`, `lib/cccd-versions.ts` - CCCD logic
 
 **Created Stubs** (8 files):
+
 - ✅ `lib/employment.ts` - Minimal stubs (check-attendance needs this)
 - ✅ `lib/staff-permissions.ts` - Empty workspace returns
 - ✅ `lib/staff-log.ts` - No-op functions
@@ -40,6 +44,7 @@ Loại bỏ toàn bộ quy trình tuyển dụng và vai trò Staff từ hệ th
 - ✅ `components/workforce/UserPicker.tsx` - Stub component
 
 **Modified Files** (~10 files):
+
 - ✅ `lib/advances.ts` - Removed recruiter_approved status, simplified types
 - ✅ `routes/_authenticated/advances.tsx` - Removed Staff approval workflow
 - ✅ `components/dashboard/FinanceDashboard.tsx` - Updated status metadata
@@ -58,10 +63,12 @@ Loại bỏ toàn bộ quy trình tuyển dụng và vai trò Staff từ hệ th
 #### 3. Workflow Simplification
 
 **Advances (Ứng lương)**:
+
 - ❌ CŨ: User → Staff (recruiter approval) → Admin → Giải ngân
 - ✅ MỚI: User → Admin → Giải ngân
 
 **Changes**:
+
 - Removed `recruiter_approved` status
 - Admin sees "Chờ duyệt" directly (was "Chờ người tuyển")
 - Removed Staff segment toggle (Workers/Staff)
@@ -82,6 +89,7 @@ Loại bỏ toàn bộ quy trình tuyển dụng và vai trò Staff từ hệ th
 #### PocketBase Collections Cần Xóa
 
 Phải xóa thủ công qua Admin UI:
+
 1. ❌ **staff_action_logs**
 2. ❌ **factory_managers**
 3. ❌ **recruitment_entities**
@@ -89,6 +97,7 @@ Phải xóa thủ công qua Admin UI:
 5. ❌ **cccd_versions**
 
 **Giữ lại**:
+
 - ✅ **employment_histories** - Cần cho check-attendance
 - ✅ **advances** - Đã đơn giản hóa workflow
 - ✅ Các collections khác không đổi
@@ -96,6 +105,7 @@ Phải xóa thủ công qua Admin UI:
 #### Users Collection
 
 Cần update users có `role='staff'`:
+
 ```sql
 -- Option A: Chuyển thành user
 UPDATE users SET role = 'user' WHERE role = 'staff';
@@ -107,6 +117,7 @@ DELETE FROM users WHERE role = 'staff';
 #### Advances Collection (Optional)
 
 Có thể xóa các fields không dùng nữa:
+
 - `recruiter_id`
 - `recruiter_staff`
 - `recruiter_partner`
@@ -119,11 +130,12 @@ Chi tiết đầy đủ trong file: **[MIGRATION.md](./MIGRATION.md)**
 ### Tóm tắt nhanh:
 
 1. **Backup PocketBase**:
+
    ```bash
    cp -r pb_data pb_data_backup
    ```
 
-2. **Truy cập Admin UI**: http://localhost:8090/_/
+2. **Truy cập Admin UI**: http://localhost:8090/\_/
 
 3. **Xóa Collections** (qua UI, không dùng SQL!):
    - staff_action_logs
@@ -133,6 +145,7 @@ Chi tiết đầy đủ trong file: **[MIGRATION.md](./MIGRATION.md)**
    - cccd_versions
 
 4. **Update Users**:
+
    ```sql
    UPDATE users SET role = 'user' WHERE role = 'staff';
    ```
@@ -145,17 +158,20 @@ Chi tiết đầy đủ trong file: **[MIGRATION.md](./MIGRATION.md)**
 ## Impact Assessment
 
 ### Code Reduction
+
 - **Routes**: -15 files (~40%)
 - **Components**: -20 files
 - **Libraries**: -10 files
 - **Total**: ~45 files deleted, ~10 files modified
 
 ### User Impact
+
 - **Staff users**: Mất quyền truy cập (cần chuyển sang User hoặc xóa)
 - **Workflow**: Đơn giản hơn (User → Admin trực tiếp)
 - **Features giữ nguyên**: Chấm công, tra lương, ứng lương, khiếu nại
 
 ### Database Impact
+
 - **Collections**: -5 collections
 - **Data loss**: Staff logs, CCCD versions, salary holds (cần backup!)
 - **Roles**: 3 → 2 (admin, user)
@@ -163,6 +179,7 @@ Chi tiết đầy đủ trong file: **[MIGRATION.md](./MIGRATION.md)**
 ## Testing Checklist
 
 ### User Flow
+
 - [ ] Login as User
 - [ ] Check attendance → OK
 - [ ] Check salary (employee code lookup) → OK
@@ -171,6 +188,7 @@ Chi tiết đầy đủ trong file: **[MIGRATION.md](./MIGRATION.md)**
 - [ ] View news, transport, notebook → OK
 
 ### Admin Flow
+
 - [ ] Login as Admin
 - [ ] View advances → Shows pending/accepted/rejected → OK
 - [ ] Approve/reject advance → Works directly → OK
@@ -178,8 +196,9 @@ Chi tiết đầy đủ trong file: **[MIGRATION.md](./MIGRATION.md)**
 - [ ] View complaints → OK
 
 ### UI Verification
+
 - [ ] Dashboard: No Staff/Workers tiles
-- [ ] No /staff/* routes (should 404 or redirect)
+- [ ] No /staff/\* routes (should 404 or redirect)
 - [ ] Advances: No Staff approval step
 - [ ] No console errors
 - [ ] No broken links in nav
@@ -187,12 +206,14 @@ Chi tiết đầy đủ trong file: **[MIGRATION.md](./MIGRATION.md)**
 ## Files Created
 
 ### Migration Scripts
+
 - ✅ `scripts/migration-remove-staff.sql` - SQL queries for verification
 - ✅ `scripts/remove-staff-collections.mjs` - Node.js migration script
 - ✅ `scripts/list-collections.mjs` - Collection checker
 - ✅ `MIGRATION.md` - Detailed migration guide
 
 ### Documentation
+
 - ✅ `SUMMARY.md` - This file
 
 ## Rollback Plan
@@ -208,12 +229,14 @@ If migration fails:
 ## Next Steps
 
 ### Immediate
+
 1. ✅ Commit code changes
 2. ⏳ Run PocketBase migration (manual, via Admin UI)
 3. ⏳ Test user/admin flows
 4. ⏳ Update PROJECT_MAP.md
 
 ### Future (Optional)
+
 - [ ] Remove employment_histories if không cần check-attendance
 - [ ] Clean up advances collection schema
 - [ ] Update user documentation
@@ -238,6 +261,7 @@ If migration fails:
 ## Completion Criteria
 
 ### Code (✅ DONE)
+
 - [x] Build succeeds
 - [x] Lint passes
 - [x] No TypeScript errors
@@ -246,16 +270,19 @@ If migration fails:
 - [x] Workflows simplified
 
 ### Database (⏳ PENDING)
+
 - [ ] Collections deleted
 - [ ] Staff users migrated
 - [ ] Schema cleaned up
 
 ### Testing (⏳ PENDING)
+
 - [ ] User flow verified
 - [ ] Admin flow verified
 - [ ] UI checked (no 404s)
 
 ### Documentation (⏳ PENDING)
+
 - [x] Migration guide written
 - [x] Summary created
 - [ ] PROJECT_MAP.md updated

@@ -7,11 +7,13 @@ File này chứa schema đã loại bỏ Staff role và các collections liên q
 ## Collections Included (12 collections)
 
 ### Core Collections:
+
 1. **users** (auth) - Admin & User only (no Staff)
 2. **factories** - Factory management
 3. **employment_histories** - Employment records (kept for check-attendance)
 
 ### Feature Collections:
+
 4. **advances** - Advance requests (simplified: User → Admin)
 5. **complaints** - User complaints
 6. **news** - News/announcements
@@ -19,15 +21,18 @@ File này chứa schema đã loại bỏ Staff role và các collections liên q
 8. **app_settings** - App configuration
 
 ### Check Attendance/Salary:
+
 9. **check_attendance_batches** - Attendance check batches
 10. **check_attendance_items** - Individual attendance records
 11. **check_salary_batches** - Salary check batches
 12. **check_salary_items** - Individual salary records
 
 ### Transport:
+
 13. **transport_routes** - Transport route information
 
 ## Collections REMOVED (Not in this schema):
+
 - ❌ staff_action_logs
 - ❌ factory_managers
 - ❌ recruitment_entities
@@ -39,16 +44,19 @@ File này chứa schema đã loại bỏ Staff role và các collections liên q
 ### Method 1: Via PocketBase Admin UI (RECOMMENDED)
 
 1. **Backup existing data**:
+
    ```bash
    cp -r pb_data pb_data_backup_$(date +%Y%m%d_%H%M%S)
    ```
 
 2. **Stop PocketBase** (if running):
+
    ```bash
    # Press Ctrl+C in the terminal where PocketBase is running
    ```
 
 3. **Delete old database** (CAREFUL!):
+
    ```bash
    rm pb_data/data.db
    rm pb_data/data.db-shm
@@ -56,12 +64,13 @@ File này chứa schema đã loại bỏ Staff role và các collections liên q
    ```
 
 4. **Start PocketBase**:
+
    ```bash
    ./pocketbase serve
    ```
 
 5. **Create admin account** (first time):
-   - Go to: http://localhost:8090/_/
+   - Go to: http://localhost:8090/\_/
    - Create new admin account
 
 6. **Import schema**:
@@ -79,6 +88,7 @@ File này chứa schema đã loại bỏ Staff role và các collections liên q
 If you have existing data and want to migrate:
 
 1. **Export current data**:
+
    ```bash
    ./pocketbase export --dir=./pb_export
    ```
@@ -86,11 +96,13 @@ If you have existing data and want to migrate:
 2. **Stop PocketBase**
 
 3. **Import new schema**:
+
    ```bash
    ./pocketbase import --collections=pb_schema_v0.38.0_no_staff.json
    ```
 
 4. **Migrate users** (convert staff to user):
+
    ```sql
    UPDATE users SET role = 'user' WHERE role = 'staff';
    ```
@@ -105,16 +117,18 @@ If you have existing data and want to migrate:
 If you're starting fresh or don't need old data:
 
 1. **Delete pb_data completely**:
+
    ```bash
    rm -rf pb_data
    ```
 
 2. **Start PocketBase**:
+
    ```bash
    ./pocketbase serve
    ```
 
-3. **Create admin account**: http://localhost:8090/_/
+3. **Create admin account**: http://localhost:8090/\_/
 
 4. **Import schema**: Settings → Import collections → Upload JSON
 
@@ -135,13 +149,17 @@ If you're starting fresh or don't need old data:
 ## Initial Data Setup (Optional)
 
 ### Create First Admin User
+
 Already done during setup, or via:
+
 ```bash
 ./pocketbase admin create admin@example.com password123
 ```
 
 ### Create App Settings
+
 Via Admin UI → app_settings → New record:
+
 ```json
 {
   "key": "default",
@@ -153,7 +171,9 @@ Via Admin UI → app_settings → New record:
 ```
 
 ### Create Sample Factory
+
 Via Admin UI → factories → New record:
+
 ```json
 {
   "name": "Nhà máy A",
@@ -166,33 +186,40 @@ Via Admin UI → factories → New record:
 ## Troubleshooting
 
 ### "Collection already exists" error
+
 - Delete pb_data/data.db and reimport
 - Or manually delete conflicting collections first
 
 ### "Auth collection users not found"
+
 - Make sure users collection is created first
 - Reimport the entire schema
 
 ### "Relation field error"
+
 - Check that related collections exist
 - Import order: users → factories → others
 
 ### "Role 'staff' not allowed"
+
 - Clean up: `UPDATE users SET role = 'user' WHERE role = 'staff'`
 - Schema only allows admin/user
 
 ## Schema Differences from Previous Version
 
 ### users collection:
+
 - ❌ Removed: role="staff" option
 - ✅ Only: role="admin" | role="user"
 
 ### advances collection:
+
 - ❌ Removed: recruiter_approved status
 - ❌ Removed: recruiter_id, recruiter_staff fields (optional cleanup)
 - ✅ Only: status="pending" | "accepted" | "rejected"
 
 ### Removed collections:
+
 - ❌ staff_action_logs
 - ❌ factory_managers
 - ❌ recruitment_entities
@@ -200,6 +227,7 @@ Via Admin UI → factories → New record:
 - ❌ cccd_versions
 
 ### Kept collections:
+
 - ✅ employment_histories (for check-attendance)
 - ✅ All other feature collections
 
@@ -213,6 +241,7 @@ Via Admin UI → factories → New record:
 ## Support
 
 If issues occur:
+
 1. Restore from backup: `cp -r pb_data_backup pb_data`
 2. Check PocketBase logs: `pb_data/logs/`
 3. Verify schema file is valid JSON
