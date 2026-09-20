@@ -17,7 +17,9 @@ Game có thể lấy cảm hứng từ các game nông trại phổ biến, như
 - React + Vite + TypeScript
 - Phaser 3 cho gameplay world
 - Zustand cho client state
-- PocketBase cho persistence/backend MVP
+- **Dual persistence mode:**
+  - **LocalStorage** cho offline/guest play
+  - **PocketBase** cho authenticated users (optional sync)
 - CSS/Tailwind hoặc UI library hiện có của repo nếu phù hợp
 - Không thêm dependency nếu không cần thiết.
 
@@ -46,11 +48,53 @@ Phaser:
 - effects
 
 Luồng:
-Phaser → game service/store → persistence service → PocketBase.
+Phaser → game service/store → persistence service → LocalStorage/PocketBase.
 
-Phaser KHÔNG được gọi PocketBase trực tiếp.
+Phaser KHÔNG được gọi PocketBase hoặc LocalStorage trực tiếp.
 
 Không duy trì cùng một nguồn dữ liệu cho cùng một trạng thái ở cả React và Phaser. Zustand/service layer là cầu nối.
+
+## Play Modes
+
+### Offline/Guest Mode (Default)
+- Không cần đăng nhập
+- Data lưu trong `localStorage`
+- Key format: `farm_game_${playerId}` (playerId = random UUID)
+- **QUAN TRỌNG:** Dữ liệu offline KHÔNG được sync lên server
+- **QUAN TRỌNG:** Dữ liệu offline KHÔNG được dùng cho giao dịch sau này
+- Chỉ dùng cho testing và casual play
+
+### Authenticated Mode (Optional)
+- User đăng nhập qua PocketBase
+- Data lưu trong PocketBase collections
+- Sync across devices
+- Persistent, secure, server-validated
+- Required cho competitive/leaderboard features
+
+### Mode Detection
+```typescript
+const isAuthenticated = pb.authStore.isValid;
+const persistenceMode = isAuthenticated ? 'server' : 'local';
+```
+
+### Data Migration Policy
+**NO MIGRATION:** Offline data CANNOT be transferred to authenticated accounts.
+
+**Why:**
+- Prevent cheating (offline data không validated)
+- Prevent economy exploits (client-controlled data)
+- Security isolation (untrusted vs trusted data)
+
+**User Flow:**
+1. User plays offline → saves to localStorage
+2. User signs up → creates NEW farm (empty state)
+3. Offline progress stays in localStorage (isolated)
+
+**UI Message:**
+```
+"Chế độ chơi thử - Tiến độ không được lưu khi đăng nhập.
+Đăng ký tài khoản để lưu tiến độ vĩnh viễn."
+```
 
 ## Crop timing
 
@@ -71,18 +115,33 @@ Readiness phải được tính từ current time và harvestAt, vì người ch
 
 ## Economy và security
 
-Client không được là nguồn sự thật cho:
+### Offline/Guest Mode Security
+Client-side validation only (không có server).
 
+**Allowed:**
+- Client tự validate coins/inventory/XP
+- Lưu trực tiếp vào localStorage
+- Không có transaction hooks
+
+**Why it's OK:**
+- Data isolated trong browser
+- Không ảnh hưởng authenticated users
+- Không dùng cho leaderboard/competitive features
+- Chỉ cho single-player casual play
+
+### Authenticated Mode Security
+Server là nguồn sự thật.
+
+Client không được là nguồn sự thật cho:
 - coins
 - inventory
 - XP
 - crop ownership
 - plot ownership
 - harvest timing
-- quest completion.
+- quest completion
 
 Action gửi lên backend nên mô tả hành động, ví dụ:
-
 - plant seed vào plot
 - harvest plot
 - buy seed
@@ -92,7 +151,6 @@ Không gửi các giá trị kiểu:
 coinsAfter, inventoryAfter, expAfter để backend tin tưởng.
 
 Backend phải kiểm tra:
-
 - authenticated player
 - resource ownership
 - seed availability
@@ -276,7 +334,9 @@ Không tự thêm:
 - payment
 - ads
 - WebSocket
-- social graph.
+- social graph
+- **offline → online data migration**
+- **localStorage → PocketBase sync**
 
 Chỉ thêm khi có yêu cầu riêng.
 

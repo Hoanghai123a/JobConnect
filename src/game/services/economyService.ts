@@ -2,7 +2,7 @@ import { useGameStore } from "../stores/gameStore";
 import { CROPS } from "../config/crops";
 import { QuestService } from "./questService";
 import { AudioService } from "./audioService";
-import { FarmPersistenceService } from "./farmPersistenceService";
+import { getStorageAdapter } from "./storageFactory";
 
 /**
  * Economy service layer
@@ -45,10 +45,10 @@ export const EconomyService = {
     // Play sound effect
     AudioService.play("buy");
 
-    // Persist to backend
-    const playerId = store.player.id;
-    FarmPersistenceService.updateInventory(playerId, cropId, 1);
-    FarmPersistenceService.savePlayer(store.player);
+    // Persist via adapter
+    const adapter = getStorageAdapter();
+    adapter.savePlayer(store.player);
+    adapter.saveInventory(store.inventory);
 
     return { success: true };
   },
@@ -95,10 +95,10 @@ export const EconomyService = {
     // Play sound effect
     AudioService.play("coin");
 
-    // Persist to backend
-    const playerId = useGameStore.getState().player.id;
-    FarmPersistenceService.updateInventory(playerId, cropId, -quantity);
-    FarmPersistenceService.savePlayer(useGameStore.getState().player);
+    // Persist via adapter
+    const adapter = getStorageAdapter();
+    adapter.savePlayer(useGameStore.getState().player);
+    adapter.saveInventory(store.inventory);
 
     return { success: true, earned };
   },
@@ -146,15 +146,10 @@ export const EconomyService = {
     // Play sound effect
     AudioService.play("plant");
 
-    // Persist to backend
-    const playerId = store.player.id;
-    const updatedPlot = store.plots.find((p) => p.id === plotId);
-    if (updatedPlot?.crop) {
-      const plantedAt = new Date(updatedPlot.crop.plantedAt);
-      const harvestAt = new Date(updatedPlot.crop.harvestAt);
-      FarmPersistenceService.plantCrop(playerId, plotId, cropId, plantedAt, harvestAt);
-      FarmPersistenceService.updateInventory(playerId, cropId, -1);
-    }
+    // Persist via adapter
+    const adapter = getStorageAdapter();
+    adapter.savePlots(store.plots);
+    adapter.saveInventory(store.inventory);
 
     return { success: true };
   },
@@ -204,11 +199,11 @@ export const EconomyService = {
     // Play sound effect
     AudioService.play("harvest");
 
-    // Persist to backend
-    const playerId = store.player.id;
-    FarmPersistenceService.harvestCrop(playerId, plotId);
-    FarmPersistenceService.updateInventory(playerId, harvestedCrop.cropId, 1);
-    FarmPersistenceService.savePlayer(store.player);
+    // Persist via adapter
+    const adapter = getStorageAdapter();
+    adapter.savePlots(store.plots);
+    adapter.savePlayer(store.player);
+    adapter.saveInventory(store.inventory);
 
     return {
       success: true,

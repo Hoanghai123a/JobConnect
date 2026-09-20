@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { FarmPersistenceService } from "../services/farmPersistenceService";
 import { useGameStore } from "../stores/gameStore";
+import { getStorageAdapter } from "../services/storageFactory";
+import { FarmPersistenceService } from "../services/farmPersistenceService";
 import { pb } from "@/lib/pocketbase";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
@@ -23,32 +24,33 @@ export const FarmLoader = ({ onLoaded, children }: FarmLoaderProps) => {
       setLoading(true);
       setError(null);
 
-      // Check authentication
-      if (!pb.authStore.isValid) {
-        setError("Vui lòng đăng nhập để chơi game");
+      const adapter = getStorageAdapter();
+      const isAuthenticated = pb.authStore.isValid;
+
+      // Load player
+      const player = await adapter.loadPlayer();
+      if (!player) {
+        setError("Không thể tải dữ liệu người chơi");
         setLoading(false);
         return;
       }
 
-      // Load farm data from PocketBase
-      const farmData = await FarmPersistenceService.initPlayer();
-
-      if (!farmData) {
-        setError("Không thể tải dữ liệu nông trại");
-        setLoading(false);
-        return;
-      }
+      // Load plots, inventory, quests
+      const plots = await adapter.loadPlots();
+      const inventory = await adapter.loadInventory();
+      const quests = await adapter.loadQuests();
 
       // Initialize Zustand store with loaded data
       const store = useGameStore.getState();
 
       // Set player data
-      store.addCoins(farmData.player.coins - store.player.coins); // Adjust to loaded value
-      store.addExp(farmData.player.exp - store.player.exp); // Adjust to loaded value
+      store.addCoins(player.coins - store.player.coins);
+      store.addExp(player.exp - store.player.exp);
+      store.player.id = player.id;
 
       // Set plots (merge loaded data with client state)
       const updatedPlots = store.plots.map((plot) => {
-        const loadedPlot = farmData.plots.find((p) => p.id === plot.id);
+        const loadedPlot = plots.find((p) => p.id === plot.id);
         return loadedPlot || plot;
       });
       store.plots.forEach((_, i) => {
@@ -58,8 +60,8 @@ export const FarmLoader = ({ onLoaded, children }: FarmLoaderProps) => {
       });
 
       // Set inventory
-      Object.keys(farmData.inventory).forEach((cropId) => {
-        const quantity = farmData.inventory[cropId];
+      Object.keys(inventory).forEach((cropId) => {
+        const quantity = inventory[cropId];
         const current = store.inventory[cropId] || 0;
         if (quantity !== current) {
           store.addToInventory(cropId, quantity - current);
@@ -67,10 +69,12 @@ export const FarmLoader = ({ onLoaded, children }: FarmLoaderProps) => {
       });
 
       // Set quests
-      store.setQuests(farmData.quests);
+      store.setQuests(quests);
 
-      // Check quest reset
-      await FarmPersistenceService.checkQuestReset(farmData.player.id);
+      // Check quest reset (authenticated mode only)
+      if (isAuthenticated && player.id) {
+        await FarmPersistenceService.checkQuestReset(player.id);
+      }
 
       setLoading(false);
       onLoaded();

@@ -1,12 +1,15 @@
 import { useGameStore } from "../stores/gameStore";
-import { Coins, TrendingUp, User, Volume2, VolumeX } from "lucide-react";
+import { Coins, TrendingUp, User, Volume2, VolumeX, CloudCheck, CloudOff } from "lucide-react";
 import { AudioService } from "../services/audioService";
 import { useState } from "react";
+import { pb } from "@/lib/pocketbase";
+import { Badge } from "@/components/ui/badge";
 
 export const GameHUD = () => {
   const { player } = useGameStore();
   const expPercentage = (player.exp / player.expToNextLevel) * 100;
   const [soundEnabled, setSoundEnabled] = useState(AudioService.isEnabled());
+  const isAuthenticated = pb.authStore.isValid;
 
   const toggleSound = () => {
     const newState = AudioService.toggle();
@@ -60,6 +63,19 @@ export const GameHUD = () => {
             <VolumeX className="w-4 h-4 text-gray-400" />
           )}
         </button>
+
+        {/* Mode indicator */}
+        {isAuthenticated ? (
+          <Badge variant="default" className="bg-green-600 hover:bg-green-700 gap-1 shadow-lg">
+            <CloudCheck className="w-3 h-3" />
+            <span className="text-xs">Đã đồng bộ</span>
+          </Badge>
+        ) : (
+          <Badge variant="secondary" className="bg-yellow-500 hover:bg-yellow-600 gap-1 shadow-lg">
+            <CloudOff className="w-3 h-3" />
+            <span className="text-xs">Chế độ thử</span>
+          </Badge>
+        )}
       </div>
     </div>
   );

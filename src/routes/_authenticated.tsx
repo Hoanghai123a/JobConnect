@@ -34,6 +34,7 @@ const GUEST_ACCESS_PATHS = new Set([
   "/garden",
   "/gems",
   "/minesweeper",
+  "/farm",
 ]);
 
 function canGuestAccess(pathname: string) {

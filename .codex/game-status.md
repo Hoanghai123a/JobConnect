@@ -2,7 +2,8 @@
 
 ## Current Phase
 
-✅ **09 - Backend** — COMPLETED (MVP)
+✅ **10 - Offline Mode** — COMPLETED
+📝 **Next: Milestone 11 - Production Assets** — PLANNED
 
 ## Milestone Overview
 
@@ -15,6 +16,7 @@
 - [x] **07 - Quests** ✓
 - [x] **08 - Polish** ✓
 - [x] **09 - Backend** ✓ (MVP - PocketBase integrated)
+- [x] **10 - Offline Mode** ✓ (LocalStorage + PocketBase dual storage)
 
 ## Completed Features
 
@@ -37,6 +39,10 @@
 - ✅ **Persistence** — Auto-save player, plots, inventory, quests
 - ✅ **Quest reset** — Daily reset logic via reset_at timestamps
 - ✅ **Authentication** — User-based farm data isolation
+- ✅ **Offline mode** — Guest play với localStorage persistence
+- ✅ **Dual storage** — StorageAdapter abstraction (LocalStorage + PocketBase)
+- ✅ **Mode indicator** — UI badge hiển thị sync status
+- ✅ **Guest access** — Farm game playable without login
 
 ### Crops (10 total)
 Tất cả crops đã được định nghĩa với balance testing:
@@ -93,7 +99,17 @@ Auto-tracking hoạt động cho:
 
 ## Current Work
 
-Đã hoàn thành Milestone 08 - Polish.
+Đã hoàn thành Milestone 10 - Offline Mode.
+
+**Milestone 10 - Offline Mode features:**
+- ✅ StorageAdapter interface cho dual persistence
+- ✅ LocalStorageAdapter với guest player UUID generation
+- ✅ PocketBaseAdapter wrapper cho authenticated users
+- ✅ Storage factory với auto mode detection
+- ✅ UI indicator badge ("Đã đồng bộ" vs "Chế độ thử")
+- ✅ Warning banner cho offline mode
+- ✅ Guest access route configuration
+- ✅ No data migration policy (offline → authenticated isolation)
 
 **Milestone 08 - Polish features:**
 - ✅ Sound effects integration (plant, harvest, coin, buy, levelUp, questComplete, click)
@@ -135,10 +151,10 @@ Placeholder path: `/game-assets/placeholder.png`
   - CollectionModal.tsx
 
 **Remaining blockers:**
-1. **Production assets** — 30+ sprites still placeholders
-2. **Schema import** — farm_game_collections.json cần import vào PocketBase
-3. **Security review** — Server-side validation cho transactions
-4. **Daily quest cron** — Automated daily reset (có thể dùng PocketBase hooks)
+1. **Production assets** — 30+ sprites still placeholders (Milestone 11)
+2. **PocketBase testing** — Verify authenticated mode với real PocketBase instance
+3. **Security review** — Server-side validation cho authenticated transactions
+4. **Daily quest cron** — Automated daily reset (PocketBase hooks or cron job)
 
 ## Files Created/Modified
 
@@ -173,6 +189,18 @@ Placeholder path: `/game-assets/placeholder.png`
 - Modified: `src/game/services/economyService.ts` (Persistence hooks)
 - Modified: `src/game/services/questService.ts` (Quest persistence)
 - Modified: `src/routes/_authenticated/farm.tsx` (FarmLoader wrapper)
+
+**Milestone 10 - Offline Mode:**
+- Created: `src/game/services/storageAdapter.ts` (Interface cho dual storage)
+- Created: `src/game/services/localStorageAdapter.ts` (Offline persistence)
+- Created: `src/game/services/pocketBaseAdapter.ts` (PocketBase wrapper)
+- Created: `src/game/services/storageFactory.ts` (Mode detection)
+- Modified: `src/game/components/FarmLoader.tsx` (Adapter-based loading)
+- Modified: `src/game/services/economyService.ts` (Adapter-based persistence)
+- Modified: `src/game/services/questService.ts` (Adapter-based persistence)
+- Modified: `src/game/components/GameHUD.tsx` (Mode indicator badge)
+- Modified: `src/routes/_authenticated/farm.tsx` (Warning banner, guest access)
+- Modified: `src/routes/_authenticated.tsx` (Added /farm to GUEST_ACCESS_PATHS)
 
 **Critical Fixes:**
 - Modified: `src/game/config/crops.ts` (Changed CROPS from array to Record<string, CropConfig>)

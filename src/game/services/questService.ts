@@ -1,6 +1,6 @@
 import { useGameStore } from "../stores/gameStore";
 import type { QuestType } from "../types";
-import { FarmPersistenceService } from "./farmPersistenceService";
+import { getStorageAdapter } from "./storageFactory";
 
 export class QuestService {
   /**
@@ -9,13 +9,8 @@ export class QuestService {
   static updateQuestProgress(type: QuestType, amount: number = 1) {
     const store = useGameStore.getState();
     const updatedQuests = store.quests.map((quest) => {
-      // Only update unclaimed quests of matching type
       if (quest.type === type && !quest.claimed) {
         const newProgress = Math.min(quest.progress + amount, quest.target);
-
-        // Persist to backend
-        const playerId = store.player.id;
-        FarmPersistenceService.updateQuestProgress(playerId, quest.id, amount);
 
         return {
           ...quest,
@@ -26,6 +21,10 @@ export class QuestService {
     });
 
     store.setQuests(updatedQuests);
+
+    // Persist via adapter
+    const adapter = getStorageAdapter();
+    adapter.saveQuests(updatedQuests);
   }
 
   /**
@@ -60,10 +59,10 @@ export class QuestService {
     store.addCoins(quest.reward.coins);
     store.addExp(quest.reward.exp);
 
-    // Persist to backend
-    const playerId = store.player.id;
-    FarmPersistenceService.claimQuest(playerId, questId);
-    FarmPersistenceService.savePlayer(store.player);
+    // Persist via adapter
+    const adapter = getStorageAdapter();
+    adapter.saveQuests(updatedQuests);
+    adapter.savePlayer(store.player);
 
     return {
       success: true,
