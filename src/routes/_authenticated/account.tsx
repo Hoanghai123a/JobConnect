@@ -2086,36 +2086,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function TextField({
-    setLoading(true);
-    try {
-      const [userRows, factoryRows, assignmentRows] = await Promise.all([
-        pb
-          .collection("users")
-          .getList<UserRecord>(1, 500, {
-            filter: staffSearchFilter(debouncedSearch),
-            sort: "full_name,username",
-          })
-          .then((res) => res.items),
-        fetchFactories(),
-        fetchFactoryManagers(),
-      ]);
-      setStaffUsers(userRows);
-      setFactories(factoryRows);
-      const counts: Record<string, number> = {};
-      for (const row of assignmentRows) {
-        if (isFactoryAssignmentActive(row)) {
-          counts[row.staff] = (counts[row.staff] || 0) + 1;
-        }
-      }
-      setAssignmentCounts(counts);
-    } catch (error: any) {
-      toast.error(error?.message || "Không tải được dữ liệu staff");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
