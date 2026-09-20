@@ -122,7 +122,11 @@ export function LocalSyncDialog({ open, onClose, onSyncComplete }: LocalSyncDial
             )}
 
             <DialogFooter className="flex-col gap-2 sm:flex-row">
-              <Button variant="ghost" onClick={() => setShowDetails(!showDetails)} className="w-full sm:w-auto">
+              <Button
+                variant="ghost"
+                onClick={() => setShowDetails(!showDetails)}
+                className="w-full sm:w-auto"
+              >
                 {showDetails ? "Ẩn chi tiết" : "Xem chi tiết"}
               </Button>
               <div className="flex gap-2 flex-1">

@@ -661,7 +661,6 @@ function AdminUsersPanel() {
     }
   };
 
-
   const toggleApprovalRequirement = async (val: boolean) => {
     setRequireApproval(val);
     try {
@@ -670,7 +669,7 @@ function AdminUsersPanel() {
       } else {
         const r = await pb.collection("app_settings").create({
           key: "require_approval",
-          requireApproval: val
+          requireApproval: val,
         });
         setSettingsId(r.id);
       }
@@ -3182,17 +3181,6 @@ function FactoryAssignmentsPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <Card className="space-y-3 p-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </h2>
-      {children}
     </Card>
   );
 }

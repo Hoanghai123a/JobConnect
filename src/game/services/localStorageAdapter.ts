@@ -147,7 +147,7 @@ export class LocalStorageAdapter implements StorageAdapter {
           createdAt: new Date().toISOString(),
           mode: "offline",
           lastPlayed: new Date().toISOString(),
-        })
+        }),
       );
 
       return newId;

@@ -58,6 +58,7 @@ import {
   type LocalAttendanceProfile,
   type LocalAttendanceState,
 } from "@/lib/local-attendance";
+import { estimateDailySalary, isTomorrow } from "@/lib/attendance-incentive";
 import {
   ChevronLeft,
   ChevronRight,
@@ -73,6 +74,8 @@ import {
   Save,
   AlertTriangle,
   LogIn,
+  CircleDollarSign,
+  TrendingDown,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/attendance")({
@@ -553,6 +556,24 @@ function AuthenticatedUserAttendance() {
   const submit = async () => {
     if (!user?.id || saving) return;
     setSaving(true);
+
+    // Tính tiền mất nếu chọn nghỉ
+    let dailyLoss: number | null = null;
+    if (attendanceType === "off" && user?.lcb) {
+      const estimate = estimateDailySalary(
+        date,
+        {
+          lcb: user.lcb,
+          chuyen_can: user.chuyen_can || 0,
+          doi_song: user.doi_song || 0,
+          tham_nien: user.tham_nien || 0,
+        },
+        shift,
+        isHoliday,
+      );
+      dailyLoss = estimate.difference;
+    }
+
     try {
       const existing = rows.find((r) => r.date === date);
       const normalizedPayload =
@@ -580,7 +601,16 @@ function AuthenticatedUserAttendance() {
         saveLastHours(normalizedPayload.hc_hours, normalizedPayload.ot_hours);
       }
 
-      toast.success("Đã lưu chấm công");
+      // Toast notification tùy theo loại
+      if (attendanceType === "off" && dailyLoss && dailyLoss > 0) {
+        toast.success(`Bạn vừa rơi xa ${formatVND(dailyLoss)}`, {
+          icon: <TrendingDown className="h-5 w-5 text-amber-600" />,
+          duration: 4000,
+        });
+      } else {
+        toast.success("Đã lưu chấm công");
+      }
+
       setEntryOpen(false);
       fetchMonth();
     } catch (e: any) {
@@ -645,6 +675,25 @@ function AuthenticatedUserAttendance() {
   };
 
   const selectedRow = rows.find((r) => r.date === date);
+
+  // Tính lương dự kiến cho banner động viên
+  const dailyEstimate = useMemo(() => {
+    if (!user?.lcb || !date) return null;
+    return estimateDailySalary(
+      date,
+      {
+        lcb: user.lcb,
+        chuyen_can: user.chuyen_can || 0,
+        doi_song: user.doi_song || 0,
+        tham_nien: user.tham_nien || 0,
+      },
+      shift,
+      isHoliday,
+    );
+  }, [date, user?.lcb, user?.chuyen_can, user?.doi_song, user?.tham_nien, shift, isHoliday]);
+
+  const showIncentiveBanner =
+    !selectedRow && attendanceType === "work" && dailyEstimate && dailyEstimate.work > 0;
 
   return (
     <PageContainer
@@ -722,6 +771,37 @@ function AuthenticatedUserAttendance() {
           title={selectedRow ? "Cập nhật chấm công" : "Nhập chấm công"}
           description="Nhập ca làm, ngày lễ, giờ hành chính và giờ tăng ca cho ngày đã chọn."
         >
+          {showIncentiveBanner && dailyEstimate && (
+            <div className="mb-4 rounded-xl border-2 border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/20">
+                  <CircleDollarSign className="h-5 w-5 text-primary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-foreground">Động viên chấm công</div>
+                  <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    {isTomorrow(date) ? (
+                      <span>
+                        Chấm công đi làm <strong className="text-primary">ngày mai</strong> và nhận{" "}
+                        <strong className="text-lg font-bold text-primary">
+                          {formatVND(dailyEstimate.work)}
+                        </strong>{" "}
+                        vào lương
+                      </span>
+                    ) : (
+                      <span>
+                        Chấm công đi làm và nhận{" "}
+                        <strong className="text-lg font-bold text-primary">
+                          {formatVND(dailyEstimate.work)}
+                        </strong>{" "}
+                        vào lương
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <form
             className="space-y-4"
             onSubmit={(event) => {
