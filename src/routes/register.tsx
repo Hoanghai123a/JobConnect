@@ -125,7 +125,6 @@ function RegisterPage() {
         phone: form.phone || undefined,
         role: "user",
         status: requireApproval ? "disabled" : "active",
-        requireApproval: requireApproval,
       });
 
       if (requireApproval) {
