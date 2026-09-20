@@ -4,9 +4,11 @@ import { Eye, EyeOff, Loader2, LogIn, UserRound, Download } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { PASSWORD_REAUTH_NOTICE_KEY, useAuth } from "@/lib/auth";
 import { normalizeAccountIdentity } from "@/lib/account-identity";
-import { pb } from "@/lib/pocketbase";
+import { pb, type UserRecord } from "@/lib/pocketbase";
 import { isProfileComplete } from "@/lib/profile";
 import { isUserApproved } from "@/lib/user-approval";
+import { hasLocalDataToSync } from "@/lib/local-sync";
+import { LocalSyncDialog } from "@/components/attendance/LocalSyncDialog";
 import {
   usePwaInstallPrompt,
   isStandaloneMode,
@@ -16,7 +18,6 @@ import {
 import { IosInstallGuideDialog } from "@/components/layout/IosInstallGuideDialog";
 import { AndroidInstallGuideDialog } from "@/components/layout/AndroidInstallGuideDialog";
 import { DesktopInstallGuideDialog } from "@/components/layout/DesktopInstallGuideDialog";
-import { getClientDeviceProfile } from "@/lib/device-profile";
 import { BackButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,10 +49,9 @@ export const Route = createFileRoute("/login")({
     if (typeof window === "undefined") return;
     if (pb.authStore.isValid) {
       const role = pb.authStore.record?.role;
-      const isDesktop = getClientDeviceProfile() === "desktop";
-      if (role === "admin" && isDesktop) throw redirect({ to: "/admin/workforce" });
+      if (role === "admin") throw redirect({ to: "/" });
       if (role === "staff") {
-        throw redirect({ to: isDesktop ? "/staff/workers" : "/staff" });
+        throw redirect({ to: "/staff" });
       }
       throw redirect({ to: "/home" });
     }
@@ -66,6 +66,10 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Local sync state
+  const [showSyncDialog, setShowSyncDialog] = useState(false);
+  const [loggedInUser, setLoggedInUser] = useState<UserRecord | null>(null);
 
   // PWA install
   const { installPrompt, installApp, isAndroid, isIos } = usePwaInstallPrompt();
@@ -93,6 +97,51 @@ function LoginPage() {
       setShowDesktopGuide(true);
     } else {
       setShowAndroidGuide(true);
+    }
+  };
+
+  const performNavigation = (user: UserRecord) => {
+    const role = user.role;
+
+    if (role === "admin") {
+      nav({ to: "/" });
+      return;
+    }
+
+    if (role === "staff") {
+      nav({ to: "/staff" });
+      return;
+    }
+
+    if (!isProfileComplete(user)) {
+      toast.info("Bổ sung đầy đủ thông tin để trải nghiệm tốt nhất");
+      nav({ to: "/account", search: { incomplete: 1 } as any });
+      return;
+    }
+
+    const today = getLocalDateKey();
+    const redirectKey = attendanceRedirectStorageKey(user.id);
+    const lastLoginDate = window.localStorage.getItem(redirectKey);
+
+    if (lastLoginDate !== today) {
+      window.localStorage.setItem(redirectKey, today);
+      nav({ to: "/attendance" });
+    } else {
+      nav({ to: "/home" });
+    }
+  };
+
+  const handleSyncComplete = () => {
+    setShowSyncDialog(false);
+    if (loggedInUser) {
+      performNavigation(loggedInUser);
+    }
+  };
+
+  const handleSyncSkip = () => {
+    setShowSyncDialog(false);
+    if (loggedInUser) {
+      performNavigation(loggedInUser);
     }
   };
 
@@ -155,13 +204,20 @@ function LoginPage() {
               : "Đăng nhập thành công. Chúc bạn một ngày làm việc hiệu quả.",
       });
 
+      // Check for local data to sync
+      if (role !== "admin" && role !== "staff" && hasLocalDataToSync()) {
+        setLoggedInUser(loggedInUser);
+        setShowSyncDialog(true);
+        return;
+      }
+
       if (role === "admin") {
-        nav({ to: getClientDeviceProfile() === "desktop" ? "/admin/workforce" : "/" });
+        nav({ to: "/" });
         return;
       }
 
       if (role === "staff") {
-        nav({ to: getClientDeviceProfile() === "desktop" ? "/staff/workers" : "/staff" });
+        nav({ to: "/staff" });
         return;
       }
 
@@ -230,6 +286,12 @@ function LoginPage() {
       <IosInstallGuideDialog open={showIosGuide} onOpenChange={setShowIosGuide} />
       <AndroidInstallGuideDialog open={showAndroidGuide} onOpenChange={setShowAndroidGuide} />
       <DesktopInstallGuideDialog open={showDesktopGuide} onOpenChange={setShowDesktopGuide} />
+
+      <LocalSyncDialog
+        open={showSyncDialog}
+        onClose={handleSyncSkip}
+        onSyncComplete={handleSyncComplete}
+      />
     </main>
   );
 }

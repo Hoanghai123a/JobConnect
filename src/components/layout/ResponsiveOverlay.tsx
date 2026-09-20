@@ -38,8 +38,8 @@ export function ResponsiveOverlay({
         data-responsive-overlay="true"
         data-presentation={presentation}
         className={cn(
-          "min-w-0 mobile:max-w-[calc(100vw-1rem)] mobile:overflow-x-hidden",
-          presentation === "full" && "mobile:h-[96dvh]",
+          "min-w-0 max-w-[calc(100vw-1rem)] overflow-x-hidden",
+          presentation === "full" && "h-[96dvh]",
           className,
         )}
       >

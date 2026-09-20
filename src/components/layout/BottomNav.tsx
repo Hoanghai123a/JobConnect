@@ -36,7 +36,6 @@ export function BottomNav() {
       ? [
           { to: "/home", label: "Trang chủ", icon: Home, exact: true },
           { to: "/admin/settings", label: "Cài đặt", icon: Settings },
-          { to: "/admin/imports", label: "Nhập liệu", icon: Upload },
           { to: "/account", label: "Tài khoản", icon: User },
         ]
       : user

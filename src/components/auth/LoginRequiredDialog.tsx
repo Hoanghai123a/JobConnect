@@ -4,7 +4,6 @@ import { Eye, EyeOff, Loader2, LogIn } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/lib/auth";
 import { normalizeAccountIdentity } from "@/lib/account-identity";
-import { getClientDeviceProfile } from "@/lib/device-profile";
 import { isProfileComplete } from "@/lib/profile";
 import { isUserApproved } from "@/lib/user-approval";
 import { Button } from "@/components/ui/button";
@@ -95,11 +94,11 @@ export function LoginRequiredDialog({
       onOpenChange(false);
 
       if (user.role === "admin") {
-        navigate({ to: getClientDeviceProfile() === "desktop" ? "/admin/workforce" : "/" });
+        navigate({ to: "/" });
         return;
       }
       if (user.role === "staff") {
-        navigate({ to: getClientDeviceProfile() === "desktop" ? "/staff/workers" : "/staff" });
+        navigate({ to: "/staff" });
         return;
       }
       if (!isProfileComplete(user)) {

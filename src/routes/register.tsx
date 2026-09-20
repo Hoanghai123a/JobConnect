@@ -1,8 +1,10 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { pb } from "@/lib/pocketbase";
+import { pb, type UserRecord } from "@/lib/pocketbase";
 import { generateUid } from "@/lib/uid";
 import { findUserByUsernameInsensitive, normalizeAccountUsername } from "@/lib/account-identity";
+import { hasLocalDataToSync } from "@/lib/local-sync";
+import { LocalSyncDialog } from "@/components/attendance/LocalSyncDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,6 +53,9 @@ function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [result, setResult] = useState<RegisterResult>(null);
 
+  // Local sync state
+  const [showSyncDialog, setShowSyncDialog] = useState(false);
+
   const set = (k: keyof typeof form, v: string) => setForm((s) => ({ ...s, [k]: v }));
 
   const backToLogin = () => {
@@ -66,6 +71,18 @@ function RegisterPage() {
 
   const useNow = () => {
     nav({ to: "/account", search: { incomplete: 1 } as any });
+  };
+
+  const handleSyncComplete = () => {
+    setShowSyncDialog(false);
+    toast.success("Đăng ký thành công");
+    setResult("approved");
+  };
+
+  const handleSyncSkip = () => {
+    setShowSyncDialog(false);
+    toast.success("Đăng ký thành công");
+    setResult("approved");
   };
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -117,6 +134,13 @@ function RegisterPage() {
         setResult("pending");
       } else {
         await pb.collection("users").authWithPassword(username, form.password);
+
+        // Check for local data to sync
+        if (hasLocalDataToSync()) {
+          setShowSyncDialog(true);
+          return;
+        }
+
         toast.success("Đăng ký thành công");
         setResult("approved");
       }
@@ -258,6 +282,12 @@ function RegisterPage() {
           </Link>
         </p>
       </form>
+
+      <LocalSyncDialog
+        open={showSyncDialog}
+        onClose={handleSyncSkip}
+        onSyncComplete={handleSyncComplete}
+      />
     </div>
   );
 }

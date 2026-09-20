@@ -8,6 +8,7 @@ import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { PushNotificationSettingsCard } from "@/components/layout/PushNotificationSettingsCard";
+import { InstallAppGuideSection } from "@/components/settings/InstallAppGuideSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
@@ -67,12 +68,15 @@ function AdminSettingsPage() {
       <div className="p-4">
         <PushNotificationSettingsCard />
         <Tabs defaultValue="company" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 rounded-2xl">
+          <TabsList className="grid w-full grid-cols-3 rounded-2xl">
             <TabsTrigger value="company" className="rounded-xl text-xs">
               <Building2 className="mr-1 h-4 w-4" /> Công ty
             </TabsTrigger>
             <TabsTrigger value="factories" className="rounded-xl text-xs">
               <Factory className="mr-1 h-4 w-4" /> Nhà máy
+            </TabsTrigger>
+            <TabsTrigger value="app" className="rounded-xl text-xs">
+              <Smartphone className="mr-1 h-4 w-4" /> Cài App
             </TabsTrigger>
           </TabsList>
           <TabsContent value="company" className="mt-4">
@@ -80,6 +84,9 @@ function AdminSettingsPage() {
           </TabsContent>
           <TabsContent value="factories" className="mt-4">
             <FactoriesTab />
+          </TabsContent>
+          <TabsContent value="app" className="mt-4">
+            <InstallAppGuideSection />
           </TabsContent>
         </Tabs>
       </div>

@@ -16,7 +16,6 @@ import { installPwaPromptListeners } from "@/lib/pwa-install";
 import { BrandHeadLinks } from "@/components/layout/BrandHeadLinks";
 import { PushPermissionPrompt } from "@/components/layout/PushPermissionPrompt";
 import { InstallFloatingBanner } from "@/components/layout/InstallFloatingBanner";
-import { DEVICE_PROFILE_BOOTSTRAP } from "@/lib/device-profile";
 import { didHardReload, hardReload } from "@/lib/hard-reload";
 
 function isChunkLoadError(error: Error) {
@@ -124,9 +123,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="vi" data-ui-device="mobile">
+    <html lang="vi">
       <head>
-        <script dangerouslySetInnerHTML={{ __html: DEVICE_PROFILE_BOOTSTRAP }} />
         <HeadContent />
       </head>
       <body>

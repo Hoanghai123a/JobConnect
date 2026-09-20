@@ -6,7 +6,6 @@ import { useAuth } from "@/lib/auth";
 import { useAppSettings } from "@/lib/app-settings";
 import { isUserApproved } from "@/lib/user-approval";
 import { getSeen } from "@/lib/seen";
-import { getClientDeviceProfile } from "@/lib/device-profile";
 import { hardReload } from "@/lib/hard-reload";
 import { cn } from "@/lib/utils";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -551,15 +550,6 @@ export function DashboardPage() {
           <FeatureTile to="/gems" label="Xếp kim cương" icon={Gem} size="compact" allowGuest />
           <FeatureTile to="/minesweeper" label="Dò mìn" icon={Bomb} size="compact" allowGuest />
         </GuestSection>
-
-        {user && (
-          <section>
-            <div className={cn("grid gap-3", isAdmin ? "grid-cols-2" : "grid-cols-1")}>
-              {isAdmin && <FeatureTile to="/admin/settings" label="Cài đặt" icon={Settings} />}
-              <FeatureTile to="/account" label="Tài khoản" icon={User} />
-            </div>
-          </section>
-        )}
       </main>
 
       <BottomNav />

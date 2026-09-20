@@ -3,7 +3,6 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
-@custom-variant mobile (&:where(html[data-ui-device="mobile"] *));
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
@@ -282,17 +281,17 @@
     display: none;
   }
 
-  html[data-ui-device="mobile"] .app-shell [class~="text-[8px]"],
-  html[data-ui-device="mobile"] .app-shell [class~="text-[9px]"],
-  html[data-ui-device="mobile"] .app-shell [class~="text-[10px]"],
-  html[data-ui-device="mobile"] .app-shell [class~="text-[11px]"] {
+  .app-shell [class~="text-[8px]"],
+  .app-shell [class~="text-[9px]"],
+  .app-shell [class~="text-[10px]"],
+  .app-shell [class~="text-[11px]"] {
     font-size: 0.75rem;
     line-height: 1.35;
   }
 
-  html[data-ui-device="mobile"] .app-shell input,
-  html[data-ui-device="mobile"] .app-shell textarea,
-  html[data-ui-device="mobile"] .app-shell select {
+  .app-shell input,
+  .app-shell textarea,
+  .app-shell select {
     line-height: 1.45;
   }
 
@@ -396,7 +395,7 @@
     }
   }
 
-  html[data-ui-device="mobile"] [data-responsive-overlay="true"] {
+  [data-responsive-overlay="true"] {
     box-sizing: border-box;
     left: 0 !important;
     right: 0 !important;
@@ -419,7 +418,7 @@
     box-shadow: 0 -18px 50px -24px rgb(15 23 42 / 48%);
   }
 
-  html[data-ui-device="mobile"] [data-responsive-overlay="true"]::before {
+  [data-responsive-overlay="true"]::before {
     content: "";
     position: absolute;
     top: 0.5rem;
@@ -431,12 +430,12 @@
     background: var(--color-muted);
   }
 
-  html[data-ui-device="mobile"] [data-responsive-overlay="true"][data-presentation="full"] {
+  [data-responsive-overlay="true"][data-presentation="full"] {
     height: 96dvh;
     max-height: 96dvh;
   }
 
-  html[data-ui-device="mobile"] [data-responsive-overlay="true"][data-presentation="dialog"] {
+  [data-responsive-overlay="true"][data-presentation="dialog"] {
     left: 50% !important;
     right: auto !important;
     top: 50% !important;
@@ -454,8 +453,7 @@
     box-shadow: var(--shadow-card);
   }
 
-  html[data-ui-device="mobile"]
-    [data-responsive-overlay="true"][data-presentation="dialog"]::before {
+  [data-responsive-overlay="true"][data-presentation="dialog"]::before {
     display: none;
   }
 

@@ -4,6 +4,8 @@ import { useAuth } from "@/lib/auth";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { pb, type Role, type UserRecord, dataUrlToFile, fileUrl } from "@/lib/pocketbase";
 import { generateUid } from "@/lib/uid";
+import { hasLocalDataToSync, countLocalAttendanceRows } from "@/lib/local-sync";
+import { LocalSyncDialog } from "@/components/attendance/LocalSyncDialog";
 import {
   accountIdentityKey,
   buildUserIdentityMaps,
@@ -64,7 +66,6 @@ import {
   type FactoryRecord,
   type FactoryStatus,
 } from "@/lib/factories";
-import { createStaffActionLog } from "@/lib/staff-log";
 import * as XLSX from "xlsx";
 import { toast } from "@/lib/toast";
 import {
@@ -96,6 +97,7 @@ import {
   Info,
   ChevronRight,
   Trash,
+  Database,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/account")({
@@ -107,7 +109,6 @@ export const Route = createFileRoute("/_authenticated/account")({
 
 const ROLE_LABELS: Record<Role, string> = {
   admin: "Quản trị viên",
-  staff: "Staff",
   user: "Người dùng",
 };
 
@@ -169,17 +170,13 @@ function AccountPage() {
           <PushNotificationSettingsCard />
         </div>
 
+        {!isAdmin && <LocalDataSyncCard />}
+
         {isAdmin ? (
           <Tabs defaultValue="admin" className="space-y-3">
             <TabsList className="grid h-10 w-full grid-cols-4 rounded-2xl">
               <TabsTrigger value="admin" className="rounded-xl text-xs">
                 Tài khoản NLĐ
-              </TabsTrigger>
-              <TabsTrigger value="staff" className="rounded-xl text-xs">
-                Staff & Admin
-              </TabsTrigger>
-              <TabsTrigger value="factories" className="rounded-xl text-xs">
-                QLNM
               </TabsTrigger>
               <TabsTrigger value="profile" className="rounded-xl text-xs">
                 Thông tin
@@ -187,12 +184,6 @@ function AccountPage() {
             </TabsList>
             <TabsContent value="admin" className="mt-0">
               <AdminUsersPanel />
-            </TabsContent>
-            <TabsContent value="staff" className="mt-0">
-              <StaffPanel />
-            </TabsContent>
-            <TabsContent value="factories" className="mt-0">
-              <FactoryAssignmentsPanel />
             </TabsContent>
             <TabsContent value="profile" className="mt-0 space-y-3">
               <UserProfileForm />
@@ -555,7 +546,6 @@ function AdminUsersPanel() {
     address: "",
   });
   const [detailProfileSaving, setDetailProfileSaving] = useState(false);
-  const [bulkStaffProcessing, setBulkStaffProcessing] = useState(false);
   const emptyNew = {
     full_name: "",
     phone: "",
@@ -671,132 +661,6 @@ function AdminUsersPanel() {
     }
   };
 
-  const downloadStaffTemplate = () => {
-    const sample = [
-      { "Tên đăng nhập hoặc mã tài khoản (UID)": "nguyenvana", "Nhà máy": "Nhà máy A" },
-      { "Tên đăng nhập hoặc mã tài khoản (UID)": "HL000002", "Nhà máy": "" },
-    ];
-    exportToExcel("mau_chuyen_staff", { "Chuyển Staff": sample });
-  };
-
-  const onImportStaff = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (!f || !me) return;
-    setBulkStaffProcessing(true);
-    try {
-      const buf = await f.arrayBuffer();
-      const wb = XLSX.read(buf);
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<any>(ws, { defval: "" });
-
-      const factories = await pb.collection("factories").getFullList({ sort: "name" });
-      const factoryMap = new Map(factories.map((f: any) => [f.name.toLowerCase(), f.id]));
-      const allUsers = await pb.collection("users").getFullList<UserRecord>({
-        fields: "id,username,uid,role",
-      });
-      const { userByUid, userByUsername } = buildUserIdentityMaps(allUsers);
-
-      let ok = 0;
-      let fail = 0;
-      let assigned = 0;
-      const failedRows: Array<Record<string, unknown>> = [];
-
-      const addFailedStaffRow = (r: Record<string, unknown>, rowNumber: number, reason: string) => {
-        fail++;
-        failedRows.push({
-          Dòng: rowNumber,
-          "Lý do lỗi": reason,
-          "Tên đăng nhập hoặc mã tài khoản (UID)":
-            r["Tên đăng nhập hoặc mã tài khoản (UID)"] ||
-            r["Tên đăng nhập"] ||
-            r["username"] ||
-            r["Mã tài khoản"] ||
-            r["uid"] ||
-            "",
-          "Nhà máy": r["Nhà máy"] || r["factory"] || "",
-        });
-      };
-
-      for (const [index, r] of rows.entries()) {
-        const rowNumber = index + 2;
-        const username = String(
-          r["Tên đăng nhập hoặc mã tài khoản (UID)"] ||
-            r["Tên đăng nhập"] ||
-            r["username"] ||
-            r["Mã tài khoản"] ||
-            r["uid"] ||
-            "",
-        ).trim();
-        const identityKey = accountIdentityKey(username);
-        const factoryName = String(r["Nhà máy"] || r["factory"] || "").trim();
-
-        if (!identityKey) {
-          addFailedStaffRow(r, rowNumber, "Thiếu tên đăng nhập hoặc mã tài khoản");
-          continue;
-        }
-
-        const factoryId = factoryName ? factoryMap.get(factoryName.toLowerCase()) : null;
-        if (factoryName && !factoryId) {
-          addFailedStaffRow(r, rowNumber, 'Không tìm thấy nhà máy "' + factoryName + '"');
-          continue;
-        }
-
-        try {
-          const user = userByUsername.get(identityKey) || userByUid.get(identityKey);
-          if (!user) {
-            addFailedStaffRow(r, rowNumber, "Không tìm thấy tài khoản");
-            continue;
-          }
-          await pb.collection("users").update(user.id, { role: "staff" });
-          if (factoryId) {
-            await pb.collection("factory_managers").create({
-              staff: user.id,
-              factory: factoryId,
-              status: "active",
-              active_from: null,
-              active_to: null,
-              note: "Gán từ Excel bởi admin",
-            });
-            assigned++;
-          }
-          await createStaffActionLog({
-            actor: me as UserRecord,
-            targetUserId: user.id,
-            targetCollection: "users",
-            targetRecord: user.id,
-            action: "update",
-            after: { role: "staff", ...(factoryId ? { factory: factoryId } : {}) },
-            note: factoryId
-              ? "Admin chuyển sang staff và gán nhà máy (import Excel)"
-              : "Admin chuyển sang staff không gán nhà máy (import Excel)",
-          });
-          ok++;
-        } catch (err: any) {
-          addFailedStaffRow(r, rowNumber, err?.message || "Lỗi chuyển Staff");
-        }
-      }
-
-      toast.success(
-        "Đã chuyển " +
-          ok +
-          " tài khoản sang Staff" +
-          (assigned ? ", gán " + assigned + " nhà máy" : "") +
-          (fail ? ", " + fail + " lỗi" : ""),
-      );
-      if (failedRows.length) {
-        exportToExcel(`chuyen_staff_loi_${Date.now()}`, {
-          "Dòng lỗi": failedRows,
-        });
-        toast.warning("Đã xuất file các dòng chuyển Staff bị lỗi");
-      }
-      load();
-    } catch (err: any) {
-      toast.error(err?.message || "File không hợp lệ");
-    } finally {
-      setBulkStaffProcessing(false);
-    }
-  };
 
   const toggleApprovalRequirement = async (val: boolean) => {
     setRequireApproval(val);
@@ -804,7 +668,10 @@ function AdminUsersPanel() {
       if (settingsId) {
         await pb.collection("app_settings").update(settingsId, { requireApproval: val });
       } else {
-        const r = await pb.collection("app_settings").create({ requireApproval: val });
+        const r = await pb.collection("app_settings").create({
+          key: "require_approval",
+          requireApproval: val
+        });
         setSettingsId(r.id);
       }
       toast.success("Đã cập nhật kiểm duyệt đăng ký");
@@ -828,7 +695,7 @@ function AdminUsersPanel() {
   const confirmToggleApprovalRequirement = async () => {
     if (pendingApprovalValue === null) return;
     const admin = pb.authStore.record as UserRecord | null;
-    const identity = admin?.username || admin?.email;
+    const identity = admin?.username;
     if (!identity) {
       toast.error("Không xác định được tài khoản admin");
       return;
@@ -916,21 +783,6 @@ function AdminUsersPanel() {
     setDetailBankSaving(true);
     try {
       await pb.collection("users").update(detailUser.id, detailBankForm);
-      await createStaffActionLog({
-        actor: me as UserRecord,
-        targetUserId: detailUser.id,
-        targetCollection: "users",
-        targetRecord: detailUser.id,
-        action: "update_bank",
-        before: {
-          bank_name: detailUser.bank_name || "",
-          bank_account_number: detailUser.bank_account_number || "",
-          bank_account_name: detailUser.bank_account_name || "",
-          bank_account_note: detailUser.bank_account_note || "",
-        },
-        after: detailBankForm,
-        note: "Admin cập nhật STK ngân hàng cho NLĐ",
-      });
       setDetailUser((prev: any) => (prev ? { ...prev, ...detailBankForm } : prev));
       setUsers((prev) =>
         prev.map((u) => (u.id === detailUser.id ? { ...u, ...detailBankForm } : u)),
@@ -961,23 +813,6 @@ function AdminUsersPanel() {
     setDetailProfileSaving(true);
     try {
       await pb.collection("users").update(detailUser.id, payload);
-      await createStaffActionLog({
-        actor: me as UserRecord,
-        targetUserId: detailUser.id,
-        targetCollection: "users",
-        targetRecord: detailUser.id,
-        action: "update",
-        before: {
-          full_name: detailUser.full_name || "",
-          phone: detailUser.phone || "",
-          gender: detailUser.gender || "",
-          cccd: detailUser.cccd || "",
-          date_of_birth: detailUser.date_of_birth || "",
-          address: detailUser.address || "",
-        },
-        after: payload,
-        note: "Admin cập nhật thông tin cá nhân cho NLĐ",
-      });
       setDetailUser((prev: any) => (prev ? { ...prev, ...payload } : prev));
       setUsers((prev) => prev.map((u) => (u.id === detailUser.id ? { ...u, ...payload } : u)));
       setDetailProfileEditing(false);
@@ -1017,16 +852,6 @@ function AdminUsersPanel() {
     if (!roleTarget || !me) return;
     try {
       await pb.collection("users").update(roleTarget.id, { role: roleValue });
-      await createStaffActionLog({
-        actor: me as UserRecord,
-        targetUserId: roleTarget.id,
-        targetCollection: "users",
-        targetRecord: roleTarget.id,
-        action: "update",
-        before: { role: roleTarget.role || "user" },
-        after: { role: roleValue },
-        note: "Admin cập nhật vai trò tài khoản",
-      });
       toast.success("Đã cập nhật vai trò");
       setRoleTarget(null);
       await load();
@@ -1258,19 +1083,6 @@ function AdminUsersPanel() {
         );
         toast.warning("Đã xuất file các dòng lỗi");
       }
-      await createStaffActionLog({
-        actor: me as UserRecord,
-        targetCollection: "users",
-        action: "import",
-        after: {
-          created: ok,
-          updated: 0,
-          failed: fail,
-          file: f.name,
-          exported_errors: failedRows.length,
-        },
-        note: "Admin import tài khoản NLĐ từ Excel",
-      });
       load();
     } catch (err: any) {
       toast.error(err?.message || "File không hợp lệ");
@@ -1295,7 +1107,7 @@ function AdminUsersPanel() {
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold">Nhật ký thao tác</span>
           <span className="block text-[11px] text-muted-foreground">
-            Xem lịch sử tác động của staff và admin lên tài khoản
+            Xem lịch sử tác động của admin lên tài khoản
           </span>
         </span>
       </Link>
@@ -1459,43 +1271,6 @@ function AdminUsersPanel() {
                 className="w-full justify-start rounded-2xl"
               >
                 <FileDown className="h-4 w-4" /> Xuất tất cả tài khoản
-              </Button>
-            </section>
-
-            <Separator />
-
-            <section className="space-y-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Staff
-              </div>
-              <label
-                className={
-                  "flex h-11 cursor-pointer items-center gap-2 rounded-2xl border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent " +
-                  (bulkStaffProcessing ? "pointer-events-none opacity-50" : "")
-                }
-              >
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="hidden"
-                  onChange={(e) => {
-                    setActionSheetOpen(false);
-                    onImportStaff(e);
-                  }}
-                  disabled={bulkStaffProcessing}
-                />
-                <Building2 className="h-4 w-4" />{" "}
-                {bulkStaffProcessing ? "Đang xử lý..." : "Nhập danh sách Staff"}
-              </label>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setActionSheetOpen(false);
-                  downloadStaffTemplate();
-                }}
-                className="w-full justify-start rounded-2xl"
-              >
-                <FileSpreadsheet className="h-4 w-4" /> Tải mẫu chuyển Staff
               </Button>
             </section>
 
@@ -1743,7 +1518,6 @@ function AdminUsersPanel() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="user">Người dùng</SelectItem>
-                <SelectItem value="staff">Staff</SelectItem>
                 <SelectItem value="admin">Quản trị viên</SelectItem>
               </SelectContent>
             </Select>
@@ -2301,32 +2075,18 @@ function formatDateRange(record: FactoryManagerRecord) {
   return `${from} -> ${to}`;
 }
 
-const STAFF_DEFAULT_PASSWORD = "nv123456";
-
-function staffSearchFilter(search: string) {
-  const q = escapePb(search.trim());
-  const roleFilter = '(role="staff" || role="admin")';
-  if (!q) return roleFilter;
-  const searchFilter = `(${["full_name", "username", "phone", "address"]
-    .map((field) => `${field}~"${q}"`)
-    .join(" || ")})`;
-  return `${roleFilter} && ${searchFilter}`;
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Card className="space-y-3 p-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h2>
+      {children}
+    </Card>
+  );
 }
 
-function StaffPanel() {
-  const { user: currentUser } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedSearch(search);
-  const [staffUsers, setStaffUsers] = useState<UserRecord[]>([]);
-  const [factories, setFactories] = useState<FactoryRecord[]>([]);
-  const [assignmentCounts, setAssignmentCounts] = useState<Record<string, number>>({});
-  const [createOpen, setCreateOpen] = useState(false);
-  const [importingStaff, setImportingStaff] = useState(false);
-  const [importResult, setImportResult] = useState("");
-  const [editingStaff, setEditingStaff] = useState<UserRecord | null>(null);
-
-  const load = async () => {
+function TextField({
     setLoading(true);
     try {
       const [userRows, factoryRows, assignmentRows] = await Promise.all([
@@ -3448,5 +3208,67 @@ function TextField({
         placeholder={placeholder}
       />
     </div>
+  );
+}
+
+/* ───────── LOCAL DATA SYNC ───────── */
+
+function LocalDataSyncCard() {
+  const [showSyncDialog, setShowSyncDialog] = useState(false);
+  const [hasSyncData, setHasSyncData] = useState(false);
+
+  useEffect(() => {
+    setHasSyncData(hasLocalDataToSync());
+  }, []);
+
+  const handleSyncComplete = () => {
+    setShowSyncDialog(false);
+    setHasSyncData(false);
+    toast.success("Đồng bộ thành công");
+  };
+
+  const handleSyncClose = () => {
+    setShowSyncDialog(false);
+  };
+
+  if (!hasSyncData) return null;
+
+  const rowCount = countLocalAttendanceRows();
+
+  return (
+    <>
+      <Card className="overflow-hidden border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
+        <div className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              <Database className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold text-blue-900 dark:text-blue-100">
+                Dữ liệu bảng công chưa đồng bộ
+              </h3>
+              <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
+                Bạn có {rowCount} ngày công được lưu trên máy. Đồng bộ ngay để sao lưu dữ liệu lên
+                hệ thống.
+              </p>
+              <Button
+                onClick={() => setShowSyncDialog(true)}
+                className="mt-3 bg-blue-600 hover:bg-blue-700"
+                size="sm"
+              >
+                <Database className="h-4 w-4" />
+                Đồng bộ ngay
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <LocalSyncDialog
+        open={showSyncDialog}
+        onClose={handleSyncClose}
+        onSyncComplete={handleSyncComplete}
+      />
+    </>
   );
 }
