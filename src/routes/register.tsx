@@ -107,9 +107,8 @@ function RegisterPage() {
         full_name: form.full_name,
         phone: form.phone || undefined,
         role: "user",
-        approvalStatus: requireApproval ? "pending" : "approved",
-        approved: requireApproval ? "false" : "true",
         status: requireApproval ? "disabled" : "active",
+        requireApproval: requireApproval,
       });
 
       if (requireApproval) {
@@ -122,6 +121,9 @@ function RegisterPage() {
         setResult("approved");
       }
     } catch (err: any) {
+      console.error("[Register] Full error:", err);
+      console.error("[Register] Error response:", err?.response);
+      console.error("[Register] Error data:", err?.data);
       toast.error(err?.message || "Đăng ký thất bại");
     } finally {
       setLoading(false);
