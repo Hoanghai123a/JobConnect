@@ -581,6 +581,8 @@ function AuthenticatedUserAttendance() {
 
     try {
       const existing = rows.find((r) => r.date === date);
+      const oldAttendanceType = existing?.attendance_type || null;
+
       const normalizedPayload =
         attendanceType === "off"
           ? { shift: "day" as Shift, is_holiday: false, hc_hours: 0, ot_hours: 0 }
@@ -606,8 +608,8 @@ function AuthenticatedUserAttendance() {
         saveLastHours(normalizedPayload.hc_hours, normalizedPayload.ot_hours);
       }
 
-      // Toast notification tùy theo loại
-      if (attendanceType === "off" && dailyLoss && dailyLoss > 0) {
+      // Toast notification: chỉ hiển thị khi CHUYỂN sang trạng thái "off" (không phải edit "off" -> "off")
+      if (attendanceType === "off" && oldAttendanceType !== "off" && dailyLoss && dailyLoss > 0) {
         setMoneyLostToast({ show: true, amount: dailyLoss });
       } else {
         toast.success("Đã lưu chấm công");
@@ -677,25 +679,6 @@ function AuthenticatedUserAttendance() {
   };
 
   const selectedRow = rows.find((r) => r.date === date);
-
-  // Tính lương dự kiến cho banner động viên
-  const dailyEstimate = useMemo(() => {
-    if (!user?.lcb || !date) return null;
-    return estimateDailySalary(
-      date,
-      {
-        lcb: user.lcb,
-        chuyen_can: user.chuyen_can || 0,
-        doi_song: user.doi_song || 0,
-        tham_nien: user.tham_nien || 0,
-      },
-      shift,
-      isHoliday,
-    );
-  }, [date, user?.lcb, user?.chuyen_can, user?.doi_song, user?.tham_nien, shift, isHoliday]);
-
-  const showIncentiveBanner =
-    !selectedRow && attendanceType === "work" && dailyEstimate && dailyEstimate.work > 0;
 
   return (
     <PageContainer
@@ -773,37 +756,6 @@ function AuthenticatedUserAttendance() {
           title={selectedRow ? "Cập nhật chấm công" : "Nhập chấm công"}
           description="Nhập ca làm, ngày lễ, giờ hành chính và giờ tăng ca cho ngày đã chọn."
         >
-          {showIncentiveBanner && dailyEstimate && (
-            <div className="mb-4 rounded-xl border-2 border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4 shadow-sm">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/20">
-                  <CircleDollarSign className="h-5 w-5 text-primary" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-foreground">Động viên chấm công</div>
-                  <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    {isTomorrow(date) ? (
-                      <span>
-                        Chấm công đi làm <strong className="text-primary">ngày mai</strong> và nhận{" "}
-                        <strong className="text-lg font-bold text-primary">
-                          {formatVND(dailyEstimate.work)}
-                        </strong>{" "}
-                        vào lương
-                      </span>
-                    ) : (
-                      <span>
-                        Chấm công đi làm và nhận{" "}
-                        <strong className="text-lg font-bold text-primary">
-                          {formatVND(dailyEstimate.work)}
-                        </strong>{" "}
-                        vào lương
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
           <form
             className="space-y-4"
             onSubmit={(event) => {
@@ -1031,6 +983,10 @@ function LocalAttendance() {
   const submit = () => {
     if (saving) return;
     setSaving(true);
+
+    const existing = state.rows.find((row) => row.date === date);
+    const oldAttendanceType = existing?.attendance_type || null;
+
     const normalizedPayload =
       attendanceType === "off"
         ? { shift: "day" as Shift, is_holiday: false, hc_hours: 0, ot_hours: 0 }
@@ -1056,8 +1012,8 @@ function LocalAttendance() {
       setState(nextState);
       setEntryOpen(false);
 
-      // Hiển thị animation "😢 bạn vừa rời xa X đ" nếu chọn "nghỉ"
-      if (attendanceType === "off" && profile) {
+      // Hiển thị animation "😢 bạn vừa rời xa X đ" chỉ khi CHUYỂN sang trạng thái "nghỉ"
+      if (attendanceType === "off" && oldAttendanceType !== "off" && profile) {
         const estimate = estimateDailySalary(
           date,
           {
