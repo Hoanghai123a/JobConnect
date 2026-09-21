@@ -77,6 +77,7 @@ import {
   CircleDollarSign,
   TrendingDown,
 } from "lucide-react";
+import { MoneyLostToast } from "@/components/ui/money-lost-toast";
 
 export const Route = createFileRoute("/_authenticated/attendance")({
   component: AttendancePage,
@@ -465,6 +466,10 @@ function AuthenticatedUserAttendance() {
   const [otHours, setOtHours] = useState<number>(() => readLastHours().ot_hours);
   const [entryOpen, setEntryOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [moneyLostToast, setMoneyLostToast] = useState<{ show: boolean; amount: number }>({
+    show: false,
+    amount: 0,
+  });
 
   useEffect(() => {
     if (!user?.id) {
@@ -603,10 +608,7 @@ function AuthenticatedUserAttendance() {
 
       // Toast notification tùy theo loại
       if (attendanceType === "off" && dailyLoss && dailyLoss > 0) {
-        toast.success(`Bạn vừa rơi xa ${formatVND(dailyLoss)}`, {
-          icon: <TrendingDown className="h-5 w-5 text-amber-600" />,
-          duration: 4000,
-        });
+        setMoneyLostToast({ show: true, amount: dailyLoss });
       } else {
         toast.success("Đã lưu chấm công");
       }
@@ -921,6 +923,12 @@ function AuthenticatedUserAttendance() {
           onSaved={refresh}
         />
       </div>
+      {moneyLostToast.show && (
+        <MoneyLostToast
+          amount={moneyLostToast.amount}
+          onComplete={() => setMoneyLostToast({ show: false, amount: 0 })}
+        />
+      )}
     </PageContainer>
   );
 }
@@ -942,6 +950,10 @@ function LocalAttendance() {
   const [hcHours, setHcHours] = useState(() => readLastHours().hc_hours);
   const [otHours, setOtHours] = useState(() => readLastHours().ot_hours);
   const [saving, setSaving] = useState(false);
+  const [moneyLostToast, setMoneyLostToast] = useState<{ show: boolean; amount: number }>({
+    show: false,
+    amount: 0,
+  });
 
   const profile = state.profile || DEFAULT_LOCAL_ATTENDANCE_PROFILE;
   const payrollPeriod = useMemo(
@@ -1043,7 +1055,27 @@ function LocalAttendance() {
       }
       setState(nextState);
       setEntryOpen(false);
-      toast.success("Đã lưu chấm công trên máy");
+
+      // Hiển thị animation "😢 bạn vừa rời xa X đ" nếu chọn "nghỉ"
+      if (attendanceType === "off" && profile) {
+        const estimate = estimateDailySalary(
+          date,
+          {
+            lcb: profile.lcb,
+            chuyen_can: profile.chuyen_can,
+            doi_song: profile.doi_song,
+            tham_nien: profile.tham_nien,
+          },
+          "day",
+          false,
+          8,
+          0,
+        );
+        setMoneyLostToast({ show: true, amount: estimate.work });
+        toast.success("Đã lưu chấm công trên máy");
+      } else {
+        toast.success("Đã lưu chấm công trên máy");
+      }
     }
     setSaving(false);
   };
@@ -1249,6 +1281,13 @@ function LocalAttendance() {
         profile={profile}
         onSave={saveProfile}
       />
+
+      {moneyLostToast.show && (
+        <MoneyLostToast
+          amount={moneyLostToast.amount}
+          onComplete={() => setMoneyLostToast({ show: false, amount: 0 })}
+        />
+      )}
     </PageContainer>
   );
 }
