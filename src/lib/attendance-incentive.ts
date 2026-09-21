@@ -20,14 +20,16 @@ export function estimateDailySalary(
   },
   shift: Shift = "day",
   isHoliday = false,
+  hcHours = 8,
+  otHours = 0,
 ): DailySalaryEstimate {
-  // Tính lương nếu đi làm (8h HC, 0h OT)
+  // Tính lương nếu đi làm
   const workRow: AttendanceRow = {
     date,
     shift,
     is_holiday: isHoliday,
-    hc_hours: 8,
-    ot_hours: 0,
+    hc_hours: hcHours,
+    ot_hours: otHours,
     attendance_type: "work",
   };
 

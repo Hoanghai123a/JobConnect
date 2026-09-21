@@ -8,6 +8,9 @@ import { isUserApproved } from "@/lib/user-approval";
 import { getSeen } from "@/lib/seen";
 import { hardReload } from "@/lib/hard-reload";
 import { cn } from "@/lib/utils";
+import { estimateDailySalary } from "@/lib/attendance-incentive";
+import { readLastHours, readLocalAttendance } from "@/lib/local-attendance";
+import { formatVND, type Shift } from "@/lib/salary";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { FeatureTile } from "@/components/dashboard/FeatureTile";
 import { LoginRequiredDialog } from "@/components/auth/LoginRequiredDialog";
@@ -75,6 +78,7 @@ export function DashboardPage() {
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
   const [unread, setUnread] = useState({ news: 0, chat: 0, check: 0, advances: 0 });
   const [hasAttendanceToday, setHasAttendanceToday] = useState<boolean | null>(null);
+  const [dailyIncentive, setDailyIncentive] = useState<number | null>(null);
   const [reloading, setReloading] = useState(false);
   const nav = useNavigate();
   const { hash, search } = useLocation();
@@ -228,6 +232,119 @@ export function DashboardPage() {
     };
   }, [isAdmin, user?.id]);
 
+  useEffect(() => {
+    if (!user || isAdmin) {
+      setDailyIncentive(null);
+      return;
+    }
+
+    if (!user.lcb || user.lcb <= 0) {
+      setDailyIncentive(null);
+      return;
+    }
+
+    let alive = true;
+
+    const fetchDailyIncentive = async () => {
+      try {
+        console.log("[DailyIncentive] Fetching for user:", user.id);
+
+        // Lấy bản ghi chấm công gần nhất từ server (không lớn hơn ngày hiện tại)
+        const today = new Date();
+        const todayStr = today.toISOString().split("T")[0];
+
+        const recentAttendance = await pb.collection("attendance").getList(1, 10, {
+          filter: `user="${user.id}"`,
+          sort: "-date",
+        });
+
+        // Filter trong JS để loại bỏ các bản ghi trong tương xa
+        const validItems = recentAttendance.items.filter((item) => {
+          const recordDate = new Date(item.date);
+          return recordDate <= today;
+        });
+
+        if (!alive) return;
+
+        let hcHours = 8; // Mặc định
+        let otHours = 0;
+        let shift: Shift = "day";
+
+        if (validItems.length > 0) {
+          const latest = validItems[0];
+          hcHours = Number(latest.hc_hours) || 8;
+          otHours = Number(latest.ot_hours) || 0;
+          shift = latest.shift === "night" ? "night" : "day";
+
+          console.log("[DailyIncentive] Latest record:", {
+            date: latest.date,
+            hcHours,
+            otHours,
+            shift,
+          });
+        } else {
+          console.log("[DailyIncentive] No records, using local storage");
+
+          // Fallback: lấy từ local storage nếu chưa có bản ghi nào
+          const lastHours = readLastHours();
+          hcHours = lastHours.hc_hours;
+          otHours = lastHours.ot_hours;
+
+          const localState = readLocalAttendance();
+          if (localState.rows.length > 0) {
+            const latestRow = localState.rows[localState.rows.length - 1];
+            shift = latestRow.shift;
+          }
+        }
+        const estimate = estimateDailySalary(
+          todayStr,
+          {
+            lcb: user.lcb || 0,
+            chuyen_can: user.chuyen_can || 0,
+            doi_song: user.doi_song || 0,
+            tham_nien: user.tham_nien || 0,
+          },
+          shift,
+          false,
+          hcHours,
+          otHours,
+        );
+
+        console.log("[DailyIncentive] Calculated:", estimate.work, "đ");
+
+        if (alive) setDailyIncentive(estimate.work);
+      } catch (error) {
+        console.error("[DailyIncentive] Error:", error);
+        if (alive) setDailyIncentive(null);
+      }
+    };
+
+    // Fetch ban đầu
+    fetchDailyIncentive();
+
+    // Subscribe realtime cho attendance collection của user này
+    pb.collection("attendance")
+      .subscribe("*", (e) => {
+        console.log("[DailyIncentive] Realtime event:", e.action, e.record);
+
+        // Refetch nếu thay đổi liên quan đến user hiện tại
+        // Lưu ý: e.record có thể là record cũ hoặc mới tùy action
+        const recordUserId = e.record?.user;
+        if (recordUserId === user.id) {
+          console.log("[DailyIncentive] Event matched user, refetching...");
+          fetchDailyIncentive();
+        }
+      })
+      .catch((err) => {
+        console.error("[DailyIncentive] Subscribe failed:", err);
+      });
+
+    return () => {
+      alive = false;
+      pb.collection("attendance").unsubscribe("*").catch(() => {});
+    };
+  }, [user, isAdmin]);
+
   if (loading) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center px-4 text-sm text-muted-foreground">
@@ -338,7 +455,12 @@ export function DashboardPage() {
                 aria-hidden="true"
               />
               <span className="min-w-0 flex-1">
-                Hôm nay bạn chưa chấm công. Chạm để nhập chấm công.
+                Hôm nay bạn chưa chấm công.{" "}
+                {dailyIncentive !== null ? (
+                  <>Chấm công nhận <strong>{formatVND(dailyIncentive)}</strong> vào lương</>
+                ) : (
+                  <>Chạm để nhập chấm công.</>
+                )}
               </span>
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             </button>
