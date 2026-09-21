@@ -59,6 +59,13 @@ function ExchangeHubPage() {
           />
         </div>
       </MobileSection>
+      <MobileSection title="Giải trí" description="Thư giãn sau giờ làm">
+        <div className="grid grid-cols-3 gap-3">
+          <FeatureTile to="/garden" label="Vườn cây" icon={Sprout} size="compact" allowGuest />
+          <FeatureTile to="/gems" label="Xếp kim cương" icon={Gem} size="compact" allowGuest />
+          <FeatureTile to="/minesweeper" label="Dò mìn" icon={Gamepad2} size="compact" allowGuest />
+        </div>
+      </MobileSection>
       <MobileSection title="Tiện ích hằng ngày">
         <div className="grid grid-cols-2 gap-3">
           <FeatureTile
@@ -82,13 +89,6 @@ function ExchangeHubPage() {
             icon={Users}
             allowGuest
           />
-        </div>
-      </MobileSection>
-      <MobileSection title="Giải trí" description="Thư giãn sau giờ làm">
-        <div className="grid grid-cols-3 gap-3">
-          <FeatureTile to="/garden" label="Vườn cây" icon={Sprout} size="compact" allowGuest />
-          <FeatureTile to="/gems" label="Xếp kim cương" icon={Gem} size="compact" allowGuest />
-          <FeatureTile to="/minesweeper" label="Dò mìn" icon={Gamepad2} size="compact" allowGuest />
         </div>
       </MobileSection>
     </PageContainer>

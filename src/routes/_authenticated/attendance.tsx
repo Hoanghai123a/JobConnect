@@ -338,7 +338,7 @@ function AdminAttendance() {
                 {user.full_name || user.username}
               </div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">
-                {getFactoryNameAtDate(user.id, lastWorkDate) || "Chưa có lịch sử đi làm"} ·{" "}
+                {user.full_name || user.username || "—"} ·{" "}
                 {user.phone || "—"}
               </div>
               <div className="mt-1 flex flex-wrap gap-1">
@@ -710,7 +710,7 @@ function AuthenticatedUserAttendance() {
                   <div>
                     <div className="text-xs uppercase opacity-80">Bảng lương tạm tính</div>
                     <div className="text-xl font-bold">
-                      {currentEmployment?.expand?.factory?.name || "Chưa có lịch sử đi làm"}
+                      {user?.full_name || user?.username || "Vô danh"}
                     </div>
                   </div>
                   <button

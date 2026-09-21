@@ -209,101 +209,101 @@ export function DashboardPage() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (!user?.id || isAdmin) {
+    if (isAdmin) {
       setHasAttendanceToday(null);
       return;
     }
 
-    let alive = true;
     const today = getLocalDateKey();
-    pb.collection("attendance")
-      .getList(1, 1, {
-        filter: `user="${user.id}" && date>="${today}" && date<"${today} 23:59:59"`,
-      })
-      .then((result) => {
-        if (alive) setHasAttendanceToday(result.totalItems > 0);
-      })
-      .catch(() => {
-        if (alive) setHasAttendanceToday(null);
-      });
 
-    return () => {
-      alive = false;
-    };
+    // Nếu có user đăng nhập, check từ server
+    if (user?.id) {
+      let alive = true;
+      pb.collection("attendance")
+        .getList(1, 1, {
+          filter: `user="${user.id}" && date>="${today}" && date<"${today} 23:59:59"`,
+        })
+        .then((result) => {
+          if (alive) setHasAttendanceToday(result.totalItems > 0);
+        })
+        .catch(() => {
+          if (alive) setHasAttendanceToday(null);
+        });
+
+      return () => {
+        alive = false;
+      };
+    } else {
+      // Guest mode: check từ local storage
+      const localState = readLocalAttendance();
+      const hasToday = localState.rows.some((row) => row.date === today);
+      setHasAttendanceToday(hasToday);
+    }
   }, [isAdmin, user?.id]);
 
   useEffect(() => {
-    if (!user || isAdmin) {
-      setDailyIncentive(null);
-      return;
-    }
-
-    if (!user.lcb || user.lcb <= 0) {
+    if (isAdmin) {
       setDailyIncentive(null);
       return;
     }
 
     let alive = true;
 
-    const fetchDailyIncentive = async () => {
+    const calculateDailyIncentive = () => {
       try {
-        console.log("[DailyIncentive] Fetching for user:", user.id);
-
-        // Lấy bản ghi chấm công gần nhất từ server (không lớn hơn ngày hiện tại)
         const today = new Date();
         const todayStr = today.toISOString().split("T")[0];
 
-        const recentAttendance = await pb.collection("attendance").getList(1, 10, {
-          filter: `user="${user.id}"`,
-          sort: "-date",
-        });
-
-        // Filter trong JS để loại bỏ các bản ghi trong tương xa
-        const validItems = recentAttendance.items.filter((item) => {
-          const recordDate = new Date(item.date);
-          return recordDate <= today;
-        });
-
-        if (!alive) return;
-
-        let hcHours = 8; // Mặc định
+        let profileData = null;
+        let hcHours = 8;
         let otHours = 0;
         let shift: Shift = "day";
 
-        if (validItems.length > 0) {
-          const latest = validItems[0];
-          hcHours = Number(latest.hc_hours) || 8;
-          otHours = Number(latest.ot_hours) || 0;
-          shift = latest.shift === "night" ? "night" : "day";
-
-          console.log("[DailyIncentive] Latest record:", {
-            date: latest.date,
-            hcHours,
-            otHours,
-            shift,
-          });
-        } else {
-          console.log("[DailyIncentive] No records, using local storage");
-
-          // Fallback: lấy từ local storage nếu chưa có bản ghi nào
-          const lastHours = readLastHours();
-          hcHours = lastHours.hc_hours;
-          otHours = lastHours.ot_hours;
-
-          const localState = readLocalAttendance();
-          if (localState.rows.length > 0) {
-            const latestRow = localState.rows[localState.rows.length - 1];
-            shift = latestRow.shift;
+        // Nếu có user đăng nhập, lấy từ profile user
+        if (user) {
+          if (!user.lcb || user.lcb <= 0) {
+            setDailyIncentive(null);
+            return;
           }
-        }
-        const estimate = estimateDailySalary(
-          todayStr,
-          {
+          profileData = {
             lcb: user.lcb || 0,
             chuyen_can: user.chuyen_can || 0,
             doi_song: user.doi_song || 0,
             tham_nien: user.tham_nien || 0,
-          },
+          };
+        } else {
+          // Guest mode: lấy từ local storage
+          const localState = readLocalAttendance();
+          if (!localState.profile || !localState.profile.lcb || localState.profile.lcb <= 0) {
+            setDailyIncentive(null);
+            return;
+          }
+          profileData = {
+            lcb: localState.profile.lcb,
+            chuyen_can: localState.profile.chuyen_can,
+            doi_song: localState.profile.doi_song,
+            tham_nien: localState.profile.tham_nien,
+          };
+        }
+
+        // Lấy giờ HC/OT từ local storage
+        const lastHours = readLastHours();
+        hcHours = lastHours.hc_hours;
+        otHours = lastHours.ot_hours;
+
+        // Lấy ca từ bản ghi local gần nhất
+        const localState = readLocalAttendance();
+        if (localState.rows.length > 0) {
+          const latestRow = localState.rows[localState.rows.length - 1];
+          shift = latestRow.shift;
+        }
+
+        console.log("[DailyIncentive] Profile:", profileData);
+        console.log("[DailyIncentive] Hours:", { hcHours, otHours, shift });
+
+        const estimate = estimateDailySalary(
+          todayStr,
+          profileData,
           shift,
           false,
           hcHours,
@@ -319,29 +319,86 @@ export function DashboardPage() {
       }
     };
 
-    // Fetch ban đầu
-    fetchDailyIncentive();
+    // Tính toán ban đầu
+    calculateDailyIncentive();
 
-    // Subscribe realtime cho attendance collection của user này
-    pb.collection("attendance")
-      .subscribe("*", (e) => {
-        console.log("[DailyIncentive] Realtime event:", e.action, e.record);
+    // Nếu user đăng nhập, fetch từ server để update
+    if (user) {
+      const fetchFromServer = async () => {
+        try {
+          console.log("[DailyIncentive] Fetching from server for user:", user.id);
 
-        // Refetch nếu thay đổi liên quan đến user hiện tại
-        // Lưu ý: e.record có thể là record cũ hoặc mới tùy action
-        const recordUserId = e.record?.user;
-        if (recordUserId === user.id) {
-          console.log("[DailyIncentive] Event matched user, refetching...");
-          fetchDailyIncentive();
+          const today = new Date();
+          const recentAttendance = await pb.collection("attendance").getList(1, 10, {
+            filter: `user="${user.id}"`,
+            sort: "-date",
+          });
+
+          // Filter trong JS để loại bỏ các bản ghi trong tương lai
+          const validItems = recentAttendance.items.filter((item) => {
+            const recordDate = new Date(item.date);
+            return recordDate <= today;
+          });
+
+          if (!alive) return;
+
+          if (validItems.length > 0) {
+            const latest = validItems[0];
+            const hcHours = Number(latest.hc_hours) || 8;
+            const otHours = Number(latest.ot_hours) || 0;
+            const shift: Shift = latest.shift === "night" ? "night" : "day";
+
+            console.log("[DailyIncentive] Latest server record:", {
+              date: latest.date,
+              hcHours,
+              otHours,
+              shift,
+            });
+
+            const todayStr = today.toISOString().split("T")[0];
+            const estimate = estimateDailySalary(
+              todayStr,
+              {
+                lcb: user.lcb || 0,
+                chuyen_can: user.chuyen_can || 0,
+                doi_song: user.doi_song || 0,
+                tham_nien: user.tham_nien || 0,
+              },
+              shift,
+              false,
+              hcHours,
+              otHours,
+            );
+
+            if (alive) setDailyIncentive(estimate.work);
+          }
+        } catch (error) {
+          console.error("[DailyIncentive] Server fetch error:", error);
         }
-      })
-      .catch((err) => {
-        console.error("[DailyIncentive] Subscribe failed:", err);
-      });
+      };
+
+      fetchFromServer();
+
+      // Subscribe realtime cho attendance collection
+      pb.collection("attendance")
+        .subscribe("*", (e) => {
+          console.log("[DailyIncentive] Realtime event:", e.action, e.record);
+          const recordUserId = e.record?.user;
+          if (recordUserId === user.id) {
+            console.log("[DailyIncentive] Event matched user, refetching...");
+            fetchFromServer();
+          }
+        })
+        .catch((err) => {
+          console.error("[DailyIncentive] Subscribe failed:", err);
+        });
+    }
 
     return () => {
       alive = false;
-      pb.collection("attendance").unsubscribe("*").catch(() => {});
+      if (user) {
+        pb.collection("attendance").unsubscribe("*").catch(() => {});
+      }
     };
   }, [user, isAdmin]);
 
@@ -415,32 +472,57 @@ export function DashboardPage() {
             </div>
           </section>
         ) : (
-          <section className="gradient-hero relative overflow-hidden px-4 py-3 text-white">
-            <div className="relative flex items-center justify-between gap-3">
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/95 shadow-soft">
-                  {logoUrl ? (
-                    <img src={logoUrl} alt="logo" className="logo-fit" />
-                  ) : (
-                    <Building2 className="h-5 w-5 text-primary" />
-                  )}
+          <>
+            <section className="gradient-hero relative overflow-hidden px-4 py-3 text-white">
+              <div className="relative flex items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/95 shadow-soft">
+                    {logoUrl ? (
+                      <img src={logoUrl} alt="logo" className="logo-fit" />
+                    ) : (
+                      <Building2 className="h-5 w-5 text-primary" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">Đang dùng không cần đăng nhập</p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold">Đang dùng không cần đăng nhập</p>
-                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="shrink-0 bg-white text-primary hover:bg-white/90"
+                  onClick={() => setGuestLoginOpen(true)}
+                >
+                  <LogIn className="h-4 w-4" />
+                  Đăng nhập
+                </Button>
               </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                className="shrink-0 bg-white text-primary hover:bg-white/90"
-                onClick={() => setGuestLoginOpen(true)}
-              >
-                <LogIn className="h-4 w-4" />
-                Đăng nhập
-              </Button>
+            </section>
+            <div className="px-4 pb-2 pt-3">
+              {hasAttendanceToday === false && (
+                <button
+                  type="button"
+                  onClick={() => nav({ to: "/attendance" })}
+                  className="mb-2 flex w-full items-center gap-2 rounded-xl border border-[color:var(--status-warning)]/30 bg-[color:var(--status-warning)]/10 px-3 py-2 text-left text-sm text-foreground transition active:scale-[0.99]"
+                >
+                  <CircleAlert
+                    className="h-4 w-4 shrink-0 text-[color:var(--status-warning-fg)]"
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 flex-1">
+                    Hôm nay bạn chưa chấm công.{" "}
+                    {dailyIncentive !== null ? (
+                      <>Chấm công nhận <strong>{formatVND(dailyIncentive)}</strong> vào lương</>
+                    ) : (
+                      <>Chạm để nhập chấm công.</>
+                    )}
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                </button>
+              )}
             </div>
-          </section>
+          </>
         )
       ) : (
         <div className="px-4 pb-2 pt-3">
@@ -558,6 +640,12 @@ export function DashboardPage() {
           />
         </GuestSection>
 
+        <GuestSection title="Giải trí" description="Thư giãn sau giờ làm" compact>
+          <FeatureTile to="/garden" label="Nông trại" icon={Sprout} size="compact" allowGuest />
+          <FeatureTile to="/gems" label="Xếp kim cương" icon={Gem} size="compact" allowGuest />
+          <FeatureTile to="/minesweeper" label="Dò mìn" icon={Bomb} size="compact" allowGuest />
+        </GuestSection>
+
         <GuestSection title="Tiện ích" description="Thông tin, kết nối và công cụ hỗ trợ" compact>
           {user?.role === "admin" ? (
             <>
@@ -665,12 +753,6 @@ export function DashboardPage() {
               />
             </>
           )}
-        </GuestSection>
-
-        <GuestSection title="Giải trí" description="Thư giãn sau giờ làm" compact>
-          <FeatureTile to="/garden" label="Nông trại" icon={Sprout} size="compact" allowGuest />
-          <FeatureTile to="/gems" label="Xếp kim cương" icon={Gem} size="compact" allowGuest />
-          <FeatureTile to="/minesweeper" label="Dò mìn" icon={Bomb} size="compact" allowGuest />
         </GuestSection>
       </main>
 
