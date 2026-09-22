@@ -89,6 +89,13 @@ interface Recruitment {
   collectionId: string;
   collectionName: string;
   created?: string;
+  expand?: {
+    area?: {
+      id: string;
+      name: string;
+      note?: string;
+    };
+  };
 }
 
 const EMPTY: Recruitment = {
@@ -182,6 +189,14 @@ const normalizeLookupValue = (value?: string) => value?.trim().toLowerCase() || 
 const isRecruitmentActive = (item: Recruitment) => item.is_active !== false;
 
 const recruitmentEmploymentType = (item: Recruitment) => item.employment_type || "official";
+
+const recruitmentAreaName = (item: Recruitment, areas: RecruitmentAreaOption[]) => {
+  // Try expanded relation first
+  if (item.expand?.area?.name) return item.expand.area.name;
+  // Fallback: lookup by ID
+  const found = areas.find(a => a.id === item.area);
+  return found?.name || item.area || "";
+};
 
 const errorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
@@ -327,8 +342,10 @@ function NewsPage() {
           productionQc: productionQcFilter,
         }),
         sort: "-created",
+        expand: "area",
       });
       const rows = res.items as unknown as Recruitment[];
+      console.log("DEBUG recruitments[0]:", rows[0]);
       setItems(rows);
       const latest = rows.reduce(
         (max, row) => Math.max(max, row.created ? new Date(row.created).getTime() : 0),
@@ -367,16 +384,9 @@ function NewsPage() {
 
   const areaOptions = useMemo(
     () =>
-      Array.from(
-        new Set(
-          [
-            ...configuredAreas.map((item) => normalizeArea(item.name)),
-            ...visibleItems.map((item) => normalizeArea(item.area)),
-          ].filter(Boolean),
-        ),
-      )
-        .sort((a, b) => a.localeCompare(b, "vi"))
-        .map((area) => ({ value: area, label: area })),
+      configuredAreas
+        .map((area) => ({ value: area.id, label: area.name }))
+        .sort((a, b) => a.label.localeCompare(b.label, "vi")),
     [configuredAreas, visibleItems],
   );
 
@@ -551,7 +561,7 @@ function NewsPage() {
                       value={optionLabel(EMPLOYMENT_TYPE_OPTIONS, recruitmentEmploymentType(r))}
                     />
                     <SummaryItem icon={Banknote} label="LCB" value={r.salary_base} />
-                    <SummaryItem icon={MapPin} label="Khu vực" value={r.area} />
+                    <SummaryItem icon={MapPin} label="Khu vực" value={recruitmentAreaName(r, configuredAreas)} />
                     <SummaryItem icon={Gift} label="Phụ cấp" value={r.allowance} />
                     <SummaryItem
                       icon={ShieldCheck}
@@ -581,7 +591,7 @@ function NewsPage() {
         })
       )}
 
-      <DetailSheet item={detail} factories={factories} onClose={() => setDetail(null)} />
+      <DetailSheet item={detail} factories={factories} areas={configuredAreas} onClose={() => setDetail(null)} />
       <EditDialog
         item={editing}
         areaOptions={areaOptions}
@@ -709,10 +719,12 @@ function SummaryItem({
 function DetailSheet({
   item,
   factories,
+  areas,
   onClose,
 }: {
   item: Recruitment | null;
   factories: FactoryOption[];
+  areas: RecruitmentAreaOption[];
   onClose: () => void;
 }) {
   const factory = item ? findFactoryByCompany(factories, item.company) : null;
@@ -794,7 +806,7 @@ function DetailSheet({
                     label={"Loại tuyển"}
                     value={optionLabel(EMPLOYMENT_TYPE_OPTIONS, recruitmentEmploymentType(item))}
                   />
-                  <Info icon={MapPin} label={"Khu vực"} value={item.area} />
+                  <Info icon={MapPin} label={"Khu vực"} value={recruitmentAreaName(item, areas)} />
                   <Info icon={Users} label={"Tuyển"} value={genderLabel(item.gender)} />
                   <Info icon={Clock} label={"Thời gian phỏng vấn"} value={item.interview_time} />
                   <Info
@@ -984,6 +996,12 @@ function EditDialog({
 
   const save = async () => {
     try {
+      // Validate required fields
+      if (!form.area?.trim()) {
+        toast.error("Vui lòng chọn khu vực tuyển dụng");
+        return;
+      }
+
       const currentFactory = selectedFactory || findFactoryByCompany(factories, form.company);
       const adminPhone = currentFactory?.hotline?.trim() || user?.phone || form.admin_phone || "";
       const mapUrl = factoryMapUrl(currentFactory) || form.map_url || "";

@@ -50,7 +50,6 @@ import {
   ChevronDown,
   MapPin,
   Search,
-  Wallet,
   Ban,
   CircleX,
 } from "lucide-react";
@@ -566,7 +565,6 @@ interface Factory {
   hotline?: string;
   note?: string;
   attendance_cutoff_day?: number;
-  advance_limit?: number;
   status?: string;
 }
 
@@ -576,46 +574,22 @@ interface RecruitmentArea {
   note?: string;
 }
 
-interface MainHouse {
-  id: string;
-  name: string;
-  address?: string;
-  hotline?: string;
-  note?: string;
-  status?: "active" | "inactive";
-}
-
 function FactoriesTab() {
   const currentUser = pb.authStore.record as UserRecord | null;
-  const { data: appSettings } = useAppSettings();
   const queryClient = useQueryClient();
   const [items, setItems] = useState<Factory[]>([]);
   const [areas, setAreas] = useState<RecruitmentArea[]>([]);
-  const [mainHouses, setMainHouses] = useState<MainHouse[]>([]);
   const [editing, setEditing] = useState<Partial<Factory> | null>(null);
   const [editingArea, setEditingArea] = useState<Partial<RecruitmentArea> | null>(null);
-  const [editingMainHouse, setEditingMainHouse] = useState<Partial<MainHouse> | null>(null);
   const [loading, setLoading] = useState(true);
   const [areasLoading, setAreasLoading] = useState(true);
-  const [mainHousesLoading, setMainHousesLoading] = useState(true);
   const [factoriesOpen, setFactoriesOpen] = useState(true);
   const [areasOpen, setAreasOpen] = useState(true);
-  const [mainHousesOpen, setMainHousesOpen] = useState(true);
   const [managingFactory, setManagingFactory] = useState<Factory | null>(null);
   const [factorySearch, setFactorySearch] = useState("");
   const [areaSearch, setAreaSearch] = useState("");
-  const [mainHouseSearch, setMainHouseSearch] = useState("");
   const debouncedFactorySearch = useDebouncedSearch(factorySearch);
   const debouncedAreaSearch = useDebouncedSearch(areaSearch);
-  const debouncedMainHouseSearch = useDebouncedSearch(mainHouseSearch);
-  const [bulkAdvanceLimit, setBulkAdvanceLimit] = useState("");
-  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
-  const [bulkSaving, setBulkSaving] = useState(false);
-  const [editingAdvanceFactory, setEditingAdvanceFactory] = useState<Factory | null>(null);
-  const [advanceLimitText, setAdvanceLimitText] = useState("");
-  const [advanceSaving, setAdvanceSaving] = useState(false);
-  const [allowAfterLeaveSaving, setAllowAfterLeaveSaving] = useState(false);
-  const [allowAfterLeavePending, setAllowAfterLeavePending] = useState(false);
 
   const filteredFactories = items.filter((f) => {
     if (!debouncedFactorySearch.trim()) return true;
@@ -631,16 +605,6 @@ function FactoriesTab() {
     if (!debouncedAreaSearch.trim()) return true;
     const q = debouncedAreaSearch.toLowerCase();
     return a.name.toLowerCase().includes(q) || (a.note || "").toLowerCase().includes(q);
-  });
-
-  const filteredMainHouses = mainHouses.filter((h) => {
-    if (!debouncedMainHouseSearch.trim()) return true;
-    const q = debouncedMainHouseSearch.toLowerCase();
-    return (
-      h.name.toLowerCase().includes(q) ||
-      (h.address || "").toLowerCase().includes(q) ||
-      (h.hotline || "").toLowerCase().includes(q)
-    );
   });
 
   const loadFactories = async () => {
@@ -667,30 +631,10 @@ function FactoriesTab() {
     }
   };
 
-  const loadMainHouses = async () => {
-    setMainHousesLoading(true);
-    try {
-      const res = await pb.collection("recruitment_entities").getList(1, 300, { sort: "name" });
-      setMainHouses(res.items as any);
-    } catch (e: any) {
-      toast.error(
-        e?.message ||
-          "Lỗi tải danh sách Nhà chính & Đối tác. Hãy cấu hình collection 'recruitment_entities'.",
-      );
-    } finally {
-      setMainHousesLoading(false);
-    }
-  };
-
   useEffect(() => {
     loadFactories();
     loadAreas();
-    loadMainHouses();
   }, []);
-
-  useEffect(() => {
-    setAllowAfterLeaveSaving(Boolean(appSettings.allow_advance_after_leave));
-  }, [appSettings.allow_advance_after_leave]);
 
   const save = async () => {
     if (!editing?.name?.trim()) {
@@ -711,7 +655,6 @@ function FactoriesTab() {
         hotline: editing.hotline || "",
         note: editing.note || "",
         attendance_cutoff_day: Number(editing.attendance_cutoff_day) || 31,
-        advance_limit: Math.max(0, Number(editing.advance_limit) || 0),
         status: editing.status || "active",
       };
       if (editing.id) {
@@ -742,117 +685,6 @@ function FactoriesTab() {
       loadFactories();
     } catch (e: any) {
       toast.error(e?.message || "Lỗi lưu");
-    }
-  };
-
-  const saveAllowAfterLeave = async (checked: boolean) => {
-    setAllowAfterLeaveSaving(checked);
-    setAllowAfterLeavePending(true);
-    try {
-      if (appSettings.id) {
-        await pb.collection("app_settings").update(appSettings.id, {
-          allow_advance_after_leave: checked,
-        });
-      } else {
-        await pb.collection("app_settings").create({
-          allow_advance_after_leave: checked,
-        });
-      }
-      queryClient.invalidateQueries({ queryKey: ["app_settings"] });
-      toast.success(
-        checked ? "Đã cho phép báo ứng khi NLĐ đã nghỉ" : "Đã tắt báo ứng khi NLĐ đã nghỉ",
-      );
-    } catch (e: any) {
-      setAllowAfterLeaveSaving(!checked);
-      toast.error(e?.message || "Không thể lưu cài đặt báo ứng sau nghỉ");
-    } finally {
-      setAllowAfterLeavePending(false);
-    }
-  };
-
-  const openAdvanceEditor = (factory: Factory) => {
-    setEditingAdvanceFactory(factory);
-    setAdvanceLimitText(formatMoneyInput(String(factory.advance_limit || 0)));
-  };
-
-  const saveAdvanceLimit = async () => {
-    if (!editingAdvanceFactory) return;
-    const advanceLimit = Math.max(0, parseMoneyInput(advanceLimitText));
-    setAdvanceSaving(true);
-    try {
-      const before = items.find((item) => item.id === editingAdvanceFactory.id);
-      const status = editingAdvanceFactory.status === "inactive" ? "inactive" : "active";
-      await pb.collection("factories").update(editingAdvanceFactory.id, {
-        advance_limit: advanceLimit,
-        status,
-      });
-      await createStaffActionLog({
-        actor: currentUser,
-        targetCollection: "factories",
-        targetRecord: editingAdvanceFactory.id,
-        action: "update",
-        before,
-        after: { advance_limit: advanceLimit, status },
-        note: "Admin cập nhật hạn mức ứng tiền theo nhà máy",
-      });
-      setItems((current) =>
-        current.map((item) =>
-          item.id === editingAdvanceFactory.id
-            ? { ...item, advance_limit: advanceLimit, status }
-            : item,
-        ),
-      );
-      setEditingAdvanceFactory(null);
-      toast.success("Đã lưu hạn mức ứng tiền");
-    } catch (e: any) {
-      toast.error(e?.message || "Không thể lưu hạn mức ứng tiền");
-    } finally {
-      setAdvanceSaving(false);
-    }
-  };
-
-  const applyAdvanceLimitToAll = async () => {
-    const advanceLimit = Math.max(0, parseMoneyInput(bulkAdvanceLimit));
-    if (!items.length) {
-      toast.warning("Chưa có nhà máy để áp dụng");
-      setBulkConfirmOpen(false);
-      return;
-    }
-    setBulkSaving(true);
-    try {
-      for (const factory of items) {
-        const before = factory;
-        const status = factory.status === "inactive" ? "inactive" : "active";
-        await pb.collection("factories").update(factory.id, {
-          advance_limit: advanceLimit,
-          status,
-        });
-        await createStaffActionLog({
-          actor: currentUser,
-          targetCollection: "factories",
-          targetRecord: factory.id,
-          action: "update",
-          before,
-          after: { advance_limit: advanceLimit, status },
-          note: "Admin áp dụng đồng loạt hạn mức ứng tiền cho toàn bộ nhà máy",
-        });
-      }
-      setItems((current) =>
-        current.map((factory) => ({
-          ...factory,
-          advance_limit: advanceLimit,
-          status: factory.status === "inactive" ? "inactive" : "active",
-        })),
-      );
-      setBulkConfirmOpen(false);
-      toast.success(
-        `Đã áp dụng ${advanceLimit.toLocaleString("vi-VN")} đ cho ${items.length} nhà máy`,
-      );
-    } catch (e: any) {
-      toast.error(e?.message || "Không thể áp dụng hạn mức cho toàn bộ nhà máy");
-      loadFactories();
-    } finally {
-      setBulkSaving(false);
     }
   };
 
@@ -935,78 +767,6 @@ function FactoriesTab() {
       loadAreas();
     } catch (e: any) {
       toast.error(e?.message || "Lỗi xoá khu vực");
-    }
-  };
-
-  const saveMainHouse = async () => {
-    const name = editingMainHouse?.name?.trim();
-    if (!name) {
-      toast.error("Tên đơn vị bắt buộc");
-      return;
-    }
-    const duplicate = mainHouses.find(
-      (h) => h.name.toLowerCase() === name.toLowerCase() && h.id !== editingMainHouse?.id,
-    );
-    if (duplicate) {
-      toast.error(`Đơn vị "${duplicate.name}" đã tồn tại`);
-      return;
-    }
-    try {
-      const payload = {
-        name,
-        address: editingMainHouse?.address || "",
-        hotline: editingMainHouse?.hotline || "",
-        note: editingMainHouse?.note || "",
-        status: editingMainHouse?.status || "active",
-      };
-      if (editingMainHouse?.id) {
-        const before = mainHouses.find((m) => m.id === editingMainHouse.id);
-        await pb.collection("recruitment_entities").update(editingMainHouse.id, payload);
-        await createStaffActionLog({
-          actor: currentUser,
-          targetCollection: "recruitment_entities",
-          targetRecord: editingMainHouse.id,
-          action: "update",
-          before,
-          after: payload,
-          note: "Admin cập nhật đơn vị Nhà chính & Đối tác",
-        });
-      } else {
-        const created = await pb.collection("recruitment_entities").create(payload);
-        await createStaffActionLog({
-          actor: currentUser,
-          targetCollection: "recruitment_entities",
-          targetRecord: created.id,
-          action: "create",
-          after: payload,
-          note: "Admin tạo đơn vị Nhà chính & Đối tác",
-        });
-      }
-      toast.success("Đã lưu đơn vị");
-      setEditingMainHouse(null);
-      loadMainHouses();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi lưu đơn vị");
-    }
-  };
-
-  const removeMainHouse = async (id: string) => {
-    if (!confirm("Xoá đơn vị này?")) return;
-    try {
-      const before = mainHouses.find((m) => m.id === id);
-      await pb.collection("recruitment_entities").delete(id);
-      await createStaffActionLog({
-        actor: currentUser,
-        targetCollection: "recruitment_entities",
-        targetRecord: id,
-        action: "delete",
-        before,
-        note: "Admin xoá đơn vị Nhà chính & Đối tác",
-      });
-      toast.success("Đã xoá đơn vị");
-      loadMainHouses();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi xoá đơn vị");
     }
   };
 
