@@ -5,6 +5,7 @@ import {
   HeadContent,
   Scripts,
   Link,
+  useLocation,
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
@@ -17,6 +18,7 @@ import { BrandHeadLinks } from "@/components/layout/BrandHeadLinks";
 import { PushPermissionPrompt } from "@/components/layout/PushPermissionPrompt";
 import { InstallFloatingBanner } from "@/components/layout/InstallFloatingBanner";
 import { didHardReload, hardReload } from "@/lib/hard-reload";
+import { logGuestActivity } from "@/lib/guest-tracking";
 
 function isChunkLoadError(error: Error) {
   return /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Load failed for module/i.test(
@@ -137,6 +139,8 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const location = useLocation();
+
   useEffect(() => {
     const removePwaListeners = installPwaPromptListeners();
     if ("serviceWorker" in navigator) {
@@ -149,6 +153,11 @@ function RootComponent() {
     }
     return removePwaListeners;
   }, []);
+
+  // Log guest activity on route change
+  useEffect(() => {
+    logGuestActivity(location.pathname, "visit");
+  }, [location.pathname]);
 
   return (
     <QueryClientProvider client={queryClient}>

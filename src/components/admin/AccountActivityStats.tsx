@@ -35,6 +35,7 @@ export function AccountActivityStats() {
   const [to, setTo] = useState(todayIso());
   const [users, setUsers] = useState<MinimalUser[]>([]);
   const [workerUserIds, setWorkerUserIds] = useState<Set<string>>(new Set());
+  const [guestSessions, setGuestSessions] = useState<Array<{ session_id: string; visited_at: string }>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,13 +43,18 @@ export function AccountActivityStats() {
     (async () => {
       setLoading(true);
       try {
-        const [userList, histList] = await Promise.all([
+        const [userList, histList, guestList] = await Promise.all([
           pb.collection("users").getFullList<MinimalUser>({ fields: "id,role,last_login" }),
           pb.collection("employment_histories").getFullList<{ user: string }>({ fields: "user" }),
+          pb.collection("guest_sessions").getFullList<{ session_id: string; visited_at: string }>({
+            fields: "session_id,visited_at",
+            sort: "-visited_at"
+          }),
         ]);
         if (!alive) return;
         setUsers(userList);
         setWorkerUserIds(new Set(histList.map((h) => h.user)));
+        setGuestSessions(guestList);
       } catch (e: any) {
         if (alive) toast.error(e?.message || "Không tải được thống kê tài khoản");
       } finally {
@@ -61,24 +67,60 @@ export function AccountActivityStats() {
   }, []);
 
   const stats = useMemo(() => {
-    const admins = users.filter((u) => u.role === "admin");
-    const staff = users.filter((u) => u.role === "staff");
-    const regularUsers = users.filter((u) => u.role === "user" || !u.role);
-    const workers = regularUsers.filter((u) => workerUserIds.has(u.id));
-    const guests = regularUsers.filter((u) => !workerUserIds.has(u.id));
+    // User = tài khoản đã đăng ký trong bảng users
+    const registeredUsers = users;
 
     const activeInRange = (list: MinimalUser[]) =>
       list.filter((u) => isInRange(u.last_login, from, to)).length;
 
+    // Guest = các session_id unique trong guest_sessions trong khoảng thời gian
+    const uniqueGuestSessions = new Set(
+      guestSessions
+        .filter((g) => isInRange(g.visited_at, from, to))
+        .map((g) => g.session_id)
+    );
+
+    // Tạo danh sách các ngày trong khoảng thời gian
+    const days: string[] = [];
+    const startDate = new Date(`${from}T00:00:00`);
+    const endDate = new Date(`${to}T23:59:59`);
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      days.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+    }
+
+    // Đếm số lượng đăng nhập theo từng ngày
+    const dailyData = days.map((day) => {
+      const dayStart = new Date(`${day}T00:00:00`).getTime();
+      const dayEnd = new Date(`${day}T23:59:59.999`).getTime();
+
+      // Đếm users đăng nhập trong ngày
+      const usersCount = registeredUsers.filter((u) => {
+        if (!u.last_login) return false;
+        const loginTime = new Date(u.last_login).getTime();
+        return !Number.isNaN(loginTime) && loginTime >= dayStart && loginTime <= dayEnd;
+      }).length;
+
+      // Đếm guest sessions unique trong ngày
+      const guestsCount = new Set(
+        guestSessions
+          .filter((g) => {
+            const visitTime = new Date(g.visited_at).getTime();
+            return !Number.isNaN(visitTime) && visitTime >= dayStart && visitTime <= dayEnd;
+          })
+          .map((g) => g.session_id)
+      ).size;
+
+      return { day, users: usersCount, guests: guestsCount };
+    });
+
     return {
       total: users.length,
       totalActive: activeInRange(users),
-      admins: { total: admins.length, active: activeInRange(admins) },
-      staff: { total: staff.length, active: activeInRange(staff) },
-      workers: { total: workers.length, active: activeInRange(workers) },
-      guests: { total: guests.length, active: activeInRange(guests) },
+      users: { total: registeredUsers.length, active: activeInRange(registeredUsers) },
+      guests: { total: uniqueGuestSessions.size, active: uniqueGuestSessions.size },
+      dailyData,
     };
-  }, [users, workerUserIds, from, to]);
+  }, [users, workerUserIds, from, to, guestSessions]);
 
   if (loading) {
     return (
@@ -144,38 +186,34 @@ export function AccountActivityStats() {
         />
       </div>
 
-      <div className="mt-3 space-y-1.5">
+      <div className="mt-3 space-y-3">
         <div className="px-1 text-xs font-semibold text-muted-foreground">Phân loại</div>
+
+        {/* Card thống kê 2 nhóm */}
         <div className="grid grid-cols-2 gap-2">
-          <RoleRow
-            label="Admin"
-            icon={ShieldCheck}
-            total={stats.admins.total}
-            active={stats.admins.active}
-            tone="text-primary"
-          />
-          <RoleRow
-            label="Staff"
-            icon={ShieldCheck}
-            total={stats.staff.total}
-            active={stats.staff.active}
-            tone="text-blue-600"
-          />
-          <RoleRow
-            label="NLĐ"
+          <GroupCard
+            label="User"
             icon={UserRoundCheck}
-            total={stats.workers.total}
-            active={stats.workers.active}
-            tone="text-emerald-600"
+            total={stats.users.total}
+            active={stats.users.active}
+            tone="emerald"
+            description="Tài khoản đã đăng ký"
           />
-          <RoleRow
-            label="Vãng lai"
+          <GroupCard
+            label="Guest"
             icon={UserRound}
             total={stats.guests.total}
             active={stats.guests.active}
-            tone="text-amber-600"
+            tone="amber"
+            description="Khách vãng lai"
           />
         </div>
+
+        {/* Biểu đồ đường theo ngày */}
+        <Card className="p-3">
+          <div className="mb-3 text-xs font-semibold">Hoạt động theo ngày</div>
+          <LineChart data={stats.dailyData} />
+        </Card>
       </div>
     </section>
   );
@@ -193,27 +231,201 @@ function QuickBtn({ label, onClick }: { label: string; onClick: () => void }) {
   );
 }
 
-function RoleRow({
+function LineChart({ data }: { data: Array<{ day: string; users: number; guests: number }> }) {
+  if (data.length === 0) {
+    return <div className="text-center text-xs text-muted-foreground">Không có dữ liệu</div>;
+  }
+
+  const maxValue = Math.max(...data.map((d) => Math.max(d.users, d.guests)), 1);
+  const chartHeight = 120;
+
+  // Tính toán điểm cho đường line
+  const userPoints = data.map((d, i) => {
+    const x = (i / (data.length - 1 || 1)) * 100;
+    const y = chartHeight - (d.users / maxValue) * chartHeight;
+    return { x, y, value: d.users };
+  });
+
+  const guestPoints = data.map((d, i) => {
+    const x = (i / (data.length - 1 || 1)) * 100;
+    const y = chartHeight - (d.guests / maxValue) * chartHeight;
+    return { x, y, value: d.guests };
+  });
+
+  const userPath = userPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const guestPath = guestPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+
+  // Format ngày hiển thị
+  const formatDate = (dateStr: string) => {
+    const [y, m, d] = dateStr.split('-');
+    return `${d}/${m}`;
+  };
+
+  // Chọn số label hiển thị dựa trên độ dài dữ liệu
+  const labelStep = data.length <= 7 ? 1 : data.length <= 14 ? 2 : Math.ceil(data.length / 7);
+
+  return (
+    <div className="space-y-3">
+      {/* SVG Chart */}
+      <div className="relative" style={{ height: chartHeight + 20 }}>
+        <svg
+          viewBox={`0 0 100 ${chartHeight}`}
+          className="w-full"
+          preserveAspectRatio="none"
+        >
+          {/* Grid lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
+            <line
+              key={ratio}
+              x1="0"
+              y1={chartHeight * ratio}
+              x2="100"
+              y2={chartHeight * ratio}
+              stroke="currentColor"
+              strokeWidth="0.2"
+              className="text-border"
+            />
+          ))}
+
+          {/* Guest line (dưới) */}
+          <path
+            d={guestPath}
+            fill="none"
+            stroke="rgb(245, 158, 11)"
+            strokeWidth="2"
+            className="drop-shadow-sm"
+          />
+
+          {/* User line (trên) */}
+          <path
+            d={userPath}
+            fill="none"
+            stroke="rgb(16, 185, 129)"
+            strokeWidth="2"
+            className="drop-shadow-sm"
+          />
+
+          {/* Guest dots */}
+          {guestPoints.map((p, i) => (
+            <circle
+              key={`guest-${i}`}
+              cx={p.x}
+              cy={p.y}
+              r="1.5"
+              fill="rgb(245, 158, 11)"
+              className="drop-shadow"
+            />
+          ))}
+
+          {/* User dots */}
+          {userPoints.map((p, i) => (
+            <circle
+              key={`user-${i}`}
+              cx={p.x}
+              cy={p.y}
+              r="1.5"
+              fill="rgb(16, 185, 129)"
+              className="drop-shadow"
+            />
+          ))}
+        </svg>
+
+        {/* Y-axis labels */}
+        <div className="absolute left-0 top-0 flex h-full flex-col justify-between text-[9px] text-muted-foreground" style={{ transform: 'translateX(-100%)' }}>
+          <span className="pr-1">{maxValue}</span>
+          <span className="pr-1">{Math.round(maxValue * 0.5)}</span>
+          <span className="pr-1">0</span>
+        </div>
+      </div>
+
+      {/* X-axis labels */}
+      <div className="flex justify-between text-[9px] text-muted-foreground">
+        {data.map((d, i) => {
+          if (i % labelStep !== 0 && i !== data.length - 1) return null;
+          return <span key={i}>{formatDate(d.day)}</span>;
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center justify-center gap-4 text-[10px]">
+        <div className="flex items-center gap-1.5">
+          <div className="h-2 w-2 rounded-full bg-emerald-500" />
+          <span className="text-muted-foreground">User</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="h-2 w-2 rounded-full bg-amber-500" />
+          <span className="text-muted-foreground">Guest</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GroupCard({
   label,
   icon: Icon,
   total,
   active,
   tone,
+  description,
 }: {
   label: string;
   icon: typeof Users;
   total: number;
   active: number;
-  tone: string;
+  tone: "emerald" | "amber";
+  description: string;
 }) {
+  const toneClasses = {
+    emerald: "text-emerald-600 bg-emerald-50 border-emerald-200",
+    amber: "text-amber-600 bg-amber-50 border-amber-200",
+  };
+
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/20 px-3 py-2">
-      <Icon className={`h-4 w-4 shrink-0 ${tone}`} />
-      <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold">{label}</div>
-        <div className="text-[11px] text-muted-foreground">
-          {total} TK · {active} đăng nhập
+    <div className={`rounded-xl border ${toneClasses[tone]} p-3`}>
+      <div className="flex items-center gap-2">
+        <Icon className={`h-5 w-5 shrink-0 ${tone === "emerald" ? "text-emerald-600" : "text-amber-600"}`} />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-bold">{label}</div>
+          <div className="text-[10px] text-muted-foreground">{description}</div>
         </div>
+      </div>
+      <div className="mt-2 flex items-baseline gap-2">
+        <div className="text-2xl font-bold">{total}</div>
+        <div className="text-xs text-muted-foreground">tài khoản</div>
+      </div>
+      <div className="mt-1 text-xs">
+        <span className="font-semibold">{active}</span>
+        <span className="text-muted-foreground"> đăng nhập trong kỳ</span>
+      </div>
+    </div>
+  );
+}
+
+function ChartBar({
+  label,
+  value,
+  max,
+  color,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  color: string;
+}) {
+  const percentage = max > 0 ? (value / max) * 100 : 0;
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium">{label}</span>
+        <span className="font-semibold">{value}</span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className={`h-full transition-all duration-500 ${color}`}
+          style={{ width: `${percentage}%` }}
+        />
       </div>
     </div>
   );

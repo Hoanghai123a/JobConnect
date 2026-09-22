@@ -10,6 +10,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { pb, type UserRecord } from "./pocketbase";
 import { getPBUpstream } from "./pocketbase-config";
+import { clearGuestSession } from "./guest-tracking";
 
 interface AuthCtx {
   user: UserRecord | null;
@@ -228,6 +229,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       pb.authStore.save(payload.token, payload.record);
       savePasswordVerifiedAt(payload.record.id);
+      clearGuestSession(); // Xóa guest session khi đăng nhập thành công
     }
 
     return payload.record as UserRecord;

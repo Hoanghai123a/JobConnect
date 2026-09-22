@@ -681,16 +681,8 @@ function NotebookPage() {
                 </SelectContent>
               </Select>
             </div>
-            {isStaffOrAdmin && (
-              <div>
-                <Label className="text-xs">Người lao động</Label>
-                <WorkerSearchSelect workers={workers} value={fWorker} onChange={setFWorker} />
-              </div>
-            )}
             <div>
-              <Label className="text-xs">
-                {isStaffOrAdmin ? "Người khác (tự nhập)" : "Họ tên"}
-              </Label>
+              <Label className="text-xs">Họ tên</Label>
               <Input
                 value={fOtherPerson}
                 onChange={(e) => setFOtherPerson(e.target.value)}

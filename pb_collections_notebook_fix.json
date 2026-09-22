@@ -1,0 +1,217 @@
+[
+  {
+    "id": "pbc_notebook_categories",
+    "name": "notebook_categories",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\" && created_by = @request.auth.id",
+    "viewRule": "@request.auth.id != \"\" && created_by = @request.auth.id",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "@request.auth.id != \"\" && created_by = @request.auth.id",
+    "deleteRule": "@request.auth.id != \"\" && created_by = @request.auth.id",
+    "fields": [
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "txt_name_notebook_categories",
+        "max": 100,
+        "min": 1,
+        "name": "name",
+        "pattern": "",
+        "presentable": true,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "_pb_users_auth_",
+        "help": "",
+        "hidden": false,
+        "id": "rel_created_by_notebook_categories",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "created_by",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389176",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085495",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX `idx_notebook_categories_created_by` ON `notebook_categories` (`created_by`)",
+      "CREATE INDEX `idx_notebook_categories_name` ON `notebook_categories` (`name`)"
+    ]
+  },
+  {
+    "id": "pbc_notebook_entries",
+    "name": "notebook_entries",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\" && created_by = @request.auth.id",
+    "viewRule": "@request.auth.id != \"\" && created_by = @request.auth.id",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "@request.auth.id != \"\" && created_by = @request.auth.id",
+    "deleteRule": "@request.auth.id != \"\" && created_by = @request.auth.id",
+    "fields": [
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date_date_notebook_entries",
+        "max": "",
+        "min": "",
+        "name": "date",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "pbc_notebook_categories",
+        "help": "",
+        "hidden": false,
+        "id": "rel_category_notebook_entries",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "category",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "_pb_users_auth_",
+        "help": "",
+        "hidden": false,
+        "id": "rel_worker_notebook_entries",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "worker",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "txt_other_person_notebook_entries",
+        "max": 200,
+        "min": 0,
+        "name": "other_person",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "num_amount_notebook_entries",
+        "max": null,
+        "min": 0,
+        "name": "amount",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "txt_note_notebook_entries",
+        "max": 2000,
+        "min": 0,
+        "name": "note",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "sel_status_notebook_entries",
+        "maxSelect": 1,
+        "name": "status",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "values": ["pending", "done", "cancelled", "other"]
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "_pb_users_auth_",
+        "help": "",
+        "hidden": false,
+        "id": "rel_created_by_notebook_entries",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "created_by",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389177",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085496",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX `idx_notebook_entries_created_by` ON `notebook_entries` (`created_by`)",
+      "CREATE INDEX `idx_notebook_entries_category` ON `notebook_entries` (`category`)",
+      "CREATE INDEX `idx_notebook_entries_worker` ON `notebook_entries` (`worker`)",
+      "CREATE INDEX `idx_notebook_entries_date` ON `notebook_entries` (`date`)",
+      "CREATE INDEX `idx_notebook_entries_status` ON `notebook_entries` (`status`)"
+    ]
+  }
+]

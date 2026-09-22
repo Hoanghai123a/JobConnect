@@ -13,7 +13,7 @@ export const Route = createFileRoute("/_authenticated/admin/accounts/stats")({
 
 function AccountStatsPage() {
   return (
-    <PageContainer title="Thống kê tài khoản" subtitle="Theo dõi đăng nhập phân loại theo role">
+    <PageContainer title="Thống kê tài khoản" subtitle="Hoạt động User và Guest theo khoảng thời gian">
       <AccountActivityStats />
     </PageContainer>
   );
