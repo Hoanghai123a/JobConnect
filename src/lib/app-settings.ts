@@ -14,6 +14,7 @@ export interface AppSettings {
   advance_rules?: string;
   allow_advance_after_leave?: boolean;
   advance_reporting_enabled?: boolean;
+  advance_blocked_users?: string[]; // Danh sách user IDs bị chặn báo ứng
   staff_employment_factory_scope?: "assigned" | "all";
   logo?: string;
   updated?: string;
@@ -33,13 +34,60 @@ const DEFAULTS: AppSettings = {
   advance_rules: "",
   allow_advance_after_leave: false,
   advance_reporting_enabled: true,
+  advance_blocked_users: [],
   staff_employment_factory_scope: "assigned",
   install_guide_images: [],
 };
 
+// Helper để parse giá trị dựa trên data_type
+function parseValue(value: string, dataType?: string): any {
+  if (!value) return null;
+  if (dataType === "json") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (dataType === "number") return Number(value);
+  if (dataType === "boolean") return value === "true";
+  return value;
+}
+
 export async function fetchAppSettingsStrict(): Promise<AppSettings> {
-  const res = await pb.collection("app_settings").getList(1, 1);
-  return { ...DEFAULTS, ...((res.items[0] as AppSettings | undefined) || {}) };
+  // Fetch all key-value records
+  const res = await pb.collection("app_settings").getFullList();
+
+  const settings: any = { ...DEFAULTS };
+  let firstRecordId = "";
+
+  // Convert key-value records to flat object
+  res.forEach((record: any) => {
+    const key = record.key;
+    const value = parseValue(record.value, record.data_type);
+
+    if (key in settings) {
+      settings[key] = value;
+    }
+
+    // Store metadata from first record for logo URL
+    if (!firstRecordId && record.id) {
+      firstRecordId = record.id;
+      settings.id = record.id;
+      settings.collectionId = record.collectionId;
+      settings.collectionName = record.collectionName;
+    }
+
+    // Store file fields
+    if (key === "logo" && record.logo) {
+      settings.logo = record.logo;
+    }
+    if (key === "install_guide_images" && record.install_guide_images) {
+      settings.install_guide_images = record.install_guide_images;
+    }
+  });
+
+  return settings;
 }
 
 export async function fetchAppSettings(): Promise<AppSettings> {
@@ -47,6 +95,45 @@ export async function fetchAppSettings(): Promise<AppSettings> {
     return await fetchAppSettingsStrict();
   } catch {
     return DEFAULTS;
+  }
+}
+
+// Helper để lưu một setting theo cấu trúc key-value
+export async function saveAppSetting(key: string, value: any, file?: File | null): Promise<void> {
+  // Tìm record hiện có cho key này
+  const existing = await pb.collection("app_settings").getFullList({
+    filter: `key = "${key}"`,
+  });
+
+  const fd = new FormData();
+  fd.append("key", key);
+
+  // Serialize value dựa trên kiểu
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    fd.append("value", JSON.stringify(value));
+    fd.append("data_type", "json");
+  } else if (typeof value === "number") {
+    fd.append("value", String(value));
+    fd.append("data_type", "number");
+  } else if (typeof value === "boolean") {
+    fd.append("value", String(value));
+    fd.append("data_type", "boolean");
+  } else if (Array.isArray(value)) {
+    fd.append("value", JSON.stringify(value));
+    fd.append("data_type", "json");
+  } else {
+    fd.append("value", String(value || ""));
+    fd.append("data_type", "string");
+  }
+
+  if (file) {
+    fd.append(key, file);
+  }
+
+  if (existing.length > 0) {
+    await pb.collection("app_settings").update(existing[0].id, fd);
+  } else {
+    await pb.collection("app_settings").create(fd);
   }
 }
 

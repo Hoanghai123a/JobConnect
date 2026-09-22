@@ -51,6 +51,8 @@ import {
   MapPin,
   Search,
   Wallet,
+  Ban,
+  CircleX,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({
@@ -117,6 +119,7 @@ function CompanyTab() {
       hotline: settings.hotline || "",
       email: settings.email || "",
       about: settings.about || "",
+      advance_limit: settings.advance_limit || 0,
       advance_rules: settings.advance_rules || "",
       staff_employment_factory_scope: settings.staff_employment_factory_scope || "assigned",
     });
@@ -145,26 +148,63 @@ function CompanyTab() {
   const save = async () => {
     setSaving(true);
     try {
-      const fd = new FormData();
-      Object.entries(form).forEach(([k, v]) => {
-        if (k === "install_guide_images") return;
-        if (k === "advance_limit") fd.append(k, String(parseMoneyInput(v as string)));
-        else fd.append(k, (v as any) ?? "");
-      });
-      if (logoFile) fd.append("logo", logoFile);
-      for (const rm of removedInstallGuideImages) fd.append("install_guide_images-", rm);
-      for (const f of installGuideFiles) fd.append("install_guide_images", f);
-      if (settings.id) {
-        await pb.collection("app_settings").update(settings.id, fd);
-      } else {
-        await pb.collection("app_settings").create(fd);
+      const { saveAppSetting } = await import("@/lib/app-settings");
+
+      // Lưu từng setting riêng lẻ
+      const savePromises: Promise<void>[] = [];
+
+      // Lưu các trường text
+      for (const [key, value] of Object.entries(form)) {
+        if (key === "install_guide_images") continue;
+
+        if (key === "advance_limit") {
+          const parsed = parseMoneyInput(value as string);
+          savePromises.push(saveAppSetting(key, parsed));
+        } else if (value !== undefined && value !== null) {
+          savePromises.push(saveAppSetting(key, value));
+        }
       }
+
+      // Lưu logo nếu có
+      if (logoFile) {
+        savePromises.push(saveAppSetting("logo", "", logoFile));
+      }
+
+      // Xử lý install_guide_images
+      if (installGuideFiles.length > 0 || removedInstallGuideImages.length > 0) {
+        // Lấy record hiện có của install_guide_images
+        const existing = await pb.collection("app_settings").getFullList({
+          filter: `key = "install_guide_images"`,
+        });
+
+        const fd = new FormData();
+        fd.append("key", "install_guide_images");
+        fd.append("value", "[]");
+        fd.append("data_type", "json");
+
+        for (const rm of removedInstallGuideImages) {
+          fd.append("install_guide_images-", rm);
+        }
+        for (const f of installGuideFiles) {
+          fd.append("install_guide_images", f);
+        }
+
+        if (existing.length > 0) {
+          savePromises.push(pb.collection("app_settings").update(existing[0].id, fd));
+        } else {
+          savePromises.push(pb.collection("app_settings").create(fd));
+        }
+      }
+
+      await Promise.all(savePromises);
+
       toast.success("Đã lưu thông tin công ty");
       qc.invalidateQueries({ queryKey: ["app_settings"] });
       refetch();
       setInstallGuideFiles([]);
       setRemovedInstallGuideImages([]);
     } catch (e: any) {
+      console.error("Save error:", e);
       toast.error(e?.message || "Lỗi lưu");
     } finally {
       setSaving(false);
@@ -207,16 +247,6 @@ function CompanyTab() {
       />
       <Field label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
       <div>
-        <Label className="text-xs">Hạn mức Ứng lương</Label>
-        <Input
-          className="mt-1 rounded-xl"
-          inputMode="numeric"
-          placeholder="0"
-          value={form.advance_limit || ""}
-          onChange={(e) => setForm({ ...form, advance_limit: formatMoneyInput(e.target.value) })}
-        />
-      </div>
-      <div>
         <Label className="text-xs">Nội quy Ứng lương</Label>
         <Textarea
           className="mt-1 rounded-xl"
@@ -226,24 +256,9 @@ function CompanyTab() {
           onChange={(e) => setForm({ ...form, advance_rules: e.target.value })}
         />
       </div>
-      <div>
-        <Label className="text-xs">Phạm vi nhà máy khi tạo/báo đi làm</Label>
-        <Select
-          value={form.staff_employment_factory_scope || "assigned"}
-          onValueChange={(value) => setForm({ ...form, staff_employment_factory_scope: value })}
-        >
-          <SelectTrigger className="mt-1 rounded-xl">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="assigned">Chỉ nhà máy được phân công</SelectItem>
-            <SelectItem value="all">Toàn bộ nhà máy</SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Áp dụng cho staff trong Tạo nhanh và Báo đi làm mới.
-        </p>
-      </div>
+
+      <AdvanceBlockedUsersSection />
+
       <div>
         <Label className="text-xs">Giới thiệu</Label>
         <Textarea
@@ -319,13 +334,6 @@ function CompanyTab() {
         <Save className="h-4 w-4" /> {saving ? "Đang lưu..." : "Lưu thay đổi"}
       </Button>
 
-      <p className="text-[11px] text-muted-foreground">
-        Yêu cầu collection PocketBase tên <code>app_settings</code> với các field: company_name,
-        slogan, address, hotline, email, about (text), advance_limit (number), advance_rules (text),
-        logo (file), install_guide_images (multiple files), staff_employment_factory_scope (select:
-        assigned/all). Collection <code>factories</code> cần thêm field attendance_cutoff_day
-        (number).
-      </p>
     </Card>
   );
 }
@@ -347,6 +355,204 @@ function Field({
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
       />
+    </div>
+  );
+}
+
+/* ───────── ADVANCE BLOCKED USERS ───────── */
+
+function AdvanceBlockedUsersSection() {
+  const { data: settings } = useAppSettings();
+  const qc = useQueryClient();
+  const [users, setUsers] = useState<UserRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebouncedSearch(searchQuery);
+  const [searchResults, setSearchResults] = useState<UserRecord[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  const blockedUserIds = settings?.advance_blocked_users || [];
+
+  useEffect(() => {
+    if (!blockedUserIds.length) {
+      setUsers([]);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    Promise.all(
+      blockedUserIds.map((id) =>
+        pb
+          .collection("users")
+          .getOne<UserRecord>(id)
+          .catch(() => null),
+      ),
+    )
+      .then((results) => {
+        if (active) setUsers(results.filter((u): u is UserRecord => u !== null));
+      })
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [blockedUserIds]);
+
+  useEffect(() => {
+    if (!debouncedSearch.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    let active = true;
+    setSearching(true);
+    pb.collection("users")
+      .getList<UserRecord>(1, 20, {
+        filter: `(full_name~"${debouncedSearch}" || phone~"${debouncedSearch}" || email~"${debouncedSearch}") && role!="admin"`,
+        sort: "-created",
+      })
+      .then((res) => {
+        if (active) setSearchResults(res.items);
+      })
+      .catch(() => {})
+      .finally(() => active && setSearching(false));
+    return () => {
+      active = false;
+    };
+  }, [debouncedSearch]);
+
+  const addBlockedUser = async (userId: string) => {
+    if (blockedUserIds.includes(userId)) {
+      toast.error("User đã có trong danh sách chặn");
+      return;
+    }
+    setSaving(true);
+    try {
+      const newList = [...blockedUserIds, userId];
+      const saved = settings?.id
+        ? await pb.collection("app_settings").update(settings.id, {
+            advance_blocked_users: newList,
+          })
+        : await pb.collection("app_settings").create({
+            advance_blocked_users: newList,
+          });
+      qc.setQueryData(["app_settings"], (current: any) => ({
+        ...current,
+        ...saved,
+      }));
+      toast.success("Đã thêm vào danh sách chặn");
+      setSearchQuery("");
+      setSearchResults([]);
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi thêm user vào danh sách chặn");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeBlockedUser = async (userId: string) => {
+    setSaving(true);
+    try {
+      const newList = blockedUserIds.filter((id) => id !== userId);
+      const saved = await pb.collection("app_settings").update(settings!.id!, {
+        advance_blocked_users: newList,
+      });
+      qc.setQueryData(["app_settings"], (current: any) => ({
+        ...current,
+        ...saved,
+      }));
+      toast.success("Đã gỡ khỏi danh sách chặn");
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi gỡ user khỏi danh sách chặn");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/50 p-4">
+      <div className="flex items-start gap-2">
+        <Ban className="mt-0.5 h-5 w-5 text-amber-600" />
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-amber-900">
+            Danh sách chặn báo ứng ({users.length})
+          </div>
+          <div className="mt-0.5 text-xs text-amber-700">
+            User trong danh sách này không thể tạo yêu cầu ứng lương mới
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-amber-900">Tìm user để chặn</Label>
+        <Input
+          placeholder="Tìm theo tên, SĐT, email..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="rounded-xl border-amber-200"
+        />
+        {searching && <div className="text-xs text-muted-foreground">Đang tìm...</div>}
+        {searchResults.length > 0 && (
+          <div className="space-y-1 rounded-xl border border-amber-200 bg-white p-2">
+            {searchResults
+              .filter((u) => !blockedUserIds.includes(u.id))
+              .map((u) => (
+                <div
+                  key={u.id}
+                  className="flex items-center justify-between rounded-lg p-2 hover:bg-amber-50"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium">{u.full_name || "Không tên"}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {u.phone || u.email || u.username}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-2 h-7 rounded-lg border-amber-300 text-xs"
+                    onClick={() => addBlockedUser(u.id)}
+                    disabled={saving}
+                  >
+                    <Ban className="mr-1 h-3 w-3" /> Chặn
+                  </Button>
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+
+      {loading && <div className="text-xs text-muted-foreground">Đang tải danh sách...</div>}
+
+      {users.length > 0 && (
+        <div className="space-y-1 rounded-xl border border-amber-200 bg-white p-2">
+          {users.map((u) => (
+            <div
+              key={u.id}
+              className="flex items-center justify-between rounded-lg bg-amber-50 p-2"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-amber-900">{u.full_name || "Không tên"}</div>
+                <div className="text-xs text-amber-700">{u.phone || u.email || u.username}</div>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ml-2 h-7 rounded-lg text-xs text-amber-700 hover:bg-amber-100 hover:text-amber-900"
+                onClick={() => removeBlockedUser(u.id)}
+                disabled={saving}
+              >
+                <CircleX className="mr-1 h-3 w-3" /> Gỡ
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && users.length === 0 && (
+        <div className="rounded-xl border border-dashed border-amber-300 bg-white p-4 text-center text-xs text-amber-600">
+          Chưa có user nào bị chặn báo ứng
+        </div>
+      )}
     </div>
   );
 }
@@ -806,77 +1012,6 @@ function FactoriesTab() {
 
   return (
     <div className="space-y-3">
-      <Card className="space-y-3 rounded-2xl border-border/70 p-3 shadow-soft">
-        <div className="flex items-start gap-2">
-          <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-          <div>
-            <div className="text-sm font-semibold">Cài đặt ứng tiền theo nhà máy</div>
-            <div className="text-[11px] text-muted-foreground">
-              Hạn mức được lấy theo lịch sử đi làm gần nhất của NLĐ. 0 đ nghĩa là không cho phép báo
-              ứng.
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3">
-          <div className="min-w-0">
-            <div className="text-xs font-medium">Cho phép báo ứng khi NLĐ đã nghỉ</div>
-            <div className="mt-0.5 text-[11px] text-muted-foreground">
-              Mặc định tắt; khi bật sử dụng nhà máy của lịch sử gần nhất.
-            </div>
-          </div>
-          <Switch
-            checked={allowAfterLeaveSaving}
-            onCheckedChange={saveAllowAfterLeave}
-            disabled={allowAfterLeavePending}
-            aria-label="Cho phép báo ứng khi NLĐ đã nghỉ"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Hạn mức áp dụng nhanh cho toàn bộ nhà máy</Label>
-          <div className="flex gap-2">
-            <Input
-              className="min-w-0 flex-1 rounded-xl"
-              inputMode="numeric"
-              placeholder="Nhập số tiền, 0 để tắt"
-              value={bulkAdvanceLimit}
-              onChange={(event) => setBulkAdvanceLimit(formatMoneyInput(event.target.value))}
-            />
-            <Button
-              type="button"
-              className="shrink-0 rounded-xl"
-              onClick={() => setBulkConfirmOpen(true)}
-              disabled={bulkSaving || !bulkAdvanceLimit.trim()}
-            >
-              Áp dụng
-            </Button>
-          </div>
-          <div className="text-[11px] text-muted-foreground">
-            Sau khi áp dụng, Admin vẫn có thể chỉnh riêng từng nhà máy bên dưới.
-          </div>
-        </div>
-      </Card>
-
-      <Dialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] rounded-2xl sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Áp dụng hạn mức cho toàn bộ nhà máy?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Tất cả {items.length} nhà máy sẽ được đặt hạn mức{" "}
-            {parseMoneyInput(bulkAdvanceLimit).toLocaleString("vi-VN")} đ. Thao tác này ghi đè hạn
-            mức riêng hiện tại.
-          </p>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setBulkConfirmOpen(false)}>
-              Huỷ
-            </Button>
-            <Button type="button" onClick={applyAdvanceLimitToAll} disabled={bulkSaving}>
-              {bulkSaving ? "Đang áp dụng..." : "Xác nhận áp dụng"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Collapsible open={factoriesOpen} onOpenChange={setFactoriesOpen}>
         <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
           <div className="flex items-center justify-between gap-2">
@@ -958,21 +1093,6 @@ function FactoriesTab() {
                     <CalendarDays className="h-3 w-3" />
                     Chốt công ngày {f.attendance_cutoff_day || 31}
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] text-muted-foreground">
-                      Hạn mức ứng tiền: {Number(f.advance_limit || 0).toLocaleString("vi-VN")} đ
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 rounded-lg px-2.5 text-[11px]"
-                      onClick={() => openAdvanceEditor(f)}
-                    >
-                      <Wallet className="h-3.5 w-3.5" />
-                      Cài hạn mức
-                    </Button>
-                  </div>
                 </div>
                 <div className="flex gap-1">
                   <button
@@ -1044,22 +1164,6 @@ function FactoriesTab() {
               </div>
             </div>
             <div>
-              <Label className="text-xs">Hạn mức báo ứng</Label>
-              <Input
-                className="mt-1 rounded-xl"
-                type="text"
-                inputMode="numeric"
-                placeholder="0"
-                value={formatMoneyInput(String(editing?.advance_limit || 0))}
-                onChange={(e) =>
-                  setEditing({ ...editing, advance_limit: parseMoneyInput(e.target.value) })
-                }
-              />
-              <div className="mt-1 text-[11px] text-muted-foreground">
-                Hạn mức tối đa cho mỗi NLĐ tại nhà máy này. Nhập 0 để không cho phép báo ứng.
-              </div>
-            </div>
-            <div>
               <Label className="text-xs">Ghi chú</Label>
               <Textarea
                 className="mt-1 rounded-xl"
@@ -1075,38 +1179,6 @@ function FactoriesTab() {
             </Button>
             <Button onClick={save} className="rounded-xl">
               <Save className="h-4 w-4" /> Lưu
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!editingAdvanceFactory}
-        onOpenChange={(open) => !open && setEditingAdvanceFactory(null)}
-      >
-        <DialogContent className="w-[calc(100%-2rem)] rounded-2xl sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Hạn mức ứng tiền · {editingAdvanceFactory?.name || "Nhà máy"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label className="text-xs">Hạn mức tối đa cho mỗi NLĐ</Label>
-            <Input
-              className="rounded-xl"
-              inputMode="numeric"
-              placeholder="0"
-              value={advanceLimitText}
-              onChange={(event) => setAdvanceLimitText(formatMoneyInput(event.target.value))}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Nhập 0 đ để tạm khoá báo ứng tại nhà máy này.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setEditingAdvanceFactory(null)}>
-              Huỷ
-            </Button>
-            <Button type="button" onClick={saveAdvanceLimit} disabled={advanceSaving}>
-              {advanceSaving ? "Đang lưu..." : "Lưu hạn mức"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1234,176 +1306,6 @@ function FactoriesTab() {
               Huỷ
             </Button>
             <Button onClick={saveArea} className="rounded-xl">
-              <Save className="h-4 w-4" /> Lưu
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Collapsible open={mainHousesOpen} onOpenChange={setMainHousesOpen}>
-        <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
-          <div className="flex items-center justify-between gap-2">
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                aria-label="Thu gọn hoặc mở rộng danh sách Nhà chính & Đối tác"
-              >
-                <ChevronDown
-                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${mainHousesOpen ? "rotate-0" : "-rotate-90"}`}
-                />
-                <h2 className="text-sm font-semibold">
-                  Nhà chính & Đối tác{" "}
-                  <span className="text-muted-foreground">({mainHouses.length})</span>
-                </h2>
-              </button>
-            </CollapsibleTrigger>
-            <button
-              onClick={() => setEditingMainHouse({ status: "active" })}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-soft active:scale-95"
-              aria-label="Thêm đơn vị"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </div>
-
-          <CollapsibleContent className="mt-3 space-y-3">
-            {mainHouses.length > 3 && (
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="rounded-xl pl-9 text-xs"
-                  placeholder="Tìm Nhà chính hoặc Đối tác..."
-                  value={mainHouseSearch}
-                  onChange={(e) => setMainHouseSearch(e.target.value)}
-                />
-              </div>
-            )}
-            {mainHousesLoading && mainHouses.length === 0 ? (
-              <DataLoadingState variant="list" label="Đang tải danh sách đơn vị..." rows={3} />
-            ) : mainHousesLoading ? (
-              <DataLoadingState variant="inline" label="Đang cập nhật danh sách đơn vị..." />
-            ) : null}
-            {!mainHousesLoading && mainHouses.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
-                Chưa có đơn vị. Bấm nút + để thêm.
-              </div>
-            )}
-            {!mainHousesLoading && mainHouses.length > 0 && filteredMainHouses.length === 0 && (
-              <div className="py-4 text-center text-xs text-muted-foreground">
-                Không tìm thấy đơn vị phù hợp
-              </div>
-            )}
-            {filteredMainHouses.map((house) => (
-              <div
-                key={house.id}
-                className="list-card border-l-[color:var(--status-warning)] flex items-start gap-3"
-              >
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Home className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">{house.name}</div>
-                  <div className="mt-0.5 text-[10px] font-medium text-muted-foreground">
-                    {house.status === "inactive" ? "Ngừng sử dụng" : "Đang hoạt động"}
-                  </div>
-                  {house.address && (
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(house.address)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="mt-0.5 block text-[11px] text-muted-foreground hover:text-primary hover:underline"
-                    >
-                      📍 {house.address}
-                    </a>
-                  )}
-                  {house.hotline && (
-                    <div className="text-[11px] text-muted-foreground">📞 {house.hotline}</div>
-                  )}
-                  {house.note && (
-                    <div className="mt-0.5 text-[11px] text-muted-foreground">{house.note}</div>
-                  )}
-                </div>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => setEditingMainHouse(house)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
-                    aria-label="Sửa đơn vị"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => removeMainHouse(house.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
-                    aria-label="Xoá đơn vị"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </CollapsibleContent>
-        </div>
-      </Collapsible>
-
-      <Dialog open={!!editingMainHouse} onOpenChange={(o) => !o && setEditingMainHouse(null)}>
-        <DialogContent className="rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>{editingMainHouse?.id ? "Sửa đơn vị" : "Thêm đơn vị"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Field
-              label="Tên đơn vị *"
-              value={editingMainHouse?.name || ""}
-              onChange={(v) => setEditingMainHouse({ ...editingMainHouse, name: v })}
-            />
-            <Field
-              label="Địa chỉ"
-              value={editingMainHouse?.address || ""}
-              onChange={(v) => setEditingMainHouse({ ...editingMainHouse, address: v })}
-            />
-            <Field
-              label="Hotline"
-              value={editingMainHouse?.hotline || ""}
-              onChange={(v) => setEditingMainHouse({ ...editingMainHouse, hotline: v })}
-            />
-            <div className="space-y-1">
-              <Label className="text-xs">Trạng thái</Label>
-              <Select
-                value={editingMainHouse?.status || "active"}
-                onValueChange={(status: "active" | "inactive") =>
-                  setEditingMainHouse({ ...editingMainHouse, status })
-                }
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Đang hoạt động</SelectItem>
-                  <SelectItem value="inactive">Ngừng sử dụng</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Ghi chú</Label>
-              <Textarea
-                className="mt-1 rounded-xl"
-                rows={3}
-                value={editingMainHouse?.note || ""}
-                onChange={(e) => setEditingMainHouse({ ...editingMainHouse, note: e.target.value })}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setEditingMainHouse(null)}
-              className="rounded-xl"
-            >
-              Huỷ
-            </Button>
-            <Button onClick={saveMainHouse} className="rounded-xl">
               <Save className="h-4 w-4" /> Lưu
             </Button>
           </DialogFooter>

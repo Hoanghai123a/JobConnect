@@ -1,7 +1,7 @@
 import { pb } from "./pocketbase";
 import { escapePb } from "./pocketbase-utils";
 import { fetchAppSettings, fetchAppSettingsStrict, type AppSettings } from "./app-settings";
-import type { Role } from "./pocketbase";
+import type { Role, UserRecord } from "./pocketbase";
 
 export const ADVANCE_INTERACTION_DISABLED_MESSAGE =
   "Chức năng báo ứng đang tạm khóa. User hiện chỉ có thể xem dữ liệu.";
@@ -21,18 +21,46 @@ export async function assertAdvanceInteractionAllowed(role?: Role) {
   }
 }
 
+export type AdvancePolicyEmployment = {
+  id: string;
+  employee_code: string;
+  worker_name_snapshot: string;
+  join_date: string;
+  leave_date?: string;
+  recruiter_staff?: string;
+};
+
 export type AdvancePolicy = {
-  limit: number;
-  outstanding: number;
-  available: number;
+  factoryName: string;
+  isWorking: boolean;
 };
 
 export type AdvancePolicyOptions = {
   actorRole?: Role;
+  allowAfterLeave?: boolean;
 };
 
 const OUTSTANDING_FILTER =
   '(status="pending" || (status="accepted" && (recovery_status="" || recovery_status="none")))';
+
+/**
+ * Kiểm tra số lần ứng lương trong 1 ngày
+ */
+export async function checkAdvanceTodayCount(userId: string): Promise<number> {
+  const today = new Date();
+  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const endOfDay = new Date(startOfDay);
+  endOfDay.setDate(endOfDay.getDate() + 1);
+
+  const filter = `user="${escapePb(userId)}" && created>="${startOfDay.toISOString()}" && created<"${endOfDay.toISOString()}"`;
+
+  const rows = await pb.collection("advances").getFullList({
+    filter,
+    fields: "id",
+  });
+
+  return rows.length;
+}
 
 export async function loadAdvanceOutstanding(userId: string) {
   const rows = await pb.collection("advances").getFullList<{ amount?: number }>({
@@ -42,36 +70,52 @@ export async function loadAdvanceOutstanding(userId: string) {
   return rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
 }
 
+interface EmploymentHistoryRecord {
+  id: string;
+  user: string;
+  factory?: string;
+  employee_code?: string;
+  join_date?: string;
+  leave_date?: string;
+  recruiter_staff?: string;
+  worker_name_snapshot?: string;
+  expand?: {
+    factory?: {
+      id: string;
+      name?: string;
+    };
+  };
+}
+
 export async function resolveAdvancePolicy(
   userId: string,
   options: AdvancePolicyOptions = {},
 ): Promise<AdvancePolicy> {
-  const [settings, outstanding] = await Promise.all([
+  const [settings, user] = await Promise.all([
     fetchAppSettings(),
-    loadAdvanceOutstanding(userId),
+    pb.collection("users").getOne<UserRecord>(escapePb(userId)),
   ]);
 
-  // Default limit from settings or fallback
-  const limit = Math.max(0, Number(settings?.default_advance_limit || 5000000));
+  // Kiểm tra user có bị chặn không
+  const blockedUsers = settings?.advance_blocked_users || [];
+  if (blockedUsers.includes(userId)) {
+    throw new Error("Tài khoản của bạn đã bị chặn báo ứng. Vui lòng liên hệ admin.");
+  }
 
-  if (limit <= 0) {
-    throw new Error("Chưa cài đặt hạn mức ứng tiền");
+  // Kiểm tra số lần ứng trong ngày
+  const todayCount = await checkAdvanceTodayCount(userId);
+  if (todayCount >= 2) {
+    throw new Error("Bạn đã báo ứng 2 lần trong ngày hôm nay. Không thể báo ứng thêm.");
   }
 
   return {
-    limit,
-    outstanding,
-    available: Math.max(0, limit - outstanding),
+    factoryName: "JobConnect",
+    isWorking: true,
   };
 }
 
-export function validateAdvanceAmount(policy: AdvancePolicy, amount: number) {
+export function validateAdvanceAmount(amount: number) {
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error("Số tiền ứng không hợp lệ");
-  }
-  if (policy.outstanding + amount > policy.limit) {
-    throw new Error(
-      `Vượt hạn mức ứng tiền. Đã ứng chưa thu hồi ${policy.outstanding.toLocaleString("vi-VN")} đ, còn có thể ứng ${policy.available.toLocaleString("vi-VN")} đ`,
-    );
   }
 }

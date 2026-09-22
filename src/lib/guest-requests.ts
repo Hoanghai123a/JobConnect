@@ -84,6 +84,52 @@ export function saveGuestComplaint(row: GuestComplaint) {
   ]);
 }
 
+export function updateGuestComplaintStatus(
+  id: string,
+  status: "pending" | "accepted" | "rejected",
+  admin_note?: string,
+  resolved_at?: string,
+) {
+  const complaints = readGuestComplaints();
+  const updated = complaints.map((item) =>
+    item.id === id ? { ...item, status, admin_note, resolved_at } : item,
+  );
+  writeLocal(GUEST_COMPLAINT_STORAGE_KEY, updated);
+}
+
+export async function syncGuestComplaints() {
+  const localComplaints = readGuestComplaints();
+  if (localComplaints.length === 0) return;
+
+  // Lấy IDs của guest complaints
+  const ids = localComplaints.map((c) => c.id).filter(Boolean);
+  if (ids.length === 0) return;
+
+  try {
+    // Fetch từ API endpoint có auth để lấy trạng thái mới nhất
+    const filter = ids.map((id) => `id="${id}"`).join(" || ");
+    const response = await fetch(
+      `/api/public/sync-guest-complaints?filter=${encodeURIComponent(filter)}`,
+    );
+    if (!response.ok) return;
+
+    const data = await response.json();
+    const serverComplaints = data.items || [];
+
+    // Cập nhật localStorage với trạng thái mới từ server
+    serverComplaints.forEach((serverItem: GuestComplaint) => {
+      updateGuestComplaintStatus(
+        serverItem.id,
+        serverItem.status || "pending",
+        serverItem.admin_note,
+        serverItem.resolved_at,
+      );
+    });
+  } catch (e) {
+    console.error("[guest-requests] Sync complaints error:", e);
+  }
+}
+
 export async function lookupGuestPayroll(employeeCode: string, company: string) {
   return postGuestJson<{
     attendance: unknown[];

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
+import PocketBase from "pocketbase";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { StatusChip, toneBorder, ChipTone } from "@/components/ui/status-chip";
@@ -26,6 +27,7 @@ import {
   readGuestComplaints,
   saveGuestComplaint,
   submitGuestComplaint,
+  syncGuestComplaints,
 } from "@/lib/guest-requests";
 import { toast } from "@/lib/toast";
 import {
@@ -57,6 +59,13 @@ interface Complaint {
   admin_note?: string;
   resolved_at?: string;
   created: string;
+  expand?: {
+    resolved_by?: {
+      id: string;
+      full_name?: string;
+      username?: string;
+    };
+  };
 }
 
 const STATUS_META: Record<Status, { label: string; tone: ChipTone }> = {
@@ -117,21 +126,25 @@ function ComplaintsPage() {
   const [sending, setSending] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [expandedComplaintId, setExpandedComplaintId] = useState<string | null>(null);
+  const [viewingComplaint, setViewingComplaint] = useState<Complaint | null>(null);
 
   const load = async () => {
     setLoading(true);
     try {
       if (isGuest) {
+        // Sync guest complaints với PocketBase để cập nhật trạng thái
+        await syncGuestComplaints();
+
         const query = debouncedSearch.trim().toLocaleLowerCase("vi-VN");
+        // Guest: Hiển thị TẤT CẢ trạng thái, không filter theo tab
         const rows = readGuestComplaints().filter((row) => {
-          const statusMatches = tab === "all" || (row.status || "pending") === tab;
           const searchMatches =
             !query ||
             [row.full_name, row.phone, row.content, row.admin_note]
               .join(" ")
               .toLocaleLowerCase("vi-VN")
               .includes(query);
-          return statusMatches && searchMatches;
+          return searchMatches;
         });
         setItems(rows);
         return;
@@ -139,15 +152,27 @@ function ComplaintsPage() {
       const filter = buildComplaintFilter({
         isAdmin,
         phone: user?.phone,
-        tab,
+        tab: isAdmin ? tab : "all", // User: luôn dùng tab="all" để lấy tất cả
         search: debouncedSearch,
       });
+      console.log("[complaints.tsx] Filter:", filter);
+      console.log("[complaints.tsx] User phone:", user?.phone);
+      console.log("[complaints.tsx] Tab:", isAdmin ? tab : "all (user view)");
+      console.log("[complaints.tsx] Is admin:", isAdmin);
       const res = await pb.collection("complaints").getList(1, 200, {
         filter,
         sort: "-created",
+        expand: "resolved_by",
       });
       setItems(res.items as any);
     } catch (e: any) {
+      console.error("[complaints.tsx] Load error:", e);
+      console.error("[complaints.tsx] Error details:", {
+        message: e?.message,
+        status: e?.status,
+        data: e?.data,
+        response: e?.response,
+      });
       toast.error(e?.message || "Lỗi tải khiếu nại");
     } finally {
       setLoading(false);
@@ -164,12 +189,29 @@ function ComplaintsPage() {
       });
       return;
     }
+
+    // Test query đơn giản trước
+    try {
+      console.log("[complaints.tsx] Testing simple query...");
+      const testRes = await pb.collection("complaints").getList(1, 1, { fields: "id" });
+      console.log("[complaints.tsx] Simple query OK, total:", testRes.totalItems);
+    } catch (testErr: any) {
+      console.error("[complaints.tsx] Simple query failed:", testErr);
+      console.error("[complaints.tsx] Error details:", {
+        message: testErr?.message,
+        status: testErr?.status,
+        data: testErr?.data,
+      });
+    }
+
     const base = buildComplaintFilter({
       isAdmin,
       phone: user?.phone,
       tab: "all",
       search: debouncedSearch,
     });
+    console.log("[complaints.tsx] Stats base filter:", base);
+
     const [pending, accepted, rejected] = await Promise.all([
       countComplaints(joinPbFilters([base, 'status="pending"'])),
       countComplaints(joinPbFilters([base, 'status="accepted"'])),
@@ -189,22 +231,29 @@ function ComplaintsPage() {
     setSending(true);
     try {
       if (isGuest) {
+        console.log("[DEBUG] Guest form submission - React state:", form);
         if (!form.full_name.trim() || !form.phone.trim() || !form.content.trim()) {
+          console.log("[DEBUG] Validation failed - empty fields detected");
           toast.error("Vui lòng nhập họ tên, số điện thoại và nội dung.");
           return;
         }
+        console.log("[DEBUG] Validation passed, submitting...");
         const created = await submitGuestComplaint({
           full_name: form.full_name.trim(),
           phone: form.phone.trim(),
           content: form.content.trim(),
         });
+        console.log("[DEBUG] Submission successful:", created);
         saveGuestComplaint(created);
         toast.success("Đã gửi khiếu nại");
         setForm((current) => ({ ...current, content: "" }));
         await load();
         return;
       }
+      const title = form.content.trim().slice(0, 100) || "Khiếu nại";
       await pb.collection("complaints").create({
+        user: user?.id || "",
+        title,
         full_name: user?.full_name || "",
         employee_code: "",
         company: "",
@@ -214,7 +263,7 @@ function ComplaintsPage() {
       });
       toast.success("Đã gửi khiếu nại");
       setForm({ ...form, content: "" });
-      load();
+      load().catch(() => {});
     } catch (e: any) {
       toast.error(e?.message || "Lỗi");
     } finally {
@@ -225,17 +274,48 @@ function ComplaintsPage() {
   const resolve = async () => {
     if (!resolving) return;
     try {
-      await pb.collection("complaints").update(resolving.row.id, {
+      // Debug: kiểm tra auth data hiện tại
+      console.log("[complaints.tsx] Current auth:", {
+        hasToken: !!pb.authStore.token,
+        hasRecord: !!pb.authStore.record,
+        recordRole: (pb.authStore.record as any)?.role,
+        recordId: (pb.authStore.record as any)?.id,
+      });
+
+      // Tạo một PocketBase client tạm với upstream URL
+      const adminPb = new PocketBase("http://127.0.0.1:8090");
+
+      // Copy toàn bộ auth state
+      adminPb.authStore.save(pb.authStore.token, pb.authStore.record);
+
+      console.log("[complaints.tsx] Admin PB auth:", {
+        hasToken: !!adminPb.authStore.token,
+        hasRecord: !!adminPb.authStore.record,
+        recordRole: (adminPb.authStore.record as any)?.role,
+      });
+
+      await adminPb.collection("complaints").update(resolving.row.id, {
         status: resolving.status,
         admin_note: note,
         resolved_at: new Date().toISOString(),
+        resolved_by: pb.authStore.record?.id || "",
       });
+
       toast.success(resolving.status === "accepted" ? "Đã tiếp nhận" : "Đã từ chối");
       setResolving(null);
       setNote("");
-      load();
+
+      // Reload cả data và stats để cập nhật số liệu
+      await Promise.all([load(), loadStats()]);
     } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
+      console.error("[complaints.tsx] Resolve error:", e);
+      console.error("[complaints.tsx] Error details:", {
+        message: e?.message,
+        status: e?.status,
+        data: e?.data,
+        response: e?.response,
+      });
+      toast.error(e?.message || "Lỗi cập nhật khiếu nại");
     }
   };
 
@@ -347,42 +427,122 @@ function ComplaintsPage() {
           items.map((c) => {
             const status = (c.status || "pending") as Status;
             const meta = STATUS_META[status];
-            const isExpanded = expandedComplaintId === c.id;
             return (
-              <div key={c.id} className={cn("list-card", toneBorder[meta.tone])}>
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setViewingComplaint(c)}
+                className={cn("list-card text-left transition-all hover:shadow-md", toneBorder[meta.tone])}
+              >
                 <div className="flex items-baseline justify-between gap-2">
                   <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
                   <div className="text-[11px] text-muted-foreground">
                     {new Date(c.created).toLocaleString("vi-VN")}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setExpandedComplaintId(isExpanded ? null : c.id)}
-                  className="mt-2 block w-full text-left"
-                >
-                  <p
-                    className={cn(
-                      "whitespace-pre-wrap text-[13px] leading-relaxed",
-                      !isExpanded && "line-clamp-2",
-                    )}
-                  >
-                    {c.content}
-                  </p>
-                  <div className="mt-1 text-[11px] font-medium text-primary">
-                    {isExpanded ? "Thu gọn" : "Xem đầy đủ"}
-                  </div>
-                </button>
-                {c.admin_note && (
-                  <div className="mt-2 rounded-lg bg-muted/60 p-2 text-[12px]">
-                    <div className="font-semibold text-muted-foreground">Phản hồi admin:</div>
-                    <div className="whitespace-pre-wrap">{c.admin_note}</div>
-                  </div>
-                )}
-              </div>
+                <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-[13px] leading-relaxed">
+                  {c.content}
+                </p>
+                <div className="mt-1 text-[11px] font-medium text-primary">Xem đầy đủ</div>
+              </button>
             );
           })
         )}
+
+        {/* Dialog chi tiết khiếu nại cho user/guest */}
+        <Dialog open={!!viewingComplaint} onOpenChange={(o) => !o && setViewingComplaint(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Chi tiết khiếu nại</DialogTitle>
+            </DialogHeader>
+            {viewingComplaint && (
+              <div className="space-y-4">
+                {/* Trạng thái */}
+                <div className="flex items-center justify-between rounded-lg border bg-muted/40 p-3">
+                  <span className="text-sm font-medium">Trạng thái</span>
+                  <StatusChip tone={STATUS_META[(viewingComplaint.status || "pending") as Status].tone}>
+                    {STATUS_META[(viewingComplaint.status || "pending") as Status].label}
+                  </StatusChip>
+                </div>
+
+                {/* Thông tin người gửi */}
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold text-muted-foreground">Thông tin người gửi</div>
+                  <div className="space-y-1.5 rounded-lg border bg-card p-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Họ và tên:</span>
+                      <span className="font-medium">{viewingComplaint.full_name}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Số điện thoại:</span>
+                      <a
+                        href={`tel:${viewingComplaint.phone}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {viewingComplaint.phone}
+                      </a>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Thời gian gửi:</span>
+                      <span className="font-medium">
+                        {new Date(viewingComplaint.created).toLocaleString("vi-VN")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Nội dung khiếu nại */}
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold text-muted-foreground">Nội dung khiếu nại</div>
+                  <div className="whitespace-pre-wrap rounded-lg border bg-card p-3 text-sm leading-relaxed">
+                    {viewingComplaint.content}
+                  </div>
+                </div>
+
+                {/* Thông tin phản hồi admin */}
+                {(viewingComplaint.admin_note || viewingComplaint.resolved_at || viewingComplaint.expand?.resolved_by) && (
+                  <div className="space-y-2">
+                    <div className="text-sm font-semibold text-muted-foreground">Thông tin phản hồi</div>
+                    <div className="space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                      {/* Admin xử lý */}
+                      {viewingComplaint.expand?.resolved_by && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Admin xử lý:</span>
+                          <span className="font-medium">
+                            {viewingComplaint.expand.resolved_by.full_name || viewingComplaint.expand.resolved_by.username || "—"}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Lý do phản hồi */}
+                      {viewingComplaint.admin_note && (
+                        <div className="space-y-1">
+                          <div className="text-sm text-muted-foreground">Lý do phản hồi:</div>
+                          <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                            {viewingComplaint.admin_note}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Thời gian phản hồi */}
+                      {viewingComplaint.resolved_at && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Thời gian phản hồi:</span>
+                          <span className="font-medium">
+                            {new Date(viewingComplaint.resolved_at).toLocaleString("vi-VN")}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button onClick={() => setViewingComplaint(null)}>Đóng</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </PageContainer>
     );
   }

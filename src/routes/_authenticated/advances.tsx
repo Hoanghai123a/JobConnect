@@ -502,7 +502,7 @@ export function AdvancesPage() {
       .catch((error: unknown) => {
         if (!active) return;
         setAdvancePolicy(null);
-        setAdvancePolicyError(getUserErrorMessage(error, "Không thể kiểm tra hạn mức ứng tiền"));
+        setAdvancePolicyError(getUserErrorMessage(error, "Không thể kiểm tra thông tin làm việc"));
       })
       .finally(() => active && setAdvancePolicyLoading(false));
     return () => {
@@ -513,10 +513,6 @@ export function AdvancesPage() {
   useEffect(() => {
     setSelectedIds(new Set());
   }, [dateFrom, dateTo, disbursementFilter, factoryFilter, debouncedSearch, tab]);
-
-  const limit = advancePolicy?.limit || 0;
-  const outstanding = advancePolicy?.outstanding || 0;
-  const available = advancePolicy?.available || 0;
 
   const filtered = items;
   const isActionable = (row: AdvanceRecord) => {
@@ -627,17 +623,16 @@ export function AdvancesPage() {
         allowAfterLeave: Boolean(settings.allow_advance_after_leave),
         actorRole: user?.role,
       });
-      validateAdvanceAmount(policy, amount);
-      const employment = policy.employment;
+      validateAdvanceAmount(amount);
       const created = await pb.collection("advances").create({
         user: selectedAdvanceUser.id,
         requested_by: user?.id || selectedAdvanceUser.id,
-        recruiter_id: employment.recruiter_staff || "",
-        employee_code: employment.employee_code || "",
-        full_name: employment.worker_name_snapshot || selectedAdvanceUser.full_name || "",
+        recruiter_id: "",
+        employee_code: selectedAdvanceUser.id.substring(0, 8).toUpperCase(),
+        full_name: selectedAdvanceUser.full_name || "",
         company: policy.factoryName,
         phone: selectedAdvanceUser.phone || "",
-        join_date: employment.join_date || "",
+        join_date: new Date().toISOString().split("T")[0],
         bank_name: payoutMethod === "cash" ? "" : bankForm.bank_name || "",
         bank_account_number: payoutMethod === "cash" ? "" : bankForm.bank_account_number || "",
         bank_account_name: payoutMethod === "cash" ? "" : bankForm.bank_account_name || "",
@@ -652,11 +647,13 @@ export function AdvancesPage() {
       setReason("");
       setPayoutMethod("bank_transfer");
       load();
-      setAdvancePolicy({
-        ...policy,
-        outstanding: policy.outstanding + amount,
-        available: Math.max(0, policy.limit - policy.outstanding - amount),
-      });
+      // Reload policy để cập nhật số lần ứng trong ngày
+      resolveAdvancePolicy(selectedAdvanceUser.id, {
+        allowAfterLeave: Boolean(settings.allow_advance_after_leave),
+        actorRole: user?.role,
+      })
+        .then(setAdvancePolicy)
+        .catch(() => {});
       return true;
     } catch (error: unknown) {
       toast.error((error as any)?.message || "Lỗi gửi Ứng lương");
@@ -995,7 +992,7 @@ export function AdvancesPage() {
 
               {!isGuest && advancePolicyLoading && (
                 <div className="rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
-                  Đang kiểm tra nhà máy và hạn mức ứng tiền...
+                  Đang kiểm tra thông tin làm việc...
                 </div>
               )}
               {!isGuest && !advancePolicyLoading && advancePolicyError && (
@@ -1007,40 +1004,6 @@ export function AdvancesPage() {
                 <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                   <div className="font-semibold">Chưa đủ thông tin để báo ứng</div>
                   <div className="mt-1">{advancePolicyError}</div>
-                </div>
-              )}
-              {!isGuest && advancePolicy && (
-                <div className="flex flex-wrap items-center gap-1.5 rounded-xl border bg-primary/5 p-3 text-xs">
-                  <span className="text-muted-foreground">Nhà máy áp dụng:</span>
-                  <span className="font-semibold">{advancePolicy.factoryName}</span>
-                  <span className="text-muted-foreground">Mã NV:</span>
-                  <span className="font-semibold">{advancePolicy.employment.employee_code}</span>
-                  {!advancePolicy.isWorking && <StatusChip tone="warning">Đã nghỉ</StatusChip>}
-                </div>
-              )}
-
-              {!isGuest && (
-                <div className="grid grid-cols-2 gap-2">
-                  <StatCard
-                    label="Hạn mức"
-                    value={limit > 0 ? formatMoney(limit) : "Chưa cài"}
-                    icon={Wallet}
-                    tone="primary"
-                  />
-                  <StatCard
-                    label="Đã báo ứng chưa thu hồi"
-                    value={formatMoney(outstanding)}
-                    icon={Banknote}
-                    tone="warning"
-                  />
-                </div>
-              )}
-              {!isGuest && (
-                <div className="rounded-xl border border-dashed border-border bg-muted/30 p-2 text-xs text-muted-foreground">
-                  Còn có thể báo ứng:{" "}
-                  <span className="font-semibold text-foreground">
-                    {limit > 0 ? formatMoney(available) : "—"}
-                  </span>
                 </div>
               )}
 

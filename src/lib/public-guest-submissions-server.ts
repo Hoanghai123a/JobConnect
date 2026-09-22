@@ -85,13 +85,16 @@ export async function handlePublicAdvanceRequest(request: Request) {
 
 export async function handlePublicComplaintRequest(request: Request) {
   const body = objectValue(await request.json().catch(() => null));
+  const content = text(body.content);
   const payload = {
+    title: content.slice(0, 100) || "Khiếu nại",
     full_name: text(body.full_name),
     phone: text(body.phone),
-    content: text(body.content),
+    content,
     employee_code: "",
     company: "",
     status: "pending",
+    user: "", // Guest complaint không có user ID
   };
 
   if (!payload.full_name || !payload.content) {

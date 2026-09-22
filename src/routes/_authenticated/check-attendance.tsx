@@ -431,8 +431,23 @@ function employeeCompanyKey(employeeCode?: string, company?: string) {
 }
 
 function CheckAttendancePage() {
-  const { isAdmin } = useAuth();
-  return isAdmin ? <AdminCheckAttendance /> : <UserCheckAttendance />;
+  return (
+    <PageContainer title="Kiểm tra chấm công">
+      <Card className="p-8 text-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <CalendarCheck className="h-8 w-8" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-lg font-semibold">Đang phát triển</h3>
+            <p className="text-sm text-muted-foreground">
+              Tính năng này đang được xây dựng và sẽ sớm ra mắt.
+            </p>
+          </div>
+        </div>
+      </Card>
+    </PageContainer>
+  );
 }
 
 function AdminCheckAttendance() {

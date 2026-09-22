@@ -42,6 +42,7 @@ import { Route as ApiStaffExportRouteImport } from './routes/api/staff/export'
 import { Route as ApiPushSubscriptionRouteImport } from './routes/api/push/subscription'
 import { Route as ApiPushPublicKeyRouteImport } from './routes/api/push/public-key'
 import { Route as ApiPushApprovalRouteImport } from './routes/api/push/approval'
+import { Route as ApiPublicSyncGuestComplaintsRouteImport } from './routes/api/public/sync-guest-complaints'
 import { Route as ApiPublicPocketbaseAuthRouteImport } from './routes/api/public/pocketbase-auth'
 import { Route as ApiPublicComplaintRouteImport } from './routes/api/public/complaint'
 import { Route as ApiPublicCheckPayrollRouteImport } from './routes/api/public/check-payroll'
@@ -233,6 +234,12 @@ const ApiPushApprovalRoute = ApiPushApprovalRouteImport.update({
   path: '/api/push/approval',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSyncGuestComplaintsRoute =
+  ApiPublicSyncGuestComplaintsRouteImport.update({
+    id: '/api/public/sync-guest-complaints',
+    path: '/api/public/sync-guest-complaints',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicPocketbaseAuthRoute = ApiPublicPocketbaseAuthRouteImport.update({
   id: '/api/public/pocketbase-auth',
   path: '/api/public/pocketbase-auth',
@@ -398,6 +405,7 @@ export interface FileRoutesByFullPath {
   '/api/public/check-payroll': typeof ApiPublicCheckPayrollRoute
   '/api/public/complaint': typeof ApiPublicComplaintRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
+  '/api/public/sync-guest-complaints': typeof ApiPublicSyncGuestComplaintsRoute
   '/api/push/approval': typeof ApiPushApprovalRoute
   '/api/push/public-key': typeof ApiPushPublicKeyRoute
   '/api/push/subscription': typeof ApiPushSubscriptionRoute
@@ -453,6 +461,7 @@ export interface FileRoutesByTo {
   '/api/public/check-payroll': typeof ApiPublicCheckPayrollRoute
   '/api/public/complaint': typeof ApiPublicComplaintRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
+  '/api/public/sync-guest-complaints': typeof ApiPublicSyncGuestComplaintsRoute
   '/api/push/approval': typeof ApiPushApprovalRoute
   '/api/push/public-key': typeof ApiPushPublicKeyRoute
   '/api/push/subscription': typeof ApiPushSubscriptionRoute
@@ -511,6 +520,7 @@ export interface FileRoutesById {
   '/api/public/check-payroll': typeof ApiPublicCheckPayrollRoute
   '/api/public/complaint': typeof ApiPublicComplaintRoute
   '/api/public/pocketbase-auth': typeof ApiPublicPocketbaseAuthRoute
+  '/api/public/sync-guest-complaints': typeof ApiPublicSyncGuestComplaintsRoute
   '/api/push/approval': typeof ApiPushApprovalRoute
   '/api/push/public-key': typeof ApiPushPublicKeyRoute
   '/api/push/subscription': typeof ApiPushSubscriptionRoute
@@ -569,6 +579,7 @@ export interface FileRouteTypes {
     | '/api/public/check-payroll'
     | '/api/public/complaint'
     | '/api/public/pocketbase-auth'
+    | '/api/public/sync-guest-complaints'
     | '/api/push/approval'
     | '/api/push/public-key'
     | '/api/push/subscription'
@@ -624,6 +635,7 @@ export interface FileRouteTypes {
     | '/api/public/check-payroll'
     | '/api/public/complaint'
     | '/api/public/pocketbase-auth'
+    | '/api/public/sync-guest-complaints'
     | '/api/push/approval'
     | '/api/push/public-key'
     | '/api/push/subscription'
@@ -681,6 +693,7 @@ export interface FileRouteTypes {
     | '/api/public/check-payroll'
     | '/api/public/complaint'
     | '/api/public/pocketbase-auth'
+    | '/api/public/sync-guest-complaints'
     | '/api/push/approval'
     | '/api/push/public-key'
     | '/api/push/subscription'
@@ -713,6 +726,7 @@ export interface RootRouteChildren {
   ApiPublicCheckPayrollRoute: typeof ApiPublicCheckPayrollRoute
   ApiPublicComplaintRoute: typeof ApiPublicComplaintRoute
   ApiPublicPocketbaseAuthRoute: typeof ApiPublicPocketbaseAuthRoute
+  ApiPublicSyncGuestComplaintsRoute: typeof ApiPublicSyncGuestComplaintsRoute
   ApiPushApprovalRoute: typeof ApiPushApprovalRoute
   ApiPushPublicKeyRoute: typeof ApiPushPublicKeyRoute
   ApiPushSubscriptionRoute: typeof ApiPushSubscriptionRoute
@@ -955,6 +969,13 @@ declare module '@tanstack/react-router' {
       path: '/api/push/approval'
       fullPath: '/api/push/approval'
       preLoaderRoute: typeof ApiPushApprovalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/sync-guest-complaints': {
+      id: '/api/public/sync-guest-complaints'
+      path: '/api/public/sync-guest-complaints'
+      fullPath: '/api/public/sync-guest-complaints'
+      preLoaderRoute: typeof ApiPublicSyncGuestComplaintsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/pocketbase-auth': {
@@ -1214,6 +1235,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicCheckPayrollRoute: ApiPublicCheckPayrollRoute,
   ApiPublicComplaintRoute: ApiPublicComplaintRoute,
   ApiPublicPocketbaseAuthRoute: ApiPublicPocketbaseAuthRoute,
+  ApiPublicSyncGuestComplaintsRoute: ApiPublicSyncGuestComplaintsRoute,
   ApiPushApprovalRoute: ApiPushApprovalRoute,
   ApiPushPublicKeyRoute: ApiPushPublicKeyRoute,
   ApiPushSubscriptionRoute: ApiPushSubscriptionRoute,
