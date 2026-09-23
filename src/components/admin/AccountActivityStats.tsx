@@ -234,19 +234,23 @@ function LineChart({ data }: { data: Array<{ day: string; users: number; guests:
   }
 
   const maxValue = Math.max(...data.map((d) => Math.max(d.users, d.guests)), 1);
-  const chartHeight = 120;
-  const chartPadding = 5; // Padding để line không bị tràn
+  const width = 100;
+  const height = 100;
+  const padding = { top: 5, right: 5, bottom: 5, left: 5 };
 
-  // Tính toán điểm cho đường line với padding
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+
+  // Tính toán điểm cho đường line
   const userPoints = data.map((d, i) => {
-    const x = chartPadding + (i / (data.length - 1 || 1)) * (100 - 2 * chartPadding);
-    const y = chartPadding + (chartHeight - chartPadding * 2) * (1 - d.users / maxValue);
+    const x = padding.left + (i / (data.length - 1 || 1)) * chartWidth;
+    const y = padding.top + chartHeight * (1 - d.users / maxValue);
     return { x, y, value: d.users };
   });
 
   const guestPoints = data.map((d, i) => {
-    const x = chartPadding + (i / (data.length - 1 || 1)) * (100 - 2 * chartPadding);
-    const y = chartPadding + (chartHeight - chartPadding * 2) * (1 - d.guests / maxValue);
+    const x = padding.left + (i / (data.length - 1 || 1)) * chartWidth;
+    const y = padding.top + chartHeight * (1 - d.guests / maxValue);
     return { x, y, value: d.guests };
   });
 
@@ -263,81 +267,82 @@ function LineChart({ data }: { data: Array<{ day: string; users: number; guests:
   const labelStep = data.length <= 7 ? 1 : data.length <= 14 ? 2 : Math.ceil(data.length / 7);
 
   return (
-    <div className="space-y-3">
-      {/* SVG Chart */}
-      <div className="relative" style={{ height: chartHeight + 20 }}>
-        <svg
-          viewBox={`0 0 100 ${chartHeight}`}
-          className="w-full overflow-visible"
-          preserveAspectRatio="xMidYMid meet"
-        >
-          {/* Grid lines */}
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
-            <line
-              key={ratio}
-              x1={chartPadding}
-              y1={chartPadding + (chartHeight - chartPadding * 2) * ratio}
-              x2={100 - chartPadding}
-              y2={chartPadding + (chartHeight - chartPadding * 2) * ratio}
-              stroke="currentColor"
-              strokeWidth="0.2"
-              className="text-border"
-            />
-          ))}
-
-          {/* Guest line (dưới) */}
-          <path
-            d={guestPath}
-            fill="none"
-            stroke="rgb(245, 158, 11)"
-            strokeWidth="2"
-            className="drop-shadow-sm"
-          />
-
-          {/* User line (trên) */}
-          <path
-            d={userPath}
-            fill="none"
-            stroke="rgb(16, 185, 129)"
-            strokeWidth="2"
-            className="drop-shadow-sm"
-          />
-
-          {/* Guest dots */}
-          {guestPoints.map((p, i) => (
-            <circle
-              key={`guest-${i}`}
-              cx={p.x}
-              cy={p.y}
-              r="1.5"
-              fill="rgb(245, 158, 11)"
-              className="drop-shadow"
-            />
-          ))}
-
-          {/* User dots */}
-          {userPoints.map((p, i) => (
-            <circle
-              key={`user-${i}`}
-              cx={p.x}
-              cy={p.y}
-              r="1.5"
-              fill="rgb(16, 185, 129)"
-              className="drop-shadow"
-            />
-          ))}
-        </svg>
-
+    <div className="space-y-2">
+      {/* Chart container with Y-axis labels */}
+      <div className="flex gap-2">
         {/* Y-axis labels */}
-        <div className="absolute left-0 top-0 flex h-full flex-col justify-between py-1 text-[9px] text-muted-foreground" style={{ transform: 'translateX(-100%)', paddingRight: '4px' }}>
+        <div className="flex flex-col justify-between py-1 text-[9px] text-muted-foreground" style={{ minWidth: '20px', textAlign: 'right' }}>
           <span>{maxValue}</span>
           <span>{Math.round(maxValue * 0.5)}</span>
           <span>0</span>
         </div>
+
+        {/* SVG Chart */}
+        <div className="flex-1" style={{ height: 120 }}>
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            className="w-full h-full"
+            preserveAspectRatio="none"
+          >
+            {/* Grid lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
+              <line
+                key={ratio}
+                x1={padding.left}
+                y1={padding.top + chartHeight * ratio}
+                x2={width - padding.right}
+                y2={padding.top + chartHeight * ratio}
+                stroke="currentColor"
+                strokeWidth="0.2"
+                className="text-border"
+              />
+            ))}
+
+            {/* Guest line (dưới) */}
+            <path
+              d={guestPath}
+              fill="none"
+              stroke="rgb(245, 158, 11)"
+              strokeWidth="2"
+              vectorEffect="non-scaling-stroke"
+            />
+
+            {/* User line (trên) */}
+            <path
+              d={userPath}
+              fill="none"
+              stroke="rgb(16, 185, 129)"
+              strokeWidth="2"
+              vectorEffect="non-scaling-stroke"
+            />
+
+            {/* Guest dots */}
+            {guestPoints.map((p, i) => (
+              <circle
+                key={`guest-${i}`}
+                cx={p.x}
+                cy={p.y}
+                r="1.5"
+                fill="rgb(245, 158, 11)"
+              />
+            ))}
+
+            {/* User dots */}
+            {userPoints.map((p, i) => (
+              <circle
+                key={`user-${i}`}
+                cx={p.x}
+                cy={p.y}
+                r="1.5"
+                fill="rgb(16, 185, 129)"
+              />
+            ))}
+          </svg>
+        </div>
       </div>
 
-      {/* X-axis labels */}
-      <div className="flex justify-between px-1 text-[9px] text-muted-foreground">
+      {/* X-axis labels - inside container */}
+      <div className="flex justify-between text-[9px] text-muted-foreground" style={{ paddingLeft: '22px' }}>
         {data.map((d, i) => {
           if (i % labelStep !== 0 && i !== data.length - 1) return null;
           return <span key={i}>{formatDate(d.day)}</span>;
@@ -345,7 +350,7 @@ function LineChart({ data }: { data: Array<{ day: string; users: number; guests:
       </div>
 
       {/* Legend */}
-      <div className="flex items-center justify-center gap-4 text-[10px]">
+      <div className="flex items-center justify-center gap-4 text-[10px] pt-1">
         <div className="flex items-center gap-1.5">
           <div className="h-2 w-2 rounded-full bg-emerald-500" />
           <span className="text-muted-foreground">User</span>

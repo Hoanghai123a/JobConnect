@@ -22,7 +22,6 @@ import { Route as AuthenticatedTransportRouteImport } from './routes/_authentica
 import { Route as AuthenticatedNotebookRouteImport } from './routes/_authenticated/notebook'
 import { Route as AuthenticatedNewsRouteImport } from './routes/_authenticated/news'
 import { Route as AuthenticatedMinesweeperRouteImport } from './routes/_authenticated/minesweeper'
-import { Route as AuthenticatedLastWorkingDayRouteImport } from './routes/_authenticated/last-working-day'
 import { Route as AuthenticatedGuidesRouteImport } from './routes/_authenticated/guides'
 import { Route as AuthenticatedGemsRouteImport } from './routes/_authenticated/gems'
 import { Route as AuthenticatedGardenRouteImport } from './routes/_authenticated/garden'
@@ -129,12 +128,6 @@ const AuthenticatedMinesweeperRoute =
   AuthenticatedMinesweeperRouteImport.update({
     id: '/minesweeper',
     path: '/minesweeper',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-const AuthenticatedLastWorkingDayRoute =
-  AuthenticatedLastWorkingDayRouteImport.update({
-    id: '/last-working-day',
-    path: '/last-working-day',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedGuidesRoute = AuthenticatedGuidesRouteImport.update({
@@ -383,7 +376,6 @@ export interface FileRoutesByFullPath {
   '/garden': typeof AuthenticatedGardenRoute
   '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
-  '/last-working-day': typeof AuthenticatedLastWorkingDayRoute
   '/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/news': typeof AuthenticatedNewsRoute
   '/notebook': typeof AuthenticatedNotebookRoute
@@ -440,7 +432,6 @@ export interface FileRoutesByTo {
   '/garden': typeof AuthenticatedGardenRoute
   '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
-  '/last-working-day': typeof AuthenticatedLastWorkingDayRoute
   '/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/news': typeof AuthenticatedNewsRoute
   '/notebook': typeof AuthenticatedNotebookRoute
@@ -498,7 +489,6 @@ export interface FileRoutesById {
   '/_authenticated/garden': typeof AuthenticatedGardenRoute
   '/_authenticated/gems': typeof AuthenticatedGemsRoute
   '/_authenticated/guides': typeof AuthenticatedGuidesRoute
-  '/_authenticated/last-working-day': typeof AuthenticatedLastWorkingDayRoute
   '/_authenticated/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/_authenticated/news': typeof AuthenticatedNewsRoute
   '/_authenticated/notebook': typeof AuthenticatedNotebookRoute
@@ -557,7 +547,6 @@ export interface FileRouteTypes {
     | '/garden'
     | '/gems'
     | '/guides'
-    | '/last-working-day'
     | '/minesweeper'
     | '/news'
     | '/notebook'
@@ -614,7 +603,6 @@ export interface FileRouteTypes {
     | '/garden'
     | '/gems'
     | '/guides'
-    | '/last-working-day'
     | '/minesweeper'
     | '/news'
     | '/notebook'
@@ -671,7 +659,6 @@ export interface FileRouteTypes {
     | '/_authenticated/garden'
     | '/_authenticated/gems'
     | '/_authenticated/guides'
-    | '/_authenticated/last-working-day'
     | '/_authenticated/minesweeper'
     | '/_authenticated/news'
     | '/_authenticated/notebook'
@@ -829,13 +816,6 @@ declare module '@tanstack/react-router' {
       path: '/minesweeper'
       fullPath: '/minesweeper'
       preLoaderRoute: typeof AuthenticatedMinesweeperRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/last-working-day': {
-      id: '/_authenticated/last-working-day'
-      path: '/last-working-day'
-      fullPath: '/last-working-day'
-      preLoaderRoute: typeof AuthenticatedLastWorkingDayRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/guides': {
@@ -1170,7 +1150,6 @@ interface AuthenticatedRouteChildren {
   AuthenticatedGardenRoute: typeof AuthenticatedGardenRoute
   AuthenticatedGemsRoute: typeof AuthenticatedGemsRoute
   AuthenticatedGuidesRoute: typeof AuthenticatedGuidesRoute
-  AuthenticatedLastWorkingDayRoute: typeof AuthenticatedLastWorkingDayRoute
   AuthenticatedMinesweeperRoute: typeof AuthenticatedMinesweeperRoute
   AuthenticatedNewsRoute: typeof AuthenticatedNewsRoute
   AuthenticatedNotebookRoute: typeof AuthenticatedNotebookRoute
@@ -1199,7 +1178,6 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedGardenRoute: AuthenticatedGardenRoute,
   AuthenticatedGemsRoute: AuthenticatedGemsRoute,
   AuthenticatedGuidesRoute: AuthenticatedGuidesRoute,
-  AuthenticatedLastWorkingDayRoute: AuthenticatedLastWorkingDayRoute,
   AuthenticatedMinesweeperRoute: AuthenticatedMinesweeperRoute,
   AuthenticatedNewsRoute: AuthenticatedNewsRoute,
   AuthenticatedNotebookRoute: AuthenticatedNotebookRoute,
