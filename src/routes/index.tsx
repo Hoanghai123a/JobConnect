@@ -123,24 +123,10 @@ export function DashboardPage() {
     };
   }, [isAdmin]);
 
+  // approval_responses collection đã bị loại bỏ - không còn sử dụng
   useEffect(() => {
     if (!isAdmin || !user?.id) return;
-    let alive = true;
-
-    (async () => {
-      try {
-        const res = await pb.collection("approval_responses").getList(1, 1, {
-          filter: `admin = "${user.id}" && status = "pending"`,
-        });
-        if (alive) setPendingApprovalCount(res.totalItems || 0);
-      } catch {
-        if (alive) setPendingApprovalCount(0);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
+    setPendingApprovalCount(0);
   }, [isAdmin, user?.id]);
 
   useEffect(() => {

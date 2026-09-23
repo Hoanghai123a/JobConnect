@@ -34,7 +34,6 @@ export function AccountActivityStats() {
   const [from, setFrom] = useState(daysAgoIso(7));
   const [to, setTo] = useState(todayIso());
   const [users, setUsers] = useState<MinimalUser[]>([]);
-  const [workerUserIds, setWorkerUserIds] = useState<Set<string>>(new Set());
   const [guestSessions, setGuestSessions] = useState<Array<{ session_id: string; visited_at: string }>>([]);
   const [loading, setLoading] = useState(true);
 
@@ -43,9 +42,8 @@ export function AccountActivityStats() {
     (async () => {
       setLoading(true);
       try {
-        const [userList, histList, guestList] = await Promise.all([
+        const [userList, guestList] = await Promise.all([
           pb.collection("users").getFullList<MinimalUser>({ fields: "id,role,last_login" }),
-          pb.collection("employment_histories").getFullList<{ user: string }>({ fields: "user" }),
           pb.collection("guest_sessions").getFullList<{ session_id: string; visited_at: string }>({
             fields: "session_id,visited_at",
             sort: "-visited_at"
@@ -53,7 +51,6 @@ export function AccountActivityStats() {
         ]);
         if (!alive) return;
         setUsers(userList);
-        setWorkerUserIds(new Set(histList.map((h) => h.user)));
         setGuestSessions(guestList);
       } catch (e: any) {
         if (alive) toast.error(e?.message || "Không tải được thống kê tài khoản");
@@ -120,7 +117,7 @@ export function AccountActivityStats() {
       guests: { total: uniqueGuestSessions.size, active: uniqueGuestSessions.size },
       dailyData,
     };
-  }, [users, workerUserIds, from, to, guestSessions]);
+  }, [users, from, to, guestSessions]);
 
   if (loading) {
     return (
@@ -238,17 +235,18 @@ function LineChart({ data }: { data: Array<{ day: string; users: number; guests:
 
   const maxValue = Math.max(...data.map((d) => Math.max(d.users, d.guests)), 1);
   const chartHeight = 120;
+  const chartPadding = 5; // Padding để line không bị tràn
 
-  // Tính toán điểm cho đường line
+  // Tính toán điểm cho đường line với padding
   const userPoints = data.map((d, i) => {
-    const x = (i / (data.length - 1 || 1)) * 100;
-    const y = chartHeight - (d.users / maxValue) * chartHeight;
+    const x = chartPadding + (i / (data.length - 1 || 1)) * (100 - 2 * chartPadding);
+    const y = chartPadding + (chartHeight - chartPadding * 2) * (1 - d.users / maxValue);
     return { x, y, value: d.users };
   });
 
   const guestPoints = data.map((d, i) => {
-    const x = (i / (data.length - 1 || 1)) * 100;
-    const y = chartHeight - (d.guests / maxValue) * chartHeight;
+    const x = chartPadding + (i / (data.length - 1 || 1)) * (100 - 2 * chartPadding);
+    const y = chartPadding + (chartHeight - chartPadding * 2) * (1 - d.guests / maxValue);
     return { x, y, value: d.guests };
   });
 
@@ -270,17 +268,17 @@ function LineChart({ data }: { data: Array<{ day: string; users: number; guests:
       <div className="relative" style={{ height: chartHeight + 20 }}>
         <svg
           viewBox={`0 0 100 ${chartHeight}`}
-          className="w-full"
-          preserveAspectRatio="none"
+          className="w-full overflow-visible"
+          preserveAspectRatio="xMidYMid meet"
         >
           {/* Grid lines */}
           {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
             <line
               key={ratio}
-              x1="0"
-              y1={chartHeight * ratio}
-              x2="100"
-              y2={chartHeight * ratio}
+              x1={chartPadding}
+              y1={chartPadding + (chartHeight - chartPadding * 2) * ratio}
+              x2={100 - chartPadding}
+              y2={chartPadding + (chartHeight - chartPadding * 2) * ratio}
               stroke="currentColor"
               strokeWidth="0.2"
               className="text-border"
@@ -331,15 +329,15 @@ function LineChart({ data }: { data: Array<{ day: string; users: number; guests:
         </svg>
 
         {/* Y-axis labels */}
-        <div className="absolute left-0 top-0 flex h-full flex-col justify-between text-[9px] text-muted-foreground" style={{ transform: 'translateX(-100%)' }}>
-          <span className="pr-1">{maxValue}</span>
-          <span className="pr-1">{Math.round(maxValue * 0.5)}</span>
-          <span className="pr-1">0</span>
+        <div className="absolute left-0 top-0 flex h-full flex-col justify-between py-1 text-[9px] text-muted-foreground" style={{ transform: 'translateX(-100%)', paddingRight: '4px' }}>
+          <span>{maxValue}</span>
+          <span>{Math.round(maxValue * 0.5)}</span>
+          <span>0</span>
         </div>
       </div>
 
       {/* X-axis labels */}
-      <div className="flex justify-between text-[9px] text-muted-foreground">
+      <div className="flex justify-between px-1 text-[9px] text-muted-foreground">
         {data.map((d, i) => {
           if (i % labelStep !== 0 && i !== data.length - 1) return null;
           return <span key={i}>{formatDate(d.day)}</span>;
