@@ -84,6 +84,7 @@ type ChatMessage = {
   room?: string;
   content: string;
   created: string;
+  is_anonymous?: boolean;
   expand?: { user?: ChatUser };
 };
 
@@ -1087,6 +1088,7 @@ function RoomChatView({
         user: user.id,
         room: room.id,
         content: text,
+        is_anonymous: isAnonymous,
       });
 
       // Thêm tin nhắn vào UI ngay lập tức (Optimistic UI)
@@ -1235,9 +1237,11 @@ function RoomChatView({
                       {!mine && (
                         <div className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
                           <span className="font-medium text-foreground">
-                            {author?.full_name || author?.username || "Ẩn danh"}
+                            {m.is_anonymous
+                              ? "Ẩn danh"
+                              : (author?.full_name || author?.username || "Ẩn danh")}
                           </span>
-                          {author?.role === "admin" && (
+                          {!m.is_anonymous && author?.role === "admin" && (
                             <>
                               <span>·</span>
                               <span>Admin</span>
@@ -1358,6 +1362,17 @@ function RoomChatView({
                     className="h-10 w-10 rounded-full"
                   >
                     <SmilePlus className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant={isAnonymous ? "default" : "outline"}
+                    onClick={toggleAnonymous}
+                    aria-label={isAnonymous ? "Đang ẩn danh" : "Hiện họ tên"}
+                    className="h-10 w-10 rounded-full"
+                    title={isAnonymous ? "Đang gửi ẩn danh - Click để hiện họ tên" : "Đang hiện họ tên - Click để ẩn danh"}
+                  >
+                    <UserRound className="h-4 w-4" />
                   </Button>
                   <Textarea
                     ref={inputRef}
