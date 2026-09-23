@@ -204,6 +204,16 @@ export function LoginRequiredDialog({
               Đăng ký
             </Link>
           </p>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+          >
+            Dùng không cần đăng nhập
+          </Button>
         </form>
       </DialogContent>
     </Dialog>

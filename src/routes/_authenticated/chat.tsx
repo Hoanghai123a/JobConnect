@@ -64,6 +64,14 @@ type ChatRoomMember = {
   user: string;
 };
 
+type ChatRoomBan = {
+  id: string;
+  room: string;
+  user: string;
+  banned_by: string;
+  created: string;
+};
+
 type JoinRequest = {
   id: string;
   room: string;
@@ -870,11 +878,13 @@ function RoomChatView({
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
+  const [roomBans, setRoomBans] = useState<ChatRoomBan[]>([]);
   const [isAnonymous, setIsAnonymous] = useState(() => {
     // Load từ localStorage, mặc định là false (hiện họ tên)
     const saved = localStorage.getItem("chat_anonymous_mode");
     return saved === "true";
   });
+  const [showAnonymousToast, setShowAnonymousToast] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -886,6 +896,10 @@ function RoomChatView({
     const newValue = !isAnonymous;
     setIsAnonymous(newValue);
     localStorage.setItem("chat_anonymous_mode", String(newValue));
+
+    // Hiển thị toast
+    setShowAnonymousToast(true);
+    setTimeout(() => setShowAnonymousToast(false), 1500);
   };
 
   const fetchMessagePage = useCallback(
@@ -961,6 +975,24 @@ function RoomChatView({
   useEffect(() => {
     void loadInitial();
   }, [loadInitial]);
+
+  // Load danh sách bans trong phòng
+  useEffect(() => {
+    if (isGuest || !isAdmin) return;
+
+    const loadBans = async () => {
+      try {
+        const bans = await pb.collection("chat_room_bans").getFullList<ChatRoomBan>({
+          filter: `room="${room.id}"`,
+        });
+        setRoomBans(bans);
+      } catch (error) {
+        console.error("[Chat] Failed to load room bans:", error);
+      }
+    };
+
+    void loadBans();
+  }, [isGuest, isAdmin, room.id]);
 
   // Realtime subscription để nhận tin nhắn mới
   useEffect(() => {
@@ -1117,8 +1149,6 @@ function RoomChatView({
   };
 
   const deleteMessage = async (id: string) => {
-    if (!confirm("Xoá tin nhắn này?")) return;
-
     // Guest không thể xóa tin nhắn
     if (isGuest) {
       toast.error("Vui lòng đăng nhập để xóa tin nhắn");
@@ -1128,6 +1158,7 @@ function RoomChatView({
     try {
       await pb.collection("group_chat_messages").delete(id);
       setActionMessage(null);
+      toast.success("Đã xóa tin nhắn");
       // Realtime subscription sẽ tự động xóa tin nhắn khỏi danh sách
     } catch (error) {
       toast.error(getErrorMessage(error, "Lỗi xoá tin nhắn"));
@@ -1142,6 +1173,49 @@ function RoomChatView({
       // Không cần refresh - chỉ thay đổi trạng thái user
     } catch (error) {
       toast.error(getErrorMessage(error, "Lỗi chặn user"));
+    }
+  };
+
+  const banUserFromRoom = async (targetUserId: string) => {
+    try {
+      await pb.collection("chat_room_bans").create({
+        room: room.id,
+        user: targetUserId,
+        banned_by: user?.id,
+      });
+      toast.success("Đã chặn user khỏi phòng");
+      setActionMessage(null);
+
+      // Reload bans list
+      const bans = await pb.collection("chat_room_bans").getFullList<ChatRoomBan>({
+        filter: `room="${room.id}"`,
+      });
+      setRoomBans(bans);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Lỗi chặn user khỏi phòng"));
+    }
+  };
+
+  const unbanUserFromRoom = async (targetUserId: string) => {
+    try {
+      // Tìm ban record
+      const bans = await pb.collection("chat_room_bans").getFullList({
+        filter: `room="${room.id}" && user="${targetUserId}"`,
+      });
+
+      if (bans.length > 0) {
+        await pb.collection("chat_room_bans").delete(bans[0].id);
+        toast.success("Đã bỏ chặn user khỏi phòng");
+        setActionMessage(null);
+
+        // Reload bans list
+        const updatedBans = await pb.collection("chat_room_bans").getFullList<ChatRoomBan>({
+          filter: `room="${room.id}"`,
+        });
+        setRoomBans(updatedBans);
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Lỗi bỏ chặn user"));
     }
   };
 
@@ -1289,28 +1363,66 @@ function RoomChatView({
                       </button>
 
                       {isAdmin && author && actionOpen && (
-                        <div className="flex items-center gap-1 rounded-full border border-border bg-background p-1 shadow-soft">
-                          {author.id !== user?.id && (
+                        <div className="space-y-1.5 rounded-lg border border-border bg-background p-2 shadow-soft">
+                          {m.is_anonymous && author.id !== user?.id && (
+                            <div className="flex items-center gap-1.5 border-b border-border pb-1.5 text-xs text-muted-foreground">
+                              <span className="font-medium text-foreground">
+                                {author.full_name || author.username || "Không rõ"}
+                              </span>
+                              <span>·</span>
+                              <span className="italic text-amber-600">Ẩn danh</span>
+                              {author.role === "admin" && (
+                                <>
+                                  <span>·</span>
+                                  <span>Admin</span>
+                                </>
+                              )}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1">
+                            {author.id !== user?.id && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => void toggleBlock(author)}
+                                >
+                                  <ShieldCheck className="h-3.5 w-3.5" />
+                                  {author.chat_blocked ? "Bỏ chặn toàn cục" : "Chặn toàn cục"}
+                                </Button>
+                                {roomBans.some((ban) => ban.user === author.id) ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => void unbanUserFromRoom(author.id)}
+                                  >
+                                    <ShieldCheck className="h-3.5 w-3.5" />
+                                    Bỏ chặn khỏi phòng
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => void banUserFromRoom(author.id)}
+                                  >
+                                    <ShieldCheck className="h-3.5 w-3.5" />
+                                    Chặn khỏi phòng
+                                  </Button>
+                                )}
+                              </>
+                            )}
                             <Button
                               size="sm"
-                              variant="outline"
-                              onClick={() => void toggleBlock(author)}
+                              variant="destructive"
+                              onClick={() => void deleteMessage(m.id)}
                             >
-                              <ShieldCheck className="h-3.5 w-3.5" />
-                              {author.chat_blocked ? "Bỏ chặn" : "Chặn"}
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Xóa
                             </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => void deleteMessage(m.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Xóa
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => setActionMessage(null)}>
-                            Đóng
-                          </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setActionMessage(null)}>
+                              Đóng
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1363,22 +1475,28 @@ function RoomChatView({
                   >
                     <SmilePlus className="h-4 w-4" />
                   </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant={isAnonymous ? "default" : "outline"}
-                    onClick={toggleAnonymous}
-                    aria-label={isAnonymous ? "Đang ẩn danh" : "Hiện họ tên"}
-                    className="h-10 w-10 rounded-full"
-                    title={isAnonymous ? "Đang gửi ẩn danh - Click để hiện họ tên" : "Đang hiện họ tên - Click để ẩn danh"}
-                  >
-                    <UserRound className="h-4 w-4" />
-                  </Button>
+                  <div className="relative">
+                    {showAnonymousToast && (
+                      <div className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 animate-in fade-in slide-in-from-bottom-2 zoom-in-95 duration-300 whitespace-nowrap rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background shadow-lg">
+                        {isAnonymous ? "Đang ẩn danh" : "Hiện họ tên"}
+                      </div>
+                    )}
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant={isAnonymous ? "default" : "outline"}
+                      onClick={toggleAnonymous}
+                      aria-label={isAnonymous ? "Đang ẩn danh" : "Hiện họ tên"}
+                      className="h-10 w-10 rounded-full"
+                      title={isAnonymous ? "Đang gửi ẩn danh - Click để hiện họ tên" : "Đang hiện họ tên - Click để ẩn danh"}
+                    >
+                      <UserRound className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <Textarea
                     ref={inputRef}
                     rows={1}
                     value={content}
-                    onFocus={() => setShowEmojis(true)}
                     onChange={(e) => setContent(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.altKey) {
