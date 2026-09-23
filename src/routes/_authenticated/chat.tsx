@@ -885,6 +885,7 @@ function RoomChatView({
     return saved === "true";
   });
   const [showAnonymousToast, setShowAnonymousToast] = useState(false);
+  const [messageTimeVisible, setMessageTimeVisible] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -945,6 +946,20 @@ function RoomChatView({
     setLoading(true);
     try {
       console.log("[Chat] loadInitial started for room:", room.id);
+
+      // Kiểm tra xem user có bị ban khỏi phòng này không
+      if (!isGuest && user && !isAdmin) {
+        const bans = await pb.collection("chat_room_bans").getFullList({
+          filter: `room="${room.id}" && user="${user.id}"`,
+        });
+
+        if (bans.length > 0) {
+          toast.error("Bạn đã bị chặn khỏi phòng này");
+          onBack();
+          return;
+        }
+      }
+
       const pageData = await fetchMessagePage(1);
       console.log("[Chat] fetchMessagePage returned:", pageData);
       if (!isGuest) await onRefreshMe();
@@ -993,6 +1008,51 @@ function RoomChatView({
 
     void loadBans();
   }, [isGuest, isAdmin, room.id]);
+
+  // Realtime subscription để theo dõi bans và đá user ra khỏi phòng
+  useEffect(() => {
+    if (isGuest || !user) return;
+
+    console.log("[Chat] Setting up ban monitoring for user:", user.id);
+
+    let unsubscribe: (() => void) | null = null;
+
+    pb.collection("chat_room_bans")
+      .subscribe("*", (event) => {
+        console.log("[Chat] Ban event:", event.action, event.record);
+
+        // Kiểm tra nếu user này bị ban khỏi phòng này
+        if (
+          event.action === "create" &&
+          event.record.room === room.id &&
+          event.record.user === user.id
+        ) {
+          toast.error("Bạn đã bị chặn khỏi phòng này");
+          // Đá user ra khỏi phòng
+          onBack();
+        }
+
+        // Cập nhật danh sách bans cho admin
+        if (isAdmin) {
+          pb.collection("chat_room_bans")
+            .getFullList<ChatRoomBan>({
+              filter: `room="${room.id}"`,
+            })
+            .then(setRoomBans)
+            .catch((error) => console.error("[Chat] Failed to refresh bans:", error));
+        }
+      })
+      .then((unsub) => {
+        unsubscribe = unsub;
+      });
+
+    return () => {
+      console.log("[Chat] Cleaning up ban monitoring");
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [isGuest, user, room.id, isAdmin, onBack]);
 
   // Realtime subscription để nhận tin nhắn mới
   useEffect(() => {
@@ -1111,6 +1171,12 @@ function RoomChatView({
 
     if (!isAdmin && blocked) {
       toast.error("Bạn đang bị chặn trong trò chuyện");
+      return;
+    }
+
+    // Kiểm tra có bị chặn khỏi phòng này không
+    if (!isAdmin && user && roomBans.some((ban) => ban.user === user.id)) {
+      toast.error("Bạn đã bị chặn khỏi phòng này");
       return;
     }
 
@@ -1330,6 +1396,9 @@ function RoomChatView({
                       )}
                       <button
                         type="button"
+                        onClick={() => {
+                          setMessageTimeVisible(messageTimeVisible === m.id ? null : m.id);
+                        }}
                         onPointerDown={() => startPress(m)}
                         onPointerUp={stopPress}
                         onPointerCancel={stopPress}
@@ -1349,17 +1418,19 @@ function RoomChatView({
                         <div className="whitespace-pre-wrap text-[14px] leading-relaxed">
                           {m.content}
                         </div>
-                        <div
-                          className={cn(
-                            "mt-1 flex items-center gap-1 text-[10px]",
-                            mine
-                              ? "justify-end text-primary-foreground/70"
-                              : "text-muted-foreground",
-                          )}
-                        >
-                          <Clock3 className="h-3 w-3" />
-                          {time}
-                        </div>
+                        {messageTimeVisible === m.id && (
+                          <div
+                            className={cn(
+                              "mt-1 flex items-center gap-1 text-[10px]",
+                              mine
+                                ? "justify-end text-primary-foreground/70"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            <Clock3 className="h-3 w-3" />
+                            {time}
+                          </div>
+                        )}
                       </button>
 
                       {isAdmin && author && actionOpen && (
