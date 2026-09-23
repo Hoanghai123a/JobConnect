@@ -55,6 +55,7 @@ import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authen
 import { Route as AuthenticatedAdminManageRouteImport } from './routes/_authenticated/admin/manage'
 import { Route as AuthenticatedAdminLogsRouteImport } from './routes/_authenticated/admin/logs'
 import { Route as AuthenticatedAdminImportsRouteImport } from './routes/_authenticated/admin/imports'
+import { Route as AuthenticatedAdminChatBansRouteImport } from './routes/_authenticated/admin/chat-bans'
 import { Route as AuthenticatedAdminApprovalsRouteImport } from './routes/_authenticated/admin/approvals'
 import { Route as AuthenticatedAdminAccountsRouteImport } from './routes/_authenticated/admin/accounts'
 import { Route as AuthenticatedAdminAccountsIndexRouteImport } from './routes/_authenticated/admin/accounts.index'
@@ -302,6 +303,12 @@ const AuthenticatedAdminImportsRoute =
     path: '/admin/imports',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedAdminChatBansRoute =
+  AuthenticatedAdminChatBansRouteImport.update({
+    id: '/admin/chat-bans',
+    path: '/admin/chat-bans',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedAdminApprovalsRoute =
   AuthenticatedAdminApprovalsRouteImport.update({
     id: '/admin/approvals',
@@ -384,6 +391,7 @@ export interface FileRoutesByFullPath {
   '/api/uid-counter': typeof ApiUidCounterRoute
   '/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
+  '/admin/chat-bans': typeof AuthenticatedAdminChatBansRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
   '/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/admin/manage': typeof AuthenticatedAdminManageRoute
@@ -439,6 +447,7 @@ export interface FileRoutesByTo {
   '/work': typeof AuthenticatedWorkRoute
   '/api/uid-counter': typeof ApiUidCounterRoute
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
+  '/admin/chat-bans': typeof AuthenticatedAdminChatBansRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
   '/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/admin/manage': typeof AuthenticatedAdminManageRoute
@@ -497,6 +506,7 @@ export interface FileRoutesById {
   '/api/uid-counter': typeof ApiUidCounterRoute
   '/_authenticated/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/_authenticated/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
+  '/_authenticated/admin/chat-bans': typeof AuthenticatedAdminChatBansRoute
   '/_authenticated/admin/imports': typeof AuthenticatedAdminImportsRoute
   '/_authenticated/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/_authenticated/admin/manage': typeof AuthenticatedAdminManageRoute
@@ -555,6 +565,7 @@ export interface FileRouteTypes {
     | '/api/uid-counter'
     | '/admin/accounts'
     | '/admin/approvals'
+    | '/admin/chat-bans'
     | '/admin/imports'
     | '/admin/logs'
     | '/admin/manage'
@@ -610,6 +621,7 @@ export interface FileRouteTypes {
     | '/work'
     | '/api/uid-counter'
     | '/admin/approvals'
+    | '/admin/chat-bans'
     | '/admin/imports'
     | '/admin/logs'
     | '/admin/manage'
@@ -667,6 +679,7 @@ export interface FileRouteTypes {
     | '/api/uid-counter'
     | '/_authenticated/admin/accounts'
     | '/_authenticated/admin/approvals'
+    | '/_authenticated/admin/chat-bans'
     | '/_authenticated/admin/imports'
     | '/_authenticated/admin/logs'
     | '/_authenticated/admin/manage'
@@ -1049,6 +1062,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminImportsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/admin/chat-bans': {
+      id: '/_authenticated/admin/chat-bans'
+      path: '/admin/chat-bans'
+      fullPath: '/admin/chat-bans'
+      preLoaderRoute: typeof AuthenticatedAdminChatBansRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/admin/approvals': {
       id: '/_authenticated/admin/approvals'
       path: '/admin/approvals'
@@ -1157,6 +1177,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedWorkRoute: typeof AuthenticatedWorkRoute
   AuthenticatedAdminAccountsRoute: typeof AuthenticatedAdminAccountsRouteWithChildren
   AuthenticatedAdminApprovalsRoute: typeof AuthenticatedAdminApprovalsRoute
+  AuthenticatedAdminChatBansRoute: typeof AuthenticatedAdminChatBansRoute
   AuthenticatedAdminImportsRoute: typeof AuthenticatedAdminImportsRoute
   AuthenticatedAdminLogsRoute: typeof AuthenticatedAdminLogsRoute
   AuthenticatedAdminManageRoute: typeof AuthenticatedAdminManageRoute
@@ -1185,6 +1206,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedWorkRoute: AuthenticatedWorkRoute,
   AuthenticatedAdminAccountsRoute: AuthenticatedAdminAccountsRouteWithChildren,
   AuthenticatedAdminApprovalsRoute: AuthenticatedAdminApprovalsRoute,
+  AuthenticatedAdminChatBansRoute: AuthenticatedAdminChatBansRoute,
   AuthenticatedAdminImportsRoute: AuthenticatedAdminImportsRoute,
   AuthenticatedAdminLogsRoute: AuthenticatedAdminLogsRoute,
   AuthenticatedAdminManageRoute: AuthenticatedAdminManageRoute,

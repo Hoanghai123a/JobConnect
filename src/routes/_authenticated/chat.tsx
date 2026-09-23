@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pb, type UserRecord } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
@@ -31,6 +31,7 @@ import {
   Plus,
   Search,
   Send,
+  Settings,
   ShieldCheck,
   SmilePlus,
   Trash2,
@@ -1329,6 +1330,18 @@ function RoomChatView({
             {`Đã tải ${stats.loaded}/${stats.total} tin`}
           </div>
         </div>
+        {isAdmin && (
+          <Link to="/admin/chat-bans">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 w-8 p-0"
+              title="Quản lý chặn"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          </Link>
+        )}
         <StatusChip tone={blocked ? "danger" : "success"}>{titleBadge}</StatusChip>
       </header>
       <main className="flex min-h-0 flex-1 flex-col gap-2 px-3 py-2">

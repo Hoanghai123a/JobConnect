@@ -4,29 +4,16 @@ import { pb } from "@/lib/pocketbase";
 import { useAuth } from "@/lib/auth";
 import { usePwaInstallPrompt } from "@/lib/pwa-install";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
-function normalizeUserPickerSearch(text: string) {
-  return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-}
 import { PageContainer } from "@/components/layout/PageContainer";
 import { IosInstallGuideDialog } from "@/components/layout/IosInstallGuideDialog";
 import { GuideDocumentsTab } from "@/components/guides/GuideDocumentsTab";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DataLoadingState } from "@/components/ui/data-loading-state";
-import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -36,12 +23,6 @@ import {
 } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
-import {
-  fetchEmploymentHistories,
-  findActiveEmploymentByUser,
-  getCurrentEmploymentHistory,
-} from "@/lib/employment";
 import { toast } from "@/lib/toast";
 import {
   AlertTriangle,
@@ -49,7 +30,6 @@ import {
   BookOpen,
   Briefcase,
   Calendar,
-  ChevronDown,
   Clock,
   Download,
   Pencil,
@@ -57,8 +37,6 @@ import {
   Smartphone,
   Trash2,
   Send,
-  Users,
-  Factory as FactoryIcon,
   FileText,
   FolderOpen,
   GraduationCap,
@@ -68,7 +46,6 @@ import {
   Map as MapIcon,
   Phone,
   ShieldCheck,
-  User as UserIcon,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/guides")({
@@ -87,21 +64,12 @@ const GUIDE_ICONS = {
   Clock,
   Banknote,
   AlertTriangle,
-  Users,
   Map: MapIcon,
   Mail,
   HelpCircle,
 } as const;
 
 const ICONS = Object.keys(GUIDE_ICONS) as Array<keyof typeof GUIDE_ICONS>;
-
-type TargetType = "all" | "factories" | "users";
-
-type MultiSelectOption = {
-  value: string;
-  label: string;
-  description?: string;
-};
 
 interface Guide {
   id: string;
@@ -110,149 +78,22 @@ interface Guide {
   content: string;
   font_size: number;
   order: number;
-  target_type?: TargetType;
-  target_factories?: string[];
-  target_users?: string[];
-}
-
-const TARGET_META: Record<TargetType, { label: string; icon: any }> = {
-  all: { label: "Tất cả", icon: Users },
-  factories: { label: "Theo nhà máy", icon: FactoryIcon },
-  users: { label: "Cá nhân", icon: UserIcon },
-};
-
-function MultiSelectDropdown({
-  options,
-  selected,
-  onChange,
-  placeholder,
-  searchPlaceholder,
-  emptyText,
-}: {
-  options: MultiSelectOption[];
-  selected: string[];
-  onChange: (values: string[]) => void;
-  placeholder: string;
-  searchPlaceholder: string;
-  emptyText: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const debouncedQuery = useDebouncedSearch(query);
-  const selectedSet = useMemo(() => new Set(selected), [selected]);
-  const selectedOptions = options.filter((option) => selectedSet.has(option.value));
-  const summary =
-    selectedOptions.length === 0
-      ? placeholder
-      : selectedOptions.length <= 2
-        ? selectedOptions.map((option) => option.label).join(", ")
-        : `${selectedOptions.length} đã chọn`;
-
-  const toggle = (value: string) => {
-    const next = new Set(selected);
-    if (next.has(value)) next.delete(value);
-    else next.add(value);
-    onChange(Array.from(next));
-  };
-
-  const filteredOptions = useMemo(() => {
-    const keyword = normalizeUserPickerSearch(debouncedQuery);
-    if (!keyword) return options;
-    return options.filter((option) =>
-      normalizeUserPickerSearch(`${option.label} ${option.description || ""}`).includes(keyword),
-    );
-  }, [debouncedQuery, options]);
-
-  return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) setQuery("");
-      }}
-    >
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-11 w-full justify-between gap-2 rounded-xl bg-white px-3 text-left font-normal text-slate-900"
-        >
-          <span className={cn("truncate", selectedOptions.length === 0 && "text-muted-foreground")}>
-            {summary}
-          </span>
-          <ChevronDown className="h-4 w-4 flex-none text-muted-foreground" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-[min(calc(100vw-3rem),24rem)] p-0">
-        <Command shouldFilter={false}>
-          <CommandInput placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
-          <CommandList className="max-h-64">
-            <CommandEmpty>{emptyText}</CommandEmpty>
-            {filteredOptions.map((option) => {
-              const checked = selectedSet.has(option.value);
-              return (
-                <CommandItem
-                  key={option.value}
-                  value={`${option.label} ${option.description || ""}`}
-                  onSelect={() => toggle(option.value)}
-                  className="items-center gap-2 py-2"
-                >
-                  <Checkbox checked={checked} className="pointer-events-none" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{option.label}</div>
-                    {option.description && (
-                      <div className="truncate text-[11px] text-muted-foreground">
-                        {option.description}
-                      </div>
-                    )}
-                  </div>
-                </CommandItem>
-              );
-            })}
-          </CommandList>
-          {options.length > 0 && (
-            <div className="flex items-center justify-between gap-2 border-t p-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2 text-xs"
-                onClick={() => onChange(options.map((option) => option.value))}
-              >
-                Chọn tất cả
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2 text-xs text-muted-foreground"
-                onClick={() => onChange([])}
-              >
-                Bỏ chọn tất cả
-              </Button>
-            </div>
-          )}
-        </Command>
-      </PopoverContent>
-    </Popover>
-  );
+  target_type?: string;
 }
 
 function GuidesPage() {
-  const { user, isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<"guides" | "documents">("guides");
   const [items, setItems] = useState<Guide[]>([]);
   const [loading, setLoading] = useState(true);
-  const [factories, setFactories] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [currentFactoryName, setCurrentFactoryName] = useState("");
   const [editing, setEditing] = useState<Guide | null>(null);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedSearch(search);
   const [reading, setReading] = useState<Guide | null>(null);
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
-  const { installPrompt, installApp: installPwaApp, isAndroid, isIos } = usePwaInstallPrompt();
+  const { installPrompt, installApp: installPwaApp, isIos } = usePwaInstallPrompt();
+  const [desktopGuideOpen, setDesktopGuideOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -265,71 +106,10 @@ function GuidesPage() {
       setLoading(false);
     }
   };
-  const loadAdminRefs = async () => {
-    if (!isAdmin) return;
-    try {
-      const f = await pb.collection("factories").getList(1, 300, { sort: "name" });
-      setFactories(f.items as any);
-    } catch {
-      /* optional */
-    }
-    try {
-      const [u, histories] = await Promise.all([
-        pb.collection("users").getFullList({ sort: "-created" }),
-        fetchEmploymentHistories(),
-      ]);
-      const historiesByUser = new Map<string, typeof histories>();
-      for (const history of histories) {
-        const list = historiesByUser.get(history.user) || [];
-        list.push(history);
-        historiesByUser.set(history.user, list);
-      }
-      const workerUsers = (u as any[])
-        .filter((item) => item.role !== "admin")
-        .map((item) => {
-          const employment = getCurrentEmploymentHistory(historiesByUser.get(item.id) || []);
-          return {
-            ...item,
-            employeeCode: employment?.employee_code || "",
-            factoryName: employment?.expand?.factory?.name || "",
-          };
-        })
-        .sort((a, b) =>
-          String(a.full_name || a.username || a.phone || "").localeCompare(
-            String(b.full_name || b.username || b.phone || ""),
-            "vi",
-          ),
-        );
-      setUsers(workerUsers);
-    } catch (e: any) {
-      setUsers([]);
-      toast.error(e?.message || "Không tải được danh sách user");
-    }
-  };
+
   useEffect(() => {
     load();
-    loadAdminRefs(); /* eslint-disable-next-line */
-  }, [isAdmin]);
-
-  useEffect(() => {
-    if (!user?.id) {
-      setCurrentFactoryName("");
-      return;
-    }
-    let active = true;
-    findActiveEmploymentByUser(user.id)
-      .then((history) => {
-        if (active) setCurrentFactoryName(history?.expand?.factory?.name || "");
-      })
-      .catch(() => {
-        if (active) setCurrentFactoryName("");
-      });
-    return () => {
-      active = false;
-    };
-  }, [user?.id]);
-
-  const [desktopGuideOpen, setDesktopGuideOpen] = useState(false);
+  }, []);
 
   const installApp = async () => {
     if (installPrompt) {
@@ -349,18 +129,12 @@ function GuidesPage() {
       font_size: 14,
       order: items.length,
       target_type: "all",
-      target_factories: [],
-      target_users: [],
     });
     setOpen(true);
   };
+
   const openEdit = (g: Guide) => {
-    setEditing({
-      ...g,
-      target_type: g.target_type || "all",
-      target_factories: g.target_factories || [],
-      target_users: g.target_users || [],
-    });
+    setEditing(g);
     setOpen(true);
   };
 
@@ -378,8 +152,6 @@ function GuidesPage() {
         font_size: editing.font_size,
         order: editing.order,
         target_type: editing.target_type || "all",
-        target_factories: editing.target_type === "factories" ? editing.target_factories || [] : [],
-        target_users: editing.target_type === "users" ? editing.target_users || [] : [],
       };
       if (editing.id) await pb.collection("guides").update(editing.id, payload);
       else await pb.collection("guides").create(payload);
@@ -397,33 +169,14 @@ function GuidesPage() {
     load();
   };
 
-  /* Filter visible guides for current user */
-  const visible = useMemo(() => {
-    if (isAdmin) return items;
-    return items.filter((g) => {
-      const t = g.target_type || "all";
-      if (t === "all") return true;
-      if (t === "factories") {
-        const list = g.target_factories || [];
-        if (!list.length) return false;
-        return list.includes(currentFactoryName);
-      }
-      if (t === "users") {
-        const list = g.target_users || [];
-        return list.includes(user?.id || "");
-      }
-      return false;
-    });
-  }, [items, isAdmin, user?.id, currentFactoryName]);
-
   const filtered = useMemo(
     () =>
-      visible.filter(
+      items.filter(
         (g) =>
           !debouncedSearch ||
           (g.title + " " + g.content).toLowerCase().includes(debouncedSearch.toLowerCase()),
       ),
-    [visible, debouncedSearch],
+    [items, debouncedSearch],
   );
 
   return (
@@ -515,8 +268,6 @@ function GuidesPage() {
             <div className="grid grid-cols-2 gap-2.5">
               {filtered.map((g) => {
                 const Icon = GUIDE_ICONS[g.icon as keyof typeof GUIDE_ICONS] || BookOpen;
-                const t = (g.target_type || "all") as TargetType;
-                const TIcon = TARGET_META[t].icon;
                 return (
                   <div key={g.id} className="relative">
                     <button
@@ -533,17 +284,6 @@ function GuidesPage() {
                         <div className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
                           {g.content}
                         </div>
-                        {isAdmin && (
-                          <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                            <TIcon className="h-3 w-3" /> {TARGET_META[t].label}
-                            {t === "factories" && g.target_factories?.length
-                              ? ` (${g.target_factories.length})`
-                              : ""}
-                            {t === "users" && g.target_users?.length
-                              ? ` (${g.target_users.length})`
-                              : ""}
-                          </div>
-                        )}
                       </div>
                     </button>
                     {isAdmin && (
@@ -695,84 +435,6 @@ function GuidesPage() {
                   value={[editing.font_size]}
                   onValueChange={(v) => setEditing({ ...editing, font_size: v[0] })}
                 />
-              </div>
-
-              {/* Target audience */}
-              <div className="space-y-2 rounded-xl border bg-muted/40 p-3">
-                <Label className="flex items-center gap-1.5">
-                  <Send className="h-3.5 w-3.5" /> Gửi tới
-                </Label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {(Object.keys(TARGET_META) as TargetType[]).map((k) => {
-                    const M = TARGET_META[k];
-                    const active = (editing.target_type || "all") === k;
-                    const I = M.icon;
-                    return (
-                      <button
-                        key={k}
-                        type="button"
-                        onClick={() => setEditing({ ...editing, target_type: k })}
-                        className={`flex flex-col items-center gap-1 rounded-lg border p-2 text-[11px] font-medium transition ${active ? "border-primary bg-primary/10 text-primary" : "bg-card text-muted-foreground"}`}
-                      >
-                        <I className="h-4 w-4" />
-                        {M.label}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {editing.target_type === "factories" && (
-                  <div className="space-y-1.5">
-                    <div className="text-[11px] text-muted-foreground">
-                      Chọn nhà máy ({editing.target_factories?.length || 0})
-                    </div>
-                    {factories.length === 0 ? (
-                      <div className="text-[11px] text-muted-foreground">Chưa có nhà máy nào.</div>
-                    ) : (
-                      <MultiSelectDropdown
-                        options={factories.map((f) => ({
-                          value: f.name,
-                          label: f.name,
-                        }))}
-                        selected={editing.target_factories || []}
-                        onChange={(values) => setEditing({ ...editing, target_factories: values })}
-                        placeholder="Chọn nhà máy"
-                        searchPlaceholder="Tìm nhà máy..."
-                        emptyText="Không tìm thấy nhà máy"
-                      />
-                    )}
-                  </div>
-                )}
-
-                {editing.target_type === "users" && (
-                  <div className="space-y-1.5">
-                    <div className="text-[11px] text-muted-foreground">
-                      Chọn người nhận ({editing.target_users?.length || 0})
-                    </div>
-                    {users.length === 0 ? (
-                      <div className="text-[11px] text-muted-foreground">Chưa có user nào.</div>
-                    ) : (
-                      <MultiSelectDropdown
-                        options={users.map((u) => ({
-                          value: u.id,
-                          label: u.full_name || u.username || u.phone || "Chưa có tên",
-                          description: `${u.factoryName || "chưa có lịch sử đi làm"}${u.employeeCode ? ` · ${u.employeeCode}` : ""}`,
-                        }))}
-                        selected={editing.target_users || []}
-                        onChange={(values) => setEditing({ ...editing, target_users: values })}
-                        placeholder="Chọn người nhận"
-                        searchPlaceholder="Tìm theo tên, nhà máy..."
-                        emptyText="Không tìm thấy người nhận"
-                      />
-                    )}
-                  </div>
-                )}
-
-                {editing.target_type === "all" && (
-                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <StatusChip tone="success">All</StatusChip> Hiển thị cho toàn bộ người lao động.
-                  </div>
-                )}
               </div>
 
               <div className="space-y-1">
