@@ -35,6 +35,7 @@ import {
   SmilePlus,
   Trash2,
   UserPlus,
+  UserRound,
   Users,
   X,
 } from "lucide-react";
@@ -177,7 +178,17 @@ function GroupChatPage() {
 
   const loadRooms = useCallback(async () => {
     if (isGuest) {
-      setRooms([GUEST_CHAT_ROOM]);
+      try {
+        // Guest có thể xem tất cả phòng có is_default = true
+        const res = await pb.collection("chat_rooms").getFullList({
+          filter: 'is_default = true',
+          sort: "name"
+        });
+        setRooms(res as unknown as ChatRoom[]);
+      } catch (error) {
+        // Fallback về phòng hardcode nếu lỗi
+        setRooms([GUEST_CHAT_ROOM]);
+      }
       return;
     }
     try {
@@ -858,12 +869,23 @@ function RoomChatView({
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
+  const [isAnonymous, setIsAnonymous] = useState(() => {
+    // Load từ localStorage, mặc định là false (hiện họ tên)
+    const saved = localStorage.getItem("chat_anonymous_mode");
+    return saved === "true";
+  });
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const pressTimerRef = useRef<number | null>(null);
   const pageRef = useRef(1);
   const isGuest = !user;
+
+  const toggleAnonymous = () => {
+    const newValue = !isAnonymous;
+    setIsAnonymous(newValue);
+    localStorage.setItem("chat_anonymous_mode", String(newValue));
+  };
 
   const fetchMessagePage = useCallback(
     async (pageNo: number) => {
