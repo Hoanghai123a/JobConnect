@@ -5,7 +5,6 @@ import { useAuth } from "@/lib/auth";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { markSeen, getSeen } from "@/lib/seen";
-import { GUEST_LOCAL_OWNER_ID, readGuestStorage, writeGuestStorage } from "@/lib/guest-storage";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +26,7 @@ import {
   Check,
   ChevronLeft,
   Clock3,
+  CornerDownLeft,
   MessageSquareText,
   Plus,
   Search,
@@ -89,24 +89,16 @@ type ChatMessage = {
 const PAGE_SIZE = 50;
 const QUICK_EMOJIS = ["😀", "😂", "❤️", "👍", "🙏", "🎉", "😢", "😮", "🔥", "✅"];
 const GUEST_CHAT_ROOM: ChatRoom = {
-  id: "guest-offline-room",
-  name: "Trò chuyện Offline",
-  description: "Tin nhắn chỉ lưu trên thiết bị này.",
+  id: "q7g5csz1o870d2y",
+  name: "Trò chuyện chung",
+  description: "Xem tin nhắn công khai. Đăng nhập để chat.",
   is_default: true,
 };
-const GUEST_CHAT_STORAGE_KEY = "jobconnect.guestChatMessages.v1";
+// ID của phòng mặc định trên server để Guest có thể xem
+const DEFAULT_ROOM_ID = "q7g5csz1o870d2y";
 
 function sortMessages(items: ChatMessage[]) {
   return [...items].sort((a, b) => new Date(a.created).getTime() - new Date(b.created).getTime());
-}
-
-function readGuestChatMessages(roomId?: string) {
-  const items = readGuestStorage<ChatMessage[]>(GUEST_CHAT_STORAGE_KEY, []);
-  return sortMessages(roomId ? items.filter((item) => item.room === roomId) : items);
-}
-
-function writeGuestChatMessages(items: ChatMessage[]) {
-  writeGuestStorage(GUEST_CHAT_STORAGE_KEY, items.slice(-200));
 }
 
 function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]) {
@@ -146,11 +138,11 @@ function GroupChatPage() {
     mode: "create" | "edit";
     room?: ChatRoom;
   }>(null);
-  const [roomForm, setRoomForm] = useState<{ name: string; description: string }>({
+  const [roomForm, setRoomForm] = useState<{ name: string; description: string; is_default: boolean }>({
     name: "",
     description: "",
+    is_default: false,
   });
-  const metaRefreshInFlightRef = useRef(false);
 
   const activeRoom = useMemo(
     () => rooms.find((r) => r.id === activeRoomId) || null,
@@ -250,33 +242,46 @@ function GroupChatPage() {
     loadAll();
   }, [loadAll]);
 
+  // Realtime subscriptions thay cho polling
   useEffect(() => {
-    const refreshMeta = async () => {
-      if (document.visibilityState !== "visible" || !window.navigator.onLine) return;
-      if (metaRefreshInFlightRef.current) return;
-      metaRefreshInFlightRef.current = true;
-      try {
-        await Promise.all([loadMemberships(), loadJoinRequests()]);
-      } finally {
-        metaRefreshInFlightRef.current = false;
-      }
+    if (isGuest) return;
+
+    // Subscribe chat_room_members
+    const unsubMembers = pb.collection("chat_room_members").subscribe("*", () => {
+      void loadMemberships();
+    });
+
+    // Subscribe chat_join_requests
+    const unsubRequests = pb.collection("chat_join_requests").subscribe("*", () => {
+      void loadJoinRequests();
+    });
+
+    return () => {
+      void unsubMembers.then((unsub) => unsub());
+      void unsubRequests.then((unsub) => unsub());
     };
-    const timer = window.setInterval(() => void refreshMeta(), 5000);
-    return () => window.clearInterval(timer);
-  }, [loadMemberships, loadJoinRequests]);
+  }, [isGuest, loadMemberships, loadJoinRequests]);
 
   const visibleRooms = useMemo(() => {
     if (isGuest) return rooms;
     if (isAdmin) return rooms;
-    return rooms.filter((r) => myMemberRoomIds.has(r.id));
+    // User thường: hiển thị phòng mặc định + các phòng đã join
+    return rooms.filter((r) => r.is_default || myMemberRoomIds.has(r.id));
   }, [rooms, myMemberRoomIds, isAdmin, isGuest]);
 
   const searchResults = useMemo(() => {
-    if (isGuest) return [];
     const q = debouncedSearch.trim().toLowerCase();
     if (!q) return [];
+
+    if (isGuest) {
+      // Guest chỉ tìm trong phòng đã load (phòng mặc định)
+      return [];
+    }
+
+    // User: tìm các phòng chưa join (loại trừ phòng mặc định và phòng đã join)
     return rooms.filter(
       (r) =>
+        !r.is_default &&
         !myMemberRoomIds.has(r.id) &&
         (r.name.toLowerCase().includes(q) || (r.description || "").toLowerCase().includes(q)),
     );
@@ -289,12 +294,16 @@ function GroupChatPage() {
   const closeRoom = () => setActiveRoomId(null);
 
   const openCreateRoom = () => {
-    setRoomForm({ name: "", description: "" });
+    setRoomForm({ name: "", description: "", is_default: false });
     setShowRoomForm({ mode: "create" });
   };
 
   const openEditRoom = (room: ChatRoom) => {
-    setRoomForm({ name: room.name, description: room.description || "" });
+    setRoomForm({
+      name: room.name,
+      description: room.description || "",
+      is_default: room.is_default || false
+    });
     setShowRoomForm({ mode: "edit", room });
   };
 
@@ -309,13 +318,14 @@ function GroupChatPage() {
         await pb.collection("chat_rooms").update(showRoomForm.room.id, {
           name,
           description: roomForm.description.trim(),
+          is_default: roomForm.is_default,
         });
         toast.success("Đã cập nhật phòng");
       } else {
         await pb.collection("chat_rooms").create({
           name,
           description: roomForm.description.trim(),
-          is_default: false,
+          is_default: roomForm.is_default,
           created_by: user?.id || "",
         });
         toast.success("Đã tạo phòng mới");
@@ -566,6 +576,21 @@ function GroupChatPage() {
               className="mt-1 rounded-xl"
             />
           </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="is-default"
+              checked={roomForm.is_default}
+              onCheckedChange={(checked) =>
+                setRoomForm((f) => ({ ...f, is_default: checked as boolean }))
+              }
+            />
+            <label
+              htmlFor="is-default"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Phòng mặc định (tất cả user đều thấy)
+            </label>
+          </div>
         </div>
         <DialogFooter>
           {showRoomForm?.mode === "edit" && showRoomForm.room && !showRoomForm.room.is_default && (
@@ -700,12 +725,6 @@ function RoomListItem({
     if (previewInFlightRef.current) return;
     previewInFlightRef.current = true;
     try {
-      if (isGuest) {
-        const items = readGuestChatMessages(room.id);
-        setLastMessage(items[items.length - 1] || null);
-        setUnreadCount(0);
-        return;
-      }
       const res = await pb.collection("group_chat_messages").getList(1, 1, {
         filter: `room = "${room.id}"`,
         sort: "-created",
@@ -714,7 +733,8 @@ function RoomListItem({
       const items = (res.items as unknown as ChatMessage[]) || [];
       setLastMessage(items[0] || null);
 
-      if (userId) {
+      // Guest không có unread count
+      if (userId && !isGuest) {
         const seen = getSeen(chatSeenScope(room.id), userId);
         const seenIso = seen ? new Date(seen).toISOString().replace("T", " ") : "";
         const countRes = await pb.collection("group_chat_messages").getList(1, 1, {
@@ -723,6 +743,8 @@ function RoomListItem({
             : `room = "${room.id}" && user != "${userId}"`,
         });
         setUnreadCount(countRes.totalItems || 0);
+      } else {
+        setUnreadCount(0);
       }
     } catch {
       // silent
@@ -732,13 +754,23 @@ function RoomListItem({
   }, [room.id, userId, isGuest]);
 
   useEffect(() => {
-    const refreshPreview = () => {
-      if (document.visibilityState === "visible" && window.navigator.onLine) void loadPreview();
-    };
-    refreshPreview();
-    const timer = window.setInterval(refreshPreview, 5000);
-    return () => window.clearInterval(timer);
+    void loadPreview();
   }, [loadPreview]);
+
+  // Realtime subscription cho tin nhắn mới trong room
+  useEffect(() => {
+    if (isGuest) return;
+
+    const unsubscribe = pb.collection("group_chat_messages").subscribe("*", (e) => {
+      if (e.record && (e.record as any).room === room.id) {
+        void loadPreview();
+      }
+    });
+
+    return () => {
+      void unsubscribe.then((unsub) => unsub());
+    };
+  }, [room.id, isGuest, loadPreview]);
 
   const startPress = () => {
     if (!isAdmin) return;
@@ -831,22 +863,32 @@ function RoomChatView({
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const pressTimerRef = useRef<number | null>(null);
   const pageRef = useRef(1);
-  const latestPageIdsRef = useRef<Set<string>>(new Set());
-  const refreshInFlightRef = useRef(false);
   const isGuest = !user;
 
   const fetchMessagePage = useCallback(
     async (pageNo: number) => {
       if (isGuest) {
-        const items = readGuestChatMessages(room.id);
-        const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-        const start = (pageNo - 1) * PAGE_SIZE;
-        const pageItems = items.slice(start, start + PAGE_SIZE);
-        return {
-          items: pageItems,
-          totalItems: items.length,
-          totalPages,
-        };
+        // Guest xem tin nhắn từ phòng mặc định (dùng ID cố định)
+        try {
+          const res = await pb.collection("group_chat_messages").getList(pageNo, PAGE_SIZE, {
+            filter: `room = "${DEFAULT_ROOM_ID}"`,
+            sort: "-created",
+            expand: "user",
+          });
+          return {
+            items: ((res.items as unknown as ChatMessage[]) || []).reverse(),
+            totalItems: res.totalItems || 0,
+            totalPages: res.totalPages || 1,
+          };
+        } catch (error) {
+          // Nếu không load được, trả về empty
+          console.error("Guest cannot load messages:", error);
+          return {
+            items: [],
+            totalItems: 0,
+            totalPages: 1,
+          };
+        }
       }
       const res = await pb.collection("group_chat_messages").getList(pageNo, PAGE_SIZE, {
         filter: `room = "${room.id}"`,
@@ -865,7 +907,9 @@ function RoomChatView({
   const loadInitial = useCallback(async () => {
     setLoading(true);
     try {
+      console.log("[Chat] loadInitial started for room:", room.id);
       const pageData = await fetchMessagePage(1);
+      console.log("[Chat] fetchMessagePage returned:", pageData);
       if (!isGuest) await onRefreshMe();
       setMessages(pageData.items);
       setTotalCount(pageData.totalItems);
@@ -881,46 +925,83 @@ function RoomChatView({
         );
       }
       window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "auto" }), 0);
+      console.log("[Chat] loadInitial completed successfully");
     } catch (error) {
+      console.error("[Chat] loadInitial error:", error);
       toast.error(getErrorMessage(error, "Lỗi tải trò chuyện"));
     } finally {
       setLoading(false);
     }
   }, [fetchMessagePage, isGuest, onRefreshMe, room.id, user?.id]);
 
-  const refreshLatest = useCallback(async () => {
-    if (refreshInFlightRef.current) return;
-    if (isGuest) return;
-    if (document.visibilityState !== "visible" || !window.navigator.onLine) return;
-    refreshInFlightRef.current = true;
-    try {
-      const pageData = await fetchMessagePage(1);
-      setTotalCount(pageData.totalItems);
-      setHasMore(pageRef.current < pageData.totalPages);
-      latestPageIdsRef.current = new Set(pageData.items.map((item) => item.id));
-      setMessages((current) =>
-        pageRef.current <= 1 ? pageData.items : mergeMessages(current, pageData.items),
-      );
-      const latest = pageData.items[pageData.items.length - 1];
-      if (latest) {
-        markSeen(chatSeenScope(room.id), user?.id, new Date(latest.created).getTime());
-      }
-    } catch {
-      // silent polling
-    } finally {
-      refreshInFlightRef.current = false;
-    }
-  }, [fetchMessagePage, isGuest, room.id, user?.id]);
-
+  // Load messages khi vào phòng
   useEffect(() => {
-    loadInitial();
+    void loadInitial();
   }, [loadInitial]);
 
+  // Realtime subscription để nhận tin nhắn mới
   useEffect(() => {
-    const refresh = () => void refreshLatest();
-    const timer = window.setInterval(refresh, 3000);
-    return () => window.clearInterval(timer);
-  }, [refreshLatest]);
+    if (isGuest) return; // Guest không subscribe realtime
+
+    console.log("[Chat] Setting up realtime subscription for room:", room.id);
+
+    let unsubscribe: (() => void) | null = null;
+
+    pb.collection("group_chat_messages")
+      .subscribe(
+        "*",
+        (event) => {
+          console.log("[Chat] Realtime event:", event.action, event.record);
+
+          // Chỉ xử lý tin nhắn của phòng này
+          if (event.record.room !== room.id) return;
+
+          if (event.action === "create") {
+            // Bỏ qua tin nhắn của chính mình vì Optimistic UI đã thêm rồi
+            if (event.record.user === user?.id) {
+              console.log("[Chat] Skipping own message from realtime (already added by optimistic UI)");
+              return;
+            }
+
+            // Kiểm tra xem tin nhắn đã có trong list chưa (tránh duplicate)
+            setMessages((current) => {
+              if (current.some((m) => m.id === event.record.id)) {
+                console.log("[Chat] Message already exists:", event.record.id);
+                return current;
+              }
+
+              // Thêm tin nhắn mới vào cuối
+              const newMessage: ChatMessage = {
+                ...event.record,
+                expand: event.record.expand,
+              } as ChatMessage;
+
+              console.log("[Chat] Adding message from another user:", event.record.id);
+              return [...current, newMessage];
+            });
+
+            setTotalCount((current) => current + 1);
+
+            // Scroll xuống tin nhắn mới (chỉ tin nhắn từ người khác đến đây)
+            window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+          } else if (event.action === "delete") {
+            setMessages((current) => current.filter((m) => m.id !== event.record.id));
+            setTotalCount((current) => Math.max(0, current - 1));
+          }
+        },
+        { expand: "user" },
+      )
+      .then((unsub) => {
+        unsubscribe = unsub;
+      });
+
+    return () => {
+      console.log("[Chat] Cleaning up realtime subscription for room:", room.id);
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [isGuest, room.id, user?.id]);
 
   const loadOlder = async () => {
     if (!hasMore || loadingOlder) return;
@@ -966,6 +1047,13 @@ function RoomChatView({
       toast.error("Nội dung không được để trống");
       return;
     }
+
+    // Guest không thể gửi tin nhắn
+    if (isGuest) {
+      toast.error("Vui lòng đăng nhập để gửi tin nhắn");
+      return;
+    }
+
     if (!isAdmin && blocked) {
       toast.error("Bạn đang bị chặn trong trò chuyện");
       return;
@@ -973,40 +1061,25 @@ function RoomChatView({
 
     setSending(true);
     try {
-      if (isGuest) {
-        const message: ChatMessage = {
-          id: `guest-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          user: GUEST_LOCAL_OWNER_ID,
-          room: room.id,
-          content: text,
-          created: new Date().toISOString(),
-          expand: {
-            user: {
-              id: GUEST_LOCAL_OWNER_ID,
-              username: "guest",
-              full_name: "Bạn",
-              role: "user",
-            } as ChatUser,
-          },
-        };
-        const next = [...readGuestChatMessages(room.id), message];
-        writeGuestChatMessages(next);
-        setMessages(next);
-        setTotalCount(next.length);
-        setContent("");
-        setShowEmojis(false);
-        window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 0);
-        return;
-      }
-      await pb.collection("group_chat_messages").create({
+      const newMessage = await pb.collection("group_chat_messages").create({
         user: user.id,
         room: room.id,
         content: text,
       });
+
+      // Thêm tin nhắn vào UI ngay lập tức (Optimistic UI)
+      const messageWithUser: ChatMessage = {
+        ...newMessage,
+        expand: { user },
+      } as ChatMessage;
+
+      setMessages((current) => [...current, messageWithUser]);
+      setTotalCount((current) => current + 1);
       setContent("");
       setShowEmojis(false);
-      await refreshLatest();
-      window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 0);
+
+      // Scroll xuống tin nhắn mới
+      window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (error) {
       toast.error(getErrorMessage(error, "Lỗi gửi tin nhắn"));
     } finally {
@@ -1021,21 +1094,17 @@ function RoomChatView({
 
   const deleteMessage = async (id: string) => {
     if (!confirm("Xoá tin nhắn này?")) return;
+
+    // Guest không thể xóa tin nhắn
+    if (isGuest) {
+      toast.error("Vui lòng đăng nhập để xóa tin nhắn");
+      return;
+    }
+
     try {
-      if (isGuest) {
-        const next = readGuestStorage<ChatMessage[]>(GUEST_CHAT_STORAGE_KEY, []).filter(
-          (message) => message.id !== id,
-        );
-        writeGuestChatMessages(next);
-        setMessages((current) => current.filter((row) => row.id !== id));
-        setTotalCount((count) => Math.max(0, count - 1));
-        setActionMessage(null);
-        return;
-      }
       await pb.collection("group_chat_messages").delete(id);
       setActionMessage(null);
-      await refreshLatest();
-      setMessages((current) => current.filter((row) => row.id !== id));
+      // Realtime subscription sẽ tự động xóa tin nhắn khỏi danh sách
     } catch (error) {
       toast.error(getErrorMessage(error, "Lỗi xoá tin nhắn"));
     }
@@ -1046,7 +1115,7 @@ function RoomChatView({
       await pb.collection("users").update(target.id, { chat_blocked: !target.chat_blocked });
       toast.success(target.chat_blocked ? "Đã bỏ chặn" : "Đã chặn");
       setActionMessage(null);
-      await refreshLatest();
+      // Không cần refresh - chỉ thay đổi trạng thái user
     } catch (error) {
       toast.error(getErrorMessage(error, "Lỗi chặn user"));
     }
@@ -1133,7 +1202,7 @@ function RoomChatView({
             ) : (
               messages.map((m) => {
                 const author = m.expand?.user;
-                const mine = m.user === (user?.id || GUEST_LOCAL_OWNER_ID);
+                const mine = !isGuest && m.user === user?.id;
                 const actionOpen = actionMessage?.id === m.id;
                 const time = new Date(m.created).toLocaleString("vi-VN");
                 return (
@@ -1177,12 +1246,7 @@ function RoomChatView({
                             : "border border-border bg-card text-foreground",
                         )}
                       >
-                        <div
-                          className={cn(
-                            "whitespace-pre-wrap text-[14px] leading-relaxed",
-                            m.content.length <= 4 && "text-2xl",
-                          )}
-                        >
+                        <div className="whitespace-pre-wrap text-[14px] leading-relaxed">
                           {m.content}
                         </div>
                         <div
@@ -1234,7 +1298,11 @@ function RoomChatView({
 
         <div className="shrink-0">
           <Card className="space-y-2 rounded-2xl border-border/80 bg-background/95 p-2 shadow-lg backdrop-blur">
-            {!isAdmin && blocked ? (
+            {isGuest ? (
+              <div className="rounded-xl border border-dashed border-blue-200 bg-blue-50 p-3 text-center text-sm text-blue-700">
+                📖 Chế độ xem. <span className="font-medium">Đăng nhập để gửi tin nhắn.</span>
+              </div>
+            ) : !isAdmin && blocked ? (
               <div className="rounded-xl border border-dashed border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 Đang bị chặn nên không thể gửi tin nhắn.
               </div>
@@ -1275,10 +1343,29 @@ function RoomChatView({
                     value={content}
                     onFocus={() => setShowEmojis(true)}
                     onChange={(e) => setContent(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.altKey) {
+                        e.preventDefault();
+                        void send();
+                      }
+                    }}
                     placeholder="Nhập tin nhắn..."
                     maxLength={500}
                     className="min-h-10 resize-none rounded-2xl py-2 text-sm"
                   />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    onClick={() => {
+                      setContent((prev) => prev + "\n");
+                      inputRef.current?.focus();
+                    }}
+                    aria-label="Xuống dòng"
+                    className="h-10 w-10 rounded-full"
+                  >
+                    <CornerDownLeft className="h-4 w-4" />
+                  </Button>
                   <Button
                     type="button"
                     size="icon"

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Users, ShieldCheck, UserRoundCheck, UserRound } from "lucide-react";
 import { toast } from "@/lib/toast";
-import { pb, type UserRecord } from "@/lib/pocketbase";
+import { pb } from "@/lib/pocketbase";
 import { StatCard } from "@/components/ui/stat-card";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,13 +28,18 @@ function isInRange(dateStr: string | undefined, from: string, to: string) {
   return t >= fromT && t <= toT;
 }
 
-type MinimalUser = Pick<UserRecord, "id" | "role" | "last_login">;
+type LoginHistoryRecord = {
+  id: string;
+  user_id?: string;
+  session_id?: string;
+  login_type: "user" | "guest";
+  login_at: string;
+};
 
 export function AccountActivityStats() {
   const [from, setFrom] = useState(daysAgoIso(7));
   const [to, setTo] = useState(todayIso());
-  const [users, setUsers] = useState<MinimalUser[]>([]);
-  const [guestSessions, setGuestSessions] = useState<Array<{ session_id: string; visited_at: string }>>([]);
+  const [loginHistory, setLoginHistory] = useState<LoginHistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,16 +47,13 @@ export function AccountActivityStats() {
     (async () => {
       setLoading(true);
       try {
-        const [userList, guestList] = await Promise.all([
-          pb.collection("users").getFullList<MinimalUser>({ fields: "id,role,last_login" }),
-          pb.collection("guest_sessions").getFullList<{ session_id: string; visited_at: string }>({
-            fields: "session_id,visited_at",
-            sort: "-visited_at"
-          }),
-        ]);
+        // Lấy toàn bộ login history
+        const historyList = await pb.collection("login_history").getFullList<LoginHistoryRecord>({
+          fields: "id,user_id,session_id,login_type,login_at",
+          sort: "-login_at"
+        });
         if (!alive) return;
-        setUsers(userList);
-        setGuestSessions(guestList);
+        setLoginHistory(historyList);
       } catch (e: any) {
         if (alive) toast.error(e?.message || "Không tải được thống kê tài khoản");
       } finally {
@@ -64,17 +66,15 @@ export function AccountActivityStats() {
   }, []);
 
   const stats = useMemo(() => {
-    // User = tài khoản đã đăng ký trong bảng users
-    const registeredUsers = users;
+    // Lọc login history trong khoảng thời gian
+    const historyInRange = loginHistory.filter((h) => isInRange(h.login_at, from, to));
 
-    const activeInRange = (list: MinimalUser[]) =>
-      list.filter((u) => isInRange(u.last_login, from, to)).length;
-
-    // Guest = các session_id unique trong guest_sessions trong khoảng thời gian
-    const uniqueGuestSessions = new Set(
-      guestSessions
-        .filter((g) => isInRange(g.visited_at, from, to))
-        .map((g) => g.session_id)
+    // Đếm unique users và guests trong khoảng thời gian
+    const uniqueUserIds = new Set(
+      historyInRange.filter((h) => h.login_type === "user" && h.user_id).map((h) => h.user_id)
+    );
+    const uniqueGuestSessionIds = new Set(
+      historyInRange.filter((h) => h.login_type === "guest" && h.session_id).map((h) => h.session_id)
     );
 
     // Tạo danh sách các ngày trong khoảng thời gian
@@ -87,37 +87,43 @@ export function AccountActivityStats() {
 
     // Đếm số lượng đăng nhập theo từng ngày
     const dailyData = days.map((day) => {
+      // Parse ngày theo giờ địa phương (Vietnam UTC+7)
       const dayStart = new Date(`${day}T00:00:00`).getTime();
       const dayEnd = new Date(`${day}T23:59:59.999`).getTime();
 
-      // Đếm users đăng nhập trong ngày
-      const usersCount = registeredUsers.filter((u) => {
-        if (!u.last_login) return false;
-        const loginTime = new Date(u.last_login).getTime();
-        return !Number.isNaN(loginTime) && loginTime >= dayStart && loginTime <= dayEnd;
-      }).length;
-
-      // Đếm guest sessions unique trong ngày
-      const guestsCount = new Set(
-        guestSessions
-          .filter((g) => {
-            const visitTime = new Date(g.visited_at).getTime();
-            return !Number.isNaN(visitTime) && visitTime >= dayStart && visitTime <= dayEnd;
+      // Đếm unique users đăng nhập trong ngày
+      const usersCount = new Set(
+        loginHistory
+          .filter((h) => {
+            if (h.login_type !== "user" || !h.user_id) return false;
+            const loginTime = new Date(h.login_at).getTime();
+            return !Number.isNaN(loginTime) && loginTime >= dayStart && loginTime <= dayEnd;
           })
-          .map((g) => g.session_id)
+          .map((h) => h.user_id)
+      ).size;
+
+      // Đếm unique guest sessions trong ngày
+      const guestsCount = new Set(
+        loginHistory
+          .filter((h) => {
+            if (h.login_type !== "guest" || !h.session_id) return false;
+            const loginTime = new Date(h.login_at).getTime();
+            return !Number.isNaN(loginTime) && loginTime >= dayStart && loginTime <= dayEnd;
+          })
+          .map((h) => h.session_id)
       ).size;
 
       return { day, users: usersCount, guests: guestsCount };
     });
 
     return {
-      total: users.length,
-      totalActive: activeInRange(users),
-      users: { total: registeredUsers.length, active: activeInRange(registeredUsers) },
-      guests: { total: uniqueGuestSessions.size, active: uniqueGuestSessions.size },
+      total: uniqueUserIds.size + uniqueGuestSessionIds.size,
+      totalActive: uniqueUserIds.size + uniqueGuestSessionIds.size,
+      users: { total: uniqueUserIds.size, active: uniqueUserIds.size },
+      guests: { total: uniqueGuestSessionIds.size, active: uniqueGuestSessionIds.size },
       dailyData,
     };
-  }, [users, from, to, guestSessions]);
+  }, [loginHistory, from, to]);
 
   if (loading) {
     return (

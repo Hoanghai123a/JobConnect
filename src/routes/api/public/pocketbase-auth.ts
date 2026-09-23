@@ -70,6 +70,9 @@ async function resolveCanonicalIdentity(identity: string) {
 }
 
 function updateLastLogin(token: string, recordId: string) {
+  const now = new Date().toISOString();
+
+  // Cập nhật last_login trong users collection (giữ lại để tương thích)
   fetch(`${getPBUpstream()}/api/collections/users/records/${recordId}`, {
     method: "PATCH",
     headers: {
@@ -77,7 +80,22 @@ function updateLastLogin(token: string, recordId: string) {
       Authorization: `Bearer ${token}`,
       "ngrok-skip-browser-warning": "true",
     },
-    body: JSON.stringify({ last_login: new Date().toISOString() }),
+    body: JSON.stringify({ last_login: now }),
+  }).catch(() => {});
+
+  // Ghi log vào login_history
+  fetch(`${getPBUpstream()}/api/collections/login_history/records`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      "ngrok-skip-browser-warning": "true",
+    },
+    body: JSON.stringify({
+      user_id: recordId,
+      login_type: "user",
+      login_at: now,
+    }),
   }).catch(() => {});
 }
 

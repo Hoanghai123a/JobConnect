@@ -10,7 +10,47 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { pb, type UserRecord } from "./pocketbase";
 import { getPBUpstream } from "./pocketbase-config";
-import { clearGuestSession } from "./guest-tracking";
+import { clearGuestSession, logGuestLogin } from "./guest-tracking";
+
+const USER_LAST_LOG_KEY = "user_last_log_date";
+
+/**
+ * Ghi log user daily active vào login_history (chỉ 1 lần mỗi ngày)
+ */
+async function logDailyActiveUser(token: string, userId: string) {
+  try {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0]; // "2026-09-23"
+
+    // Kiểm tra đã log hôm nay chưa
+    const lastLogDate = localStorage.getItem(`${USER_LAST_LOG_KEY}:${userId}`);
+    if (lastLogDate === today) {
+      console.debug('[auth] User already logged today, skip');
+      return; // Đã log rồi, không log nữa
+    }
+
+    // Ghi log vào login_history
+    await fetch(`${getPBUpstream()}/api/collections/login_history/records`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "ngrok-skip-browser-warning": "true",
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        login_type: "user",
+        login_at: now.toISOString(),
+      }),
+    });
+
+    // Lưu ngày đã log
+    localStorage.setItem(`${USER_LAST_LOG_KEY}:${userId}`, today);
+    console.debug('[auth] User logged successfully for', today);
+  } catch (error) {
+    console.debug("Failed to log daily active user:", error);
+  }
+}
 
 interface AuthCtx {
   user: UserRecord | null;
@@ -101,6 +141,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setLoading(false);
     setGuestModeActive(true);
+
+    // Ghi log guest login vào login_history
+    logGuestLogin().catch(() => {});
   }, []);
 
   const logout = useCallback(() => {
@@ -154,6 +197,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(null);
           } else {
             setUser(refreshedUser ?? null);
+
+            // Ghi log daily active user (1 lần mỗi ngày)
+            if (refreshedUser?.id && pb.authStore.token) {
+              logDailyActiveUser(pb.authStore.token, refreshedUser.id).catch(() => {});
+            }
           }
         } else {
           setUser(null);
@@ -204,6 +252,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", enforcePasswordReauth);
     };
   }, [expirePasswordReauth, loading, user?.id]);
+
+  // Ghi log guest daily active khi app load
+  useEffect(() => {
+    if (loading) return; // Đợi auth check xong
+
+    // Nếu đang ở guest mode → ghi log
+    const isGuestMode =
+      typeof window !== "undefined" &&
+      window.localStorage.getItem("jobconnect:guest-mode") === "true" &&
+      !user;
+
+    if (isGuestMode) {
+      logGuestLogin().catch(() => {});
+    }
+  }, [loading, user]);
 
   const login = useCallback(async (identity: string, password: string) => {
     const res = await fetch("/api/public/pocketbase-auth", {
