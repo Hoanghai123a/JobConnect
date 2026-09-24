@@ -640,7 +640,7 @@ function CounterPage() {
               label="Giao diện"
               options={[
                 { value: "list" as const, label: "Card ngang", icon: List },
-                { value: "grid" as const, label: "Ô vuông", icon: LayoutGrid },
+                { value: "grid" as const, label: "Nhiều người", icon: LayoutGrid },
               ]}
               value={state.layout}
               onChange={(layout) => updatePreferences({ layout })}
@@ -871,17 +871,17 @@ function PersonCard({
   return (
     <Card
       className={cn(
-        "relative flex overflow-hidden rounded-3xl border-l-4 bg-card p-3 shadow-soft",
-        layout === "grid" ? "aspect-square flex-col" : "min-h-[8.5rem] flex-col",
+        "relative flex overflow-hidden rounded-3xl border-l-4 bg-card shadow-soft",
+        layout === "grid" ? "flex-col p-1.5" : "min-h-[8.5rem] flex-col p-3",
       )}
       style={{ borderLeftColor: accent }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: accent }} />
+      <div className={cn("flex items-start justify-between", layout === "grid" ? "gap-1 mb-0.5" : "gap-1.5")}>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className={cn("shrink-0 rounded-full", layout === "grid" ? "h-2 w-2" : "h-2.5 w-2.5")} style={{ backgroundColor: accent }} />
           <button
             type="button"
-            className="min-w-0 truncate rounded-lg px-1 text-left text-sm font-semibold transition hover:bg-muted active:scale-[0.98]"
+            className={cn("min-w-0 truncate rounded-lg px-1 text-left font-semibold transition hover:bg-muted active:scale-[0.98]", layout === "grid" ? "text-[11px]" : "text-xs")}
             title={`Đổi tên ${person.name}`}
             onClick={onName}
           >
@@ -890,17 +890,20 @@ function PersonCard({
         </div>
         <button
           type="button"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-muted active:scale-95"
+          className={cn("flex shrink-0 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-muted active:scale-95", layout === "grid" ? "h-6 w-6" : "h-7 w-7")}
           onClick={onActions}
           aria-label={`Thao tác với ${person.name}`}
         >
-          <MoreHorizontal className="h-5 w-5" />
+          <MoreHorizontal className={cn(layout === "grid" ? "h-3.5 w-3.5" : "h-4 w-4")} />
         </button>
       </div>
-      <div className="mt-auto flex items-center gap-2 pt-4">
+      <div className={cn("flex flex-1 items-center gap-1.5", layout === "grid" ? "" : "mt-auto pt-4")}>
         <button
           type="button"
-          className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border bg-background text-xl font-semibold transition hover:bg-muted active:scale-95"
+          className={cn(
+            "grid shrink-0 place-items-center rounded-2xl border bg-background font-semibold transition hover:bg-muted active:scale-95 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1",
+            layout === "grid" ? "h-12 w-12 text-xl" : "h-16 w-16 text-3xl"
+          )}
           onClick={onMinus}
           aria-label={`Trừ 1 điểm cho ${person.name}`}
         >
@@ -908,19 +911,22 @@ function PersonCard({
         </button>
         <button
           type="button"
-          className="flex min-w-0 flex-1 flex-col items-center justify-center rounded-2xl px-1 py-2 transition active:scale-95"
+          className={cn("flex min-w-0 flex-1 flex-col items-center justify-center rounded-2xl transition active:scale-95 focus-visible:ring-2 focus-visible:ring-offset-1", layout === "grid" ? "px-1 py-1.5" : "px-1.5 py-2.5")}
           style={{ backgroundColor: tint, color: accent }}
           onClick={onScore}
           aria-label={`Điểm của ${person.name}: ${person.score}. Chạm để điều chỉnh nhanh`}
         >
-          <span className="text-3xl font-bold leading-none">{person.score}</span>
-          <span className="mt-1 truncate text-[9px] font-medium uppercase tracking-wide opacity-75">
-            Nhập nhanh
+          <span className={cn("font-bold leading-none tabular-nums", layout === "grid" ? "text-2xl" : "text-4xl")}>{person.score}</span>
+          <span className={cn("mt-0.5 truncate font-medium uppercase tracking-wide opacity-75", layout === "grid" ? "text-[9px]" : "text-[10px]")}>
+            Nhập
           </span>
         </button>
         <button
           type="button"
-          className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border bg-background text-xl font-semibold transition hover:bg-muted active:scale-95"
+          className={cn(
+            "grid shrink-0 place-items-center rounded-2xl border bg-background font-semibold transition hover:bg-muted active:scale-95 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1",
+            layout === "grid" ? "h-12 w-12 text-xl" : "h-16 w-16 text-3xl"
+          )}
           onClick={onPlus}
           aria-label={`Cộng 1 điểm cho ${person.name}`}
         >

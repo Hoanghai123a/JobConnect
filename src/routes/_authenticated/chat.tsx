@@ -848,32 +848,36 @@ function RoomChatView({
   onBack: () => void;
   onRefreshMe: () => Promise<void>;
 }) {
-  // Lock viewport height để header không bị đẩy lên khi bàn phím xuất hiện
-  const [viewportHeight, setViewportHeight] = useState<number>(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerHeight;
-    }
-    return 0;
-  });
+  // Visual Viewport API để xử lý bàn phím mobile
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    // Lưu chiều cao viewport ban đầu
-    const initialHeight = window.innerHeight;
-    setViewportHeight(initialHeight);
+    const container = containerRef.current;
+    if (!container) return;
 
-    // Ngăn body scroll khi bàn phím xuất hiện
-    document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
-    document.body.style.height = `${initialHeight}px`;
+    // Visual Viewport API - giải pháp triệt để cho mobile keyboard
+    if (window.visualViewport) {
+      const resizeHandler = () => {
+        // Lấy chiều cao thực tế sau khi bàn phím xuất hiện
+        const viewportHeight = window.visualViewport.height;
 
-    return () => {
-      // Cleanup khi unmount
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-      document.body.style.height = '';
-    };
+        // Ép chiều cao container đúng bằng khoảng trống còn lại
+        container.style.height = `${viewportHeight}px`;
+
+        // Ngăn browser tự scroll body
+        window.scrollTo(0, 0);
+      };
+
+      // Lắng nghe sự kiện resize khi bàn phím bật/tắt
+      window.visualViewport.addEventListener('resize', resizeHandler);
+
+      // Gọi một lần lúc khởi tạo
+      resizeHandler();
+
+      return () => {
+        window.visualViewport?.removeEventListener('resize', resizeHandler);
+      };
+    }
   }, []);
 
   // Hook mới: useChatRoomMessages với cache-first pattern
@@ -1395,11 +1399,13 @@ function RoomChatView({
 
   return (
     <div
-      className="fixed inset-x-0 top-0 flex flex-col overflow-hidden bg-background"
+      ref={containerRef}
+      className="flex flex-col overflow-hidden bg-background"
       style={{
-        height: viewportHeight > 0 ? `${viewportHeight}px` : "100vh",
-        paddingTop: "env(safe-area-inset-top)",
-        paddingBottom: "env(safe-area-inset-bottom)"
+        position: 'fixed',
+        insetInline: 0,
+        top: 0,
+        height: '100dvh', // Fallback cho trình duyệt không hỗ trợ visualViewport
       }}
     >
       <header
