@@ -220,6 +220,7 @@ function GroupChatPage() {
     mode: "create" | "edit";
     room?: ChatRoom;
   }>(null);
+  const [roomToDelete, setRoomToDelete] = useState<ChatRoom | null>(null);
   const [roomForm, setRoomForm] = useState<{ name: string; description: string; is_default: boolean }>({
     name: "",
     description: "",
@@ -337,18 +338,21 @@ function GroupChatPage() {
   };
 
   const deleteRoom = async (room: ChatRoom) => {
+    console.log("[deleteRoom] Called with room:", room);
     if (room.is_default) {
       toast.error("Không thể xoá nhóm mặc định");
       return;
     }
-    if (!confirm(`Xoá phòng "${room.name}"? Tất cả tin nhắn sẽ bị mất.`)) return;
     try {
+      console.log("[deleteRoom] Deleting room:", room.id);
       await pb.collection("chat_rooms").delete(room.id);
       toast.success("Đã xoá phòng");
       setShowRoomForm(null);
+      setRoomToDelete(null);
       if (activeRoomId === room.id) setActiveRoomId(null);
       setReloadToken((prev) => prev + 1);
     } catch (error) {
+      console.error("[deleteRoom] Error:", error);
       toast.error(getErrorMessage(error, "Lỗi xoá phòng"));
     }
   };
@@ -607,18 +611,25 @@ function GroupChatPage() {
         <DialogFooter>
           {showRoomForm?.mode === "edit" && showRoomForm.room && !showRoomForm.room.is_default && (
             <Button
+              type="button"
               variant="destructive"
-              onClick={() => showRoomForm.room && void deleteRoom(showRoomForm.room)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (showRoomForm.room) {
+                  setRoomToDelete(showRoomForm.room);
+                }
+              }}
               className="sm:mr-auto"
             >
               <Trash2 className="h-4 w-4" />
               Xoá phòng
             </Button>
           )}
-          <Button variant="outline" onClick={() => setShowRoomForm(null)}>
+          <Button type="button" variant="outline" onClick={() => setShowRoomForm(null)}>
             Huỷ
           </Button>
-          <Button onClick={() => void submitRoomForm()}>
+          <Button type="button" onClick={() => void submitRoomForm()}>
             <Check className="h-4 w-4" />
             Lưu
           </Button>
@@ -708,6 +719,32 @@ function GroupChatPage() {
             )}
           </>
         )}
+      </ResponsiveOverlay>
+
+      {/* Confirm Delete Dialog */}
+      <ResponsiveOverlay
+        open={roomToDelete !== null}
+        onOpenChange={(open) => !open && setRoomToDelete(null)}
+        title="Xác nhận xóa phòng"
+        description={`Bạn có chắc muốn xóa phòng "${roomToDelete?.name}"? Tất cả tin nhắn sẽ bị mất và không thể khôi phục.`}
+      >
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setRoomToDelete(null)}>
+            Hủy
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => {
+              if (roomToDelete) {
+                void deleteRoom(roomToDelete);
+              }
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+            Xóa phòng
+          </Button>
+        </DialogFooter>
       </ResponsiveOverlay>
     </div>
   );
