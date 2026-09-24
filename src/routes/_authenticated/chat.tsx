@@ -848,6 +848,34 @@ function RoomChatView({
   onBack: () => void;
   onRefreshMe: () => Promise<void>;
 }) {
+  // Lock viewport height để header không bị đẩy lên khi bàn phím xuất hiện
+  const [viewportHeight, setViewportHeight] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerHeight;
+    }
+    return 0;
+  });
+
+  useEffect(() => {
+    // Lưu chiều cao viewport ban đầu
+    const initialHeight = window.innerHeight;
+    setViewportHeight(initialHeight);
+
+    // Ngăn body scroll khi bàn phím xuất hiện
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = `${initialHeight}px`;
+
+    return () => {
+      // Cleanup khi unmount
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+    };
+  }, []);
+
   // Hook mới: useChatRoomMessages với cache-first pattern
   const isGuest = !user;
   const {
@@ -1369,7 +1397,7 @@ function RoomChatView({
     <div
       className="fixed inset-x-0 top-0 flex flex-col overflow-hidden bg-background"
       style={{
-        height: "100dvh",
+        height: viewportHeight > 0 ? `${viewportHeight}px` : "100vh",
         paddingTop: "env(safe-area-inset-top)",
         paddingBottom: "env(safe-area-inset-bottom)"
       }}
