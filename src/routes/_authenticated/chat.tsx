@@ -1367,10 +1367,11 @@ function RoomChatView({
 
   return (
     <div
-      className="fixed inset-0 flex flex-col overflow-hidden bg-background"
+      className="fixed inset-x-0 top-0 flex flex-col overflow-hidden bg-background"
       style={{
-        top: "env(safe-area-inset-top)",
-        bottom: "env(safe-area-inset-bottom)"
+        height: "100dvh",
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)"
       }}
     >
       <header
