@@ -82,12 +82,14 @@ export function useChatRoomList(params: {
         isAdmin
           ? pb.collection("chat_join_requests").getFullList<JoinRequest>({
               filter: 'status = "pending"',
+              expand: "user,room",
             })
           : Promise.resolve([]),
 
         viewer
           ? pb.collection("chat_join_requests").getFullList<JoinRequest>({
               filter: `user = "${viewer.id}"`,
+              expand: "user,room",
             })
           : Promise.resolve([]),
       ]);

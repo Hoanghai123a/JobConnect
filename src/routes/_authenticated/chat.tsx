@@ -13,6 +13,9 @@ import { useOnlineStatus, useOfflineQueue } from "@/lib/use-offline-queue";
 import { trackRoomVisit, startBackgroundSync, setupVisibilitySync } from "@/lib/chat-background-sync";
 import { logPerformanceReport } from "@/lib/chat-performance";
 import { useTypingBroadcast, useTypingListener } from "@/lib/use-typing-indicator";
+import { useMessageSearch } from "@/lib/use-message-search";
+import { useMessageReactions, REACTION_EMOJIS } from "@/lib/use-message-reactions";
+import { MessageReactions, ReactionPicker } from "@/components/chat/MessageReactions";
 import type { RoomPreview } from "@/lib/chat-cache";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -327,7 +330,7 @@ function GroupChatPage() {
         toast.success("Đã tạo phòng mới");
       }
       setShowRoomForm(null);
-      await loadRooms();
+      setReloadToken((prev) => prev + 1);
     } catch (error) {
       toast.error(getErrorMessage(error, "Lỗi lưu phòng"));
     }
@@ -344,7 +347,7 @@ function GroupChatPage() {
       toast.success("Đã xoá phòng");
       setShowRoomForm(null);
       if (activeRoomId === room.id) setActiveRoomId(null);
-      await loadAll();
+      setReloadToken((prev) => prev + 1);
     } catch (error) {
       toast.error(getErrorMessage(error, "Lỗi xoá phòng"));
     }
@@ -360,7 +363,7 @@ function GroupChatPage() {
       });
       toast.success(`Đã gửi yêu cầu vào "${room.name}"`);
       setSearch("");
-      await loadJoinRequests();
+      setReloadToken((prev) => prev + 1);
     } catch (error) {
       toast.error(getErrorMessage(error, "Lỗi gửi yêu cầu"));
     }
@@ -399,7 +402,7 @@ function GroupChatPage() {
       }
       toast.success(approve ? "Đã duyệt" : "Đã từ chối");
       setSelectedRequests(new Set());
-      await Promise.all([loadJoinRequests(), loadMemberships()]);
+      setReloadToken((prev) => prev + 1);
     } catch (error) {
       toast.error(getErrorMessage(error, "Lỗi xử lý yêu cầu"));
     }
@@ -837,9 +840,14 @@ function RoomChatView({
   const { notifyTyping, clearTyping } = useTypingBroadcast({ viewer: user, roomId: room.id, isGuest });
   const { typingUsers } = useTypingListener({ viewer: user, roomId: room.id, isGuest });
 
+  // Message search
+  const { query: searchQuery, results: searchResults, searching, search, clearSearch } = useMessageSearch({ viewer: user, roomId: room.id, isGuest });
+
   // UI states
   const [content, setContent] = useState("");
   const [showEmojis, setShowEmojis] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null); // messageId
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [sending, setSending] = useState(false);
   const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
@@ -1322,12 +1330,15 @@ function RoomChatView({
 
   return (
     <div
-      className="flex min-h-0 flex-col overflow-hidden"
-      style={{ height: "calc(100dvh - env(safe-area-inset-bottom))" }}
+      className="fixed inset-0 flex flex-col overflow-hidden bg-background"
+      style={{
+        top: "env(safe-area-inset-top)",
+        bottom: "env(safe-area-inset-bottom)"
+      }}
     >
       <header
-        className="sticky top-0 z-30 flex items-center gap-2 border-b border-border/60 bg-card/90 px-3 backdrop-blur-xl"
-        style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.5rem)", paddingBottom: "0.5rem" }}
+        className="flex shrink-0 items-center gap-2 border-b border-border/60 bg-card/90 px-3 backdrop-blur-xl"
+        style={{ paddingTop: "0.5rem", paddingBottom: "0.5rem" }}
       >
         <button
           onClick={onBack}
@@ -1350,6 +1361,17 @@ function RoomChatView({
             )}
           </div>
         </div>
+        {!isGuest && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setShowSearch(!showSearch)}
+            className="h-9 w-9 rounded-full"
+            title="Tìm tin nhắn"
+          >
+            <Search className="h-4 w-4" />
+          </Button>
+        )}
         <StatusChip tone={blocked ? "danger" : "success"}>{titleBadge}</StatusChip>
       </header>
       <main className="flex min-h-0 flex-1 flex-col gap-2 px-3 py-2">
@@ -1368,6 +1390,65 @@ function RoomChatView({
                 {queueSize > 0 && ` ${queueSize} tin nhắn sẽ được gửi khi online.`}
               </span>
             </div>
+          </Card>
+        )}
+
+        {showSearch && !isGuest && (
+          <Card className="shrink-0 space-y-2 rounded-2xl p-3">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Tìm tin nhắn..."
+                  value={searchQuery}
+                  onChange={(e) => search(e.target.value)}
+                  className="rounded-xl pl-10"
+                  autoFocus
+                />
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => {
+                  setShowSearch(false);
+                  clearSearch();
+                }}
+                className="h-9 w-9 rounded-full"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            {searching && (
+              <div className="text-xs text-muted-foreground">Đang tìm...</div>
+            )}
+            {searchQuery && !searching && searchResults.length === 0 && (
+              <div className="text-xs text-muted-foreground">Không tìm thấy tin nhắn nào</div>
+            )}
+            {searchResults.length > 0 && (
+              <div className="max-h-48 space-y-1 overflow-y-auto">
+                {searchResults.map((result) => {
+                  const author = result.message.expand?.user;
+                  return (
+                    <button
+                      key={result.message.id}
+                      type="button"
+                      onClick={() => {
+                        // Scroll to message (simplified - just close search)
+                        setShowSearch(false);
+                        clearSearch();
+                        // TODO: Implement scroll to specific message
+                      }}
+                      className="w-full rounded-lg border border-border bg-background p-2 text-left text-xs hover:bg-muted"
+                    >
+                      <div className="font-medium text-foreground">
+                        {author?.full_name || author?.username || "Ai đó"}
+                      </div>
+                      <div className="truncate text-muted-foreground">{result.message.content}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </Card>
         )}
 
@@ -1492,6 +1573,18 @@ function RoomChatView({
                           </div>
                         )}
                       </button>
+
+                      {/* Message Reactions */}
+                      {!isPending && !isFailed && (
+                        <div className="px-1">
+                          <MessageReactions
+                            messageId={m.id}
+                            viewer={user}
+                            isGuest={isGuest}
+                            mine={mine}
+                          />
+                        </div>
+                      )}
 
                       {isFailed && mine && (
                         <button
