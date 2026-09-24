@@ -5,6 +5,9 @@ import { useAuth } from "@/lib/auth";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { markSeen, getSeen } from "@/lib/seen";
+import { useChatRoomList } from "@/lib/use-chat-data";
+import { useChatRealtime } from "@/lib/use-chat-realtime";
+import type { RoomPreview } from "@/lib/chat-cache";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -134,15 +137,36 @@ function getErrorMessage(error: unknown, fallback: string) {
 function GroupChatPage() {
   const { user, isAdmin } = useAuth();
   const isGuest = !user;
-  const [rooms, setRooms] = useState<ChatRoom[]>([]);
-  const [memberships, setMemberships] = useState<ChatRoomMember[]>([]);
+
+  // Data loading từ hook
+  const [reloadToken, setReloadToken] = useState(0);
+  const chatData = useChatRoomList({
+    viewer: user,
+    isAdmin,
+    isGuest,
+    reloadToken,
+  });
+
+  useChatRealtime({
+    viewer: user,
+    isAdmin,
+    onMembersChanged: () => setReloadToken(t => t + 1),
+    onRequestsChanged: () => setReloadToken(t => t + 1),
+  });
+
+  // Extract data từ hook
+  const rooms = chatData.data?.rooms || [];
+  const previews = chatData.data?.previews || new Map();
+  const memberships = chatData.data?.memberships || [];
+  const pendingRequests = chatData.data?.pendingRequests || [];
+  const myRequests = chatData.data?.myRequests || [];
+  const roomsLoading = chatData.loading;
+
+  // UI state
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [meFresh, setMeFresh] = useState<ChatUser | null>(null);
-  const [roomsLoading, setRoomsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedSearch(search);
-  const [pendingRequests, setPendingRequests] = useState<JoinRequest[]>([]);
-  const [myRequests, setMyRequests] = useState<JoinRequest[]>([]);
   const [showRequestsDialog, setShowRequestsDialog] = useState(false);
   const [selectedRequests, setSelectedRequests] = useState<Set<string>>(new Set());
   const [showRoomForm, setShowRoomForm] = useState<null | {
@@ -186,102 +210,9 @@ function GroupChatPage() {
     }
   }, [user?.id]);
 
-  const loadRooms = useCallback(async () => {
-    if (isGuest) {
-      try {
-        // Guest có thể xem tất cả phòng có is_default = true
-        const res = await pb.collection("chat_rooms").getFullList({
-          filter: 'is_default = true',
-          sort: "name"
-        });
-        setRooms(res as unknown as ChatRoom[]);
-      } catch (error) {
-        // Fallback về phòng hardcode nếu lỗi
-        setRooms([GUEST_CHAT_ROOM]);
-      }
-      return;
-    }
-    try {
-      const res = await pb.collection("chat_rooms").getFullList({ sort: "-is_default,name" });
-      setRooms(res as unknown as ChatRoom[]);
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Lỗi tải danh sách phòng"));
-    }
-  }, [isGuest]);
-
-  const loadMemberships = useCallback(async () => {
-    if (!user?.id) {
-      setMemberships([]);
-      return;
-    }
-    try {
-      const filter = isAdmin ? "" : `user = "${user.id}"`;
-      const res = await pb.collection("chat_room_members").getFullList({
-        ...(filter ? { filter } : {}),
-      });
-      setMemberships(res as unknown as ChatRoomMember[]);
-    } catch {
-      // silent
-    }
-  }, [user?.id, isAdmin]);
-
-  const loadJoinRequests = useCallback(async () => {
-    if (!user?.id) {
-      setPendingRequests([]);
-      setMyRequests([]);
-      return;
-    }
-    try {
-      if (isAdmin) {
-        const res = await pb.collection("chat_join_requests").getFullList({
-          filter: 'status = "pending"',
-          sort: "-created",
-          expand: "user,room",
-        });
-        setPendingRequests(res as unknown as JoinRequest[]);
-      }
-      const mine = await pb.collection("chat_join_requests").getFullList({
-        filter: `user = "${user.id}"`,
-        sort: "-created",
-      });
-      setMyRequests(mine as unknown as JoinRequest[]);
-    } catch {
-      // silent
-    }
-  }, [user?.id, isAdmin]);
-
-  const loadAll = useCallback(async () => {
-    setRoomsLoading(true);
-    try {
-      await Promise.all([loadRooms(), loadMemberships(), loadJoinRequests(), loadMe()]);
-    } finally {
-      setRoomsLoading(false);
-    }
-  }, [loadRooms, loadMemberships, loadJoinRequests, loadMe]);
-
   useEffect(() => {
-    loadAll();
-  }, [loadAll]);
-
-  // Realtime subscriptions thay cho polling
-  useEffect(() => {
-    if (isGuest) return;
-
-    // Subscribe chat_room_members
-    const unsubMembers = pb.collection("chat_room_members").subscribe("*", () => {
-      void loadMemberships();
-    });
-
-    // Subscribe chat_join_requests
-    const unsubRequests = pb.collection("chat_join_requests").subscribe("*", () => {
-      void loadJoinRequests();
-    });
-
-    return () => {
-      void unsubMembers.then((unsub) => unsub());
-      void unsubRequests.then((unsub) => unsub());
-    };
-  }, [isGuest, loadMemberships, loadJoinRequests]);
+    void loadMe();
+  }, [loadMe]);
 
   const visibleRooms = useMemo(() => {
     if (isGuest) return rooms;
@@ -572,6 +503,7 @@ function GroupChatPage() {
               <RoomListItem
                 key={room.id}
                 room={room}
+                preview={chatData.data?.previews.get(room.id)}
                 userId={user?.id}
                 isGuest={isGuest}
                 isAdmin={isAdmin}
@@ -736,6 +668,7 @@ function GroupChatPage() {
 
 function RoomListItem({
   room,
+  preview,
   userId,
   isGuest,
   isAdmin,
@@ -743,67 +676,17 @@ function RoomListItem({
   onEdit,
 }: {
   room: ChatRoom;
+  preview?: RoomPreview;
   userId?: string;
   isGuest: boolean;
   isAdmin: boolean;
   onOpen: () => void;
   onEdit: () => void;
 }) {
-  const [lastMessage, setLastMessage] = useState<ChatMessage | null>(null);
-  const [unreadCount, setUnreadCount] = useState(0);
+  // NEW: Dùng preview từ props
+  const lastMessage = preview?.lastMessage || null;
+  const unreadCount = preview?.unreadCount || 0;
   const pressTimerRef = useRef<number | null>(null);
-  const previewInFlightRef = useRef(false);
-
-  const loadPreview = useCallback(async () => {
-    if (previewInFlightRef.current) return;
-    previewInFlightRef.current = true;
-    try {
-      const res = await pb.collection("group_chat_messages").getList(1, 1, {
-        filter: `room = "${room.id}"`,
-        sort: "-created",
-        expand: "user",
-      });
-      const items = (res.items as unknown as ChatMessage[]) || [];
-      setLastMessage(items[0] || null);
-
-      // Guest không có unread count
-      if (userId && !isGuest) {
-        const seen = getSeen(chatSeenScope(room.id), userId);
-        const seenIso = seen ? new Date(seen).toISOString().replace("T", " ") : "";
-        const countRes = await pb.collection("group_chat_messages").getList(1, 1, {
-          filter: seenIso
-            ? `room = "${room.id}" && created > "${seenIso}" && user != "${userId}"`
-            : `room = "${room.id}" && user != "${userId}"`,
-        });
-        setUnreadCount(countRes.totalItems || 0);
-      } else {
-        setUnreadCount(0);
-      }
-    } catch {
-      // silent
-    } finally {
-      previewInFlightRef.current = false;
-    }
-  }, [room.id, userId, isGuest]);
-
-  useEffect(() => {
-    void loadPreview();
-  }, [loadPreview]);
-
-  // Realtime subscription cho tin nhắn mới trong room
-  useEffect(() => {
-    if (isGuest) return;
-
-    const unsubscribe = pb.collection("group_chat_messages").subscribe("*", (e) => {
-      if (e.record && (e.record as any).room === room.id) {
-        void loadPreview();
-      }
-    });
-
-    return () => {
-      void unsubscribe.then((unsub) => unsub());
-    };
-  }, [room.id, isGuest, loadPreview]);
 
   const startPress = () => {
     if (!isAdmin) return;
