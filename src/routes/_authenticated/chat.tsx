@@ -456,13 +456,25 @@ function GroupChatPage() {
         }
         right={
           isAdmin ? (
-            <button
-              onClick={openCreateRoom}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm active:scale-95"
-              aria-label="Tạo phòng"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <Link to="/admin/chat-bans">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-9 w-9 p-0"
+                  title="Quản lý chặn"
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </Link>
+              <button
+                onClick={openCreateRoom}
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm active:scale-95"
+                aria-label="Tạo phòng"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
           ) : null
         }
       />
@@ -1330,18 +1342,6 @@ function RoomChatView({
             {`Đã tải ${stats.loaded}/${stats.total} tin`}
           </div>
         </div>
-        {isAdmin && (
-          <Link to="/admin/chat-bans">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0"
-              title="Quản lý chặn"
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-          </Link>
-        )}
         <StatusChip tone={blocked ? "danger" : "success"}>{titleBadge}</StatusChip>
       </header>
       <main className="flex min-h-0 flex-1 flex-col gap-2 px-3 py-2">

@@ -53,11 +53,12 @@ function ChatBansPage() {
   // Load danh sách user bị chặn toàn cục
   const loadGlobalBans = async () => {
     try {
-      const users = await pb.collection("users").getFullList<User>({
-        filter: "chat_blocked = true",
+      // Load tất cả users và filter ở client side vì field chat_blocked có thể chưa tồn tại
+      const allUsers = await pb.collection("users").getFullList<User>({
         sort: "-updated",
       });
-      setGlobalBans(users);
+      const blockedUsers = allUsers.filter(u => u.chat_blocked === true);
+      setGlobalBans(blockedUsers);
     } catch (error) {
       console.error("Failed to load global bans:", error);
       toast.error("Không thể tải danh sách chặn toàn cục");
