@@ -17,6 +17,7 @@ type ChatMessage = {
   content: string;
   created: string;
   is_anonymous?: boolean;
+  image?: string[]; // Field chứa danh sách ảnh
   expand?: {
     user?: {
       id: string;

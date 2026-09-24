@@ -946,6 +946,7 @@ function RoomChatView({
   });
   const [messageTimeVisible, setMessageTimeVisible] = useState<string | null>(null);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [showImageUploader, setShowImageUploader] = useState(false);
 
   // Pull-to-refresh state
   const [refreshing, setRefreshing] = useState(false);
@@ -1273,6 +1274,7 @@ function RoomChatView({
     setTotalCount((current) => current + 1);
     setContent("");
     setImageFiles([]);
+    setShowImageUploader(false); // Đóng ImageUploader và reset icon camera
     setShowEmojis(false);
     setShowEmojiPicker(false);
     setSending(true);
@@ -1309,19 +1311,37 @@ function RoomChatView({
 
     // 3. ONLINE: Gửi lên server background
     try {
-      // Tạo FormData để upload ảnh
-      const formData = new FormData();
-      formData.append("user", user!.id);
-      formData.append("room", room.id);
-      formData.append("content", text);
-      formData.append("is_anonymous", String(isAnonymous));
+      let savedMessage;
 
-      // Append images
-      imageFiles.forEach((file, index) => {
-        formData.append(`images`, file);
-      });
+      if (imageFiles.length > 0) {
+        // Tạo FormData để upload ảnh
+        const formData = new FormData();
+        formData.append("user", user!.id);
+        formData.append("room", room.id);
+        formData.append("content", text || " "); // PocketBase yêu cầu content không empty
+        formData.append("is_anonymous", String(isAnonymous));
 
-      const savedMessage = await pb.collection("group_chat_messages").create(formData);
+        // Thử cả 2 cách append images: 'image' và 'images'
+        imageFiles.forEach((file) => {
+          formData.append("image", file); // Thử field name 'image' (single)
+        });
+
+        // Log FormData để debug
+        console.log("[Send Image] Sending with FormData:");
+        for (const [key, value] of formData.entries()) {
+          console.log(`  ${key}:`, value instanceof File ? `File(${value.name}, ${value.size} bytes)` : value);
+        }
+
+        savedMessage = await pb.collection("group_chat_messages").create(formData);
+      } else {
+        // Tin nhắn không có ảnh
+        savedMessage = await pb.collection("group_chat_messages").create({
+          user: user!.id,
+          room: room.id,
+          content: text,
+          is_anonymous: isAnonymous,
+        });
+      }
 
       // 4. Replace tin nhắn tạm với tin nhắn thật từ server
       const messageWithUser: ChatMessage = {
@@ -1973,10 +1993,16 @@ function RoomChatView({
               </div>
             ) : (
               <>
-                {/* Image Uploader */}
-                {imageFiles.length > 0 && (
+                {/* Image Uploader - Hiển thị khi có ảnh hoặc đang chọn */}
+                {(imageFiles.length > 0 || showImageUploader) && (
                   <ImageUploader
-                    onImagesChange={setImageFiles}
+                    onImagesChange={(files) => {
+                      setImageFiles(files);
+                      // Nếu không còn file nào, ẩn uploader
+                      if (files.length === 0) {
+                        setShowImageUploader(false);
+                      }
+                    }}
                     maxImages={5}
                   />
                 )}
@@ -1997,26 +2023,19 @@ function RoomChatView({
                   </div>
                 )}
                 <div className="flex items-end gap-2">
-                  {/* Camera Button - Upload ảnh (giống Zalo) */}
+                  {/* Camera Button - Toggle ImageUploader */}
                   <Button
                     type="button"
                     size="icon"
                     variant="ghost"
-                    onClick={() => {
-                      const input = document.createElement("input");
-                      input.type = "file";
-                      input.accept = "image/jpeg,image/png,image/webp,image/gif";
-                      input.multiple = true;
-                      input.onchange = async (e) => {
-                        const files = Array.from((e.target as HTMLInputElement).files || []);
-                        if (files.length > 0) {
-                          setImageFiles(files.slice(0, 5));
-                        }
-                      };
-                      input.click();
-                    }}
-                    aria-label="Chọn ảnh"
-                    className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    onClick={() => setShowImageUploader(!showImageUploader)}
+                    aria-label={showImageUploader ? "Đóng chọn ảnh" : "Chọn ảnh"}
+                    aria-pressed={showImageUploader}
+                    className={`h-10 w-10 shrink-0 rounded-full transition ${
+                      showImageUploader
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    }`}
                   >
                     <Camera className="h-5 w-5" />
                   </Button>
