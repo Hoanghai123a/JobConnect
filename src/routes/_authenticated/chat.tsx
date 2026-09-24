@@ -7,6 +7,12 @@ import { AppHeader } from "@/components/layout/BottomNav";
 import { markSeen, getSeen } from "@/lib/seen";
 import { useChatRoomList } from "@/lib/use-chat-data";
 import { useChatRealtime } from "@/lib/use-chat-realtime";
+import { useChatCacheManager } from "@/lib/use-chat-cache-manager";
+import { useChatRoomMessages } from "@/lib/use-chat-messages";
+import { useOnlineStatus, useOfflineQueue } from "@/lib/use-offline-queue";
+import { trackRoomVisit, startBackgroundSync, setupVisibilitySync } from "@/lib/chat-background-sync";
+import { logPerformanceReport } from "@/lib/chat-performance";
+import { useTypingBroadcast, useTypingListener } from "@/lib/use-typing-indicator";
 import type { RoomPreview } from "@/lib/chat-cache";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +34,7 @@ import { toast } from "@/lib/toast";
 import {
   Check,
   ChevronLeft,
+  CircleX,
   Clock3,
   CornerDownLeft,
   MessageSquareText,
@@ -153,6 +160,43 @@ function GroupChatPage() {
     onMembersChanged: () => setReloadToken(t => t + 1),
     onRequestsChanged: () => setReloadToken(t => t + 1),
   });
+
+  // Smart cache invalidation và auto-cleanup
+  useChatCacheManager({
+    viewer: user,
+    onCacheInvalidated: () => setReloadToken(t => t + 1),
+  });
+
+  // Background sync service
+  useEffect(() => {
+    if (!user) return;
+
+    console.log("[BackgroundSync] Setting up background sync service");
+
+    const stopBackgroundSync = startBackgroundSync(user);
+    const stopVisibilitySync = setupVisibilitySync(user);
+
+    return () => {
+      stopBackgroundSync?.();
+      stopVisibilitySync?.();
+    };
+  }, [user?.id]);
+
+  // Expose performance report để user có thể gọi từ console
+  useEffect(() => {
+    // @ts-ignore - Expose to window for debugging
+    window.chatPerformanceReport = logPerformanceReport;
+
+    console.log(
+      "%c💡 Tip: Gọi window.chatPerformanceReport() để xem performance report",
+      "color: #00aa00; font-weight: bold"
+    );
+
+    return () => {
+      // @ts-ignore
+      delete window.chatPerformanceReport;
+    };
+  }, []);
 
   // Extract data từ hook
   const rooms = chatData.data?.rooms || [];
@@ -764,15 +808,40 @@ function RoomChatView({
   onBack: () => void;
   onRefreshMe: () => Promise<void>;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Hook mới: useChatRoomMessages với cache-first pattern
+  const isGuest = !user;
+  const {
+    messages,
+    setMessages,
+    loading,
+    hasMore,
+    totalCount,
+    setTotalCount,
+    page,
+    setPage,
+    setHasMore,
+    loadMore,
+    reload: reloadMessages,
+  } = useChatRoomMessages({
+    viewer: user,
+    roomId: room.id,
+    pageSize: PAGE_SIZE,
+    isGuest,
+  });
+
+  // Offline support
+  const isOnline = useOnlineStatus();
+  const { queue, queueSize, enqueue, processQueue } = useOfflineQueue();
+
+  // Typing indicators
+  const { notifyTyping, clearTyping } = useTypingBroadcast({ viewer: user, roomId: room.id, isGuest });
+  const { typingUsers } = useTypingListener({ viewer: user, roomId: room.id, isGuest });
+
+  // UI states
   const [content, setContent] = useState("");
   const [showEmojis, setShowEmojis] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [sending, setSending] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [totalCount, setTotalCount] = useState(0);
   const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
   const [roomBans, setRoomBans] = useState<ChatRoomBan[]>([]);
   const [isAnonymous, setIsAnonymous] = useState(() => {
@@ -782,12 +851,13 @@ function RoomChatView({
   });
   const [showAnonymousToast, setShowAnonymousToast] = useState(false);
   const [messageTimeVisible, setMessageTimeVisible] = useState<string | null>(null);
+
+  // Refs
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const pressTimerRef = useRef<number | null>(null);
   const pageRef = useRef(1);
-  const isGuest = !user;
 
   const toggleAnonymous = () => {
     const newValue = !isAnonymous;
@@ -799,51 +869,15 @@ function RoomChatView({
     setTimeout(() => setShowAnonymousToast(false), 1500);
   };
 
-  const fetchMessagePage = useCallback(
-    async (pageNo: number) => {
-      if (isGuest) {
-        // Guest xem tin nhắn từ phòng mặc định (dùng ID cố định)
-        try {
-          const res = await pb.collection("group_chat_messages").getList(pageNo, PAGE_SIZE, {
-            filter: `room = "${DEFAULT_ROOM_ID}"`,
-            sort: "-created",
-            expand: "user",
-          });
-          return {
-            items: ((res.items as unknown as ChatMessage[]) || []).reverse(),
-            totalItems: res.totalItems || 0,
-            totalPages: res.totalPages || 1,
-          };
-        } catch (error) {
-          // Nếu không load được, trả về empty
-          console.error("Guest cannot load messages:", error);
-          return {
-            items: [],
-            totalItems: 0,
-            totalPages: 1,
-          };
-        }
-      }
-      const res = await pb.collection("group_chat_messages").getList(pageNo, PAGE_SIZE, {
-        filter: `room = "${room.id}"`,
-        sort: "-created",
-        expand: "user",
-      });
-      return {
-        items: ((res.items as unknown as ChatMessage[]) || []).reverse(),
-        totalItems: res.totalItems || 0,
-        totalPages: res.totalPages || 1,
-      };
-    },
-    [room.id, isGuest],
-  );
+  // Check ban status và mark seen khi messages load xong
+  useEffect(() => {
+    const handleMessagesLoaded = async () => {
+      if (loading) return; // Chờ load xong
 
-  const loadInitial = useCallback(async () => {
-    setLoading(true);
-    try {
-      console.log("[Chat] loadInitial started for room:", room.id);
+      // Track room visit cho background sync prefetch
+      trackRoomVisit(room.id);
 
-      // Kiểm tra xem user có bị ban khỏi phòng này không
+      // Check ban status (chỉ cho non-admin users)
       if (!isGuest && user && !isAdmin) {
         const bans = await pb.collection("chat_room_bans").getFullList({
           filter: `room="${room.id}" && user="${user.id}"`,
@@ -856,36 +890,68 @@ function RoomChatView({
         }
       }
 
-      const pageData = await fetchMessagePage(1);
-      console.log("[Chat] fetchMessagePage returned:", pageData);
-      if (!isGuest) await onRefreshMe();
-      setMessages(pageData.items);
-      setTotalCount(pageData.totalItems);
-      setHasMore(pageData.totalPages > 1);
-      setPage(1);
-      pageRef.current = 1;
-      const latest = pageData.items[pageData.items.length - 1];
+      // Refresh user data
       if (!isGuest) {
+        await onRefreshMe();
+      }
+
+      // Mark seen
+      const latest = messages[messages.length - 1];
+      if (!isGuest && latest) {
         markSeen(
           chatSeenScope(room.id),
           user?.id,
-          latest ? new Date(latest.created).getTime() : Date.now(),
+          new Date(latest.created).getTime(),
         );
       }
-      window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "auto" }), 0);
-      console.log("[Chat] loadInitial completed successfully");
-    } catch (error) {
-      console.error("[Chat] loadInitial error:", error);
-      toast.error(getErrorMessage(error, "Lỗi tải trò chuyện"));
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchMessagePage, isGuest, onRefreshMe, room.id, user?.id]);
 
-  // Load messages khi vào phòng
+      // Auto-scroll to bottom (chỉ lần đầu load)
+      window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "auto" }), 0);
+    };
+
+    void handleMessagesLoaded();
+  }, [loading, messages.length]); // Trigger khi loading changes hoặc có messages mới
+
+  // Auto-process offline queue khi online
   useEffect(() => {
-    void loadInitial();
-  }, [loadInitial]);
+    if (!isOnline || queueSize === 0 || isGuest) return;
+
+    console.log(`[Offline] Online detected, processing ${queueSize} queued messages`);
+
+    const sendQueuedMessage = async (queuedMsg: any) => {
+      try {
+        const savedMessage = await pb.collection("group_chat_messages").create({
+          user: queuedMsg.userId,
+          room: queuedMsg.roomId,
+          content: queuedMsg.content,
+          is_anonymous: queuedMsg.isAnonymous,
+        });
+
+        // Update UI - replace temp message với real message
+        setMessages((current) =>
+          current.map((m) =>
+            m.id === queuedMsg.id
+              ? ({ ...savedMessage, expand: { user: user! } } as ChatMessage)
+              : m
+          )
+        );
+
+        return { success: true };
+      } catch (error) {
+        console.error("[Offline] Failed to send queued message:", error);
+        return { success: false, error: getErrorMessage(error, "Lỗi gửi") };
+      }
+    };
+
+    void processQueue(sendQueuedMessage).then((result) => {
+      if (result.sent > 0) {
+        toast.success(`Đã gửi ${result.sent} tin nhắn đang chờ`);
+      }
+      if (result.failed > 0) {
+        toast.error(`${result.failed} tin nhắn gửi thất bại`);
+      }
+    });
+  }, [isOnline, queueSize, isGuest, user, processQueue]);
 
   // Load danh sách bans trong phòng
   useEffect(() => {
@@ -1018,14 +1084,10 @@ function RoomChatView({
     if (!hasMore || loadingOlder) return;
     const box = scrollRef.current;
     const previousHeight = box?.scrollHeight || 0;
-    const nextPage = page + 1;
     setLoadingOlder(true);
     try {
-      const pageData = await fetchMessagePage(nextPage);
-      setMessages((current) => mergeMessages(pageData.items, current));
-      setPage(nextPage);
-      pageRef.current = nextPage;
-      setHasMore(nextPage < pageData.totalPages);
+      await loadMore();
+      // Maintain scroll position after loading older messages
       window.setTimeout(() => {
         if (!box) return;
         box.scrollTop = box.scrollHeight - previousHeight;
@@ -1076,29 +1138,84 @@ function RoomChatView({
       return;
     }
 
+    // OPTIMISTIC UI: Tạo tin nhắn tạm thời với ID unique
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const optimisticMessage: ChatMessage = {
+      id: tempId,
+      room: room.id,
+      user: user!.id,
+      content: text,
+      is_anonymous: isAnonymous,
+      created: new Date().toISOString(),
+      updated: new Date().toISOString(),
+      expand: { user: user! },
+      _pending: true, // Flag để hiển thị loading state
+    } as ChatMessage & { _pending?: boolean };
+
+    // 1. Hiển thị tin nhắn ngay lập tức
+    setMessages((current) => [...current, optimisticMessage]);
+    setTotalCount((current) => current + 1);
+    setContent("");
+    setShowEmojis(false);
     setSending(true);
+
+    // Scroll xuống tin nhắn mới ngay
+    window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+
+    // 2. Kiểm tra online/offline status
+    if (!isOnline) {
+      // OFFLINE: Queue message để gửi sau
+      console.log("[Offline] Queuing message for later:", tempId);
+
+      enqueue({
+        id: tempId,
+        roomId: room.id,
+        content: text,
+        isAnonymous,
+        userId: user!.id,
+      });
+
+      // Mark message as queued (vẫn pending nhưng có icon khác)
+      setMessages((current) =>
+        current.map((m) =>
+          m.id === tempId
+            ? ({ ...m, _pending: true, _queued: true } as ChatMessage & { _queued?: boolean })
+            : m
+        )
+      );
+
+      toast.info("Tin nhắn sẽ được gửi khi online");
+      setSending(false);
+      return;
+    }
+
+    // 3. ONLINE: Gửi lên server background
     try {
-      const newMessage = await pb.collection("group_chat_messages").create({
-        user: user.id,
+      const savedMessage = await pb.collection("group_chat_messages").create({
+        user: user!.id,
         room: room.id,
         content: text,
         is_anonymous: isAnonymous,
       });
 
-      // Thêm tin nhắn vào UI ngay lập tức (Optimistic UI)
+      // 4. Replace tin nhắn tạm với tin nhắn thật từ server
       const messageWithUser: ChatMessage = {
-        ...newMessage,
-        expand: { user },
+        ...savedMessage,
+        expand: { user: user! },
       } as ChatMessage;
 
-      setMessages((current) => [...current, messageWithUser]);
-      setTotalCount((current) => current + 1);
-      setContent("");
-      setShowEmojis(false);
-
-      // Scroll xuống tin nhắn mới
-      window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      setMessages((current) =>
+        current.map((m) => (m.id === tempId ? messageWithUser : m))
+      );
     } catch (error) {
+      // 5. Nếu lỗi, đánh dấu tin nhắn failed
+      setMessages((current) =>
+        current.map((m) =>
+          m.id === tempId
+            ? ({ ...m, _pending: false, _failed: true, _error: getErrorMessage(error, "Lỗi gửi") } as ChatMessage & { _failed?: boolean; _error?: string })
+            : m
+        )
+      );
       toast.error(getErrorMessage(error, "Lỗi gửi tin nhắn"));
     } finally {
       setSending(false);
@@ -1195,16 +1312,18 @@ function RoomChatView({
 
   const titleBadge = isGuest
     ? "Offline"
-    : isAdmin
-      ? "Admin"
-      : blocked
-        ? "Đang bị chặn"
-        : "Hoạt động";
+    : !isOnline
+      ? "Offline"
+      : isAdmin
+        ? "Admin"
+        : blocked
+          ? "Đang bị chặn"
+          : "Hoạt động";
 
   return (
     <div
       className="flex min-h-0 flex-col overflow-hidden"
-      style={{ height: "calc(100dvh - 5.5rem - env(safe-area-inset-bottom))" }}
+      style={{ height: "calc(100dvh - env(safe-area-inset-bottom))" }}
     >
       <header
         className="sticky top-0 z-30 flex items-center gap-2 border-b border-border/60 bg-card/90 px-3 backdrop-blur-xl"
@@ -1222,7 +1341,13 @@ function RoomChatView({
             {room.name}
           </h1>
           <div className="truncate text-[11px] leading-tight text-muted-foreground">
-            {`Đã tải ${stats.loaded}/${stats.total} tin`}
+            {typingUsers.length > 0 ? (
+              <span className="text-primary animate-pulse">
+                {typingUsers[0]} đang gõ...
+              </span>
+            ) : (
+              `Đã tải ${stats.loaded}/${stats.total} tin`
+            )}
           </div>
         </div>
         <StatusChip tone={blocked ? "danger" : "success"}>{titleBadge}</StatusChip>
@@ -1231,6 +1356,18 @@ function RoomChatView({
         {!isAdmin && blocked && (
           <Card className="shrink-0 border-red-200 bg-red-50 p-3 text-sm text-red-700">
             Bạn đang bị chặn trong trò chuyện. Chỉ xem được nội dung.
+          </Card>
+        )}
+
+        {!isOnline && !isGuest && (
+          <Card className="shrink-0 border-orange-200 bg-orange-50 p-3 text-sm text-orange-700">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-orange-500"></div>
+              <span>
+                Bạn đang offline.
+                {queueSize > 0 && ` ${queueSize} tin nhắn sẽ được gửi khi online.`}
+              </span>
+            </div>
           </Card>
         )}
 
@@ -1265,6 +1402,11 @@ function RoomChatView({
                 const mine = !isGuest && m.user === user?.id;
                 const actionOpen = actionMessage?.id === m.id;
                 const time = new Date(m.created).toLocaleString("vi-VN");
+                const isPending = (m as any)._pending;
+                const isFailed = (m as any)._failed;
+                const isQueued = (m as any)._queued;
+                const errorMsg = (m as any)._error;
+
                 return (
                   <div key={m.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
                     <div
@@ -1305,14 +1447,36 @@ function RoomChatView({
                           setActionMessage(m);
                         }}
                         className={cn(
-                          "block rounded-2xl px-3 py-2 text-left shadow-sm",
+                          "block rounded-2xl px-3 py-2 text-left shadow-sm transition-opacity",
                           mine
                             ? "bg-primary text-primary-foreground"
                             : "border border-border bg-card text-foreground",
+                          isPending && "opacity-60",
+                          isFailed && "opacity-50 border-red-300",
                         )}
                       >
-                        <div className="whitespace-pre-wrap text-[14px] leading-relaxed">
-                          {m.content}
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 whitespace-pre-wrap text-[14px] leading-relaxed">
+                            {m.content}
+                          </div>
+                          {isPending && !isQueued && (
+                            <div className="flex-shrink-0 pt-0.5">
+                              <svg className="h-4 w-4 animate-spin text-current opacity-70" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                            </div>
+                          )}
+                          {isQueued && (
+                            <div className="flex-shrink-0 pt-0.5 text-orange-500" title="Đang chờ gửi khi online">
+                              <Clock3 className="h-4 w-4" />
+                            </div>
+                          )}
+                          {isFailed && (
+                            <div className="flex-shrink-0 pt-0.5 text-red-500" title={errorMsg}>
+                              <CircleX className="h-4 w-4" />
+                            </div>
+                          )}
                         </div>
                         {messageTimeVisible === m.id && (
                           <div
@@ -1328,6 +1492,20 @@ function RoomChatView({
                           </div>
                         )}
                       </button>
+
+                      {isFailed && mine && (
+                        <button
+                          onClick={() => {
+                            // Retry gửi tin nhắn
+                            setContent(m.content);
+                            setMessages(current => current.filter(msg => msg.id !== m.id));
+                            setTotalCount(current => current - 1);
+                          }}
+                          className="text-xs text-red-600 hover:text-red-700 underline px-1"
+                        >
+                          Thử lại
+                        </button>
+                      )}
 
                       {isAdmin && author && actionOpen && (
                         <div className="space-y-1.5 rounded-lg border border-border bg-background p-2 shadow-soft">
@@ -1464,13 +1642,18 @@ function RoomChatView({
                     ref={inputRef}
                     rows={1}
                     value={content}
-                    onChange={(e) => setContent(e.target.value)}
+                    onChange={(e) => {
+                      setContent(e.target.value);
+                      notifyTyping(); // Broadcast typing status
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.altKey) {
                         e.preventDefault();
+                        clearTyping(); // Clear typing status khi gửi
                         void send();
                       }
                     }}
+                    onBlur={clearTyping} // Clear typing status khi blur
                     placeholder="Nhập tin nhắn..."
                     maxLength={500}
                     className="min-h-10 resize-none rounded-2xl py-2 text-sm"

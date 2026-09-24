@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { UserRecord } from "./pocketbase";
 import { pb } from "./pocketbase";
 import { batchLoadRoomPreviews } from "./chat-batch-api";
-import type { RoomPreview } from "./chat-cache";
+import { invalidateChatCache, cleanupOldMessages, type RoomPreview } from "./chat-cache";
 
 type ChatRoom = {
   id: string;

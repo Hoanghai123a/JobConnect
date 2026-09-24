@@ -70,6 +70,7 @@ export const Route = createFileRoute("/_authenticated")({
 function AuthLayout() {
   const { loading, user, isGuest } = useAuth();
   const nav = useNavigate();
+  const { pathname } = useLocation();
 
   // Khởi động guest log sync khi ở guest mode
   useEffect(() => {
@@ -89,9 +90,12 @@ function AuthLayout() {
     return <DataLoadingState variant="page" label="Đang xác thực tài khoản..." rows={4} />;
   }
 
+  // Focus mode routes không cần padding cho bottom nav
+  const focusMode = pathname === "/gems" || pathname === "/minesweeper" || pathname === "/chat";
+
   if (!user && isGuest) {
     return (
-      <div className="pb-nav">
+      <div className={focusMode ? "" : "pb-nav"}>
         <Outlet />
         <BottomNav />
       </div>
@@ -101,7 +105,7 @@ function AuthLayout() {
   if (!user) return <DataLoadingState variant="page" label="Đang mở ứng dụng..." rows={4} />;
 
   return (
-    <div className="pb-nav">
+    <div className={focusMode ? "" : "pb-nav"}>
       <Outlet />
       <BottomNav />
     </div>

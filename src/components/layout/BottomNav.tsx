@@ -51,7 +51,7 @@ export function BottomNav() {
             { to: "/about", label: "Về chúng tôi", icon: Info },
           ];
 
-  const focusMode = pathname === "/gems" || pathname === "/minesweeper";
+  const focusMode = pathname === "/gems" || pathname === "/minesweeper" || pathname === "/chat";
   if (focusMode) return null;
 
   return (
