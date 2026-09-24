@@ -23,6 +23,12 @@ export function ChatImageViewer({ images, className }: ChatImageViewerProps) {
   const activeImage = viewIdx !== null ? images[viewIdx] : null;
   const canBrowse = images.length > 1;
 
+  // Helper: Check if image should be preloaded (current + 1 before/after)
+  const shouldPreloadImage = useCallback((idx: number) => {
+    if (viewIdx === null) return false;
+    return Math.abs(idx - viewIdx) <= 1;
+  }, [viewIdx]);
+
   const closeViewer = useCallback(() => {
     setViewIdx(null);
     setTouchStartX(null);
@@ -217,15 +223,30 @@ export function ChatImageViewer({ images, className }: ChatImageViewerProps) {
               </>
             )}
 
-            {/* Main image */}
-            <OptimizedImage
-              src={activeImage.url}
-              alt={`Ảnh ${viewIdx! + 1}`}
-              className="max-h-[88dvh] max-w-[96vw] rounded-lg transition-transform duration-200"
-              style={{ transform: `scale(${scale})` }}
-              onClick={(event) => event.stopPropagation()}
-              loading="eager"
-            />
+            {/* Main image with lazy preloading */}
+            <div className="relative">
+              <OptimizedImage
+                src={activeImage.url}
+                alt={`Ảnh ${viewIdx! + 1}`}
+                className="max-h-[88dvh] max-w-[96vw] rounded-lg transition-transform duration-200"
+                style={{ transform: `scale(${scale})` }}
+                onClick={(event) => event.stopPropagation()}
+                loading="eager"
+              />
+
+              {/* Preload adjacent images (hidden) */}
+              {images.map((img, idx) => {
+                if (idx === viewIdx || !shouldPreloadImage(idx)) return null;
+                return (
+                  <link
+                    key={idx}
+                    rel="preload"
+                    as="image"
+                    href={img.url}
+                  />
+                );
+              })}
+            </div>
           </div>,
           document.body,
         )}

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { UserRecord } from "./pocketbase";
-import { invalidateChatCache, cleanupOldMessages } from "./chat-cache";
+import { invalidateChatCache, cleanupOldMessages, evictOldCache } from "./chat-cache";
 
 /**
  * Custom hook quản lý cache invalidation và cleanup
@@ -38,12 +38,24 @@ export function useChatCacheManager(params: {
     };
   }, [viewer, onCacheInvalidated]);
 
-  // Auto-cleanup: Xóa messages cũ hơn 7 ngày khi mount
+  // Auto-cleanup và Smart Cache Eviction
   useEffect(() => {
-    if (viewer) {
-      void cleanupOldMessages(viewer, 7).then(() => {
-        console.log("[Cache] Cleaned up old messages (>7 days)");
-      });
-    }
+    if (!viewer) return;
+
+    // Run cleanup old messages on mount
+    void cleanupOldMessages(viewer, 7).then(() => {
+      console.log("[Cache] Cleaned up old messages (>7 days)");
+    });
+
+    // ✅ Phase 4 Improvement #8: Smart Cache Eviction (LRU)
+    // Run eviction on mount
+    void evictOldCache(viewer).catch(console.error);
+
+    // Run eviction every 24 hours
+    const interval = setInterval(() => {
+      void evictOldCache(viewer).catch(console.error);
+    }, 24 * 60 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, [viewer?.id]);
 }

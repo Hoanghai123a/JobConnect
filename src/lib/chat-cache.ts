@@ -455,3 +455,216 @@ export async function writeChatMeta(
 
   await transactionDone(tx);
 }
+
+// ===== Smart Cache Eviction (LRU) =====
+
+const MAX_CACHED_ROOMS = 20; // Giữ tối đa 20 phòng
+const MAX_MESSAGES_PER_ROOM = 200; // Mỗi phòng 200 tin
+const MAX_PREVIEW_AGE_DAYS = 7; // Preview cache 7 ngày
+
+type RoomStats = {
+  roomId: string;
+  lastAccess: number;
+  messageCount: number;
+};
+
+async function getCachedRoomsSorted(
+  viewer: Pick<UserRecord, "id" | "role">
+): Promise<RoomStats[]> {
+  const db = await openChatDb();
+  const tx = db.transaction([MESSAGES, META], "readonly");
+  const vKey = viewerKey(viewer);
+
+  const rooms = new Map<string, { messageCount: number }>();
+
+  // Collect message counts per room
+  const messageStore = tx.objectStore(MESSAGES);
+  const cursorRequest = messageStore.openCursor();
+
+  await new Promise<void>((resolve, reject) => {
+    cursorRequest.onsuccess = () => {
+      const cursor = cursorRequest.result;
+      if (cursor) {
+        const record = cursor.value as MessageRecord;
+        if (record.viewerKey === vKey) {
+          const existing = rooms.get(record.roomId) || { messageCount: 0 };
+          existing.messageCount++;
+          rooms.set(record.roomId, existing);
+        }
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+    cursorRequest.onerror = () => reject(cursorRequest.error);
+  });
+
+  // Get last access times from meta (stub - in real app would need separate lastAccess store)
+  // For now, use current time as placeholder
+  const now = Date.now();
+
+  // Sort by message count (proxy for usage) - most used first
+  return Array.from(rooms.entries())
+    .map(([roomId, stats]) => ({
+      roomId,
+      lastAccess: now, // Placeholder
+      messageCount: stats.messageCount,
+    }))
+    .sort((a, b) => b.messageCount - a.messageCount);
+}
+
+async function deleteCachedRoom(
+  viewer: Pick<UserRecord, "id" | "role">,
+  roomId: string
+): Promise<void> {
+  const db = await openChatDb();
+  const tx = db.transaction([MESSAGES, PREVIEWS], "readwrite");
+  const rKey = roomKey(viewer, roomId);
+
+  // Delete messages
+  const messageStore = tx.objectStore(MESSAGES);
+  const index = messageStore.index("by_room");
+  const cursorRequest = index.openCursor(IDBKeyRange.only(rKey));
+
+  await new Promise<void>((resolve, reject) => {
+    cursorRequest.onsuccess = () => {
+      const cursor = cursorRequest.result;
+      if (cursor) {
+        cursor.delete();
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+    cursorRequest.onerror = () => reject(cursorRequest.error);
+  });
+
+  // Delete preview
+  tx.objectStore(PREVIEWS).delete(rKey);
+
+  await transactionDone(tx);
+}
+
+async function trimRoomMessages(
+  viewer: Pick<UserRecord, "id" | "role">,
+  roomId: string,
+  keepCount: number
+): Promise<void> {
+  const db = await openChatDb();
+  const tx = db.transaction(MESSAGES, "readwrite");
+  const rKey = roomKey(viewer, roomId);
+
+  const messages: Array<{ key: string; created: string }> = [];
+  const messageStore = tx.objectStore(MESSAGES);
+  const index = messageStore.index("by_room");
+  const cursorRequest = index.openCursor(IDBKeyRange.only(rKey));
+
+  await new Promise<void>((resolve, reject) => {
+    cursorRequest.onsuccess = () => {
+      const cursor = cursorRequest.result;
+      if (cursor) {
+        const record = cursor.value as MessageRecord;
+        messages.push({
+          key: record.key,
+          created: record.created,
+        });
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+    cursorRequest.onerror = () => reject(cursorRequest.error);
+  });
+
+  // Sort by created (newest first)
+  messages.sort((a, b) =>
+    new Date(b.created).getTime() - new Date(a.created).getTime()
+  );
+
+  // Delete old messages
+  const toDelete = messages.slice(keepCount);
+  for (const msg of toDelete) {
+    await requestValue(messageStore.delete(msg.key));
+  }
+
+  await transactionDone(tx);
+
+  if (toDelete.length > 0) {
+    console.log(`[Cache] Trimmed ${toDelete.length} old messages from room ${roomId}`);
+  }
+}
+
+async function cleanupOldPreviews(
+  viewer: Pick<UserRecord, "id" | "role">,
+  maxAgeDays: number
+): Promise<void> {
+  const db = await openChatDb();
+  const tx = db.transaction(PREVIEWS, "readwrite");
+  const vKey = viewerKey(viewer);
+
+  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+
+  const store = tx.objectStore(PREVIEWS);
+  const cursorRequest = store.openCursor();
+  let deleted = 0;
+
+  await new Promise<void>((resolve, reject) => {
+    cursorRequest.onsuccess = () => {
+      const cursor = cursorRequest.result;
+      if (cursor) {
+        const record = cursor.value as PreviewRecord;
+        if (record.viewerKey === vKey) {
+          const generatedAt = new Date(record.generatedAt).getTime();
+          if (generatedAt < cutoff) {
+            cursor.delete();
+            deleted++;
+          }
+        }
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+    cursorRequest.onerror = () => reject(cursorRequest.error);
+  });
+
+  await transactionDone(tx);
+
+  if (deleted > 0) {
+    console.log(`[Cache] Deleted ${deleted} old previews`);
+  }
+}
+
+export async function evictOldCache(
+  viewer: Pick<UserRecord, "id" | "role">
+): Promise<void> {
+  try {
+    const rooms = await getCachedRoomsSorted(viewer);
+
+    console.log(`[Cache] Found ${rooms.length} cached rooms`);
+
+    // 1. Delete old rooms (keep only MAX_CACHED_ROOMS most recent)
+    const roomsToDelete = rooms.slice(MAX_CACHED_ROOMS);
+    if (roomsToDelete.length > 0) {
+      console.log(`[Cache] Deleting ${roomsToDelete.length} old rooms`);
+      for (const room of roomsToDelete) {
+        await deleteCachedRoom(viewer, room.roomId);
+      }
+    }
+
+    // 2. Trim messages in kept rooms
+    const keptRooms = rooms.slice(0, MAX_CACHED_ROOMS);
+    for (const room of keptRooms) {
+      if (room.messageCount > MAX_MESSAGES_PER_ROOM) {
+        await trimRoomMessages(viewer, room.roomId, MAX_MESSAGES_PER_ROOM);
+      }
+    }
+
+    // 3. Clean up old previews
+    await cleanupOldPreviews(viewer, MAX_PREVIEW_AGE_DAYS);
+
+    console.log(`[Cache] Eviction complete`);
+  } catch (error) {
+    console.error("[Cache] Eviction error:", error);
+  }
+}

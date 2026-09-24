@@ -42,49 +42,78 @@ export async function batchLoadRoomPreviews(
       return cached;
     }
 
-    const roomFilter = missingIds.map((id) => `room = "${id}"`).join(" || ");
-    const allMessages = await pb
-      .collection("group_chat_messages")
-      .getFullList<ChatMessage>({
-        filter: roomFilter,
-        sort: "-created",
-        expand: "user",
-      });
+    // ✅ Tối ưu: Load song song cho mỗi phòng (chỉ tin cuối + count unread)
+    const previewPromises = missingIds.map(async (roomId) => {
+      try {
+        // 1. Lấy tin nhắn cuối cùng (chỉ 1 tin)
+        let lastMessage: ChatMessage | null = null;
+        try {
+          lastMessage = await pb
+            .collection("group_chat_messages")
+            .getFirstListItem<ChatMessage>(`room = "${roomId}"`, {
+              sort: "-created",
+              expand: "user",
+            });
+        } catch (err) {
+          // Phòng chưa có tin nhắn nào - OK
+          lastMessage = null;
+        }
 
-    const byRoom = new Map<string, ChatMessage[]>();
-    for (const msg of allMessages) {
-      const existing = byRoom.get(msg.room) || [];
-      existing.push(msg);
-      byRoom.set(msg.room, existing);
-    }
+        // 2. Đếm total messages (chỉ count, không fetch data)
+        const totalResult = await pb
+          .collection("group_chat_messages")
+          .getList(1, 1, {
+            filter: `room = "${roomId}"`,
+          });
+        const totalMessages = totalResult.totalItems;
 
-    const previews: RoomPreview[] = [];
-    for (const roomId of missingIds) {
-      const messages = byRoom.get(roomId) || [];
-      const lastMessage = messages[0] || null;
+        // 3. Đếm unread messages
+        const seenTimestamp = getSeen(`chat:${roomId}`, viewer.id);
+        const seenIso = seenTimestamp
+          ? new Date(seenTimestamp).toISOString()
+          : null;
 
-      const seenTimestamp = getSeen(`chat:${roomId}`, viewer.id);
-      const seenIso = seenTimestamp
-        ? new Date(seenTimestamp).toISOString()
-        : null;
+        let unreadCount = 0;
+        if (seenIso) {
+          // Đếm tin nhắn sau lần seen cuối, không phải của mình
+          const unreadResult = await pb
+            .collection("group_chat_messages")
+            .getList(1, 1, {
+              filter: `room = "${roomId}" && created > "${seenIso}" && user != "${viewer.id}"`,
+            });
+          unreadCount = unreadResult.totalItems;
+        } else {
+          // Chưa từng seen - đếm tất cả tin không phải của mình
+          const unreadResult = await pb
+            .collection("group_chat_messages")
+            .getList(1, 1, {
+              filter: `room = "${roomId}" && user != "${viewer.id}"`,
+            });
+          unreadCount = unreadResult.totalItems;
+        }
 
-      let unreadCount = 0;
-      if (seenIso) {
-        unreadCount = messages.filter(
-          (m) => m.created > seenIso && m.user !== viewer.id,
-        ).length;
-      } else {
-        unreadCount = messages.filter((m) => m.user !== viewer.id).length;
+        return {
+          roomId,
+          lastMessage,
+          unreadCount,
+          totalMessages,
+          generatedAt: new Date().toISOString(),
+        };
+      } catch (err) {
+        console.error(`Preview error for room ${roomId}:`, err);
+        // Fallback: phòng lỗi vẫn trả về preview rỗng
+        return {
+          roomId,
+          lastMessage: null,
+          unreadCount: 0,
+          totalMessages: 0,
+          generatedAt: new Date().toISOString(),
+        };
       }
+    });
 
-      previews.push({
-        roomId,
-        lastMessage,
-        unreadCount,
-        totalMessages: messages.length,
-        generatedAt: new Date().toISOString(),
-      });
-    }
+    // Chờ tất cả preview load xong
+    const previews = await Promise.all(previewPromises);
 
     await writePreviewCache(viewer, previews);
 
