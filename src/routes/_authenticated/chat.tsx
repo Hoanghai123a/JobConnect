@@ -17,6 +17,10 @@ import { useMessageSearch } from "@/lib/use-message-search";
 import { useMessageReactions, REACTION_EMOJIS } from "@/lib/use-message-reactions";
 import { MessageReactions, ReactionPicker } from "@/components/chat/MessageReactions";
 import type { RoomPreview } from "@/lib/chat-cache";
+import { ImageUploader } from "@/components/chat/ImageUploader";
+import { ChatImageViewer } from "@/components/chat/ChatImageViewer";
+import { OptimizedEmojiPicker } from "@/components/chat/OptimizedEmojiPicker";
+import { OptimizedImage } from "@/components/chat/OptimizedImage";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,18 +39,18 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
 import {
+  Camera,
   Check,
   ChevronLeft,
   CircleX,
   Clock3,
-  CornerDownLeft,
   MessageSquareText,
   Plus,
   Search,
   Send,
   Settings,
   ShieldCheck,
-  SmilePlus,
+  Smile,
   Trash2,
   UserPlus,
   UserRound,
@@ -105,6 +109,7 @@ type ChatMessage = {
   user: string;
   room?: string;
   content: string;
+  images?: string[]; // URLs của ảnh đã upload lên PocketBase
   created: string;
   is_anonymous?: boolean;
   expand?: { user?: ChatUser };
@@ -915,6 +920,7 @@ function RoomChatView({
   // UI states
   const [content, setContent] = useState("");
   const [showEmojis, setShowEmojis] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null); // messageId
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -926,8 +932,8 @@ function RoomChatView({
     const saved = localStorage.getItem("chat_anonymous_mode");
     return saved === "true";
   });
-  const [showAnonymousToast, setShowAnonymousToast] = useState(false);
   const [messageTimeVisible, setMessageTimeVisible] = useState<string | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
 
   // Refs
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -940,10 +946,7 @@ function RoomChatView({
     const newValue = !isAnonymous;
     setIsAnonymous(newValue);
     localStorage.setItem("chat_anonymous_mode", String(newValue));
-
-    // Hiển thị toast
-    setShowAnonymousToast(true);
-    setTimeout(() => setShowAnonymousToast(false), 1500);
+    toast.success(newValue ? "Đã bật chế độ ẩn danh" : "Đã tắt chế độ ẩn danh");
   };
 
   // Check ban status và mark seen khi messages load xong
@@ -1193,8 +1196,10 @@ function RoomChatView({
 
   const send = async () => {
     const text = content.trim();
-    if (!text) {
-      toast.error("Nội dung không được để trống");
+    const hasImages = imageFiles.length > 0;
+
+    if (!text && !hasImages) {
+      toast.error("Vui lòng nhập nội dung hoặc chọn ảnh");
       return;
     }
 
@@ -1233,7 +1238,9 @@ function RoomChatView({
     setMessages((current) => [...current, optimisticMessage]);
     setTotalCount((current) => current + 1);
     setContent("");
+    setImageFiles([]);
     setShowEmojis(false);
+    setShowEmojiPicker(false);
     setSending(true);
 
     // Scroll xuống tin nhắn mới ngay
@@ -1268,12 +1275,19 @@ function RoomChatView({
 
     // 3. ONLINE: Gửi lên server background
     try {
-      const savedMessage = await pb.collection("group_chat_messages").create({
-        user: user!.id,
-        room: room.id,
-        content: text,
-        is_anonymous: isAnonymous,
+      // Tạo FormData để upload ảnh
+      const formData = new FormData();
+      formData.append("user", user!.id);
+      formData.append("room", room.id);
+      formData.append("content", text);
+      formData.append("is_anonymous", String(isAnonymous));
+
+      // Append images
+      imageFiles.forEach((file, index) => {
+        formData.append(`images`, file);
       });
+
+      const savedMessage = await pb.collection("group_chat_messages").create(formData);
 
       // 4. Replace tin nhắn tạm với tin nhắn thật từ server
       const messageWithUser: ChatMessage = {
@@ -1434,15 +1448,26 @@ function RoomChatView({
           </div>
         </div>
         {!isGuest && (
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => setShowSearch(!showSearch)}
-            className="h-9 w-9 rounded-full"
-            title="Tìm tin nhắn"
-          >
-            <Search className="h-4 w-4" />
-          </Button>
+          <>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setShowSearch(!showSearch)}
+              className="h-9 w-9 rounded-full"
+              title="Tìm tin nhắn"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant={isAnonymous ? "default" : "ghost"}
+              onClick={toggleAnonymous}
+              className="h-9 w-9 rounded-full"
+              title={isAnonymous ? "Đang gửi ẩn danh - Click để hiện họ tên" : "Đang hiện họ tên - Click để ẩn danh"}
+            >
+              <UserRound className="h-4 w-4" />
+            </Button>
+          </>
         )}
         <StatusChip tone={blocked ? "danger" : "success"}>{titleBadge}</StatusChip>
       </header>
@@ -1609,8 +1634,34 @@ function RoomChatView({
                         )}
                       >
                         <div className="flex items-start gap-2">
-                          <div className="flex-1 whitespace-pre-wrap text-[14px] leading-relaxed">
-                            {m.content}
+                          <div className="flex-1 space-y-2">
+                            {/* Message content */}
+                            {m.content && (
+                              <div className="whitespace-pre-wrap text-[14px] leading-relaxed">
+                                {m.content}
+                              </div>
+                            )}
+
+                            {/* Message images */}
+                            {m.images && m.images.length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {m.images.map((imageUrl, idx) => {
+                                  const fullUrl = pb.files.getUrl(m, imageUrl);
+                                  return (
+                                    <OptimizedImage
+                                      key={idx}
+                                      src={fullUrl}
+                                      alt={`Ảnh ${idx + 1}`}
+                                      className="h-32 w-32 cursor-pointer rounded-lg"
+                                      onClick={() => {
+                                        // TODO: Open image viewer
+                                      }}
+                                      loading="lazy"
+                                    />
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                           {isPending && !isQueued && (
                             <div className="flex-shrink-0 pt-0.5">
@@ -1756,6 +1807,14 @@ function RoomChatView({
               </div>
             ) : (
               <>
+                {/* Image Uploader */}
+                {imageFiles.length > 0 && (
+                  <ImageUploader
+                    onImagesChange={setImageFiles}
+                    maxImages={5}
+                  />
+                )}
+
                 {showEmojis && (
                   <div className="flex gap-1 overflow-x-auto pb-1">
                     {QUICK_EMOJIS.map((emoji) => (
@@ -1772,77 +1831,72 @@ function RoomChatView({
                   </div>
                 )}
                 <div className="flex items-end gap-2">
+                  {/* Camera Button - Upload ảnh (giống Zalo) */}
                   <Button
                     type="button"
                     size="icon"
-                    variant="outline"
+                    variant="ghost"
                     onClick={() => {
-                      setShowEmojis((value) => !value);
-                      inputRef.current?.focus();
+                      const input = document.createElement("input");
+                      input.type = "file";
+                      input.accept = "image/jpeg,image/png,image/webp,image/gif";
+                      input.multiple = true;
+                      input.onchange = async (e) => {
+                        const files = Array.from((e.target as HTMLInputElement).files || []);
+                        if (files.length > 0) {
+                          setImageFiles(files.slice(0, 5));
+                        }
+                      };
+                      input.click();
                     }}
-                    aria-label="Icon"
-                    className="h-10 w-10 rounded-full"
+                    aria-label="Chọn ảnh"
+                    className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   >
-                    <SmilePlus className="h-4 w-4" />
+                    <Camera className="h-5 w-5" />
                   </Button>
-                  <div className="relative">
-                    {showAnonymousToast && (
-                      <div className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 animate-in fade-in slide-in-from-bottom-2 zoom-in-95 duration-300 whitespace-nowrap rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background shadow-lg">
-                        {isAnonymous ? "Đang ẩn danh" : "Hiện họ tên"}
-                      </div>
-                    )}
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant={isAnonymous ? "default" : "outline"}
-                      onClick={toggleAnonymous}
-                      aria-label={isAnonymous ? "Đang ẩn danh" : "Hiện họ tên"}
-                      className="h-10 w-10 rounded-full"
-                      title={isAnonymous ? "Đang gửi ẩn danh - Click để hiện họ tên" : "Đang hiện họ tên - Click để ẩn danh"}
-                    >
-                      <UserRound className="h-4 w-4" />
-                    </Button>
-                  </div>
+
+                  {/* Textarea - chiếm nhiều không gian */}
                   <Textarea
                     ref={inputRef}
                     rows={1}
                     value={content}
                     onChange={(e) => {
                       setContent(e.target.value);
-                      notifyTyping(); // Broadcast typing status
+                      notifyTyping();
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.altKey) {
+                      if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
-                        clearTyping(); // Clear typing status khi gửi
+                        clearTyping();
                         void send();
                       }
                     }}
-                    onBlur={clearTyping} // Clear typing status khi blur
+                    onBlur={clearTyping}
                     placeholder="Nhập tin nhắn..."
                     maxLength={500}
                     className="min-h-10 resize-none rounded-2xl py-2 text-sm"
                   />
+
+                  {/* Emoji Button - Icon đơn giản */}
                   <Button
                     type="button"
                     size="icon"
-                    variant="outline"
-                    onClick={() => {
-                      setContent((prev) => prev + "\n");
-                      inputRef.current?.focus();
-                    }}
-                    aria-label="Xuống dòng"
-                    className="h-10 w-10 rounded-full"
+                    variant="ghost"
+                    onClick={() => setShowEmojiPicker(true)}
+                    aria-label="Chọn emoji"
+                    className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   >
-                    <CornerDownLeft className="h-4 w-4" />
+                    <Smile className="h-5 w-5" />
                   </Button>
+
+                  {/* Send Button - luôn hiển thị */}
                   <Button
                     type="button"
                     size="icon"
                     onClick={() => void send()}
                     disabled={sending}
                     aria-label="Gửi"
-                    className="h-10 w-10 rounded-full"
+                    className="h-10 w-10 shrink-0 rounded-full"
                   >
                     <Send className="h-4 w-4" />
                   </Button>
@@ -1852,6 +1906,17 @@ function RoomChatView({
           </Card>
         </div>
       </main>
+
+      {/* Optimized Emoji Picker */}
+      {showEmojiPicker && (
+        <OptimizedEmojiPicker
+          onSelect={(emoji) => {
+            setContent((prev) => prev + emoji);
+            inputRef.current?.focus();
+          }}
+          onClose={() => setShowEmojiPicker(false)}
+        />
+      )}
     </div>
   );
 }
