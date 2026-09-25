@@ -1,0 +1,39 @@
+
+> dev
+> vite dev --host 127.0.0.1 --port 5174 --strictPort
+
+
+  [32m[1mVITE[22m v7.3.3[39m  [2mready in [0m[1m14507[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5174[22m/[39m
+[2m4:50:46 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ new dependencies optimized: [33m@radix-ui/react-collapsible[32m[39m
+[2m4:50:46 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ optimized dependencies changed. reloading[39m
+[2m4:58:41 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/routes/_authenticated/admin/settings.tsx, /src/routes/_authenticated/admin/settings.tsx?tsr-split=component[22m
+[2m4:58:41 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/routes/_authenticated/admin/settings.tsx[22m
+[2m4:58:56 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/routes/_authenticated/account.tsx, /src/routes/_authenticated/account.tsx?tsr-split=component[22m
+[2m4:58:56 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/routes/_authenticated/account.tsx[22m
+[2m4:59:03 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/routes/_authenticated/account.tsx, /src/routes/_authenticated/account.tsx?tsr-split=component[22m
+[2m4:59:03 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/routes/_authenticated/account.tsx[22m
+[2m4:59:13 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/routes/_authenticated/account.tsx, /src/routes/_authenticated/account.tsx?tsr-split=component[22m
+[2m4:59:13 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/routes/_authenticated/account.tsx[22m
+[2m4:59:32 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/routes/_authenticated/account.tsx, /src/routes/_authenticated/account.tsx?tsr-split=component[22m
+[2m4:59:32 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/routes/_authenticated/account.tsx[22m
+[2m4:59:46 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/routes/_authenticated/account.tsx, /src/routes/_authenticated/account.tsx?tsr-split=component[22m
+[2m4:59:46 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/routes/_authenticated/account.tsx[22m
+[2m5:00:07 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/routes/_authenticated/advances.tsx[22m
+[2m5:00:07 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/routes/_authenticated/advances.tsx[22m
+[2m5:00:16 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/routes/_authenticated/advances.tsx[22m
+[2m5:00:16 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/routes/_authenticated/advances.tsx[22m
+[2m5:00:37 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/routes/_authenticated/advances.tsx[22m
+[2m5:00:37 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/routes/_authenticated/advances.tsx[22m
+[2m5:00:48 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/routes/_authenticated/check-attendance.tsx[22m
+[2m5:00:48 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/routes/_authenticated/check-attendance.tsx[22m
+[2m5:01:00 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/routes/_authenticated/check-attendance.tsx[22m
+[2m5:01:00 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/routes/_authenticated/check-attendance.tsx[22m
+[2m5:01:24 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/routes/_authenticated/check-attendance.tsx[22m
+[2m5:01:24 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/routes/_authenticated/check-attendance.tsx[22m
+[2m5:01:30 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/routes/_authenticated/staff.tsx, /src/routes/_authenticated/staff.index.tsx?tsr-split=component, /src/routes/_authenticated/staff.workers.tsx?tsr-split=component, /src/routes/_authenticated/staff.export.tsx?tsr-split=component, /src/components/users/UserCombobox.tsx, /src/routes/_authenticated/account.tsx?tsr-split=component, /src/components/factories/FactoryManagersDialog.tsx, /src/routes/_authenticated/admin/imports.tsx?tsr-split=component, /src/components/employment/UserWorkHistoryPanel.tsx, /src/components/delegations/DelegationPanel.tsx, /src/routes/_authenticated/advances.tsx[22m
+[2m5:01:30 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/lib/delegations.ts[22m
+[2m5:01:42 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/components/delegations/DelegationPanel.tsx[22m
+[2m5:01:42 PM[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m [32mpage reload [39m[2msrc/components/delegations/DelegationPanel.tsx[22m
+[2m5:02:02 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css?direct, /src/components/factories/FactoryManagersDialog.tsx[22m

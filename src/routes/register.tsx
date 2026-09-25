@@ -1,11 +1,15 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { pb } from "@/lib/pocketbase";
+import { pb, type UserRecord } from "@/lib/pocketbase";
+import { generateUid } from "@/lib/uid";
+import { findUserByUsernameInsensitive, normalizeAccountUsername } from "@/lib/account-identity";
+import { hasLocalDataToSync } from "@/lib/local-sync";
+import { LocalSyncDialog } from "@/components/attendance/LocalSyncDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BackButton } from "@/components/layout/BackButton";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   CheckCircle2,
   Clock,
@@ -27,8 +31,8 @@ export const Route = createFileRoute("/register")({
 
 async function fetchRequireApproval(): Promise<boolean> {
   try {
-    const list = await pb.collection("settings").getList(1, 1);
-    return Boolean(list.items[0]?.require_approval ?? true);
+    const list = await pb.collection("app_settings").getList(1, 1);
+    return Boolean(list.items[0]?.requireApproval ?? true);
   } catch {
     return true;
   }
@@ -49,6 +53,9 @@ function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [result, setResult] = useState<RegisterResult>(null);
 
+  // Local sync state
+  const [showSyncDialog, setShowSyncDialog] = useState(false);
+
   const set = (k: keyof typeof form, v: string) => setForm((s) => ({ ...s, [k]: v }));
 
   const backToLogin = () => {
@@ -66,6 +73,18 @@ function RegisterPage() {
     nav({ to: "/account", search: { incomplete: 1 } as any });
   };
 
+  const handleSyncComplete = () => {
+    setShowSyncDialog(false);
+    toast.success("Đăng ký thành công");
+    setResult("approved");
+  };
+
+  const handleSyncSkip = () => {
+    setShowSyncDialog(false);
+    toast.success("Đăng ký thành công");
+    setResult("approved");
+  };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (form.password !== form.passwordConfirm) {
@@ -73,40 +92,38 @@ function RegisterPage() {
       return;
     }
 
-    const username = form.username.trim().toLowerCase();
+    const username = normalizeAccountUsername(form.username);
     if (!/^[a-z0-9_.]{4,30}$/.test(username)) {
       toast.error("Tên đăng nhập 4-30 ký tự, chỉ chữ/số/._");
       return;
     }
 
-    if (form.phone && !/^[0-9]{9,11}$/.test(form.phone)) {
-      toast.error("Số điện thoại không hợp lệ");
+    const phoneDigits = form.phone.replace(/\D/g, "");
+    if (form.phone && phoneDigits.length !== 10) {
+      toast.error("Số điện thoại phải có đúng 10 chữ số; có thể thêm ký tự phía sau");
       return;
     }
 
     setLoading(true);
     try {
-      const userTaken = await pb
-        .collection("users")
-        .getList(1, 1, { filter: `username="${username}"` })
-        .catch(() => ({ items: [] as any[] }));
+      const userTaken = await findUserByUsernameInsensitive(username);
 
-      if (userTaken.items.length) {
+      if (userTaken) {
         throw new Error("Tên đăng nhập đã tồn tại");
       }
 
       const requireApproval = await fetchRequireApproval();
+      const uid = await generateUid();
 
       await pb.collection("users").create({
         username,
+        uid,
         emailVisibility: false,
         password: form.password,
         passwordConfirm: form.passwordConfirm,
         full_name: form.full_name,
         phone: form.phone || undefined,
         role: "user",
-        approvalStatus: requireApproval ? "pending" : "approved",
-        approved: requireApproval ? "false" : "true",
         status: requireApproval ? "disabled" : "active",
       });
 
@@ -116,10 +133,20 @@ function RegisterPage() {
         setResult("pending");
       } else {
         await pb.collection("users").authWithPassword(username, form.password);
+
+        // Check for local data to sync
+        if (hasLocalDataToSync()) {
+          setShowSyncDialog(true);
+          return;
+        }
+
         toast.success("Đăng ký thành công");
         setResult("approved");
       }
     } catch (err: any) {
+      console.error("[Register] Full error:", err);
+      console.error("[Register] Error response:", err?.response);
+      console.error("[Register] Error data:", err?.data);
       toast.error(err?.message || "Đăng ký thất bại");
     } finally {
       setLoading(false);
@@ -173,7 +200,7 @@ function RegisterPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background">
+    <div className="min-h-[100dvh] bg-background desktop:grid-cols-[minmax(22rem,0.85fr)_minmax(28rem,1fr)]">
       <div className="gradient-primary relative px-6 pb-16 pt-16 text-primary-foreground">
         <BackButton className="absolute left-4 top-4 text-primary-foreground active:bg-white/15" />
         <h1 className="text-2xl font-bold">Tạo tài khoản</h1>
@@ -254,6 +281,12 @@ function RegisterPage() {
           </Link>
         </p>
       </form>
+
+      <LocalSyncDialog
+        open={showSyncDialog}
+        onClose={handleSyncSkip}
+        onSyncComplete={handleSyncComplete}
+      />
     </div>
   );
 }

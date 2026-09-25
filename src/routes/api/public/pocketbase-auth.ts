@@ -29,10 +29,15 @@ async function authWithPassword(identity: string, password: string) {
     body: JSON.stringify({ identity, password }),
   });
 
-  return {
-    response,
-    body: await readPocketBaseAuthResponse(response),
-  };
+  const body = await readPocketBaseAuthResponse(response);
+  if (response.ok && body?.record?.status === "disabled") {
+    return {
+      response: new Response(null, { status: 403 }),
+      body: { message: "Tài khoản đã bị khóa và không thể đăng nhập." },
+    };
+  }
+
+  return { response, body };
 }
 
 function escapePocketBaseString(value: string) {
@@ -42,9 +47,9 @@ function escapePocketBaseString(value: string) {
 async function resolveCanonicalIdentity(identity: string) {
   const normalizedIdentity = identity.toLowerCase();
   const escapedIdentity = escapePocketBaseString(identity);
-  const filter = encodeURIComponent(`username~"${escapedIdentity}" || email~"${escapedIdentity}"`);
+  const filter = encodeURIComponent(`username~"${escapedIdentity}"`);
   const response = await fetch(
-    `${getPBUpstream()}/api/collections/users/records?page=1&perPage=25&filter=${filter}&fields=username,email`,
+    `${getPBUpstream()}/api/collections/users/records?page=1&perPage=25&filter=${filter}&fields=username`,
     {
       headers: {
         "ngrok-skip-browser-warning": "true",
@@ -55,14 +60,43 @@ async function resolveCanonicalIdentity(identity: string) {
   if (!response.ok) return null;
 
   const body = await response.json().catch(() => null);
-  const items = Array.isArray(body?.items) ? body.items : [];
+  const items: Array<{ username?: unknown }> = Array.isArray(body?.items) ? body.items : [];
   const matched = items.find(
-    (item) =>
-      String(item?.username || "").toLowerCase() === normalizedIdentity ||
-      String(item?.email || "").toLowerCase() === normalizedIdentity,
+    (item) => String(item?.username || "").toLowerCase() === normalizedIdentity,
   );
 
-  return matched?.username || matched?.email || null;
+  if (!matched) return null;
+  return String(matched.username || "") || null;
+}
+
+function updateLastLogin(token: string, recordId: string) {
+  const now = new Date().toISOString();
+
+  // Cập nhật last_login trong users collection (giữ lại để tương thích)
+  fetch(`${getPBUpstream()}/api/collections/users/records/${recordId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      "ngrok-skip-browser-warning": "true",
+    },
+    body: JSON.stringify({ last_login: now }),
+  }).catch(() => {});
+
+  // Ghi log vào login_history
+  fetch(`${getPBUpstream()}/api/collections/login_history/records`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      "ngrok-skip-browser-warning": "true",
+    },
+    body: JSON.stringify({
+      user_id: recordId,
+      login_type: "user",
+      login_at: now,
+    }),
+  }).catch(() => {});
 }
 
 export const Route = createFileRoute("/api/public/pocketbase-auth")({
@@ -83,6 +117,9 @@ export const Route = createFileRoute("/api/public/pocketbase-auth")({
             lastResult = await authWithPassword(identity, parsed.data.password);
 
             if (lastResult.response.ok || lastResult.response.status !== 400) {
+              if (lastResult.response.ok && lastResult.body?.token && lastResult.body?.record?.id) {
+                updateLastLogin(lastResult.body.token, lastResult.body.record.id);
+              }
               return Response.json(lastResult.body, { status: lastResult.response.status });
             }
           }
@@ -90,6 +127,10 @@ export const Route = createFileRoute("/api/public/pocketbase-auth")({
           const canonicalIdentity = await resolveCanonicalIdentity(parsed.data.identity);
           if (canonicalIdentity && !identityCandidates.includes(canonicalIdentity)) {
             lastResult = await authWithPassword(canonicalIdentity, parsed.data.password);
+          }
+
+          if (lastResult?.response.ok && lastResult.body?.token && lastResult.body?.record?.id) {
+            updateLastLogin(lastResult.body.token, lastResult.body.record.id);
           }
 
           return Response.json(lastResult?.body || {}, {

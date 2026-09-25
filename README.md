@@ -53,7 +53,12 @@ Example `.env` for CentOS / PM2 / Cloudflare Tunnel:
 ```bash
 PB_URL=http://127.0.0.1:8090
 VITE_PB_URL=http://127.0.0.1:8090
+PB_ADMIN_EMAIL=your-pocketbase-superuser@example.com
+PB_ADMIN_PASSWORD=your-pocketbase-superuser-password
 ```
+
+Keep `.env` only on the server and never commit it. The PM2 configuration loads this file through
+Node's `--env-file` option, so production requires Node.js 20.6 or newer.
 
 ## PM2 Deploy
 
@@ -72,6 +77,7 @@ npm run deploy
 ```
 
 `npm run deploy` rebuilds the app, reloads PM2, and saves the PM2 process list.
+When `.env` changes, the same command reloads PM2 with the updated values.
 
 If dependencies changed, run the full deploy instead:
 
@@ -96,6 +102,35 @@ npm run deploy:full
 2. Import repo in Netlify.
 3. Build command: `npm run build`
 4. Publish handled by the TanStack Start Netlify plugin.
+
+## Module Nông Trại Game
+
+Module game mini tích hợp trong JobConnect, do AI Engineer phát triển theo quy trình milestone nghiêm ngặt.
+
+### Tệp tin quản lý
+
+- `.codex/skills/nong-trai-game/SKILL.md` — Hướng dẫn kỹ thuật chi tiết
+- `.codex/game-status.md` — Trạng thái tiến độ hiện tại
+
+### Lệnh điều hành
+
+Prefix: `@nong-trai-game`
+
+- `status` — Báo cáo tiến độ
+- `implement milestone [X]` — Triển khai milestone X
+- `continue` — Tiếp tục công việc dở dang
+- `asset-spec crops` — Kiểm tra quy chuẩn asset cây trồng
+- `asset-audit` — Kiểm tra tính hợp lệ của asset
+- `qa` — Kiểm thử và rà soát lỗi
+
+### Milestones (theo thứ tự)
+
+1. Foundation → 2. UI → 3. Phaser world → 4. Crop system → 5. Economy → 6. Progression → 7. Quests → 8. Collection → 9. PocketBase → 10. Security → 11. Polish → 12. QA
+
+### Quy tắc Asset
+
+- Artwork từ Image Generation, tích hợp chính xác vào game logic
+- **KHÔNG** tự bịa filename hoặc dùng emoji/icon thay thế asset thật
 
 ## Git push
 

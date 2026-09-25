@@ -1,0 +1,809 @@
+[
+  {
+    "id": "pbc_user_points001",
+    "name": "user_points",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "id": "rel_user_points_user",
+        "name": "user",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name", "username"]
+        }
+      },
+      {
+        "id": "num_total_points",
+        "name": "total_points",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "num_available_points",
+        "name": "available_points",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "num_used_points",
+        "name": "used_points",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "sel_tier",
+        "name": "tier",
+        "type": "select",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "maxSelect": 1,
+          "values": ["bronze", "silver", "gold", "platinum"]
+        }
+      },
+      {
+        "id": "date_tier_updated",
+        "name": "tier_updated_at",
+        "type": "date",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_user_points_user ON user_points (user)",
+      "CREATE INDEX idx_user_points_tier ON user_points (tier)"
+    ],
+    "listRule": "@request.auth.id != '' && user = @request.auth.id",
+    "viewRule": "@request.auth.id != '' && (user = @request.auth.id || @request.auth.role = 'admin')",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "options": {}
+  },
+  {
+    "id": "pbc_point_txns001",
+    "name": "point_transactions",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "id": "rel_txn_user",
+        "name": "user",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name", "username"]
+        }
+      },
+      {
+        "id": "sel_txn_type",
+        "name": "type",
+        "type": "select",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "maxSelect": 1,
+          "values": ["earn", "redeem", "expire", "adjust"]
+        }
+      },
+      {
+        "id": "sel_txn_source",
+        "name": "source",
+        "type": "select",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "maxSelect": 1,
+          "values": ["referral", "attendance", "advance_recovery", "login_streak", "manual", "other"]
+        }
+      },
+      {
+        "id": "num_txn_amount",
+        "name": "amount",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "num_txn_balance_after",
+        "name": "balance_after",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "text_ref_type",
+        "name": "reference_type",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 50,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "text_ref_id",
+        "name": "reference_id",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 100,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "text_txn_desc",
+        "name": "description",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 500,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "rel_created_by",
+        "name": "created_by",
+        "type": "relation",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name"]
+        }
+      },
+      {
+        "id": "date_expires_at",
+        "name": "expires_at",
+        "type": "date",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_point_transactions_user ON point_transactions (user)",
+      "CREATE INDEX idx_point_transactions_type ON point_transactions (type)",
+      "CREATE INDEX idx_point_transactions_created ON point_transactions (created)"
+    ],
+    "listRule": "@request.auth.id != '' && (user = @request.auth.id || @request.auth.role = 'admin')",
+    "viewRule": "@request.auth.id != '' && (user = @request.auth.id || @request.auth.role = 'admin')",
+    "createRule": "@request.auth.role = 'admin'",
+    "updateRule": null,
+    "deleteRule": "@request.auth.role = 'admin'",
+    "options": {}
+  },
+  {
+    "id": "pbc_ref_codes001",
+    "name": "referral_codes",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "id": "rel_code_user",
+        "name": "user",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name", "username"]
+        }
+      },
+      {
+        "id": "text_code",
+        "name": "code",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": true,
+        "unique": false,
+        "options": {
+          "min": 6,
+          "max": 10,
+          "pattern": "^[A-Z0-9]{6,8}$"
+        }
+      },
+      {
+        "id": "num_total_uses",
+        "name": "total_uses",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "num_successful_refs",
+        "name": "successful_referrals",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "num_total_points",
+        "name": "total_points_earned",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "bool_is_active",
+        "name": "is_active",
+        "type": "bool",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {}
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_referral_codes_user ON referral_codes (user)",
+      "CREATE UNIQUE INDEX idx_referral_codes_code ON referral_codes (code)"
+    ],
+    "listRule": "@request.auth.id != '' && user = @request.auth.id",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": "@request.auth.id != '' && user = @request.auth.id",
+    "updateRule": "@request.auth.id != '' && user = @request.auth.id",
+    "deleteRule": null,
+    "options": {}
+  },
+  {
+    "id": "pbc_referrals001",
+    "name": "referrals",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "id": "rel_referrer",
+        "name": "referrer",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name"]
+        }
+      },
+      {
+        "id": "rel_referee",
+        "name": "referee",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name"]
+        }
+      },
+      {
+        "id": "text_ref_code",
+        "name": "referral_code",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 10,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "sel_status",
+        "name": "status",
+        "type": "select",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "maxSelect": 1,
+          "values": ["pending", "active", "completed", "cancelled"]
+        }
+      },
+      {
+        "id": "date_join",
+        "name": "referee_join_date",
+        "type": "date",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      },
+      {
+        "id": "date_first_advance",
+        "name": "referee_first_advance_date",
+        "type": "date",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      },
+      {
+        "id": "num_points_awarded",
+        "name": "points_awarded",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "text_bonus_milestone",
+        "name": "bonus_milestone",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 50,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "date_completed",
+        "name": "completed_at",
+        "type": "date",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_referrals_referee ON referrals (referee)",
+      "CREATE INDEX idx_referrals_referrer ON referrals (referrer)",
+      "CREATE INDEX idx_referrals_status ON referrals (status)"
+    ],
+    "listRule": "@request.auth.id != '' && (referrer = @request.auth.id || referee = @request.auth.id || @request.auth.role = 'admin')",
+    "viewRule": "@request.auth.id != '' && (referrer = @request.auth.id || referee = @request.auth.id || @request.auth.role = 'admin')",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "options": {}
+  },
+  {
+    "id": "pbc_rewards001",
+    "name": "rewards",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "id": "text_title",
+        "name": "title",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": true,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 200,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "text_description",
+        "name": "description",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 1000,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "sel_category",
+        "name": "category",
+        "type": "select",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "maxSelect": 1,
+          "values": ["voucher", "gift", "cash", "service"]
+        }
+      },
+      {
+        "id": "num_point_cost",
+        "name": "point_cost",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "num_stock_qty",
+        "name": "stock_quantity",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "num_available_qty",
+        "name": "available_quantity",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "bool_is_active",
+        "name": "is_active",
+        "type": "bool",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {}
+      },
+      {
+        "id": "file_image",
+        "name": "image",
+        "type": "file",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "mimeTypes": ["image/jpeg", "image/png", "image/webp"],
+          "thumbs": ["128x128", "512x512"],
+          "maxSelect": 1,
+          "maxSize": 5242880,
+          "protected": false
+        }
+      },
+      {
+        "id": "text_terms",
+        "name": "terms",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 2000,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "num_order",
+        "name": "order",
+        "type": "number",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "noDecimal": true
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_rewards_is_active ON rewards (is_active)",
+      "CREATE INDEX idx_rewards_order ON rewards (order)"
+    ],
+    "listRule": "@request.auth.id != '' && is_active = true",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": "@request.auth.role = 'admin'",
+    "updateRule": "@request.auth.role = 'admin'",
+    "deleteRule": "@request.auth.role = 'admin'",
+    "options": {}
+  },
+  {
+    "id": "pbc_reward_red001",
+    "name": "reward_redemptions",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "id": "rel_redeem_user",
+        "name": "user",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name", "phone"]
+        }
+      },
+      {
+        "id": "rel_redeem_reward",
+        "name": "reward",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "pbc_rewards001",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["title"]
+        }
+      },
+      {
+        "id": "num_points_spent",
+        "name": "points_spent",
+        "type": "number",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "sel_redeem_status",
+        "name": "status",
+        "type": "select",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "maxSelect": 1,
+          "values": ["pending", "approved", "delivered", "cancelled"]
+        }
+      },
+      {
+        "id": "json_delivery_info",
+        "name": "delivery_info",
+        "type": "json",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "maxSize": 2000000
+        }
+      },
+      {
+        "id": "rel_approved_by",
+        "name": "approved_by",
+        "type": "relation",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name"]
+        }
+      },
+      {
+        "id": "date_approved",
+        "name": "approved_at",
+        "type": "date",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      },
+      {
+        "id": "date_delivered",
+        "name": "delivered_at",
+        "type": "date",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      },
+      {
+        "id": "text_admin_note",
+        "name": "admin_note",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 1000,
+          "pattern": ""
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_reward_redemptions_user ON reward_redemptions (user)",
+      "CREATE INDEX idx_reward_redemptions_status ON reward_redemptions (status)"
+    ],
+    "listRule": "@request.auth.id != '' && (user = @request.auth.id || @request.auth.role = 'admin')",
+    "viewRule": "@request.auth.id != '' && (user = @request.auth.id || @request.auth.role = 'admin')",
+    "createRule": "@request.auth.id != '' && user = @request.auth.id",
+    "updateRule": "@request.auth.role = 'admin'",
+    "deleteRule": "@request.auth.role = 'admin'",
+    "options": {}
+  }
+]

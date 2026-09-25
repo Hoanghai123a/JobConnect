@@ -1,0 +1,19 @@
+{
+  "mode": "dry-run",
+  "prefix": "HL",
+  "users": {
+    "total": 17,
+    "changed": 17,
+    "maxSequence": 17
+  },
+  "histories": {
+    "total": 14,
+    "changed": 8,
+    "months": 4
+  },
+  "files": {
+    "userPlan": "D:\\My App\\JobConnect\\output\\rebuild-uids-plan-20260831-214905-users.csv",
+    "historyPlan": "D:\\My App\\JobConnect\\output\\rebuild-uids-plan-20260831-214905-histories.csv",
+    "summary": "D:\\My App\\JobConnect\\output\\rebuild-uids-plan-20260831-214905-summary.json"
+  }
+}

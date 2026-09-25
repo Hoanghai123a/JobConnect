@@ -1,19 +1,30 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { pb, dataUrlToFile, fileUrl } from "@/lib/pocketbase";
+import { pb, dataUrlToFile, fileUrl, type UserRecord } from "@/lib/pocketbase";
 import { useAppSettings } from "@/lib/app-settings";
-import { isUserApproved } from "@/lib/user-approval";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
+import { createStaffActionLog } from "@/lib/staff-log";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/money";
 import { useQueryClient } from "@tanstack/react-query";
-import { DelegationPanel } from "@/components/delegations/DelegationPanel";
 import { AppHeader } from "@/components/layout/BottomNav";
+import { PushNotificationSettingsCard } from "@/components/layout/PushNotificationSettingsCard";
+import { InstallAppGuideSection } from "@/components/settings/InstallAppGuideSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { DataLoadingState } from "@/components/ui/data-loading-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { FactoryManagersDialog } from "@/components/factories/FactoryManagersDialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
@@ -22,24 +33,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   Building2,
   Factory,
-  Users,
+  Home,
   Save,
   ImagePlus,
   Pencil,
   Trash2,
   Plus,
-  Check,
   X,
   ShieldCheck,
-  Search,
   Smartphone,
   CalendarDays,
   ChevronDown,
   MapPin,
+  Search,
+  Ban,
+  CircleX,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({
@@ -55,6 +67,7 @@ function AdminSettingsPage() {
     <div>
       <AppHeader title="Cài đặt hệ thống" back />
       <div className="p-4">
+        <PushNotificationSettingsCard />
         <Tabs defaultValue="company" className="w-full">
           <TabsList className="grid w-full grid-cols-3 rounded-2xl">
             <TabsTrigger value="company" className="rounded-xl text-xs">
@@ -63,8 +76,8 @@ function AdminSettingsPage() {
             <TabsTrigger value="factories" className="rounded-xl text-xs">
               <Factory className="mr-1 h-4 w-4" /> Nhà máy
             </TabsTrigger>
-            <TabsTrigger value="users" className="rounded-xl text-xs">
-              <Users className="mr-1 h-4 w-4" /> Người dùng
+            <TabsTrigger value="app" className="rounded-xl text-xs">
+              <Smartphone className="mr-1 h-4 w-4" /> Cài App
             </TabsTrigger>
           </TabsList>
           <TabsContent value="company" className="mt-4">
@@ -73,8 +86,8 @@ function AdminSettingsPage() {
           <TabsContent value="factories" className="mt-4">
             <FactoriesTab />
           </TabsContent>
-          <TabsContent value="users" className="mt-4">
-            <UsersTab />
+          <TabsContent value="app" className="mt-4">
+            <InstallAppGuideSection />
           </TabsContent>
         </Tabs>
       </div>
@@ -105,11 +118,12 @@ function CompanyTab() {
       hotline: settings.hotline || "",
       email: settings.email || "",
       about: settings.about || "",
-      advance_limit: formatMoneyInput(settings.advance_limit || 0),
+      advance_limit: settings.advance_limit || 0,
       advance_rules: settings.advance_rules || "",
+      staff_employment_factory_scope: settings.staff_employment_factory_scope || "assigned",
     });
     setLogoPreview(logoUrl);
-  }, [settings.id]);
+  }, [logoUrl, settings]);
 
   const onPickLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -133,26 +147,63 @@ function CompanyTab() {
   const save = async () => {
     setSaving(true);
     try {
-      const fd = new FormData();
-      Object.entries(form).forEach(([k, v]) => {
-        if (k === "install_guide_images") return;
-        if (k === "advance_limit") fd.append(k, String(parseMoneyInput(v as string)));
-        else fd.append(k, (v as any) ?? "");
-      });
-      if (logoFile) fd.append("logo", logoFile);
-      for (const rm of removedInstallGuideImages) fd.append("install_guide_images-", rm);
-      for (const f of installGuideFiles) fd.append("install_guide_images", f);
-      if (settings.id) {
-        await pb.collection("app_settings").update(settings.id, fd);
-      } else {
-        await pb.collection("app_settings").create(fd);
+      const { saveAppSetting } = await import("@/lib/app-settings");
+
+      // Lưu từng setting riêng lẻ
+      const savePromises: Promise<void>[] = [];
+
+      // Lưu các trường text
+      for (const [key, value] of Object.entries(form)) {
+        if (key === "install_guide_images") continue;
+
+        if (key === "advance_limit") {
+          const parsed = parseMoneyInput(value as string);
+          savePromises.push(saveAppSetting(key, parsed));
+        } else if (value !== undefined && value !== null) {
+          savePromises.push(saveAppSetting(key, value));
+        }
       }
+
+      // Lưu logo nếu có
+      if (logoFile) {
+        savePromises.push(saveAppSetting("logo", "", logoFile));
+      }
+
+      // Xử lý install_guide_images
+      if (installGuideFiles.length > 0 || removedInstallGuideImages.length > 0) {
+        // Lấy record hiện có của install_guide_images
+        const existing = await pb.collection("app_settings").getFullList({
+          filter: `key = "install_guide_images"`,
+        });
+
+        const fd = new FormData();
+        fd.append("key", "install_guide_images");
+        fd.append("value", "[]");
+        fd.append("data_type", "json");
+
+        for (const rm of removedInstallGuideImages) {
+          fd.append("install_guide_images-", rm);
+        }
+        for (const f of installGuideFiles) {
+          fd.append("install_guide_images", f);
+        }
+
+        if (existing.length > 0) {
+          savePromises.push(pb.collection("app_settings").update(existing[0].id, fd));
+        } else {
+          savePromises.push(pb.collection("app_settings").create(fd));
+        }
+      }
+
+      await Promise.all(savePromises);
+
       toast.success("Đã lưu thông tin công ty");
       qc.invalidateQueries({ queryKey: ["app_settings"] });
       refetch();
       setInstallGuideFiles([]);
       setRemovedInstallGuideImages([]);
     } catch (e: any) {
+      console.error("Save error:", e);
       toast.error(e?.message || "Lỗi lưu");
     } finally {
       setSaving(false);
@@ -195,16 +246,6 @@ function CompanyTab() {
       />
       <Field label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
       <div>
-        <Label className="text-xs">Hạn mức Ứng lương</Label>
-        <Input
-          className="mt-1 rounded-xl"
-          inputMode="numeric"
-          placeholder="0"
-          value={form.advance_limit || ""}
-          onChange={(e) => setForm({ ...form, advance_limit: formatMoneyInput(e.target.value) })}
-        />
-      </div>
-      <div>
         <Label className="text-xs">Nội quy Ứng lương</Label>
         <Textarea
           className="mt-1 rounded-xl"
@@ -214,6 +255,9 @@ function CompanyTab() {
           onChange={(e) => setForm({ ...form, advance_rules: e.target.value })}
         />
       </div>
+
+      <AdvanceBlockedUsersSection />
+
       <div>
         <Label className="text-xs">Giới thiệu</Label>
         <Textarea
@@ -272,7 +316,7 @@ function CompanyTab() {
               </button>
             </div>
           ))}
-          <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed text-muted-foreground">
+          <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed bg-white text-muted-foreground">
             <ImagePlus className="h-5 w-5" />
             <input
               type="file"
@@ -289,12 +333,6 @@ function CompanyTab() {
         <Save className="h-4 w-4" /> {saving ? "Đang lưu..." : "Lưu thay đổi"}
       </Button>
 
-      <p className="text-[11px] text-muted-foreground">
-        Yêu cầu collection PocketBase tên <code>app_settings</code> với các field: company_name,
-        slogan, address, hotline, email, about (text), advance_limit (number), advance_rules (text),
-        logo (file), install_guide_images (multiple files). Collection <code>factories</code> cần
-        thêm field attendance_cutoff_day (number).
-      </p>
     </Card>
   );
 }
@@ -320,6 +358,204 @@ function Field({
   );
 }
 
+/* ───────── ADVANCE BLOCKED USERS ───────── */
+
+function AdvanceBlockedUsersSection() {
+  const { data: settings } = useAppSettings();
+  const qc = useQueryClient();
+  const [users, setUsers] = useState<UserRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebouncedSearch(searchQuery);
+  const [searchResults, setSearchResults] = useState<UserRecord[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  const blockedUserIds = settings?.advance_blocked_users || [];
+
+  useEffect(() => {
+    if (!blockedUserIds.length) {
+      setUsers([]);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    Promise.all(
+      blockedUserIds.map((id) =>
+        pb
+          .collection("users")
+          .getOne<UserRecord>(id)
+          .catch(() => null),
+      ),
+    )
+      .then((results) => {
+        if (active) setUsers(results.filter((u): u is UserRecord => u !== null));
+      })
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [blockedUserIds]);
+
+  useEffect(() => {
+    if (!debouncedSearch.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    let active = true;
+    setSearching(true);
+    pb.collection("users")
+      .getList<UserRecord>(1, 20, {
+        filter: `(full_name~"${debouncedSearch}" || phone~"${debouncedSearch}" || email~"${debouncedSearch}") && role!="admin"`,
+        sort: "-created",
+      })
+      .then((res) => {
+        if (active) setSearchResults(res.items);
+      })
+      .catch(() => {})
+      .finally(() => active && setSearching(false));
+    return () => {
+      active = false;
+    };
+  }, [debouncedSearch]);
+
+  const addBlockedUser = async (userId: string) => {
+    if (blockedUserIds.includes(userId)) {
+      toast.error("User đã có trong danh sách chặn");
+      return;
+    }
+    setSaving(true);
+    try {
+      const newList = [...blockedUserIds, userId];
+      const saved = settings?.id
+        ? await pb.collection("app_settings").update(settings.id, {
+            advance_blocked_users: newList,
+          })
+        : await pb.collection("app_settings").create({
+            advance_blocked_users: newList,
+          });
+      qc.setQueryData(["app_settings"], (current: any) => ({
+        ...current,
+        ...saved,
+      }));
+      toast.success("Đã thêm vào danh sách chặn");
+      setSearchQuery("");
+      setSearchResults([]);
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi thêm user vào danh sách chặn");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeBlockedUser = async (userId: string) => {
+    setSaving(true);
+    try {
+      const newList = blockedUserIds.filter((id) => id !== userId);
+      const saved = await pb.collection("app_settings").update(settings!.id!, {
+        advance_blocked_users: newList,
+      });
+      qc.setQueryData(["app_settings"], (current: any) => ({
+        ...current,
+        ...saved,
+      }));
+      toast.success("Đã gỡ khỏi danh sách chặn");
+    } catch (error: unknown) {
+      toast.error((error as any)?.message || "Lỗi gỡ user khỏi danh sách chặn");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/50 p-4">
+      <div className="flex items-start gap-2">
+        <Ban className="mt-0.5 h-5 w-5 text-amber-600" />
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-amber-900">
+            Danh sách chặn báo ứng ({users.length})
+          </div>
+          <div className="mt-0.5 text-xs text-amber-700">
+            User trong danh sách này không thể tạo yêu cầu ứng lương mới
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-amber-900">Tìm user để chặn</Label>
+        <Input
+          placeholder="Tìm theo tên, SĐT, email..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="rounded-xl border-amber-200"
+        />
+        {searching && <div className="text-xs text-muted-foreground">Đang tìm...</div>}
+        {searchResults.length > 0 && (
+          <div className="space-y-1 rounded-xl border border-amber-200 bg-white p-2">
+            {searchResults
+              .filter((u) => !blockedUserIds.includes(u.id))
+              .map((u) => (
+                <div
+                  key={u.id}
+                  className="flex items-center justify-between rounded-lg p-2 hover:bg-amber-50"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium">{u.full_name || "Không tên"}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {u.phone || u.email || u.username}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-2 h-7 rounded-lg border-amber-300 text-xs"
+                    onClick={() => addBlockedUser(u.id)}
+                    disabled={saving}
+                  >
+                    <Ban className="mr-1 h-3 w-3" /> Chặn
+                  </Button>
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+
+      {loading && <div className="text-xs text-muted-foreground">Đang tải danh sách...</div>}
+
+      {users.length > 0 && (
+        <div className="space-y-1 rounded-xl border border-amber-200 bg-white p-2">
+          {users.map((u) => (
+            <div
+              key={u.id}
+              className="flex items-center justify-between rounded-lg bg-amber-50 p-2"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-amber-900">{u.full_name || "Không tên"}</div>
+                <div className="text-xs text-amber-700">{u.phone || u.email || u.username}</div>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ml-2 h-7 rounded-lg text-xs text-amber-700 hover:bg-amber-100 hover:text-amber-900"
+                onClick={() => removeBlockedUser(u.id)}
+                disabled={saving}
+              >
+                <CircleX className="mr-1 h-3 w-3" /> Gỡ
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && users.length === 0 && (
+        <div className="rounded-xl border border-dashed border-amber-300 bg-white p-4 text-center text-xs text-amber-600">
+          Chưa có user nào bị chặn báo ứng
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ───────── FACTORIES ───────── */
 
 interface Factory {
@@ -329,6 +565,7 @@ interface Factory {
   hotline?: string;
   note?: string;
   attendance_cutoff_day?: number;
+  status?: string;
 }
 
 interface RecruitmentArea {
@@ -338,20 +575,43 @@ interface RecruitmentArea {
 }
 
 function FactoriesTab() {
+  const currentUser = pb.authStore.record as UserRecord | null;
+  const queryClient = useQueryClient();
   const [items, setItems] = useState<Factory[]>([]);
   const [areas, setAreas] = useState<RecruitmentArea[]>([]);
   const [editing, setEditing] = useState<Partial<Factory> | null>(null);
   const [editingArea, setEditingArea] = useState<Partial<RecruitmentArea> | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [areasLoading, setAreasLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [areasLoading, setAreasLoading] = useState(true);
   const [factoriesOpen, setFactoriesOpen] = useState(true);
   const [areasOpen, setAreasOpen] = useState(true);
+  const [managingFactory, setManagingFactory] = useState<Factory | null>(null);
+  const [factorySearch, setFactorySearch] = useState("");
+  const [areaSearch, setAreaSearch] = useState("");
+  const debouncedFactorySearch = useDebouncedSearch(factorySearch);
+  const debouncedAreaSearch = useDebouncedSearch(areaSearch);
+
+  const filteredFactories = items.filter((f) => {
+    if (!debouncedFactorySearch.trim()) return true;
+    const q = debouncedFactorySearch.toLowerCase();
+    return (
+      f.name.toLowerCase().includes(q) ||
+      (f.address || "").toLowerCase().includes(q) ||
+      (f.hotline || "").toLowerCase().includes(q)
+    );
+  });
+
+  const filteredAreas = areas.filter((a) => {
+    if (!debouncedAreaSearch.trim()) return true;
+    const q = debouncedAreaSearch.toLowerCase();
+    return a.name.toLowerCase().includes(q) || (a.note || "").toLowerCase().includes(q);
+  });
 
   const loadFactories = async () => {
     setLoading(true);
     try {
-      const res = await pb.collection("factories").getFullList({ sort: "name" });
-      setItems(res as any);
+      const res = await pb.collection("factories").getList(1, 300, { sort: "name" });
+      setItems(res.items as any);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải nhà máy. Hãy tạo collection 'factories'.");
     } finally {
@@ -362,8 +622,8 @@ function FactoriesTab() {
   const loadAreas = async () => {
     setAreasLoading(true);
     try {
-      const res = await pb.collection("recruitment_areas").getFullList({ sort: "name" });
-      setAreas(res as any);
+      const res = await pb.collection("recruitment_areas").getList(1, 300, { sort: "name" });
+      setAreas(res.items as any);
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải khu vực. Hãy tạo collection 'recruitment_areas'.");
     } finally {
@@ -381,6 +641,13 @@ function FactoriesTab() {
       toast.error("Tên nhà máy bắt buộc");
       return;
     }
+    const duplicate = items.find(
+      (f) => f.name.toLowerCase() === editing.name!.trim().toLowerCase() && f.id !== editing.id,
+    );
+    if (duplicate) {
+      toast.error(`Nhà máy "${duplicate.name}" đã tồn tại`);
+      return;
+    }
     try {
       const payload = {
         name: editing.name,
@@ -388,11 +655,30 @@ function FactoriesTab() {
         hotline: editing.hotline || "",
         note: editing.note || "",
         attendance_cutoff_day: Number(editing.attendance_cutoff_day) || 31,
+        status: editing.status || "active",
       };
       if (editing.id) {
+        const before = items.find((it) => it.id === editing.id);
         await pb.collection("factories").update(editing.id, payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "factories",
+          targetRecord: editing.id,
+          action: "update",
+          before,
+          after: payload,
+          note: "Admin cập nhật nhà máy",
+        });
       } else {
-        await pb.collection("factories").create(payload);
+        const created = await pb.collection("factories").create(payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "factories",
+          targetRecord: created.id,
+          action: "create",
+          after: payload,
+          note: "Admin tạo nhà máy mới",
+        });
       }
       toast.success("Đã lưu");
       setEditing(null);
@@ -405,7 +691,16 @@ function FactoriesTab() {
   const remove = async (id: string) => {
     if (!confirm("Xoá nhà máy này?")) return;
     try {
+      const before = items.find((it) => it.id === id);
       await pb.collection("factories").delete(id);
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "factories",
+        targetRecord: id,
+        action: "delete",
+        before,
+        note: "Admin xoá nhà máy",
+      });
       toast.success("Đã xoá");
       loadFactories();
     } catch (e: any) {
@@ -425,9 +720,27 @@ function FactoriesTab() {
         note: editingArea?.note || "",
       };
       if (editingArea?.id) {
+        const before = areas.find((a) => a.id === editingArea.id);
         await pb.collection("recruitment_areas").update(editingArea.id, payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "recruitment_areas",
+          targetRecord: editingArea.id,
+          action: "update",
+          before,
+          after: payload,
+          note: "Admin cập nhật khu vực tuyển dụng",
+        });
       } else {
-        await pb.collection("recruitment_areas").create(payload);
+        const created = await pb.collection("recruitment_areas").create(payload);
+        await createStaffActionLog({
+          actor: currentUser,
+          targetCollection: "recruitment_areas",
+          targetRecord: created.id,
+          action: "create",
+          after: payload,
+          note: "Admin tạo khu vực tuyển dụng",
+        });
       }
       toast.success("Đã lưu khu vực");
       setEditingArea(null);
@@ -440,7 +753,16 @@ function FactoriesTab() {
   const removeArea = async (id: string) => {
     if (!confirm("Xoá khu vực này?")) return;
     try {
+      const before = areas.find((a) => a.id === id);
       await pb.collection("recruitment_areas").delete(id);
+      await createStaffActionLog({
+        actor: currentUser,
+        targetCollection: "recruitment_areas",
+        targetRecord: id,
+        action: "delete",
+        before,
+        note: "Admin xoá khu vực tuyển dụng",
+      });
       toast.success("Đã xoá khu vực");
       loadAreas();
     } catch (e: any) {
@@ -477,15 +799,33 @@ function FactoriesTab() {
           </div>
 
           <CollapsibleContent className="mt-3 space-y-3">
-            {loading && (
-              <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
+            {items.length > 3 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="rounded-xl pl-9 text-xs"
+                  placeholder="Tìm nhà máy..."
+                  value={factorySearch}
+                  onChange={(e) => setFactorySearch(e.target.value)}
+                />
+              </div>
             )}
+            {loading && items.length === 0 ? (
+              <DataLoadingState variant="list" label="Đang tải danh sách nhà máy..." rows={3} />
+            ) : loading ? (
+              <DataLoadingState variant="inline" label="Đang cập nhật danh sách nhà máy..." />
+            ) : null}
             {!loading && items.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
                 Chưa có nhà máy. Bấm nút + để thêm.
               </div>
             )}
-            {items.map((f) => (
+            {!loading && items.length > 0 && filteredFactories.length === 0 && (
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                Không tìm thấy nhà máy phù hợp
+              </div>
+            )}
+            {filteredFactories.map((f) => (
               <div
                 key={f.id}
                 className="list-card border-l-[color:var(--status-info)] flex items-start gap-3"
@@ -501,7 +841,7 @@ function FactoriesTab() {
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="mt-0.5 block text-[11px] text-muted-foreground hover:text-primary hover:underline"
+                      className="mt-0.5 block truncate text-[11px] text-muted-foreground hover:text-primary hover:underline"
                     >
                       📍 {f.address}
                     </a>
@@ -515,6 +855,14 @@ function FactoriesTab() {
                   </div>
                 </div>
                 <div className="flex gap-1">
+                  <button
+                    onClick={() => setManagingFactory(f)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
+                    aria-label="Cấp quyền quản lý"
+                    title="Cấp quyền quản lý"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                  </button>
                   <button
                     onClick={() => setEditing(f)}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
@@ -596,6 +944,13 @@ function FactoriesTab() {
         </DialogContent>
       </Dialog>
 
+      <FactoryManagersDialog
+        factoryId={managingFactory?.id || null}
+        factoryName={managingFactory?.name || ""}
+        open={!!managingFactory}
+        onOpenChange={(open) => !open && setManagingFactory(null)}
+      />
+
       <Collapsible open={areasOpen} onOpenChange={setAreasOpen}>
         <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-soft">
           <div className="flex items-center justify-between gap-2">
@@ -623,17 +978,33 @@ function FactoriesTab() {
           </div>
 
           <CollapsibleContent className="mt-3 space-y-3">
-            {areasLoading && (
-              <div className="py-6 text-center text-sm text-muted-foreground">
-                Đang tải khu vực...
+            {areas.length > 3 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="rounded-xl pl-9 text-xs"
+                  placeholder="Tìm khu vực..."
+                  value={areaSearch}
+                  onChange={(e) => setAreaSearch(e.target.value)}
+                />
               </div>
             )}
+            {areasLoading && areas.length === 0 ? (
+              <DataLoadingState variant="list" label="Đang tải khu vực tuyển dụng..." rows={3} />
+            ) : areasLoading ? (
+              <DataLoadingState variant="inline" label="Đang cập nhật khu vực tuyển dụng..." />
+            ) : null}
             {!areasLoading && areas.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
                 Chưa có khu vực. Bấm nút + để thêm.
               </div>
             )}
-            {areas.map((area) => (
+            {!areasLoading && areas.length > 0 && filteredAreas.length === 0 && (
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                Không tìm thấy khu vực phù hợp
+              </div>
+            )}
+            {filteredAreas.map((area) => (
               <div
                 key={area.id}
                 className="list-card border-l-[color:var(--status-success)] flex items-start gap-3"
@@ -701,311 +1072,5 @@ function FactoriesTab() {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-/* ───────── USERS ───────── */
-
-function UsersTab() {
-  const [users, setUsers] = useState<any[]>([]);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [requireApproval, setRequireApproval] = useState(true);
-  const [settingsId, setSettingsId] = useState<string | null>(null);
-  const [pendingApprovalValue, setPendingApprovalValue] = useState<boolean | null>(null);
-  const [adminPassword, setAdminPassword] = useState("");
-  const [confirmingApproval, setConfirmingApproval] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await pb.collection("users").getFullList({ sort: "-created" });
-      setUsers(res as any);
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi tải user");
-    } finally {
-      setLoading(false);
-    }
-
-    try {
-      const s = await pb.collection("settings").getList(1, 1);
-      if (s.items[0]) {
-        setSettingsId(s.items[0].id);
-        setRequireApproval(Boolean(s.items[0].require_approval));
-      }
-    } catch {
-      // Settings collection may be initialized later by another admin screen.
-    }
-  };
-  useEffect(() => {
-    load();
-  }, []);
-
-  const toggleApproved = async (u: any) => {
-    const approved = isUserApproved(u);
-    try {
-      await pb.collection("users").update(u.id, {
-        approvalStatus: approved ? "pending" : "approved",
-        approved: approved ? "false" : "true",
-        status: approved ? "disabled" : "active",
-      });
-      toast.success(approved ? "Đã huỷ duyệt" : "Đã duyệt");
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
-    }
-  };
-
-  const toggleRole = async (u: any) => {
-    const newRole = u.role === "admin" ? "user" : "admin";
-    if (!confirm(`Đổi vai trò sang ${newRole}?`)) return;
-    try {
-      await pb.collection("users").update(u.id, { role: newRole });
-      toast.success("Đã đổi vai trò");
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
-    }
-  };
-
-  const remove = async (u: any) => {
-    if (!confirm(`Xoá user ${u.username || u.full_name}?`)) return;
-    try {
-      await pb.collection("users").delete(u.id);
-      toast.success("Đã xoá");
-      load();
-    } catch (e: any) {
-      toast.error(e?.message || "Lỗi");
-    }
-  };
-
-  const toggleApprovalRequirement = async (val: boolean) => {
-    setRequireApproval(val);
-    try {
-      if (settingsId) {
-        await pb.collection("settings").update(settingsId, { require_approval: val });
-      } else {
-        const r = await pb.collection("settings").create({ require_approval: val });
-        setSettingsId(r.id);
-      }
-      toast.success("Đã cập nhật kiểm duyệt đăng ký");
-    } catch (e: any) {
-      setRequireApproval((prev) => !prev);
-      toast.error(e?.message || "Lỗi cập nhật");
-    }
-  };
-
-  const requestToggleApprovalRequirement = (val: boolean) => {
-    setPendingApprovalValue(val);
-    setAdminPassword("");
-  };
-
-  const closeApprovalConfirm = () => {
-    if (confirmingApproval) return;
-    setPendingApprovalValue(null);
-    setAdminPassword("");
-  };
-
-  const confirmToggleApprovalRequirement = async () => {
-    if (pendingApprovalValue === null) return;
-    const admin = pb.authStore.record as any;
-    const identity = admin?.username || admin?.email;
-    if (!identity) {
-      toast.error("Không xác định được tài khoản admin");
-      return;
-    }
-    if (!adminPassword) {
-      toast.error("Nhập mật khẩu admin");
-      return;
-    }
-
-    setConfirmingApproval(true);
-    try {
-      const res = await fetch("/api/public/pocketbase-auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identity, password: adminPassword }),
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload?.message || "Mật khẩu admin không đúng");
-      if (payload?.record?.id !== admin.id || payload?.record?.role !== "admin") {
-        throw new Error("Tài khoản xác thực không phải admin hiện tại");
-      }
-
-      await toggleApprovalRequirement(pendingApprovalValue);
-      closeApprovalConfirm();
-    } catch (e: any) {
-      toast.error(e?.message || "Không xác thực được mật khẩu admin");
-    } finally {
-      setConfirmingApproval(false);
-    }
-  };
-
-  const filtered = users.filter((u) => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return (
-      (u.username || "").toLowerCase().includes(s) ||
-      (u.full_name || "").toLowerCase().includes(s) ||
-      (u.phone || "").toLowerCase().includes(s)
-    );
-  });
-
-  return (
-    <Tabs defaultValue="accounts" className="space-y-3">
-      <TabsList className="grid h-10 w-full grid-cols-2 rounded-2xl">
-        <TabsTrigger value="accounts" className="rounded-xl text-xs">
-          Tài khoản
-        </TabsTrigger>
-        <TabsTrigger value="delegations" className="rounded-xl text-xs">
-          Ủy quyền
-        </TabsTrigger>
-      </TabsList>
-
-      <TabsContent value="accounts" className="mt-0 space-y-3">
-        <Card className="flex items-center gap-3 rounded-2xl border-border/60 p-3.5 shadow-soft">
-          <div className="rounded-xl bg-primary/10 p-2 text-primary">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <Label className="text-sm font-semibold">Yêu cầu duyệt khi đăng ký</Label>
-            <div className="text-[11px] text-muted-foreground">
-              Tắt để user tạo tài khoản và sử dụng ngay.
-            </div>
-          </div>
-          <Switch checked={requireApproval} onCheckedChange={requestToggleApprovalRequirement} />
-        </Card>
-
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="rounded-full pl-9"
-            placeholder="Tìm theo tên / username / SĐT"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        <div className="px-1 text-xs text-muted-foreground">
-          Tổng: {users.length} · Hiển thị: {filtered.length}
-        </div>
-
-        {loading && (
-          <div className="py-6 text-center text-sm text-muted-foreground">Đang tải...</div>
-        )}
-        {!loading && filtered.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-border bg-card/50 py-10 text-center text-sm text-muted-foreground">
-            Không có user.
-          </div>
-        )}
-        {filtered.map((u) => {
-          const avatar = u.avatar ? fileUrl(u, u.avatar) : "";
-          const approved = isUserApproved(u);
-          const borderTone = approved
-            ? "border-l-[color:var(--status-success)]"
-            : "border-l-[color:var(--status-warning)]";
-          return (
-            <div key={u.id} className={`list-card flex items-start gap-3 ${borderTone}`}>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
-                {avatar ? (
-                  <img src={avatar} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="text-sm font-semibold text-muted-foreground">
-                    {(u.full_name || u.username || "?").slice(0, 1).toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">{u.full_name || u.username}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  @{u.username} {u.phone && `· ${u.phone}`}
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  <span className={`chip ${u.role === "admin" ? "chip-info" : "chip-neutral"}`}>
-                    {u.role === "admin" && <ShieldCheck className="h-3 w-3" />}
-                    {u.role === "admin" ? "Admin" : "User"}
-                  </span>
-                  <span className={`chip ${approved ? "chip-success" : "chip-warning"}`}>
-                    {approved ? "Đã duyệt" : "Chờ duyệt"}
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1">
-                <button
-                  onClick={() => toggleApproved(u)}
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                    approved
-                      ? "text-[color:var(--status-warning-fg)] hover:bg-[color:var(--status-warning-bg)]"
-                      : "text-[color:var(--status-success-fg)] hover:bg-[color:var(--status-success-bg)]"
-                  }`}
-                  title={approved ? "Huỷ duyệt" : "Duyệt"}
-                >
-                  {approved ? <X className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                </button>
-                <button
-                  onClick={() => toggleRole(u)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
-                  title="Đổi vai trò"
-                >
-                  <ShieldCheck className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => remove(u)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10"
-                  title="Xoá"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-
-        <Dialog
-          open={pendingApprovalValue !== null}
-          onOpenChange={(open) => !open && closeApprovalConfirm()}
-        >
-          <DialogContent className="rounded-2xl">
-            <DialogHeader>
-              <DialogTitle>Xác nhận mật khẩu admin</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Label className="text-xs">Mật khẩu admin</Label>
-              <Input
-                type="password"
-                className="rounded-xl"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") confirmToggleApprovalRequirement();
-                }}
-                autoComplete="current-password"
-                autoFocus
-              />
-              <div className="text-xs text-muted-foreground">
-                Sau khi xác thực, hệ thống sẽ {pendingApprovalValue ? "bật" : "tắt"} yêu cầu duyệt
-                khi đăng ký.
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={closeApprovalConfirm} className="rounded-xl">
-                Huỷ
-              </Button>
-              <Button
-                onClick={confirmToggleApprovalRequirement}
-                disabled={confirmingApproval}
-                className="rounded-xl"
-              >
-                {confirmingApproval ? "Đang xác thực..." : "Xác nhận"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </TabsContent>
-
-      <TabsContent value="delegations" className="mt-0">
-        <DelegationPanel mode="admin" />
-      </TabsContent>
-    </Tabs>
   );
 }
