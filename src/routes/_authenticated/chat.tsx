@@ -856,6 +856,8 @@ function RoomChatView({
   onBack: () => void;
   onRefreshMe: () => Promise<void>;
 }) {
+  // console.log("[RoomChatView] Component rendered. room.id:", room.id, "user.id:", user?.id);
+
   // Visual Viewport API để xử lý bàn phím mobile
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -1118,7 +1120,7 @@ function RoomChatView({
         unsubscribe();
       }
     };
-  }, [isGuest, user, room.id, isAdmin, onBack]);
+  }, [isGuest, user?.id, room.id, isAdmin]);
 
   // Realtime subscription để nhận tin nhắn mới
   useEffect(() => {
@@ -1128,15 +1130,14 @@ function RoomChatView({
 
     let unsubscribe: (() => void) | null = null;
 
-    // ✅ Phase 1 Improvement #1: Filter at server level
-    // Chỉ subscribe tin nhắn của phòng này → giảm 90% event không cần thiết
     pb.collection("group_chat_messages")
       .subscribe(
-        `room = "${room.id}"`, // ← Server chỉ gửi event của phòng này
+        "*",
         (event) => {
           console.log("[Chat] Realtime event:", event.action, event.record);
 
-          // Không cần filter room nữa vì server đã filter rồi
+          // Chỉ xử lý tin nhắn của phòng này
+          if (event.record.room !== room.id) return;
 
           if (event.action === "create") {
             // Bỏ qua tin nhắn của chính mình vì Optimistic UI đã thêm rồi
@@ -1159,14 +1160,6 @@ function RoomChatView({
               } as ChatMessage;
 
               console.log("[Chat] Adding message from another user:", event.record.id);
-
-              // ✅ Accessibility: Announce new message for screen readers
-              const senderName = newMessage.expand?.user?.full_name || "Người dùng";
-              const messagePreview = newMessage.content.substring(0, 50);
-              setLiveRegionMessage(`Tin nhắn mới từ ${senderName}: ${messagePreview}`);
-              // Clear announcement after 3 seconds
-              setTimeout(() => setLiveRegionMessage(""), 3000);
-
               return [...current, newMessage];
             });
 
@@ -1183,19 +1176,9 @@ function RoomChatView({
                   : m
               )
             );
-
-            // ✅ Accessibility: Announce recall for screen readers
-            if (event.record.recalled) {
-              setLiveRegionMessage("Một tin nhắn đã bị thu hồi");
-              setTimeout(() => setLiveRegionMessage(""), 3000);
-            }
           } else if (event.action === "delete") {
             setMessages((current) => current.filter((m) => m.id !== event.record.id));
             setTotalCount((current) => Math.max(0, current - 1));
-
-            // ✅ Accessibility: Announce deletion for screen readers
-            setLiveRegionMessage("Một tin nhắn đã bị xóa");
-            setTimeout(() => setLiveRegionMessage(""), 3000);
           }
         },
         { expand: "user" },
@@ -1210,7 +1193,7 @@ function RoomChatView({
         unsubscribe();
       }
     };
-  }, [isGuest, room.id, user?.id]);
+  }, [isGuest, user, room.id]);
 
   const loadOlder = async () => {
     if (!hasMore || loadingOlder) return;

@@ -28,10 +28,12 @@ export function useOnlineStatus() {
       // Nếu có authStore và realtime, check connection
       if (pb.realtime) {
         const connected = pb.realtime.isConnected ?? true;
-        if (connected !== pbConnected) {
-          console.log(`[Offline] PocketBase connection: ${connected ? "connected" : "disconnected"}`);
-          setPbConnected(connected);
-        }
+        setPbConnected((prev) => {
+          if (connected !== prev) {
+            console.log(`[Offline] PocketBase connection: ${connected ? "connected" : "disconnected"}`);
+          }
+          return connected;
+        });
       }
     }, 5000); // Check mỗi 5 giây
 
@@ -40,7 +42,7 @@ export function useOnlineStatus() {
       window.removeEventListener("offline", handleOffline);
       clearInterval(checkPbHealth);
     };
-  }, [pbConnected]);
+  }, []); // Không depend vào pbConnected vì nó được set BÊN TRONG effect
 
   // Trả về true chỉ khi cả browser và PocketBase đều online
   return isOnline && pbConnected;

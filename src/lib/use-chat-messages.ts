@@ -128,7 +128,7 @@ export function useChatRoomMessages(params: {
         throw error;
       }
     },
-    [viewer, roomId, pageSize, isGuest],
+    [viewer?.id, roomId, pageSize, isGuest],
   );
 
   /**
@@ -143,7 +143,8 @@ export function useChatRoomMessages(params: {
       console.error("[useChatRoomMessages] loadInitial error:", error);
       throw error;
     }
-  }, [loadMessages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]); // Chỉ depend vào roomId, loadMessages closure over viewer
 
   /**
    * Load thêm messages cũ (pagination)

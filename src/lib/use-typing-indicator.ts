@@ -53,7 +53,7 @@ export function useTypingBroadcast(params: {
     } catch (error) {
       console.error("[Typing] Failed to broadcast:", error);
     }
-  }, [viewer, roomId, isGuest]);
+  }, [viewer?.id, viewer?.full_name, viewer?.username, roomId, isGuest]);
 
   const notifyTyping = useCallback(() => {
     if (!viewer || isGuest) return;
@@ -63,7 +63,7 @@ export function useTypingBroadcast(params: {
     debounceRef.current = window.setTimeout(() => {
       void sendTyping();
     }, DEBOUNCE_DELAY);
-  }, [viewer, isGuest, sendTyping]);
+  }, [viewer?.id, isGuest, sendTyping]);
 
   const clearTyping = useCallback(() => {
     if (!viewer || isGuest) return;
@@ -79,7 +79,7 @@ export function useTypingBroadcast(params: {
       window.clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
-  }, [viewer, roomId, isGuest]);
+  }, [viewer?.id, roomId, isGuest]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -141,7 +141,7 @@ export function useTypingListener(params: {
     return () => {
       window.clearInterval(interval);
     };
-  }, [viewer, roomId, isGuest]);
+  }, [viewer?.id, roomId, isGuest]);
 
   return { typingUsers };
 }
