@@ -111,7 +111,7 @@ type ChatMessage = {
   user: string;
   room?: string;
   content: string;
-  images?: string[]; // URLs của ảnh đã upload lên PocketBase
+  image?: string[]; // Field "image" từ PocketBase (type file, maxSelect unlimited)
   created: string;
   is_anonymous?: boolean;
   recalled?: boolean; // Tin nhắn đã bị thu hồi
@@ -950,7 +950,6 @@ function RoomChatView({
   });
   const [messageTimeVisible, setMessageTimeVisible] = useState<string | null>(null);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [showImageUploader, setShowImageUploader] = useState(false);
 
   // Pull-to-refresh state
   const [refreshing, setRefreshing] = useState(false);
@@ -965,6 +964,7 @@ function RoomChatView({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pressTimerRef = useRef<number | null>(null);
   const pageRef = useRef(1);
 
@@ -1274,7 +1274,6 @@ function RoomChatView({
     setTotalCount((current) => current + 1);
     setContent("");
     setImageFiles([]);
-    setShowImageUploader(false); // Đóng ImageUploader và reset icon camera
     setShowEmojis(false);
     setShowEmojiPicker(false);
     setSending(true);
@@ -1852,12 +1851,18 @@ function RoomChatView({
                         }, ${new Date(m.created).toLocaleString("vi-VN")}`}
                         aria-pressed={messageTimeVisible === m.id}
                         className={cn(
-                          "block rounded-2xl px-3 py-2 text-left shadow-sm transition-opacity",
+                          "block text-left transition-opacity",
+                          // Chỉ có ảnh không có text -> không padding/background
+                          m.image && !m.content?.trim() && !m.recalled
+                            ? ""
+                            : "rounded-2xl px-3 py-2 shadow-sm",
                           m.recalled
                             ? "border border-border bg-card text-muted-foreground"
-                            : mine
-                              ? "bg-primary text-primary-foreground"
-                              : "border border-border bg-card text-foreground",
+                            : m.image && !m.content?.trim()
+                              ? "" // Không background khi chỉ có ảnh
+                              : mine
+                                ? "bg-primary text-primary-foreground"
+                                : "border border-border bg-card text-foreground",
                           isPending && "opacity-60",
                           isFailed && "opacity-50 border-red-300",
                         )}
@@ -1872,23 +1877,23 @@ function RoomChatView({
                             ) : (
                               <>
                                 {/* Message content */}
-                                {m.content && (
+                                {m.content && m.content.trim() && (
                                   <div className="whitespace-pre-wrap text-[14px] leading-relaxed">
                                     {m.content}
                                   </div>
                                 )}
 
                                 {/* Message images */}
-                                {m.images && m.images.length > 0 && (
+                                {m.image && (
                                   <div className="flex flex-wrap gap-2">
-                                    {m.images.map((imageUrl, idx) => {
+                                    {(Array.isArray(m.image) ? m.image : [m.image]).map((imageUrl, idx) => {
                                       const fullUrl = pb.files.getUrl(m, imageUrl);
                                       return (
                                         <OptimizedImage
                                           key={idx}
                                           src={fullUrl}
                                           alt={`Ảnh ${idx + 1}`}
-                                          className="h-32 w-32 cursor-pointer rounded-lg"
+                                          className="h-32 w-32 cursor-pointer rounded-lg object-cover"
                                           onClick={() => {
                                             // TODO: Open image viewer
                                           }}
@@ -2092,15 +2097,11 @@ function RoomChatView({
               </div>
             ) : (
               <>
-                {/* Image Uploader - Hiển thị khi có ảnh hoặc đang chọn */}
-                {(imageFiles.length > 0 || showImageUploader) && (
+                {/* Image Preview - Hiển thị khi có ảnh đã chọn */}
+                {imageFiles.length > 0 && (
                   <ImageUploader
                     onImagesChange={(files) => {
                       setImageFiles(files);
-                      // Nếu không còn file nào, ẩn uploader
-                      if (files.length === 0) {
-                        setShowImageUploader(false);
-                      }
                     }}
                     maxImages={5}
                   />
@@ -2122,19 +2123,123 @@ function RoomChatView({
                   </div>
                 )}
                 <div className="flex items-end gap-2">
-                  {/* Camera Button - Toggle ImageUploader */}
+                  {/* Hidden file input - trigger trực tiếp từ icon camera */}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    ref={fileInputRef}
+                    onChange={async (e) => {
+                      const files = Array.from(e.target.files || []);
+                      if (files.length === 0) return;
+
+                      // Chỉ lấy 5 ảnh đầu tiên
+                      const limitedFiles = files.slice(0, 5);
+
+                      // Reset input để có thể chọn lại cùng file
+                      e.target.value = '';
+
+                      // Kiểm tra quyền gửi tin nhắn
+                      if (isGuest) {
+                        toast.error("Vui lòng đăng nhập để gửi tin nhắn");
+                        return;
+                      }
+
+                      if (!isAdmin && blocked) {
+                        toast.error("Bạn đang bị chặn trong trò chuyện");
+                        return;
+                      }
+
+                      if (!isAdmin && user && roomBans.some((ban) => ban.user === user.id)) {
+                        toast.error("Bạn đã bị chặn khỏi phòng này");
+                        return;
+                      }
+
+                      // Tự động gửi tin nhắn với ảnh ngay lập tức
+                      const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                      const optimisticMessage: ChatMessage = {
+                        id: tempId,
+                        room: room.id,
+                        user: user!.id,
+                        content: " ", // Tin nhắn chỉ có ảnh
+                        is_anonymous: isAnonymous,
+                        created: new Date().toISOString(),
+                        updated: new Date().toISOString(),
+                        expand: { user: user! },
+                        _pending: true,
+                      } as ChatMessage & { _pending?: boolean };
+
+                      // Hiển thị tin nhắn ngay lập tức
+                      setMessages((current) => [...current, optimisticMessage]);
+                      setTotalCount((current) => current + 1);
+                      setSending(true);
+
+                      // Scroll xuống tin nhắn mới
+                      window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+
+                      // Kiểm tra online status
+                      if (!isOnline) {
+                        toast.info("Tin nhắn sẽ được gửi khi online");
+                        setSending(false);
+                        return;
+                      }
+
+                      // Gửi tin nhắn với ảnh
+                      try {
+                        const formData = new FormData();
+                        formData.append("user", user!.id);
+                        formData.append("room", room.id);
+                        formData.append("content", " "); // Content trống cho tin nhắn chỉ có ảnh
+                        formData.append("is_anonymous", String(isAnonymous));
+
+                        // Append tất cả các ảnh vào cùng 1 field "image"
+                        limitedFiles.forEach((file) => {
+                          formData.append("image", file);
+                        });
+
+                        console.log(`[Send Image] Sending ${limitedFiles.length} images`);
+
+                        const savedMessage = await pb.collection("group_chat_messages").create(formData);
+
+                        console.log('[Send Image] Server response:', savedMessage);
+
+                        // Replace tin nhắn tạm với tin nhắn thật
+                        const messageWithUser: ChatMessage = {
+                          ...savedMessage,
+                          expand: { user: user! },
+                        } as ChatMessage;
+
+                        setMessages((current) =>
+                          current.map((m) => (m.id === tempId ? messageWithUser : m))
+                        );
+
+                        toast.success(`Đã gửi ${limitedFiles.length} ảnh`);
+                      } catch (error) {
+                        console.error('[Send Image] Error:', error);
+                        // Đánh dấu tin nhắn failed
+                        setMessages((current) =>
+                          current.map((m) =>
+                            m.id === tempId
+                              ? ({ ...m, _pending: false, _failed: true, _error: getErrorMessage(error, "Lỗi gửi") } as ChatMessage & { _failed?: boolean; _error?: string })
+                              : m
+                          )
+                        );
+                        toast.error(getErrorMessage(error, "Lỗi gửi tin nhắn"));
+                      } finally {
+                        setSending(false);
+                      }
+                    }}
+                    className="hidden"
+                  />
+
+                  {/* Camera Button - Click để chọn ảnh trực tiếp */}
                   <Button
                     type="button"
                     size="icon"
                     variant="ghost"
-                    onClick={() => setShowImageUploader(!showImageUploader)}
-                    aria-label={showImageUploader ? "Đóng chọn ảnh" : "Chọn ảnh"}
-                    aria-pressed={showImageUploader}
-                    className={`h-10 w-10 shrink-0 rounded-full transition ${
-                      showImageUploader
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                    }`}
+                    onClick={() => fileInputRef.current?.click()}
+                    aria-label="Chọn ảnh"
+                    className="h-10 w-10 shrink-0 rounded-full text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
                   >
                     <Camera className="h-5 w-5" />
                   </Button>
