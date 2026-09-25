@@ -12,10 +12,12 @@ import { cn } from "@/lib/utils";
 interface ChatImageViewerProps {
   images: { url: string; thumbUrl: string }[];
   className?: string;
+  initialIndex?: number;
+  onClose?: () => void;
 }
 
-export function ChatImageViewer({ images, className }: ChatImageViewerProps) {
-  const [viewIdx, setViewIdx] = useState<number | null>(null);
+export function ChatImageViewer({ images, className, initialIndex, onClose }: ChatImageViewerProps) {
+  const [viewIdx, setViewIdx] = useState<number | null>(initialIndex ?? null);
   const [scale, setScale] = useState(1);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchStartDistance, setTouchStartDistance] = useState<number | null>(null);
@@ -34,7 +36,8 @@ export function ChatImageViewer({ images, className }: ChatImageViewerProps) {
     setTouchStartX(null);
     setScale(1);
     setTouchStartDistance(null);
-  }, []);
+    onClose?.();
+  }, [onClose]);
 
   const showPrev = useCallback(() => {
     setViewIdx((current) => {

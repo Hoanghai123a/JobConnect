@@ -642,17 +642,11 @@ export function DashboardPage() {
                 allowGuest
               />
               <FeatureTile
-                to="/notebook"
-                label="Sổ tay"
-                icon={NotebookPen}
+                to="/transport"
+                label="Tìm nhà xe"
+                icon={BusFront}
                 size="compact"
                 allowGuest
-              />
-              <FeatureTile
-                to="/admin/accounts/stats"
-                label="Thống kê"
-                icon={Users}
-                size="compact"
               />
               <FeatureTile
                 to="/chat"
@@ -663,18 +657,31 @@ export function DashboardPage() {
                 allowGuest
               />
               <FeatureTile
-                to="/transport"
-                label="Tìm nhà xe"
-                icon={BusFront}
-                size="compact"
-                allowGuest
-              />
-              <FeatureTile
                 to="/guides"
                 label="Hướng dẫn"
                 icon={BookOpen}
                 size="compact"
                 allowGuest
+              />
+              <FeatureTile
+                to="/notebook"
+                label="Sổ tay"
+                icon={NotebookPen}
+                size="compact"
+                allowGuest
+              />
+              <FeatureTile
+                to="/counter"
+                label="Bộ đếm"
+                icon={ListOrdered}
+                size="compact"
+                allowGuest
+              />
+              <FeatureTile
+                to="/admin/accounts/stats"
+                label="Thống kê"
+                icon={Users}
+                size="compact"
               />
             </>
           ) : (

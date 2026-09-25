@@ -950,6 +950,9 @@ function RoomChatView({
   });
   const [messageTimeVisible, setMessageTimeVisible] = useState<string | null>(null);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [viewerImages, setViewerImages] = useState<{ url: string; thumbUrl: string }[]>([]);
+  const [viewerInitialIndex, setViewerInitialIndex] = useState<number>(0);
+  const [showViewer, setShowViewer] = useState(false);
 
   // Pull-to-refresh state
   const [refreshing, setRefreshing] = useState(false);
@@ -1320,9 +1323,9 @@ function RoomChatView({
         formData.append("content", text || " "); // PocketBase yêu cầu content không empty
         formData.append("is_anonymous", String(isAnonymous));
 
-        // Thử cả 2 cách append images: 'image' và 'images'
+        // Upload multiple images - PocketBase cần array notation hoặc field được config là multiple
         imageFiles.forEach((file) => {
-          formData.append("image", file); // Thử field name 'image' (single)
+          formData.append("image", file); // PocketBase sẽ auto-detect multiple files với cùng key
         });
 
         // Log FormData để debug
@@ -1884,25 +1887,50 @@ function RoomChatView({
                                 )}
 
                                 {/* Message images */}
-                                {m.image && (
-                                  <div className="flex flex-wrap gap-2">
-                                    {(Array.isArray(m.image) ? m.image : [m.image]).map((imageUrl, idx) => {
-                                      const fullUrl = pb.files.getUrl(m, imageUrl);
-                                      return (
-                                        <OptimizedImage
-                                          key={idx}
-                                          src={fullUrl}
-                                          alt={`Ảnh ${idx + 1}`}
-                                          className="h-32 w-32 cursor-pointer rounded-lg object-cover"
-                                          onClick={() => {
-                                            // TODO: Open image viewer
-                                          }}
-                                          loading="lazy"
-                                        />
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                                {m.image && (() => {
+                                  const images = Array.isArray(m.image) ? m.image : [m.image];
+                                  const imageCount = images.length;
+
+                                  // Layout giống Zalo: 1 ảnh full width, 2-3 ảnh chia đều, 4+ ảnh grid 2 cột
+                                  const getGridClass = () => {
+                                    if (imageCount === 1) return "grid-cols-1 max-w-sm";
+                                    if (imageCount === 2) return "grid-cols-2";
+                                    if (imageCount === 3) return "grid-cols-3";
+                                    return "grid-cols-2"; // 4+ ảnh
+                                  };
+
+                                  return (
+                                    <div className={cn("grid gap-1", getGridClass())}>
+                                      {images.map((imageUrl, idx) => {
+                                        const fullUrl = pb.files.getUrl(m, imageUrl);
+                                        return (
+                                          <button
+                                            key={idx}
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setViewerImages(images.map(url => ({
+                                                url: pb.files.getUrl(m, url),
+                                                thumbUrl: pb.files.getUrl(m, url, { thumb: "200x200" })
+                                              })));
+                                              setViewerInitialIndex(idx);
+                                              setShowViewer(true);
+                                            }}
+                                            className="group relative overflow-hidden rounded-lg"
+                                          >
+                                            <OptimizedImage
+                                              src={fullUrl}
+                                              alt={`Ảnh ${idx + 1}`}
+                                              className="w-full h-full cursor-pointer object-cover transition group-hover:opacity-90"
+                                              style={{ aspectRatio: 'auto' }}
+                                              loading="lazy"
+                                            />
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                })()}
                               </>
                             )}
                           </div>
@@ -2304,6 +2332,15 @@ function RoomChatView({
             inputRef.current?.focus();
           }}
           onClose={() => setShowEmojiPicker(false)}
+        />
+      )}
+
+      {/* Image Viewer */}
+      {showViewer && (
+        <ChatImageViewer
+          images={viewerImages}
+          initialIndex={viewerInitialIndex}
+          onClose={() => setShowViewer(false)}
         />
       )}
     </div>

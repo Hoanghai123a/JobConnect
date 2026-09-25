@@ -41,12 +41,6 @@ import {
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/counter")({
-  beforeLoad: () => {
-    if (typeof window === "undefined") return;
-    const record = pb.authStore.record as { role?: string } | null;
-    if (!record) return;
-    if (record.role !== "user" && record.role !== "staff") throw redirect({ to: "/" });
-  },
   component: CounterPage,
 });
 
