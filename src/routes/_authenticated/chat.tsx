@@ -47,6 +47,7 @@ import {
   Clock3,
   MessageSquareText,
   Plus,
+  RotateCcw,
   Search,
   Send,
   Settings,
@@ -113,6 +114,7 @@ type ChatMessage = {
   images?: string[]; // URLs của ảnh đã upload lên PocketBase
   created: string;
   is_anonymous?: boolean;
+  recalled?: boolean; // Tin nhắn đã bị thu hồi
   expand?: { user?: ChatUser };
 };
 
@@ -1172,6 +1174,21 @@ function RoomChatView({
 
             // Scroll xuống tin nhắn mới (chỉ tin nhắn từ người khác đến đây)
             window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+          } else if (event.action === "update") {
+            // Xử lý tin nhắn bị thu hồi
+            setMessages((current) =>
+              current.map((m) =>
+                m.id === event.record.id
+                  ? { ...m, recalled: event.record.recalled }
+                  : m
+              )
+            );
+
+            // ✅ Accessibility: Announce recall for screen readers
+            if (event.record.recalled) {
+              setLiveRegionMessage("Một tin nhắn đã bị thu hồi");
+              setTimeout(() => setLiveRegionMessage(""), 3000);
+            }
           } else if (event.action === "delete") {
             setMessages((current) => current.filter((m) => m.id !== event.record.id));
             setTotalCount((current) => Math.max(0, current - 1));
@@ -1423,6 +1440,52 @@ function RoomChatView({
     }
   };
 
+  const recallMessage = async (id: string) => {
+    // Guest không thể thu hồi tin nhắn
+    if (isGuest) {
+      toast.error("Vui lòng đăng nhập để thu hồi tin nhắn");
+      return;
+    }
+
+    const messageToRecall = messages.find((m) => m.id === id);
+    if (!messageToRecall) return;
+
+    // Verify: chỉ được thu hồi tin nhắn của chính mình
+    if (messageToRecall.user !== user?.id) {
+      toast.error("Bạn chỉ có thể thu hồi tin nhắn của chính mình");
+      return;
+    }
+
+    // Verify: chỉ được thu hồi trong vòng 10 phút
+    const now = Date.now();
+    const messageTime = new Date(messageToRecall.created).getTime();
+    const timeDiff = now - messageTime;
+    const TEN_MINUTES = 10 * 60 * 1000; // 600000ms
+
+    if (timeDiff > TEN_MINUTES) {
+      toast.error("Chỉ có thể thu hồi tin nhắn trong vòng 10 phút");
+      return;
+    }
+
+    // 1. Update UI ngay lập tức (optimistic)
+    setMessages((current) =>
+      current.map((m) => (m.id === id ? { ...m, recalled: true } : m))
+    );
+    setActionMessage(null);
+
+    // 2. Update server background
+    try {
+      await pb.collection("group_chat_messages").update(id, { recalled: true });
+      toast.success("Đã thu hồi tin nhắn");
+    } catch (error) {
+      // 3. Rollback nếu lỗi
+      setMessages((current) =>
+        current.map((m) => (m.id === id ? { ...m, recalled: false } : m))
+      );
+      toast.error(getErrorMessage(error, "Không thể thu hồi tin nhắn"));
+    }
+  };
+
   const toggleBlock = async (target: ChatUser) => {
     try {
       await pb.collection("users").update(target.id, { chat_blocked: !target.chat_blocked });
@@ -1518,7 +1581,11 @@ function RoomChatView({
   };
 
   const startPress = (message: ChatMessage) => {
-    if (!isAdmin) return;
+    // Admin có thể long press bất kỳ tin nhắn nào
+    // User thường chỉ có thể long press tin nhắn của chính mình
+    const canPress = isAdmin || (!isGuest && message.user === user?.id);
+    if (!canPress) return;
+
     if (pressTimerRef.current) window.clearTimeout(pressTimerRef.current);
     pressTimerRef.current = window.setTimeout(() => setActionMessage(message), 520);
   };
@@ -1803,41 +1870,52 @@ function RoomChatView({
                         aria-pressed={messageTimeVisible === m.id}
                         className={cn(
                           "block rounded-2xl px-3 py-2 text-left shadow-sm transition-opacity",
-                          mine
-                            ? "bg-primary text-primary-foreground"
-                            : "border border-border bg-card text-foreground",
+                          m.recalled
+                            ? "border border-border bg-card text-muted-foreground"
+                            : mine
+                              ? "bg-primary text-primary-foreground"
+                              : "border border-border bg-card text-foreground",
                           isPending && "opacity-60",
                           isFailed && "opacity-50 border-red-300",
                         )}
                       >
                         <div className="flex items-start gap-2">
                           <div className="flex-1 space-y-2">
-                            {/* Message content */}
-                            {m.content && (
-                              <div className="whitespace-pre-wrap text-[14px] leading-relaxed">
-                                {m.content}
+                            {/* Message content hoặc recalled text */}
+                            {m.recalled ? (
+                              <div className="whitespace-pre-wrap text-[14px] italic leading-relaxed text-muted-foreground opacity-60">
+                                Tin nhắn đã bị thu hồi
                               </div>
-                            )}
+                            ) : (
+                              <>
+                                {/* Message content */}
+                                {m.content && (
+                                  <div className="whitespace-pre-wrap text-[14px] leading-relaxed">
+                                    {m.content}
+                                  </div>
+                                )}
 
-                            {/* Message images */}
-                            {m.images && m.images.length > 0 && (
-                              <div className="flex flex-wrap gap-2">
-                                {m.images.map((imageUrl, idx) => {
-                                  const fullUrl = pb.files.getUrl(m, imageUrl);
-                                  return (
-                                    <OptimizedImage
-                                      key={idx}
-                                      src={fullUrl}
-                                      alt={`Ảnh ${idx + 1}`}
-                                      className="h-32 w-32 cursor-pointer rounded-lg"
-                                      onClick={() => {
-                                        // TODO: Open image viewer
-                                      }}
-                                      loading="lazy"
-                                    />
-                                  );
-                                })}
-                              </div>
+                                {/* Message images */}
+                                {m.images && m.images.length > 0 && (
+                                  <div className="flex flex-wrap gap-2">
+                                    {m.images.map((imageUrl, idx) => {
+                                      const fullUrl = pb.files.getUrl(m, imageUrl);
+                                      return (
+                                        <OptimizedImage
+                                          key={idx}
+                                          src={fullUrl}
+                                          alt={`Ảnh ${idx + 1}`}
+                                          className="h-32 w-32 cursor-pointer rounded-lg"
+                                          onClick={() => {
+                                            // TODO: Open image viewer
+                                          }}
+                                          loading="lazy"
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </>
                             )}
                           </div>
                           {isPending && !isQueued && (
@@ -1900,76 +1978,114 @@ function RoomChatView({
                         </button>
                       )}
 
-                      {isAdmin && author && actionOpen && (
+                      {actionOpen && (
                         <div className="space-y-1.5 rounded-lg border border-border bg-background p-2 shadow-soft">
-                          {m.is_anonymous && author.id !== user?.id && (
-                            <div className="flex items-center gap-1.5 border-b border-border pb-1.5 text-xs text-muted-foreground">
-                              <span className="font-medium text-foreground">
-                                {author.full_name || author.username || "Không rõ"}
-                              </span>
-                              <span>·</span>
-                              <span className="italic text-amber-600">Ẩn danh</span>
-                              {author.role === "admin" && (
-                                <>
+                          {/* Admin actions */}
+                          {isAdmin && author && (
+                            <>
+                              {m.is_anonymous && author.id !== user?.id && (
+                                <div className="flex items-center gap-1.5 border-b border-border pb-1.5 text-xs text-muted-foreground">
+                                  <span className="font-medium text-foreground">
+                                    {author.full_name || author.username || "Không rõ"}
+                                  </span>
                                   <span>·</span>
-                                  <span>Admin</span>
-                                </>
+                                  <span className="italic text-amber-600">Ẩn danh</span>
+                                  {author.role === "admin" && (
+                                    <>
+                                      <span>·</span>
+                                      <span>Admin</span>
+                                    </>
+                                  )}
+                                </div>
                               )}
-                            </div>
-                          )}
-                          <div className="flex items-center gap-1">
-                            {author.id !== user?.id && (
-                              <>
+                              <div className="flex items-center gap-1">
+                                {author.id !== user?.id && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => void toggleBlock(author)}
+                                      aria-label={author.chat_blocked ? `Bỏ chặn ${author.full_name}` : `Chặn ${author.full_name}`}
+                                    >
+                                      <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                                      {author.chat_blocked ? "Bỏ chặn toàn cục" : "Chặn toàn cục"}
+                                    </Button>
+                                    {roomBans.some((ban) => ban.user === author.id) ? (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => void unbanUserFromRoom(author.id)}
+                                        aria-label={`Bỏ chặn ${author.full_name} khỏi phòng này`}
+                                      >
+                                        <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                                        Bỏ chặn khỏi phòng
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() => void banUserFromRoom(author.id)}
+                                        aria-label={`Chặn ${author.full_name} khỏi phòng này`}
+                                      >
+                                        <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                                        Chặn khỏi phòng
+                                      </Button>
+                                    )}
+                                  </>
+                                )}
                                 <Button
                                   size="sm"
-                                  variant="outline"
-                                  onClick={() => void toggleBlock(author)}
-                                  aria-label={author.chat_blocked ? `Bỏ chặn ${author.full_name}` : `Chặn ${author.full_name}`}
+                                  variant="destructive"
+                                  onClick={() => void deleteMessage(m.id)}
+                                  aria-label={`Xóa tin nhắn này`}
                                 >
-                                  <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                                  {author.chat_blocked ? "Bỏ chặn toàn cục" : "Chặn toàn cục"}
+                                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                  Xóa
                                 </Button>
-                                {roomBans.some((ban) => ban.user === author.id) ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setActionMessage(null)}
+                                  aria-label="Đóng menu hành động"
+                                >
+                                  Đóng
+                                </Button>
+                              </div>
+                            </>
+                          )}
+
+                          {/* User recall action - chỉ cho tin nhắn của chính mình trong vòng 10p */}
+                          {!isAdmin && mine && !m.recalled && (
+                            <div className="flex items-center gap-1">
+                              {(() => {
+                                const now = Date.now();
+                                const messageTime = new Date(m.created).getTime();
+                                const timeDiff = now - messageTime;
+                                const TEN_MINUTES = 10 * 60 * 1000;
+                                const canRecall = timeDiff <= TEN_MINUTES;
+
+                                return canRecall ? (
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => void unbanUserFromRoom(author.id)}
-                                    aria-label={`Bỏ chặn ${author.full_name} khỏi phòng này`}
+                                    onClick={() => void recallMessage(m.id)}
+                                    aria-label="Thu hồi tin nhắn"
                                   >
-                                    <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                                    Bỏ chặn khỏi phòng
+                                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                                    Thu hồi
                                   </Button>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => void banUserFromRoom(author.id)}
-                                    aria-label={`Chặn ${author.full_name} khỏi phòng này`}
-                                  >
-                                    <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                                    Chặn khỏi phòng
-                                  </Button>
-                                )}
-                              </>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => void deleteMessage(m.id)}
-                              aria-label={`Xóa tin nhắn này`}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                              Xóa
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setActionMessage(null)}
-                              aria-label="Đóng menu hành động"
-                            >
-                              Đóng
-                            </Button>
-                          </div>
+                                ) : null;
+                              })()}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setActionMessage(null)}
+                                aria-label="Đóng menu hành động"
+                              >
+                                Đóng
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

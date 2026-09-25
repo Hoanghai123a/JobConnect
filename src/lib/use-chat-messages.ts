@@ -18,6 +18,7 @@ type ChatMessage = {
   created: string;
   is_anonymous?: boolean;
   image?: string[]; // Field chứa danh sách ảnh
+  recalled?: boolean; // Tin nhắn đã bị thu hồi
   expand?: {
     user?: {
       id: string;
