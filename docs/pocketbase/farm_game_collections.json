@@ -1,0 +1,329 @@
+[
+  {
+    "id": "pbc_4401000010",
+    "listRule": "user = @request.auth.id || @request.auth.role = \"admin\"",
+    "viewRule": "user = @request.auth.id || @request.auth.role = \"admin\"",
+    "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
+    "updateRule": "user = @request.auth.id || @request.auth.role = \"admin\"",
+    "deleteRule": "@request.auth.role = \"admin\"",
+    "name": "farm_players",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "hidden": false,
+        "id": "text_id_farm_player",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "_pb_users_auth_",
+        "hidden": false,
+        "id": "relation_user_farm",
+        "maxSelect": 1,
+        "minSelect": 1,
+        "name": "user",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "hidden": false,
+        "id": "num_coins_farm",
+        "max": null,
+        "min": 0,
+        "name": "coins",
+        "onlyInt": true,
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "num_level_farm",
+        "max": 100,
+        "min": 1,
+        "name": "level",
+        "onlyInt": true,
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "num_exp_farm",
+        "max": null,
+        "min": 0,
+        "name": "exp",
+        "onlyInt": true,
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "date_last_login",
+        "max": "",
+        "min": "",
+        "name": "last_login",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_farm_players_user ON farm_players (user)"
+    ]
+  },
+  {
+    "id": "pbc_4401000011",
+    "listRule": "@request.auth.id != \"\" && player.user = @request.auth.id",
+    "viewRule": "@request.auth.id != \"\" && player.user = @request.auth.id",
+    "createRule": null,
+    "updateRule": "@request.auth.id != \"\" && player.user = @request.auth.id",
+    "deleteRule": null,
+    "name": "farm_plots",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "hidden": false,
+        "id": "text_id_plot",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": true,
+        "collectionId": "pbc_4401000010",
+        "hidden": false,
+        "id": "relation_player_plot",
+        "maxSelect": 1,
+        "minSelect": 1,
+        "name": "player",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "hidden": false,
+        "id": "num_plot_id",
+        "max": 11,
+        "min": 0,
+        "name": "plot_id",
+        "onlyInt": true,
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "text_crop_id",
+        "max": 50,
+        "min": 0,
+        "name": "crop_id",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "date_planted_at",
+        "max": "",
+        "min": "",
+        "name": "planted_at",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date"
+      },
+      {
+        "hidden": false,
+        "id": "date_harvest_at",
+        "max": "",
+        "min": "",
+        "name": "harvest_at",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_farm_plots_player_plot ON farm_plots (player, plot_id)"
+    ]
+  },
+  {
+    "id": "pbc_4401000012",
+    "listRule": "@request.auth.id != \"\" && player.user = @request.auth.id",
+    "viewRule": "@request.auth.id != \"\" && player.user = @request.auth.id",
+    "createRule": null,
+    "updateRule": "@request.auth.id != \"\" && player.user = @request.auth.id",
+    "deleteRule": null,
+    "name": "farm_inventory",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "hidden": false,
+        "id": "text_id_inv",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": true,
+        "collectionId": "pbc_4401000010",
+        "hidden": false,
+        "id": "relation_player_inv",
+        "maxSelect": 1,
+        "minSelect": 1,
+        "name": "player",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "hidden": false,
+        "id": "text_crop_id_inv",
+        "max": 50,
+        "min": 1,
+        "name": "crop_id",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "num_quantity_inv",
+        "max": null,
+        "min": 0,
+        "name": "quantity",
+        "onlyInt": true,
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "number"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_farm_inventory_player_crop ON farm_inventory (player, crop_id)"
+    ]
+  },
+  {
+    "id": "pbc_4401000013",
+    "listRule": "@request.auth.id != \"\" && player.user = @request.auth.id",
+    "viewRule": "@request.auth.id != \"\" && player.user = @request.auth.id",
+    "createRule": null,
+    "updateRule": "@request.auth.id != \"\" && player.user = @request.auth.id && claimed = false",
+    "deleteRule": null,
+    "name": "farm_quests",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "hidden": false,
+        "id": "text_id_quest",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": true,
+        "collectionId": "pbc_4401000010",
+        "hidden": false,
+        "id": "relation_player_quest",
+        "maxSelect": 1,
+        "minSelect": 1,
+        "name": "player",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "hidden": false,
+        "id": "text_quest_id",
+        "max": 100,
+        "min": 1,
+        "name": "quest_id",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "num_progress_quest",
+        "max": null,
+        "min": 0,
+        "name": "progress",
+        "onlyInt": true,
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "bool_claimed_quest",
+        "name": "claimed",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "bool"
+      },
+      {
+        "hidden": false,
+        "id": "date_reset_at",
+        "max": "",
+        "min": "",
+        "name": "reset_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_farm_quests_player_quest ON farm_quests (player, quest_id)",
+      "CREATE INDEX idx_farm_quests_reset_at ON farm_quests (reset_at)"
+    ]
+  }
+]

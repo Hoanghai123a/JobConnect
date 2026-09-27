@@ -1,0 +1,73 @@
+import type { Quest, QuestType } from "../types";
+
+export const QUEST_TYPES: QuestType[] = [
+  "PLANT",
+  "HARVEST",
+  "SELL",
+  "BUY_SEED",
+  "EARN_COINS",
+  "GAIN_EXP",
+];
+
+export const DAILY_QUESTS: Quest[] = [
+  {
+    id: "daily_plant_5",
+    title: "Trồng 5 cây",
+    description: "Trồng 5 cây bất kỳ trên nông trại",
+    type: "PLANT",
+    target: 5,
+    progress: 0,
+    reward: { coins: 50, exp: 10 },
+    claimed: false,
+  },
+  {
+    id: "daily_harvest_10",
+    title: "Thu hoạch 10 cây",
+    description: "Thu hoạch 10 cây đã chín",
+    type: "HARVEST",
+    target: 10,
+    progress: 0,
+    reward: { coins: 100, exp: 20 },
+    claimed: false,
+  },
+  {
+    id: "daily_sell_15",
+    title: "Bán 15 cây",
+    description: "Bán 15 cây thu hoạch",
+    type: "SELL",
+    target: 15,
+    progress: 0,
+    reward: { coins: 80, exp: 15 },
+    claimed: false,
+  },
+  {
+    id: "daily_buy_seed_8",
+    title: "Mua 8 hạt giống",
+    description: "Mua 8 hạt giống từ cửa hàng",
+    type: "BUY_SEED",
+    target: 8,
+    progress: 0,
+    reward: { coins: 40, exp: 10 },
+    claimed: false,
+  },
+  {
+    id: "daily_earn_500",
+    title: "Kiếm 500 xu",
+    description: "Kiếm được 500 xu từ việc bán cây",
+    type: "EARN_COINS",
+    target: 500,
+    progress: 0,
+    reward: { coins: 150, exp: 25 },
+    claimed: false,
+  },
+  {
+    id: "daily_gain_50_exp",
+    title: "Đạt 50 EXP",
+    description: "Tích lũy 50 điểm kinh nghiệm",
+    type: "GAIN_EXP",
+    target: 50,
+    progress: 0,
+    reward: { coins: 120, exp: 30 },
+    claimed: false,
+  },
+];

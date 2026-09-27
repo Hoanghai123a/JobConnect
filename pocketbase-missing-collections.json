@@ -1,0 +1,941 @@
+[
+  {
+    "id": "transport_contacts_new",
+    "name": "transport_contacts",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "@request.auth.role = \"admin\" || user = @request.auth.id",
+    "deleteRule": "@request.auth.role = \"admin\"",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 15,
+          "max": 15,
+          "pattern": "^[a-z0-9]+$"
+        }
+      },
+      {
+        "id": "transport_user",
+        "name": "user",
+        "type": "relation",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name"]
+        }
+      },
+      {
+        "id": "transport_edited_by",
+        "name": "edited_by",
+        "type": "relation",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name"]
+        }
+      },
+      {
+        "id": "transport_carrier_name",
+        "name": "carrier_name",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 200,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "transport_title",
+        "name": "title",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": true,
+        "unique": false,
+        "options": {
+          "min": 1,
+          "max": 200,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "transport_run_time",
+        "name": "run_time",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 200,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "transport_phone",
+        "name": "phone",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 10,
+          "max": 15,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "autodate2990389176",
+        "name": "created",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": false
+        }
+      },
+      {
+        "id": "autodate3332085495",
+        "name": "updated",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": true
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_transport_contacts_user ON transport_contacts(user)",
+      "CREATE INDEX idx_transport_contacts_created ON transport_contacts(created)"
+    ]
+  },
+  {
+    "id": "chat_rooms_new",
+    "name": "chat_rooms",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.role = \"admin\"",
+    "updateRule": "@request.auth.role = \"admin\"",
+    "deleteRule": "@request.auth.role = \"admin\"",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 15,
+          "max": 15,
+          "pattern": "^[a-z0-9]+$"
+        }
+      },
+      {
+        "id": "chat_room_name",
+        "name": "name",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": true,
+        "unique": false,
+        "options": {
+          "min": 1,
+          "max": 200,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "chat_room_description",
+        "name": "description",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 1000,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "chat_room_is_default",
+        "name": "is_default",
+        "type": "bool",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false
+      },
+      {
+        "id": "chat_room_created_by",
+        "name": "created_by",
+        "type": "relation",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name"]
+        }
+      },
+      {
+        "id": "autodate2990389176",
+        "name": "created",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": false
+        }
+      },
+      {
+        "id": "autodate3332085495",
+        "name": "updated",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": true
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_chat_rooms_is_default ON chat_rooms(is_default)"
+    ]
+  },
+  {
+    "id": "chat_room_members_new",
+    "name": "chat_room_members",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || user = @request.auth.id)",
+    "viewRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || user = @request.auth.id)",
+    "createRule": "@request.auth.role = \"admin\"",
+    "updateRule": "@request.auth.role = \"admin\"",
+    "deleteRule": "@request.auth.role = \"admin\"",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 15,
+          "max": 15,
+          "pattern": "^[a-z0-9]+$"
+        }
+      },
+      {
+        "id": "chat_member_room",
+        "name": "room",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "chat_rooms_new",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["name"]
+        }
+      },
+      {
+        "id": "chat_member_user",
+        "name": "user",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name"]
+        }
+      },
+      {
+        "id": "autodate2990389176",
+        "name": "created",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": false
+        }
+      },
+      {
+        "id": "autodate3332085495",
+        "name": "updated",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": true
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_chat_room_members_room_user ON chat_room_members(room, user)",
+      "CREATE INDEX idx_chat_room_members_user ON chat_room_members(user)"
+    ]
+  },
+  {
+    "id": "group_chat_messages_new",
+    "name": "group_chat_messages",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": null,
+    "deleteRule": "@request.auth.role = \"admin\" || user = @request.auth.id",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 15,
+          "max": 15,
+          "pattern": "^[a-z0-9]+$"
+        }
+      },
+      {
+        "id": "chat_msg_user",
+        "name": "user",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name"]
+        }
+      },
+      {
+        "id": "chat_msg_room",
+        "name": "room",
+        "type": "relation",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "chat_rooms_new",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["name"]
+        }
+      },
+      {
+        "id": "chat_msg_content",
+        "name": "content",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 1,
+          "max": 5000,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "autodate2990389176",
+        "name": "created",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": false
+        }
+      },
+      {
+        "id": "autodate3332085495",
+        "name": "updated",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": true
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_group_chat_messages_room ON group_chat_messages(room)",
+      "CREATE INDEX idx_group_chat_messages_created ON group_chat_messages(created)"
+    ]
+  },
+  {
+    "id": "chat_join_requests_new",
+    "name": "chat_join_requests",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || user = @request.auth.id)",
+    "viewRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || user = @request.auth.id)",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "@request.auth.role = \"admin\"",
+    "deleteRule": "@request.auth.role = \"admin\"",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 15,
+          "max": 15,
+          "pattern": "^[a-z0-9]+$"
+        }
+      },
+      {
+        "id": "join_req_room",
+        "name": "room",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "chat_rooms_new",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["name"]
+        }
+      },
+      {
+        "id": "join_req_user",
+        "name": "user",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name"]
+        }
+      },
+      {
+        "id": "join_req_status",
+        "name": "status",
+        "type": "select",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "maxSelect": 1,
+          "values": ["pending", "approved", "rejected"]
+        }
+      },
+      {
+        "id": "join_req_handled_by",
+        "name": "handled_by",
+        "type": "relation",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": false,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name"]
+        }
+      },
+      {
+        "id": "join_req_handled_at",
+        "name": "handled_at",
+        "type": "date",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": "",
+          "max": ""
+        }
+      },
+      {
+        "id": "autodate2990389176",
+        "name": "created",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": false
+        }
+      },
+      {
+        "id": "autodate3332085495",
+        "name": "updated",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": true
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_chat_join_requests_status ON chat_join_requests(status)",
+      "CREATE INDEX idx_chat_join_requests_user ON chat_join_requests(user)"
+    ]
+  },
+  {
+    "id": "guide_documents_new",
+    "name": "guide_documents",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.role = \"admin\"",
+    "updateRule": "@request.auth.role = \"admin\"",
+    "deleteRule": "@request.auth.role = \"admin\"",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 15,
+          "max": 15,
+          "pattern": "^[a-z0-9]+$"
+        }
+      },
+      {
+        "id": "guide_doc_title",
+        "name": "title",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": true,
+        "unique": false,
+        "options": {
+          "min": 1,
+          "max": 200,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "guide_doc_description",
+        "name": "description",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 5000,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "guide_doc_files",
+        "name": "files",
+        "type": "file",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "mimeTypes": [
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          ],
+          "thumbs": [],
+          "maxSelect": 3,
+          "maxSize": 26214400,
+          "protected": false
+        }
+      },
+      {
+        "id": "guide_doc_order",
+        "name": "order",
+        "type": "number",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "autodate2990389176",
+        "name": "created",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": false
+        }
+      },
+      {
+        "id": "autodate3332085495",
+        "name": "updated",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": true
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_guide_documents_order ON guide_documents(`order`)"
+    ]
+  },
+  {
+    "id": "notebook_categories_new",
+    "name": "notebook_categories",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+    "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+    "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 15,
+          "max": 15,
+          "pattern": "^[a-z0-9]+$"
+        }
+      },
+      {
+        "id": "notebook_cat_user",
+        "name": "user",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name"]
+        }
+      },
+      {
+        "id": "notebook_cat_name",
+        "name": "name",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": true,
+        "unique": false,
+        "options": {
+          "min": 1,
+          "max": 100,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "notebook_cat_color",
+        "name": "color",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 50,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "notebook_cat_order",
+        "name": "order",
+        "type": "number",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": true
+        }
+      },
+      {
+        "id": "autodate2990389176",
+        "name": "created",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": false
+        }
+      },
+      {
+        "id": "autodate3332085495",
+        "name": "updated",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": true
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_notebook_categories_user ON notebook_categories(user)",
+      "CREATE INDEX idx_notebook_categories_order ON notebook_categories(`order`)"
+    ]
+  },
+  {
+    "id": "notebook_entries_new",
+    "name": "notebook_entries",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+    "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+    "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": 15,
+          "max": 15,
+          "pattern": "^[a-z0-9]+$"
+        }
+      },
+      {
+        "id": "notebook_entry_user",
+        "name": "user",
+        "type": "relation",
+        "system": false,
+        "required": true,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name"]
+        }
+      },
+      {
+        "id": "notebook_entry_category",
+        "name": "category",
+        "type": "relation",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "collectionId": "notebook_categories_new",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["name"]
+        }
+      },
+      {
+        "id": "notebook_entry_title",
+        "name": "title",
+        "type": "text",
+        "system": false,
+        "required": true,
+        "presentable": true,
+        "unique": false,
+        "options": {
+          "min": 1,
+          "max": 200,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "notebook_entry_content",
+        "name": "content",
+        "type": "text",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": 50000,
+          "pattern": ""
+        }
+      },
+      {
+        "id": "notebook_entry_pinned",
+        "name": "pinned",
+        "type": "bool",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false
+      },
+      {
+        "id": "autodate2990389176",
+        "name": "created",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": false
+        }
+      },
+      {
+        "id": "autodate3332085495",
+        "name": "updated",
+        "type": "autodate",
+        "system": false,
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "onCreate": true,
+          "onUpdate": true
+        }
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_notebook_entries_user ON notebook_entries(user)",
+      "CREATE INDEX idx_notebook_entries_category ON notebook_entries(category)",
+      "CREATE INDEX idx_notebook_entries_pinned ON notebook_entries(pinned)"
+    ]
+  }
+]

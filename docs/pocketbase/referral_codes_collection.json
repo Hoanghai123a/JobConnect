@@ -1,0 +1,94 @@
+{
+  "id": "referral_codes_id",
+  "name": "referral_codes",
+  "type": "base",
+  "system": false,
+  "schema": [
+    {
+      "id": "user_field",
+      "name": "user",
+      "type": "relation",
+      "required": true,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "collectionId": "_pb_users_auth_",
+        "cascadeDelete": false,
+        "minSelect": null,
+        "maxSelect": 1,
+        "displayFields": null
+      }
+    },
+    {
+      "id": "code_field",
+      "name": "code",
+      "type": "text",
+      "required": true,
+      "presentable": false,
+      "unique": true,
+      "options": {
+        "min": 6,
+        "max": 6,
+        "pattern": "^[A-Z0-9]{6}$"
+      }
+    },
+    {
+      "id": "total_uses_field",
+      "name": "total_uses",
+      "type": "number",
+      "required": false,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "min": 0,
+        "max": null,
+        "noDecimal": true
+      }
+    },
+    {
+      "id": "successful_referrals_field",
+      "name": "successful_referrals",
+      "type": "number",
+      "required": false,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "min": 0,
+        "max": null,
+        "noDecimal": true
+      }
+    },
+    {
+      "id": "total_points_earned_field",
+      "name": "total_points_earned",
+      "type": "number",
+      "required": false,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "min": 0,
+        "max": null,
+        "noDecimal": true
+      }
+    },
+    {
+      "id": "is_active_field",
+      "name": "is_active",
+      "type": "bool",
+      "required": false,
+      "presentable": false,
+      "unique": false,
+      "options": {}
+    }
+  ],
+  "indexes": [
+    "CREATE UNIQUE INDEX idx_referral_codes_user ON referral_codes (user)",
+    "CREATE UNIQUE INDEX idx_referral_codes_code ON referral_codes (code)"
+  ],
+  "listRule": "",
+  "viewRule": "",
+  "createRule": "",
+  "updateRule": "",
+  "deleteRule": "",
+  "options": {}
+}

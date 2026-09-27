@@ -7,6 +7,7 @@ type AppSettingsRecord = {
   company_name?: string;
   slogan?: string;
   logo?: string;
+  updated?: string;
 };
 
 type ListResponse = {
@@ -74,4 +75,15 @@ export function buildPocketBaseFileUrl(params: {
 }) {
   const { upstream, collectionIdOrName, recordId, fileName } = params;
   return `${upstream}/api/files/${encodeURIComponent(collectionIdOrName)}/${encodeURIComponent(recordId)}/${encodeURIComponent(fileName)}`;
+}
+
+export function getAppLogoFileUrl(app: NonNullable<CachedAppSettingsRecord>) {
+  if (!app.item.logo || !app.item.id) return null;
+
+  return buildPocketBaseFileUrl({
+    upstream: app.upstream,
+    collectionIdOrName: app.item.collectionId || app.item.collectionName || "app_settings",
+    recordId: app.item.id,
+    fileName: app.item.logo,
+  });
 }

@@ -16,6 +16,10 @@ export default defineConfig({
       port: 3000,
       strictPort: true,
       allowedHosts: ["chamcongchua.com"],
+      hmr: {
+        overlay: false, // Tắt overlay lỗi khi HMR fail
+        timeout: 60000, // Tăng timeout lên 60s
+      },
     },
   },
 });

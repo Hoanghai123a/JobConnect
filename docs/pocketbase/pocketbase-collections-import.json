@@ -1,0 +1,834 @@
+{
+  "version": "0.40.3",
+  "collections": [
+    {
+      "id": "complaints_collection",
+      "name": "complaints",
+      "type": "base",
+      "system": false,
+      "listRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || phone = @request.auth.phone)",
+      "viewRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || phone = @request.auth.phone)",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.role = \"admin\"",
+      "deleteRule": "@request.auth.role = \"admin\"",
+      "fields": [
+        {
+          "name": "employee_code",
+          "type": "text",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": null,
+            "max": 50,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "full_name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "unique": false,
+          "options": {
+            "min": 1,
+            "max": 200,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "company",
+          "type": "text",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": 1,
+            "max": 200,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "phone",
+          "type": "text",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": 10,
+            "max": 15,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": 1,
+            "max": 5000,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "maxSelect": 1,
+            "values": ["pending", "accepted", "rejected"]
+          }
+        },
+        {
+          "name": "admin_note",
+          "type": "text",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": null,
+            "max": 2000,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "resolved_at",
+          "type": "date",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": "",
+            "max": ""
+          }
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_complaints_phone ON complaints(phone)",
+        "CREATE INDEX idx_complaints_status ON complaints(status)",
+        "CREATE INDEX idx_complaints_created ON complaints(created)"
+      ]
+    },
+    {
+      "id": "news_feed_collection",
+      "name": "guides",
+      "type": "base",
+      "system": false,
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.role = \"admin\"",
+      "updateRule": "@request.auth.role = \"admin\"",
+      "deleteRule": "@request.auth.role = \"admin\"",
+      "fields": [
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "unique": false,
+          "options": {
+            "min": 1,
+            "max": 200,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": 1,
+            "max": 50000,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "maxSelect": 1,
+            "values": ["news", "announcement", "policy", "guide"]
+          }
+        },
+        {
+          "name": "pinned",
+          "type": "bool",
+          "required": false,
+          "presentable": false,
+          "unique": false
+        },
+        {
+          "name": "order",
+          "type": "number",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": null,
+            "max": null,
+            "noDecimal": true
+          }
+        },
+        {
+          "name": "author",
+          "type": "relation",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "users",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["full_name"]
+          }
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_guides_type ON guides(type)",
+        "CREATE INDEX idx_guides_pinned ON guides(pinned)",
+        "CREATE INDEX idx_guides_order ON guides(`order`)"
+      ]
+    },
+    {
+      "id": "transport_contacts_collection",
+      "name": "transport_contacts",
+      "type": "base",
+      "system": false,
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.role = \"admin\" || user = @request.auth.id",
+      "deleteRule": "@request.auth.role = \"admin\"",
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "users",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["full_name"]
+          }
+        },
+        {
+          "name": "edited_by",
+          "type": "relation",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "users",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["full_name"]
+          }
+        },
+        {
+          "name": "carrier_name",
+          "type": "text",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": null,
+            "max": 200,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "unique": false,
+          "options": {
+            "min": 1,
+            "max": 200,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "run_time",
+          "type": "text",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": null,
+            "max": 200,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "phone",
+          "type": "text",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": 10,
+            "max": 15,
+            "pattern": ""
+          }
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_transport_user ON transport_contacts(user)",
+        "CREATE INDEX idx_transport_created ON transport_contacts(created)"
+      ]
+    },
+    {
+      "id": "chat_rooms_collection",
+      "name": "chat_rooms",
+      "type": "base",
+      "system": false,
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.role = \"admin\"",
+      "updateRule": "@request.auth.role = \"admin\"",
+      "deleteRule": "@request.auth.role = \"admin\"",
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "unique": false,
+          "options": {
+            "min": 1,
+            "max": 200,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": null,
+            "max": 1000,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "is_default",
+          "type": "bool",
+          "required": false,
+          "presentable": false,
+          "unique": false
+        },
+        {
+          "name": "created_by",
+          "type": "relation",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "users",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["full_name"]
+          }
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_chat_rooms_default ON chat_rooms(is_default)"
+      ]
+    },
+    {
+      "id": "chat_room_members_collection",
+      "name": "chat_room_members",
+      "type": "base",
+      "system": false,
+      "listRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || user = @request.auth.id)",
+      "viewRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || user = @request.auth.id)",
+      "createRule": "@request.auth.role = \"admin\"",
+      "updateRule": "@request.auth.role = \"admin\"",
+      "deleteRule": "@request.auth.role = \"admin\"",
+      "fields": [
+        {
+          "name": "room",
+          "type": "relation",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "chat_rooms",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["name"]
+          }
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["full_name"]
+          }
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_chat_members_room_user ON chat_room_members(room, user)",
+        "CREATE INDEX idx_chat_members_user ON chat_room_members(user)"
+      ]
+    },
+    {
+      "id": "group_chat_messages_collection",
+      "name": "group_chat_messages",
+      "type": "base",
+      "system": false,
+      "listRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || room.members.user ?= @request.auth.id)",
+      "viewRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || room.members.user ?= @request.auth.id)",
+      "createRule": "@request.auth.id != \"\" && room.members.user ?= @request.auth.id",
+      "updateRule": null,
+      "deleteRule": "@request.auth.role = \"admin\" || user = @request.auth.id",
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "users",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["full_name"]
+          }
+        },
+        {
+          "name": "room",
+          "type": "relation",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "chat_rooms",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["name"]
+          }
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": 1,
+            "max": 5000,
+            "pattern": ""
+          }
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_chat_messages_room ON group_chat_messages(room)",
+        "CREATE INDEX idx_chat_messages_created ON group_chat_messages(created)"
+      ]
+    },
+    {
+      "id": "chat_join_requests_collection",
+      "name": "chat_join_requests",
+      "type": "base",
+      "system": false,
+      "listRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || user = @request.auth.id)",
+      "viewRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || user = @request.auth.id)",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.role = \"admin\"",
+      "deleteRule": "@request.auth.role = \"admin\"",
+      "fields": [
+        {
+          "name": "room",
+          "type": "relation",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "chat_rooms",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["name"]
+          }
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["full_name"]
+          }
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "maxSelect": 1,
+            "values": ["pending", "approved", "rejected"]
+          }
+        },
+        {
+          "name": "handled_by",
+          "type": "relation",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "users",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["full_name"]
+          }
+        },
+        {
+          "name": "handled_at",
+          "type": "date",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": "",
+            "max": ""
+          }
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_join_requests_status ON chat_join_requests(status)",
+        "CREATE INDEX idx_join_requests_user ON chat_join_requests(user)"
+      ]
+    },
+    {
+      "id": "guide_documents_collection",
+      "name": "guide_documents",
+      "type": "base",
+      "system": false,
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "createRule": "@request.auth.role = \"admin\"",
+      "updateRule": "@request.auth.role = \"admin\"",
+      "deleteRule": "@request.auth.role = \"admin\"",
+      "fields": [
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "unique": false,
+          "options": {
+            "min": 1,
+            "max": 200,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": null,
+            "max": 5000,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "files",
+          "type": "file",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "mimeTypes": [
+              "application/pdf",
+              "application/msword",
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              "application/vnd.ms-excel",
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ],
+            "thumbs": [],
+            "maxSelect": 3,
+            "maxSize": 26214400,
+            "protected": false
+          }
+        },
+        {
+          "name": "order",
+          "type": "number",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": 0,
+            "max": null,
+            "noDecimal": true
+          }
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_guide_docs_order ON guide_documents(`order`)"
+      ]
+    },
+    {
+      "id": "notebook_categories_collection",
+      "name": "notebook_categories",
+      "type": "base",
+      "system": false,
+      "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+      "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+      "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["full_name"]
+          }
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "unique": false,
+          "options": {
+            "min": 1,
+            "max": 100,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "color",
+          "type": "text",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": null,
+            "max": 50,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "order",
+          "type": "number",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": 0,
+            "max": null,
+            "noDecimal": true
+          }
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_notebook_cat_user ON notebook_categories(user)",
+        "CREATE INDEX idx_notebook_cat_order ON notebook_categories(`order`)"
+      ]
+    },
+    {
+      "id": "notebook_entries_collection",
+      "name": "notebook_entries",
+      "type": "base",
+      "system": false,
+      "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+      "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+      "createRule": "@request.auth.id != \"\"",
+      "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+      "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["full_name"]
+          }
+        },
+        {
+          "name": "category",
+          "type": "relation",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "notebook_categories",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["name"]
+          }
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "unique": false,
+          "options": {
+            "min": 1,
+            "max": 200,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": null,
+            "max": 50000,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "pinned",
+          "type": "bool",
+          "required": false,
+          "presentable": false,
+          "unique": false
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_notebook_entries_user ON notebook_entries(user)",
+        "CREATE INDEX idx_notebook_entries_category ON notebook_entries(category)",
+        "CREATE INDEX idx_notebook_entries_pinned ON notebook_entries(pinned)"
+      ]
+    },
+    {
+      "id": "uid_counters_collection",
+      "name": "uid_counters",
+      "type": "base",
+      "system": false,
+      "listRule": null,
+      "viewRule": null,
+      "createRule": null,
+      "updateRule": null,
+      "deleteRule": null,
+      "fields": [
+        {
+          "name": "counter_key",
+          "type": "text",
+          "required": true,
+          "presentable": true,
+          "unique": true,
+          "options": {
+            "min": 1,
+            "max": 100,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "counter_type",
+          "type": "text",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": null,
+            "max": 50,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "current_value",
+          "type": "number",
+          "required": true,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": 0,
+            "max": 9999999999,
+            "noDecimal": true
+          }
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "min": null,
+            "max": 500,
+            "pattern": ""
+          }
+        },
+        {
+          "name": "updated_by",
+          "type": "relation",
+          "required": false,
+          "presentable": false,
+          "unique": false,
+          "options": {
+            "collectionId": "users",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1,
+            "displayFields": ["full_name"]
+          }
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_counters_key ON uid_counters(counter_key)"
+      ]
+    }
+  ]
+}
