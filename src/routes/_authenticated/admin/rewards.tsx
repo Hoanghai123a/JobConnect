@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { pb, fileUrl } from "@/lib/pocketbase";
-import type { Reward, RewardRedemption } from "@/lib/rewards";
+import { cancelRedemption, type Reward, type RewardRedemption } from "@/lib/rewards";
+import { useRewardsRealtime } from "@/lib/use-rewards-realtime";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,25 @@ function AdminRewardsPage() {
     is_active: true,
     terms: "",
     order: 0,
+  });
+
+  // Reject dialog states
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [rejectingRedemption, setRejectingRedemption] = useState<RewardRedemption | null>(null);
+  const [rejectNote, setRejectNote] = useState("");
+
+  // Setup realtime updates
+  useRewardsRealtime({
+    viewer: user,
+    onRedemptionChanged: () => {
+      // Reload data khi có đơn đổi quà mới hoặc status thay đổi
+      loadData();
+      toast.info("Có cập nhật đơn đổi quà mới!");
+    },
+    onRewardChanged: () => {
+      // Reload rewards khi có thay đổi
+      loadData();
+    },
   });
 
   useEffect(() => {
@@ -227,22 +247,34 @@ function AdminRewardsPage() {
   };
 
   const handleRejectRedemption = async (redemption: RewardRedemption) => {
-    const note = prompt("Lý do từ chối:");
-    if (!note) return;
+    setRejectingRedemption(redemption);
+    setRejectNote("");
+    setShowRejectDialog(true);
+  };
+
+  const confirmRejectRedemption = async () => {
+    if (!rejectingRedemption || !rejectNote.trim()) {
+      toast.error("Vui lòng nhập lý do từ chối");
+      return;
+    }
 
     try {
-      await pb.collection("reward_redemptions").update(redemption.id, {
-        status: "cancelled",
-        admin_note: note,
+      await cancelRedemption({
+        redemptionId: rejectingRedemption.id,
+        adminNote: rejectNote,
+        adminId: user!.id,
       });
       await createStaffActionLog({
         staff_id: user!.id,
         action: "reject",
         target_type: "reward_redemption",
-        target_id: redemption.id,
-        details: { note },
+        target_id: rejectingRedemption.id,
+        details: { note: rejectNote },
       });
-      toast.success("Đã từ chối đơn đổi quà");
+      toast.success("Đã từ chối đơn đổi quà và hoàn xu cho user");
+      setShowRejectDialog(false);
+      setRejectingRedemption(null);
+      setRejectNote("");
       await loadData();
     } catch (error: any) {
       console.error("Error rejecting redemption:", error);
@@ -637,6 +669,51 @@ function AdminRewardsPage() {
             </Button>
             <Button onClick={handleSaveReward} disabled={saving} className="rounded-xl">
               {saving ? "Đang lưu..." : editingReward ? "Cập nhật" : "Tạo mới"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Redemption Dialog */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Từ chối đơn đổi quà</DialogTitle>
+            <DialogDescription>
+              Nhập lý do từ chối. Xu sẽ được hoàn lại cho người dùng.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div>
+            <Label className="text-xs">Lý do từ chối *</Label>
+            <Textarea
+              className="mt-1 rounded-xl"
+              rows={4}
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+              placeholder="Ví dụ: Thông tin địa chỉ không hợp lệ..."
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRejectDialog(false);
+                setRejectingRedemption(null);
+                setRejectNote("");
+              }}
+              className="rounded-xl"
+            >
+              Huỷ
+            </Button>
+            <Button
+              onClick={confirmRejectRedemption}
+              disabled={!rejectNote.trim()}
+              className="rounded-xl"
+              variant="destructive"
+            >
+              Xác nhận từ chối
             </Button>
           </DialogFooter>
         </DialogContent>

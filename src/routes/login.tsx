@@ -48,12 +48,7 @@ export const Route = createFileRoute("/login")({
   beforeLoad: () => {
     if (typeof window === "undefined") return;
     if (pb.authStore.isValid) {
-      const role = pb.authStore.record?.role;
-      if (role === "admin") throw redirect({ to: "/" });
-      if (role === "staff") {
-        throw redirect({ to: "/staff" });
-      }
-      throw redirect({ to: "/home" });
+      throw redirect({ to: "/" });
     }
   },
   component: LoginPage,
@@ -85,7 +80,7 @@ function LoginPage() {
     toast.success("Chế độ truy cập không đăng nhập", {
       description: "Dữ liệu của bạn sẽ được lưu trên thiết bị này.",
     });
-    nav({ to: "/home" });
+    nav({ to: "/" });
   };
 
   const handleInstallClick = () => {
@@ -119,16 +114,7 @@ function LoginPage() {
       return;
     }
 
-    const today = getLocalDateKey();
-    const redirectKey = attendanceRedirectStorageKey(user.id);
-    const lastLoginDate = window.localStorage.getItem(redirectKey);
-
-    if (lastLoginDate !== today) {
-      window.localStorage.setItem(redirectKey, today);
-      nav({ to: "/attendance" });
-    } else {
-      nav({ to: "/home" });
-    }
+    nav({ to: "/" });
   };
 
   const handleSyncComplete = () => {
@@ -227,17 +213,7 @@ function LoginPage() {
         return;
       }
 
-      // Chỉ chuyển đến chấm công ở lần đăng nhập đầu tiên của từng tài khoản trong ngày.
-      const today = getLocalDateKey();
-      const redirectKey = attendanceRedirectStorageKey(loggedInUser.id);
-      const lastLoginDate = window.localStorage.getItem(redirectKey);
-
-      if (lastLoginDate !== today) {
-        window.localStorage.setItem(redirectKey, today);
-        nav({ to: "/attendance" });
-      } else {
-        nav({ to: "/home" });
-      }
+      nav({ to: "/" });
     } catch (error: any) {
       console.error("[login] error", error, error?.data);
       const status = error?.status;

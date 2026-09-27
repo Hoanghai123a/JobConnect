@@ -35,7 +35,7 @@ function attendanceRedirectStorageKey(userId: string) {
 export function LoginRequiredDialog({
   open,
   onOpenChange,
-  redirectTo = "/home",
+  redirectTo = "/",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -93,25 +93,9 @@ export function LoginRequiredDialog({
       toast.success(`Chào mừng ${name}`, { id: toastId });
       onOpenChange(false);
 
-      if (user.role === "admin") {
-        navigate({ to: "/" });
-        return;
-      }
-      if (user.role === "staff") {
-        navigate({ to: "/staff" });
-        return;
-      }
       if (!isProfileComplete(user)) {
         toast.info("Bổ sung đầy đủ thông tin để trải nghiệm tốt nhất");
         navigate({ to: "/account", search: { incomplete: 1 } as any });
-        return;
-      }
-
-      const today = getLocalDateKey();
-      const redirectKey = attendanceRedirectStorageKey(user.id);
-      if (window.localStorage.getItem(redirectKey) !== today) {
-        window.localStorage.setItem(redirectKey, today);
-        navigate({ to: "/attendance" });
         return;
       }
 

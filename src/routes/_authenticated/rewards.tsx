@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { pb } from "@/lib/pocketbase";
 import { escapePb } from "@/lib/pocketbase-utils";
 import { getActiveRewards, redeemReward, getUserRedemptions, type Reward } from "@/lib/rewards";
+import { useRewardsRealtime } from "@/lib/use-rewards-realtime";
 import { AppHeader } from "@/components/layout/BottomNav";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,65 @@ function RewardsPage() {
   });
   const [redeeming, setRedeeming] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [selectedRedemption, setSelectedRedemption] = useState<any>(null);
+
+  // Setup realtime updates
+  useRewardsRealtime({
+    viewer: user,
+    onRedemptionChanged: () => {
+      // Reload redemptions khi có thay đổi
+      if (user?.id) {
+        getUserRedemptions(user.id).then(setRedemptions).catch(console.error);
+      }
+    },
+    onRewardChanged: () => {
+      // Reload rewards khi admin thay đổi
+      getActiveRewards().then(setRewards).catch(console.error);
+    },
+  });
+
+  // Listen to redemption status changes (chi tiết hơn)
+  useEffect(() => {
+    const handleRedemptionChanged = (event: any) => {
+      const { action, record, status, userId } = event.detail;
+
+      // Chỉ notify nếu là đơn của user hiện tại
+      if (userId !== user?.id) return;
+
+      if (action === "update") {
+        // Admin đã phản hồi đơn đổi quà
+        if (status === "approved") {
+          toast.success("✅ Đơn đổi quà của bạn đã được duyệt!");
+        } else if (status === "delivered") {
+          toast.success("🎉 Đơn đổi quà đã được giao!");
+        } else if (status === "cancelled") {
+          const adminNote = record.admin_note || "Không có lý do cụ thể";
+          toast.error(`❌ Đơn đổi quà bị từ chối: ${adminNote}`);
+        }
+      }
+    };
+
+    window.addEventListener("jobconnect:reward-redemption-changed", handleRedemptionChanged);
+
+    return () => {
+      window.removeEventListener("jobconnect:reward-redemption-changed", handleRedemptionChanged);
+    };
+  }, [user?.id]);
+
+  // Listen to coin balance changes
+  useEffect(() => {
+    const handleCoinBalanceChanged = (event: any) => {
+      const { coins } = event.detail;
+      setCoins(coins);
+      toast.success(`🪙 Số xu của bạn đã được cập nhật: ${coins} xu`);
+    };
+
+    window.addEventListener("jobconnect:coin-balance-changed", handleCoinBalanceChanged);
+
+    return () => {
+      window.removeEventListener("jobconnect:coin-balance-changed", handleCoinBalanceChanged);
+    };
+  }, []);
 
   useEffect(() => {
     if (user?.id) {
@@ -159,18 +219,9 @@ function RewardsPage() {
         <TabsContent value="rewards" className="mt-0 p-4">
           {/* Coin Balance */}
           <Card className="mb-4 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 p-4 dark:from-amber-950/20 dark:to-orange-950/20">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="mb-1 text-xs text-muted-foreground">Số dư của bạn</p>
-                <CoinBalance coins={coins} size="lg" />
-              </div>
-              <Link
-                to="/account"
-                search={{ tab: "coins" }}
-                className="text-sm text-primary hover:underline"
-              >
-                Chi tiết →
-              </Link>
+            <div>
+              <p className="mb-1 text-xs text-muted-foreground">Số dư của bạn</p>
+              <CoinBalance coins={coins} size="lg" />
             </div>
           </Card>
 
@@ -273,7 +324,11 @@ function RewardsPage() {
         <TabsContent value="history" className="mt-0 p-4">
           <div className="space-y-3">
             {redemptions.map((redemption) => (
-              <Card key={redemption.id} className="rounded-2xl p-4">
+              <Card
+                key={redemption.id}
+                className="rounded-2xl p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => setSelectedRedemption(redemption)}
+              >
                 <div className="mb-2 flex items-start justify-between">
                   <div className="min-w-0 flex-1">
                     <h4 className="font-semibold">
@@ -302,6 +357,80 @@ function RewardsPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Redemption Detail Dialog */}
+      <Dialog open={!!selectedRedemption} onOpenChange={(open) => !open && setSelectedRedemption(null)}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Chi tiết đơn đổi quà</DialogTitle>
+            <DialogDescription>
+              {selectedRedemption?.expand?.reward?.title || "Phần thưởng"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-xl bg-muted/50 p-3 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Trạng thái:</span>
+                {selectedRedemption && <StatusBadge status={selectedRedemption.status} />}
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Xu đã tiêu:</span>
+                <CoinBalance coins={selectedRedemption?.points_spent || 0} size="sm" />
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Ngày đổi:</span>
+                <span className="font-medium">
+                  {selectedRedemption && new Date(selectedRedemption.created).toLocaleString("vi-VN")}
+                </span>
+              </div>
+            </div>
+
+            {selectedRedemption?.delivery_info && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Thông tin nhận hàng:</p>
+                <div className="rounded-xl bg-muted/50 p-3 space-y-1 text-sm">
+                  <p><span className="text-muted-foreground">Tên:</span> {JSON.parse(selectedRedemption.delivery_info).name}</p>
+                  <p><span className="text-muted-foreground">SĐT:</span> {JSON.parse(selectedRedemption.delivery_info).phone}</p>
+                  <p><span className="text-muted-foreground">Địa chỉ:</span> {JSON.parse(selectedRedemption.delivery_info).address}</p>
+                  {JSON.parse(selectedRedemption.delivery_info).note && (
+                    <p><span className="text-muted-foreground">Ghi chú:</span> {JSON.parse(selectedRedemption.delivery_info).note}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {selectedRedemption?.admin_note && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-red-600">
+                  {selectedRedemption.status === "cancelled" ? "⚠️ Lý do từ chối:" : "📝 Ghi chú Admin:"}
+                </p>
+                <div className="rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 p-3 text-sm">
+                  {selectedRedemption.admin_note}
+                </div>
+              </div>
+            )}
+
+            {selectedRedemption?.delivered_at && (
+              <div className="rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 p-3 text-sm">
+                <p className="text-green-700 dark:text-green-400">
+                  ✅ Đã giao ngày: {new Date(selectedRedemption.delivered_at).toLocaleString("vi-VN")}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSelectedRedemption(null)}
+              className="rounded-xl w-full"
+            >
+              Đóng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Redeem Dialog */}
       <Dialog open={!!selectedReward} onOpenChange={(open) => !open && setSelectedReward(null)}>

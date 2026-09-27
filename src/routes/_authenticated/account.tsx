@@ -198,12 +198,9 @@ function AccountPage() {
           </Tabs>
         ) : (
           <Tabs defaultValue={tab || "profile"} className="space-y-3">
-            <TabsList className="grid h-10 w-full grid-cols-3 rounded-2xl">
+            <TabsList className="grid h-10 w-full grid-cols-2 rounded-2xl">
               <TabsTrigger value="profile" className="rounded-xl text-xs">
                 Thông tin
-              </TabsTrigger>
-              <TabsTrigger value="coins" className="rounded-xl text-xs">
-                Xu & Điểm
               </TabsTrigger>
               <TabsTrigger value="app" className="rounded-xl text-xs">
                 Ứng dụng
@@ -211,9 +208,6 @@ function AccountPage() {
             </TabsList>
             <TabsContent value="profile" className="mt-0 space-y-3">
               <UserProfileForm />
-            </TabsContent>
-            <TabsContent value="coins" className="mt-0">
-              <UserCoinsPanel />
             </TabsContent>
             <TabsContent value="app" className="mt-0">
               <AccountAppLinks />
@@ -267,6 +261,7 @@ function AccountAppLinks() {
 
 function UserProfileForm() {
   const { user, refresh, isAdmin } = useAuth();
+  const navigate = useNavigate();
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -276,10 +271,19 @@ function UserProfileForm() {
   const showIncomplete = !!search.incomplete;
 
   useEffect(() => {
-    if (showIncomplete && !isAdmin) {
+    if (!isAdmin && user && showIncomplete) {
+      const { isProfileComplete } = require("@/lib/profile");
+      const profileComplete = isProfileComplete(user);
+
+      if (profileComplete) {
+        toast.success("Thông tin đã đầy đủ, chuyển về trang chủ");
+        navigate({ to: "/" });
+        return;
+      }
+
       toast.info("Bổ sung đầy đủ thông tin để trải nghiệm tốt nhất");
     }
-  }, [isAdmin, showIncomplete]);
+  }, [isAdmin, showIncomplete, user, navigate]);
 
   useEffect(() => {
     setForm({
@@ -332,8 +336,16 @@ function UserProfileForm() {
       }
       setAvatarFile(null);
       setRemoveAvatar(false);
-      await refresh();
+      const updatedUser = await refresh();
       toast.success("Đã lưu");
+
+      if (showIncomplete && !isAdmin && updatedUser) {
+        const { isProfileComplete } = await import("@/lib/profile");
+        if (isProfileComplete(updatedUser)) {
+          toast.success("Thông tin đã đầy đủ, chuyển về trang chủ");
+          navigate({ to: "/" });
+        }
+      }
     } catch (e: any) {
       toast.error(e?.message || "Lỗi lưu");
     } finally {

@@ -35,7 +35,7 @@ export function BottomNav() {
     user?.role === "admin"
       ? [
           { to: "/home", label: "Trang chủ", icon: Home, exact: true },
-          { to: "/coins", label: "Xu", icon: Coins },
+          { to: "/admin/coin-settings", label: "Xu", icon: Coins },
           { to: "/admin/settings", label: "Cài đặt", icon: Settings },
           { to: "/account", label: "Tài khoản", icon: User },
         ]
