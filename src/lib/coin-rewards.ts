@@ -176,12 +176,19 @@ export async function checkInDaily(
   const sundayStr = formatDate(getSunday(today));
   const todayStr = formatDate(today);
 
-  // Lấy số coins cho điểm danh hàng ngày
-  let dailyCoins = await getCoinAmount("daily_checkin_base");
+  // Kiểm tra chế độ điểm danh (0 = cố định, 1 = random)
+  const checkinMode = await getCoinAmount("daily_checkin_mode");
 
-  // Nếu chưa có cài đặt, dùng giá trị mặc định
-  if (dailyCoins === 0) {
-    dailyCoins = 5; // Giá trị mặc định
+  let dailyCoins: number;
+
+  if (checkinMode === 1) {
+    // Random mode: lấy số xu ngẫu nhiên trong khoảng min-max
+    const minCoins = (await getCoinAmount("daily_checkin_min")) || 3;
+    const maxCoins = (await getCoinAmount("daily_checkin_max")) || 10;
+    dailyCoins = Math.floor(Math.random() * (maxCoins - minCoins + 1)) + minCoins;
+  } else {
+    // Fixed mode: lấy số xu cố định
+    dailyCoins = (await getCoinAmount("daily_checkin_base")) || 5;
   }
 
   if (status.currentWeek) {

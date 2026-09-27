@@ -95,7 +95,7 @@ function todayStr() {
 }
 
 function getAttendanceTypeLabel(type?: AttendanceType) {
-  if (type === "off") return "Nghỉ";
+  if (type === "off") return "Nghỉ KL";
   if (type === "paid_leave") return "Nghỉ phép";
   return "Làm việc";
 }

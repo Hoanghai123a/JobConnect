@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { pb } from "@/lib/pocketbase";
+import { pb, fileUrl } from "@/lib/pocketbase";
 import type { Reward, RewardRedemption } from "@/lib/rewards";
-import { AdminHeader } from "@/components/layout/BottomNav";
+import { AppHeader } from "@/components/layout/BottomNav";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -40,7 +40,7 @@ import {
   Upload,
   ShoppingBag
 } from "lucide-react";
-import { cn, fileUrl } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { createStaffActionLog } from "@/lib/audit-staff";
 import { useAuth } from "@/lib/auth";
 
@@ -273,7 +273,7 @@ function AdminRewardsPage() {
   if (loading) {
     return (
       <div>
-        <AdminHeader title="Quản lý phần thưởng" />
+        <AppHeader title="Quản lý phần thưởng" />
         <DataLoadingState message="Đang tải..." />
       </div>
     );
@@ -286,7 +286,7 @@ function AdminRewardsPage() {
 
   return (
     <div className="pb-nav">
-      <AdminHeader title="Quản lý phần thưởng" />
+      <AppHeader title="Quản lý phần thưởng" />
 
       <div className="p-4">
         {/* Stats Cards */}
