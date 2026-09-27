@@ -664,7 +664,19 @@ export function AdvancesPage() {
   };
 
   const updateRow = async (id: string, payload: Partial<AdvanceRecord>) => {
-    await pb.collection("advances").update(id, payload);
+    const advance = await pb.collection("advances").update(id, payload);
+
+    // Award referral coins khi approve advance đầu tiên
+    if (payload.status === "accepted" && advance.user) {
+      try {
+        const { processReferralFirstAdvance } = await import("@/lib/referral-coins");
+        await processReferralFirstAdvance(advance.user, advance.id);
+      } catch (error) {
+        console.error("Error awarding referral coins:", error);
+      }
+    }
+
+    return advance;
   };
 
   const runBulkAction = async (action: BulkAction, operation: () => Promise<void>) => {

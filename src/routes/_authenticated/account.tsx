@@ -98,11 +98,16 @@ import {
   ChevronRight,
   Trash,
   Database,
+  Coins,
+  Gift,
+  TrendingUp,
+  History,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/account")({
   validateSearch: (s: Record<string, unknown>) => ({
     incomplete: s.incomplete ? 1 : undefined,
+    tab: s.tab as string | undefined,
   }),
   component: AccountPage,
 });
@@ -125,6 +130,7 @@ function buildUserSearchFilter(search: string, extraFilter = "") {
 function AccountPage() {
   const { user, logout, isAdmin } = useAuth();
   const nav = useNavigate();
+  const { tab } = Route.useSearch();
 
   return (
     <div>
@@ -191,10 +197,28 @@ function AccountPage() {
             </TabsContent>
           </Tabs>
         ) : (
-          <div className="space-y-4">
-            <UserProfileForm />
-            <AccountAppLinks />
-          </div>
+          <Tabs defaultValue={tab || "profile"} className="space-y-3">
+            <TabsList className="grid h-10 w-full grid-cols-3 rounded-2xl">
+              <TabsTrigger value="profile" className="rounded-xl text-xs">
+                Thông tin
+              </TabsTrigger>
+              <TabsTrigger value="coins" className="rounded-xl text-xs">
+                Xu & Điểm
+              </TabsTrigger>
+              <TabsTrigger value="app" className="rounded-xl text-xs">
+                Ứng dụng
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="profile" className="mt-0 space-y-3">
+              <UserProfileForm />
+            </TabsContent>
+            <TabsContent value="coins" className="mt-0">
+              <UserCoinsPanel />
+            </TabsContent>
+            <TabsContent value="app" className="mt-0">
+              <AccountAppLinks />
+            </TabsContent>
+          </Tabs>
         )}
       </div>
     </div>
@@ -3270,5 +3294,220 @@ function LocalDataSyncCard() {
         onSyncComplete={handleSyncComplete}
       />
     </>
+  );
+}
+
+/* ───────── USER COINS PANEL ───────── */
+
+function UserCoinsPanel() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [coins, setCoins] = useState(0);
+  const [points, setPoints] = useState(0);
+  const [tier, setTier] = useState<"bronze" | "silver" | "gold" | "platinum">("bronze");
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [referralStats, setReferralStats] = useState<any>(null);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadCoinsData();
+    }
+  }, [user?.id]);
+
+  const loadCoinsData = async () => {
+    if (!user?.id) return;
+
+    setLoading(true);
+    try {
+      // Load coins from garden_balances
+      const balance = await pb
+        .collection("garden_balances")
+        .getFirstListItem(`user = "${escapePb(user.id)}"`)
+        .catch(() => null);
+
+      if (balance) {
+        setCoins(balance.coins || 0);
+      }
+
+      // Load points and tier
+      const userPoints = await pb
+        .collection("user_points")
+        .getFirstListItem(`user = "${escapePb(user.id)}"`)
+        .catch(() => null);
+
+      if (userPoints) {
+        setPoints(userPoints.points || 0);
+        setTier(userPoints.tier || "bronze");
+      }
+
+      // Load recent transactions
+      const txs = await pb.collection("coin_transactions").getList(1, 10, {
+        filter: `user = "${escapePb(user.id)}"`,
+        sort: "-created",
+      });
+      setTransactions(txs.items);
+
+      // Load referral stats
+      const { getReferralStats } = await import("@/lib/referrals");
+      const stats = await getReferralStats(user.id);
+      setReferralStats(stats.stats);
+    } catch (error) {
+      console.error("Error loading coins data:", error);
+      toast.error("Không thể tải dữ liệu xu");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return <DataLoadingState message="Đang tải..." />;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Coins Balance Card */}
+      <Card className="rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 p-5 dark:from-amber-950/20 dark:to-orange-950/20">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Coins className="h-5 w-5 text-amber-600" />
+            <h3 className="font-semibold">Số dư xu</h3>
+          </div>
+          <div className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30">
+            {tier === "bronze" && "Đồng"}
+            {tier === "silver" && "Bạc"}
+            {tier === "gold" && "Vàng"}
+            {tier === "platinum" && "Bạch kim"}
+          </div>
+        </div>
+
+        <div className="mb-4 rounded-xl bg-white/60 p-4 dark:bg-black/20">
+          <p className="mb-1 text-xs text-muted-foreground">Số xu hiện có</p>
+          <div className="flex items-center gap-2">
+            <span className="text-3xl font-bold text-foreground">
+              {coins.toLocaleString("vi-VN")}
+            </span>
+            <span className="text-lg text-muted-foreground">xu</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Link
+            to="/referral"
+            className="flex items-center justify-center gap-2 rounded-xl bg-white/60 p-3 transition-colors hover:bg-white/80 dark:bg-black/20 dark:hover:bg-black/30"
+          >
+            <Users className="h-4 w-4 text-blue-600" />
+            <span className="text-sm font-medium">Giới thiệu</span>
+          </Link>
+          <Link
+            to="/rewards"
+            className="flex items-center justify-center gap-2 rounded-xl bg-white/60 p-3 transition-colors hover:bg-white/80 dark:bg-black/20 dark:hover:bg-black/30"
+          >
+            <Gift className="h-4 w-4 text-purple-600" />
+            <span className="text-sm font-medium">Đổi quà</span>
+          </Link>
+        </div>
+      </Card>
+
+      {/* Stats */}
+      <Card className="rounded-2xl p-4">
+        <h3 className="mb-3 font-semibold">Thống kê</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl bg-muted/50 p-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <TrendingUp className="h-3.5 w-3.5" />
+              Điểm tích luỹ
+            </div>
+            <p className="mt-1 text-xl font-bold">{points.toLocaleString("vi-VN")}</p>
+          </div>
+          {referralStats && (
+            <div className="rounded-xl bg-muted/50 p-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Users className="h-3.5 w-3.5" />
+                Đã giới thiệu
+              </div>
+              <p className="mt-1 text-xl font-bold">{referralStats.completedReferrals}</p>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Recent Transactions */}
+      <Card className="rounded-2xl p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-semibold">Giao dịch gần đây</h3>
+          <History className="h-4 w-4 text-muted-foreground" />
+        </div>
+
+        {transactions.length > 0 ? (
+          <div className="space-y-2">
+            {transactions.map((tx) => (
+              <div
+                key={tx.id}
+                className="flex items-center justify-between rounded-xl bg-muted/50 p-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{tx.description}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(tx.created).toLocaleString("vi-VN")}
+                  </p>
+                </div>
+                <div
+                  className={cn(
+                    "ml-2 text-sm font-semibold",
+                    tx.amount > 0 ? "text-green-600" : "text-red-600"
+                  )}
+                >
+                  {tx.amount > 0 ? "+" : ""}
+                  {tx.amount} xu
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            Chưa có giao dịch nào
+          </div>
+        )}
+      </Card>
+
+      {/* Quick Actions */}
+      <Card className="rounded-2xl p-4">
+        <h3 className="mb-3 font-semibold">Cách kiếm xu</h3>
+        <div className="space-y-2 text-sm">
+          <Link
+            to="/weekly-checkin"
+            className="flex items-center justify-between rounded-xl bg-muted/50 p-3 transition-colors hover:bg-muted"
+          >
+            <div className="flex items-center gap-2">
+              <CalendarRange className="h-4 w-4 text-green-600" />
+              <span>Điểm danh hàng ngày</span>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </Link>
+
+          <Link
+            to="/referral"
+            className="flex items-center justify-between rounded-xl bg-muted/50 p-3 transition-colors hover:bg-muted"
+          >
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-blue-600" />
+              <span>Giới thiệu bạn bè</span>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </Link>
+
+          <Link
+            to="/rewards"
+            className="flex items-center justify-between rounded-xl bg-muted/50 p-3 transition-colors hover:bg-muted"
+          >
+            <div className="flex items-center gap-2">
+              <Gift className="h-4 w-4 text-purple-600" />
+              <span>Đổi quà thưởng</span>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </Link>
+        </div>
+      </Card>
+    </div>
   );
 }

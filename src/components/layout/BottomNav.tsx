@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useState, type ComponentType, type ReactNode } from "react";
-import { ChevronLeft, Home, Info, LogIn, LogOut, Settings, Upload, User } from "lucide-react";
+import { ChevronLeft, Home, Info, LogIn, LogOut, Settings, Upload, User, Coins } from "lucide-react";
 import { LoginRequiredDialog } from "@/components/auth/LoginRequiredDialog";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -35,15 +35,16 @@ export function BottomNav() {
     user?.role === "admin"
       ? [
           { to: "/home", label: "Trang chủ", icon: Home, exact: true },
+          { to: "/coins", label: "Xu", icon: Coins },
           { to: "/admin/settings", label: "Cài đặt", icon: Settings },
           { to: "/account", label: "Tài khoản", icon: User },
         ]
       : user
         ? [
             { to: "/home", label: "Trang chủ", icon: Home, exact: true },
+            { to: "/coins", label: "Xu", icon: Coins },
             { to: "/about", label: "Về chúng tôi", icon: Info },
             { to: "/account", label: "Tài khoản", icon: User },
-            { to: "/login", label: "Đăng xuất", icon: LogOut, action: "logout" },
           ]
         : [
             { to: "/home", label: "Trang chủ", icon: Home, exact: true },

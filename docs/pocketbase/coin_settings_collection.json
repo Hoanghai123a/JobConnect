@@ -1,0 +1,59 @@
+{
+  "id": "pbc_coin_settings001",
+  "name": "coin_settings",
+  "type": "base",
+  "system": false,
+  "schema": [
+    {
+      "id": "text_key",
+      "name": "key",
+      "type": "text",
+      "system": false,
+      "required": true,
+      "presentable": true,
+      "unique": false,
+      "options": {
+        "min": null,
+        "max": 100,
+        "pattern": ""
+      }
+    },
+    {
+      "id": "num_value",
+      "name": "value",
+      "type": "number",
+      "system": false,
+      "required": true,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "min": 0,
+        "max": null,
+        "noDecimal": true
+      }
+    },
+    {
+      "id": "text_description",
+      "name": "description",
+      "type": "text",
+      "system": false,
+      "required": false,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "min": null,
+        "max": 500,
+        "pattern": ""
+      }
+    }
+  ],
+  "indexes": [
+    "CREATE UNIQUE INDEX idx_coin_settings_key ON coin_settings (key)"
+  ],
+  "listRule": "@request.auth.id != ''",
+  "viewRule": "@request.auth.id != ''",
+  "createRule": "@request.auth.role = 'admin'",
+  "updateRule": "@request.auth.role = 'admin'",
+  "deleteRule": "@request.auth.role = 'admin'",
+  "options": {}
+}

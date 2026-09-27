@@ -26,6 +26,9 @@ export const Route = createFileRoute("/register")({
   beforeLoad: () => {
     if (pb.authStore.isValid) throw redirect({ to: "/" });
   },
+  validateSearch: (s: Record<string, unknown>) => ({
+    ref: s.ref as string | undefined,
+  }),
   component: RegisterPage,
 });
 
@@ -42,12 +45,14 @@ type RegisterResult = "pending" | "approved" | null;
 
 function RegisterPage() {
   const nav = useNavigate();
+  const { ref } = Route.useSearch();
   const [form, setForm] = useState({
     username: "",
     full_name: "",
     phone: "",
     password: "",
     passwordConfirm: "",
+    referral_code: ref || "",
   });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -115,7 +120,7 @@ function RegisterPage() {
       const requireApproval = await fetchRequireApproval();
       const uid = await generateUid();
 
-      await pb.collection("users").create({
+      const newUser = await pb.collection("users").create({
         username,
         uid,
         emailVisibility: false,
@@ -126,6 +131,17 @@ function RegisterPage() {
         role: "user",
         status: requireApproval ? "disabled" : "active",
       });
+
+      // Process referral code if provided
+      if (form.referral_code && form.referral_code.trim()) {
+        try {
+          const { recordReferral } = await import("@/lib/referrals");
+          await recordReferral(form.referral_code.trim().toUpperCase(), newUser.id);
+        } catch (error) {
+          console.error("Error processing referral:", error);
+          // Don't fail registration if referral fails
+        }
+      }
 
       if (requireApproval) {
         toast.success("Đã gửi đăng ký, chờ admin duyệt");
@@ -230,6 +246,12 @@ function RegisterPage() {
           value={form.phone}
           onChange={(v) => set("phone", v)}
           type="tel"
+        />
+        <Field
+          label="Mã giới thiệu (không bắt buộc)"
+          value={form.referral_code}
+          onChange={(v) => set("referral_code", v)}
+          placeholder="Nhập mã nếu có"
         />
         <Field
           label="Mật khẩu"

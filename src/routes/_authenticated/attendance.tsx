@@ -470,6 +470,7 @@ function AuthenticatedUserAttendance() {
     show: false,
     amount: 0,
   });
+  const [draftRows, setDraftRows] = useState<AttendanceRow[]>([]); // Draft entries cho ngày tương lai
 
   useEffect(() => {
     if (!user?.id) {
@@ -527,7 +528,10 @@ function AuthenticatedUserAttendance() {
     void fetchMonth();
   }, [fetchMonth]);
 
-  const buckets = useMemo(() => aggregate(rows), [rows]);
+  // Kết hợp rows từ database và draft rows local
+  const allRows = useMemo(() => [...rows, ...draftRows], [rows, draftRows]);
+
+  const buckets = useMemo(() => aggregate(allRows), [allRows]);
   const salary = useMemo(
     () =>
       calcSalary(buckets, {
@@ -535,7 +539,7 @@ function AuthenticatedUserAttendance() {
         chuyen_can: user?.chuyen_can || 0,
         doi_song: user?.doi_song || 0,
         tham_nien: user?.tham_nien || 0,
-        rows,
+        rows: allRows,
         periodStart: payrollPeriod.start,
       }),
     [
@@ -544,7 +548,7 @@ function AuthenticatedUserAttendance() {
       user?.chuyen_can,
       user?.doi_song,
       user?.tham_nien,
-      rows,
+      allRows,
       payrollPeriod.start,
     ],
   );
@@ -558,8 +562,53 @@ function AuthenticatedUserAttendance() {
     { label: "390%", hours: buckets.r390 },
   ].filter((cell) => cell.hours > 0);
 
+  // Lưu tạm cho ngày tương lai (không lưu vào database)
+  const saveDraft = () => {
+    const today = todayStr();
+    if (date <= today) {
+      toast.error("Chỉ lưu tạm cho ngày tương lai. Ngày này hãy dùng 'Lưu chấm công'.");
+      return;
+    }
+
+    const normalizedPayload =
+      attendanceType === "off"
+        ? { shift: "day" as Shift, is_holiday: false, hc_hours: 0, ot_hours: 0 }
+        : attendanceType === "paid_leave"
+          ? { shift: "day" as Shift, is_holiday: false, hc_hours: 8, ot_hours: 0 }
+          : {
+              shift,
+              is_holiday: isHoliday,
+              hc_hours: Number(hcHours) || 0,
+              ot_hours: Number(otHours) || 0,
+            };
+
+    const draftEntry: AttendanceRow = {
+      id: `draft-${date}-${Date.now()}`, // ID tạm thời
+      date,
+      ...normalizedPayload,
+      attendance_type: attendanceType,
+    };
+
+    // Xóa draft cũ cùng ngày (nếu có) trước khi thêm mới
+    setDraftRows((prev) => {
+      const filtered = prev.filter((r) => r.date !== date);
+      return [...filtered, draftEntry];
+    });
+
+    toast.success("Đã lưu tạm để xem thử. Dữ liệu không được lưu vào hệ thống.");
+    setEntryOpen(false);
+  };
+
   const submit = async () => {
     if (!user?.id || saving) return;
+
+    // Chặn chấm công cho ngày tương lai
+    const today = todayStr();
+    if (date > today) {
+      toast.error("Không thể chấm công cho ngày tương lai. Hãy dùng nút 'Lưu tạm' để xem thử.");
+      return;
+    }
+
     setSaving(true);
 
     // Tính tiền mất nếu chọn nghỉ
@@ -1224,9 +1273,20 @@ function LocalAttendance() {
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
             )}
-            <Button type="submit" className="flex-1" disabled={saving}>
-              <Plus className="h-4 w-4" /> Lưu / Cập nhật
-            </Button>
+            {date > todayStr() ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="flex-1"
+                onClick={saveDraft}
+              >
+                <Plus className="h-4 w-4" /> Lưu tạm (xem thử)
+              </Button>
+            ) : (
+              <Button type="submit" className="flex-1" disabled={saving}>
+                <Plus className="h-4 w-4" /> Lưu chấm công
+              </Button>
+            )}
           </div>
         </form>
       </ResponsiveOverlay>

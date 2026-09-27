@@ -18,7 +18,10 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiUidCounterRouteImport } from './routes/api/uid-counter'
 import { Route as AuthenticatedWorkRouteImport } from './routes/_authenticated/work'
+import { Route as AuthenticatedWeeklyCheckinRouteImport } from './routes/_authenticated/weekly-checkin'
 import { Route as AuthenticatedTransportRouteImport } from './routes/_authenticated/transport'
+import { Route as AuthenticatedRewardsRouteImport } from './routes/_authenticated/rewards'
+import { Route as AuthenticatedReferralRouteImport } from './routes/_authenticated/referral'
 import { Route as AuthenticatedNotebookRouteImport } from './routes/_authenticated/notebook'
 import { Route as AuthenticatedNewsRouteImport } from './routes/_authenticated/news'
 import { Route as AuthenticatedMinesweeperRouteImport } from './routes/_authenticated/minesweeper'
@@ -30,6 +33,7 @@ import { Route as AuthenticatedFarmRouteImport } from './routes/_authenticated/f
 import { Route as AuthenticatedExchangeRouteImport } from './routes/_authenticated/exchange'
 import { Route as AuthenticatedCounterRouteImport } from './routes/_authenticated/counter'
 import { Route as AuthenticatedComplaintsRouteImport } from './routes/_authenticated/complaints'
+import { Route as AuthenticatedCoinsRouteImport } from './routes/_authenticated/coins'
 import { Route as AuthenticatedCheckAttendanceRouteImport } from './routes/_authenticated/check-attendance'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedAttendanceRouteImport } from './routes/_authenticated/attendance'
@@ -52,9 +56,11 @@ import { Route as ApiPublicAppIconRouteImport } from './routes/api/public/app-ic
 import { Route as ApiPublicAdvanceRequestRouteImport } from './routes/api/public/advance-request'
 import { Route as AuthenticatedAdminWorkProgressRouteImport } from './routes/_authenticated/admin/work-progress'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
+import { Route as AuthenticatedAdminRewardsRouteImport } from './routes/_authenticated/admin/rewards'
 import { Route as AuthenticatedAdminManageRouteImport } from './routes/_authenticated/admin/manage'
 import { Route as AuthenticatedAdminLogsRouteImport } from './routes/_authenticated/admin/logs'
 import { Route as AuthenticatedAdminImportsRouteImport } from './routes/_authenticated/admin/imports'
+import { Route as AuthenticatedAdminCoinSettingsRouteImport } from './routes/_authenticated/admin/coin-settings'
 import { Route as AuthenticatedAdminChatBansRouteImport } from './routes/_authenticated/admin/chat-bans'
 import { Route as AuthenticatedAdminApprovalsRouteImport } from './routes/_authenticated/admin/approvals'
 import { Route as AuthenticatedAdminAccountsRouteImport } from './routes/_authenticated/admin/accounts'
@@ -110,9 +116,25 @@ const AuthenticatedWorkRoute = AuthenticatedWorkRouteImport.update({
   path: '/work',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedWeeklyCheckinRoute =
+  AuthenticatedWeeklyCheckinRouteImport.update({
+    id: '/weekly-checkin',
+    path: '/weekly-checkin',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedTransportRoute = AuthenticatedTransportRouteImport.update({
   id: '/transport',
   path: '/transport',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedRewardsRoute = AuthenticatedRewardsRouteImport.update({
+  id: '/rewards',
+  path: '/rewards',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedReferralRoute = AuthenticatedReferralRouteImport.update({
+  id: '/referral',
+  path: '/referral',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedNotebookRoute = AuthenticatedNotebookRouteImport.update({
@@ -170,6 +192,11 @@ const AuthenticatedCounterRoute = AuthenticatedCounterRouteImport.update({
 const AuthenticatedComplaintsRoute = AuthenticatedComplaintsRouteImport.update({
   id: '/complaints',
   path: '/complaints',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedCoinsRoute = AuthenticatedCoinsRouteImport.update({
+  id: '/coins',
+  path: '/coins',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedCheckAttendanceRoute =
@@ -286,6 +313,12 @@ const AuthenticatedAdminSettingsRoute =
     path: '/admin/settings',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedAdminRewardsRoute =
+  AuthenticatedAdminRewardsRouteImport.update({
+    id: '/admin/rewards',
+    path: '/admin/rewards',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedAdminManageRoute =
   AuthenticatedAdminManageRouteImport.update({
     id: '/admin/manage',
@@ -301,6 +334,12 @@ const AuthenticatedAdminImportsRoute =
   AuthenticatedAdminImportsRouteImport.update({
     id: '/admin/imports',
     path: '/admin/imports',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedAdminCoinSettingsRoute =
+  AuthenticatedAdminCoinSettingsRouteImport.update({
+    id: '/admin/coin-settings',
+    path: '/admin/coin-settings',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedAdminChatBansRoute =
@@ -375,6 +414,7 @@ export interface FileRoutesByFullPath {
   '/attendance': typeof AuthenticatedAttendanceRoute
   '/chat': typeof AuthenticatedChatRoute
   '/check-attendance': typeof AuthenticatedCheckAttendanceRoute
+  '/coins': typeof AuthenticatedCoinsRoute
   '/complaints': typeof AuthenticatedComplaintsRoute
   '/counter': typeof AuthenticatedCounterRoute
   '/exchange': typeof AuthenticatedExchangeRoute
@@ -386,15 +426,20 @@ export interface FileRoutesByFullPath {
   '/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/news': typeof AuthenticatedNewsRoute
   '/notebook': typeof AuthenticatedNotebookRoute
+  '/referral': typeof AuthenticatedReferralRoute
+  '/rewards': typeof AuthenticatedRewardsRoute
   '/transport': typeof AuthenticatedTransportRoute
+  '/weekly-checkin': typeof AuthenticatedWeeklyCheckinRoute
   '/work': typeof AuthenticatedWorkRoute
   '/api/uid-counter': typeof ApiUidCounterRoute
   '/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/chat-bans': typeof AuthenticatedAdminChatBansRoute
+  '/admin/coin-settings': typeof AuthenticatedAdminCoinSettingsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
   '/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/admin/manage': typeof AuthenticatedAdminManageRoute
+  '/admin/rewards': typeof AuthenticatedAdminRewardsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/work-progress': typeof AuthenticatedAdminWorkProgressRoute
   '/api/public/advance-request': typeof ApiPublicAdvanceRequestRoute
@@ -432,6 +477,7 @@ export interface FileRoutesByTo {
   '/attendance': typeof AuthenticatedAttendanceRoute
   '/chat': typeof AuthenticatedChatRoute
   '/check-attendance': typeof AuthenticatedCheckAttendanceRoute
+  '/coins': typeof AuthenticatedCoinsRoute
   '/complaints': typeof AuthenticatedComplaintsRoute
   '/counter': typeof AuthenticatedCounterRoute
   '/exchange': typeof AuthenticatedExchangeRoute
@@ -443,14 +489,19 @@ export interface FileRoutesByTo {
   '/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/news': typeof AuthenticatedNewsRoute
   '/notebook': typeof AuthenticatedNotebookRoute
+  '/referral': typeof AuthenticatedReferralRoute
+  '/rewards': typeof AuthenticatedRewardsRoute
   '/transport': typeof AuthenticatedTransportRoute
+  '/weekly-checkin': typeof AuthenticatedWeeklyCheckinRoute
   '/work': typeof AuthenticatedWorkRoute
   '/api/uid-counter': typeof ApiUidCounterRoute
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/chat-bans': typeof AuthenticatedAdminChatBansRoute
+  '/admin/coin-settings': typeof AuthenticatedAdminCoinSettingsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
   '/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/admin/manage': typeof AuthenticatedAdminManageRoute
+  '/admin/rewards': typeof AuthenticatedAdminRewardsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/work-progress': typeof AuthenticatedAdminWorkProgressRoute
   '/api/public/advance-request': typeof ApiPublicAdvanceRequestRoute
@@ -490,6 +541,7 @@ export interface FileRoutesById {
   '/_authenticated/attendance': typeof AuthenticatedAttendanceRoute
   '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/check-attendance': typeof AuthenticatedCheckAttendanceRoute
+  '/_authenticated/coins': typeof AuthenticatedCoinsRoute
   '/_authenticated/complaints': typeof AuthenticatedComplaintsRoute
   '/_authenticated/counter': typeof AuthenticatedCounterRoute
   '/_authenticated/exchange': typeof AuthenticatedExchangeRoute
@@ -501,15 +553,20 @@ export interface FileRoutesById {
   '/_authenticated/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/_authenticated/news': typeof AuthenticatedNewsRoute
   '/_authenticated/notebook': typeof AuthenticatedNotebookRoute
+  '/_authenticated/referral': typeof AuthenticatedReferralRoute
+  '/_authenticated/rewards': typeof AuthenticatedRewardsRoute
   '/_authenticated/transport': typeof AuthenticatedTransportRoute
+  '/_authenticated/weekly-checkin': typeof AuthenticatedWeeklyCheckinRoute
   '/_authenticated/work': typeof AuthenticatedWorkRoute
   '/api/uid-counter': typeof ApiUidCounterRoute
   '/_authenticated/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/_authenticated/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/_authenticated/admin/chat-bans': typeof AuthenticatedAdminChatBansRoute
+  '/_authenticated/admin/coin-settings': typeof AuthenticatedAdminCoinSettingsRoute
   '/_authenticated/admin/imports': typeof AuthenticatedAdminImportsRoute
   '/_authenticated/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/_authenticated/admin/manage': typeof AuthenticatedAdminManageRoute
+  '/_authenticated/admin/rewards': typeof AuthenticatedAdminRewardsRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/work-progress': typeof AuthenticatedAdminWorkProgressRoute
   '/api/public/advance-request': typeof ApiPublicAdvanceRequestRoute
@@ -549,6 +606,7 @@ export interface FileRouteTypes {
     | '/attendance'
     | '/chat'
     | '/check-attendance'
+    | '/coins'
     | '/complaints'
     | '/counter'
     | '/exchange'
@@ -560,15 +618,20 @@ export interface FileRouteTypes {
     | '/minesweeper'
     | '/news'
     | '/notebook'
+    | '/referral'
+    | '/rewards'
     | '/transport'
+    | '/weekly-checkin'
     | '/work'
     | '/api/uid-counter'
     | '/admin/accounts'
     | '/admin/approvals'
     | '/admin/chat-bans'
+    | '/admin/coin-settings'
     | '/admin/imports'
     | '/admin/logs'
     | '/admin/manage'
+    | '/admin/rewards'
     | '/admin/settings'
     | '/admin/work-progress'
     | '/api/public/advance-request'
@@ -606,6 +669,7 @@ export interface FileRouteTypes {
     | '/attendance'
     | '/chat'
     | '/check-attendance'
+    | '/coins'
     | '/complaints'
     | '/counter'
     | '/exchange'
@@ -617,14 +681,19 @@ export interface FileRouteTypes {
     | '/minesweeper'
     | '/news'
     | '/notebook'
+    | '/referral'
+    | '/rewards'
     | '/transport'
+    | '/weekly-checkin'
     | '/work'
     | '/api/uid-counter'
     | '/admin/approvals'
     | '/admin/chat-bans'
+    | '/admin/coin-settings'
     | '/admin/imports'
     | '/admin/logs'
     | '/admin/manage'
+    | '/admin/rewards'
     | '/admin/settings'
     | '/admin/work-progress'
     | '/api/public/advance-request'
@@ -663,6 +732,7 @@ export interface FileRouteTypes {
     | '/_authenticated/attendance'
     | '/_authenticated/chat'
     | '/_authenticated/check-attendance'
+    | '/_authenticated/coins'
     | '/_authenticated/complaints'
     | '/_authenticated/counter'
     | '/_authenticated/exchange'
@@ -674,15 +744,20 @@ export interface FileRouteTypes {
     | '/_authenticated/minesweeper'
     | '/_authenticated/news'
     | '/_authenticated/notebook'
+    | '/_authenticated/referral'
+    | '/_authenticated/rewards'
     | '/_authenticated/transport'
+    | '/_authenticated/weekly-checkin'
     | '/_authenticated/work'
     | '/api/uid-counter'
     | '/_authenticated/admin/accounts'
     | '/_authenticated/admin/approvals'
     | '/_authenticated/admin/chat-bans'
+    | '/_authenticated/admin/coin-settings'
     | '/_authenticated/admin/imports'
     | '/_authenticated/admin/logs'
     | '/_authenticated/admin/manage'
+    | '/_authenticated/admin/rewards'
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/work-progress'
     | '/api/public/advance-request'
@@ -803,11 +878,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWorkRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/weekly-checkin': {
+      id: '/_authenticated/weekly-checkin'
+      path: '/weekly-checkin'
+      fullPath: '/weekly-checkin'
+      preLoaderRoute: typeof AuthenticatedWeeklyCheckinRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/transport': {
       id: '/_authenticated/transport'
       path: '/transport'
       fullPath: '/transport'
       preLoaderRoute: typeof AuthenticatedTransportRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/rewards': {
+      id: '/_authenticated/rewards'
+      path: '/rewards'
+      fullPath: '/rewards'
+      preLoaderRoute: typeof AuthenticatedRewardsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/referral': {
+      id: '/_authenticated/referral'
+      path: '/referral'
+      fullPath: '/referral'
+      preLoaderRoute: typeof AuthenticatedReferralRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/notebook': {
@@ -885,6 +981,13 @@ declare module '@tanstack/react-router' {
       path: '/complaints'
       fullPath: '/complaints'
       preLoaderRoute: typeof AuthenticatedComplaintsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/coins': {
+      id: '/_authenticated/coins'
+      path: '/coins'
+      fullPath: '/coins'
+      preLoaderRoute: typeof AuthenticatedCoinsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/check-attendance': {
@@ -1041,6 +1144,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/admin/rewards': {
+      id: '/_authenticated/admin/rewards'
+      path: '/admin/rewards'
+      fullPath: '/admin/rewards'
+      preLoaderRoute: typeof AuthenticatedAdminRewardsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/admin/manage': {
       id: '/_authenticated/admin/manage'
       path: '/admin/manage'
@@ -1060,6 +1170,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/imports'
       fullPath: '/admin/imports'
       preLoaderRoute: typeof AuthenticatedAdminImportsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/admin/coin-settings': {
+      id: '/_authenticated/admin/coin-settings'
+      path: '/admin/coin-settings'
+      fullPath: '/admin/coin-settings'
+      preLoaderRoute: typeof AuthenticatedAdminCoinSettingsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/admin/chat-bans': {
@@ -1162,6 +1279,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAttendanceRoute: typeof AuthenticatedAttendanceRoute
   AuthenticatedChatRoute: typeof AuthenticatedChatRoute
   AuthenticatedCheckAttendanceRoute: typeof AuthenticatedCheckAttendanceRoute
+  AuthenticatedCoinsRoute: typeof AuthenticatedCoinsRoute
   AuthenticatedComplaintsRoute: typeof AuthenticatedComplaintsRoute
   AuthenticatedCounterRoute: typeof AuthenticatedCounterRoute
   AuthenticatedExchangeRoute: typeof AuthenticatedExchangeRoute
@@ -1173,14 +1291,19 @@ interface AuthenticatedRouteChildren {
   AuthenticatedMinesweeperRoute: typeof AuthenticatedMinesweeperRoute
   AuthenticatedNewsRoute: typeof AuthenticatedNewsRoute
   AuthenticatedNotebookRoute: typeof AuthenticatedNotebookRoute
+  AuthenticatedReferralRoute: typeof AuthenticatedReferralRoute
+  AuthenticatedRewardsRoute: typeof AuthenticatedRewardsRoute
   AuthenticatedTransportRoute: typeof AuthenticatedTransportRoute
+  AuthenticatedWeeklyCheckinRoute: typeof AuthenticatedWeeklyCheckinRoute
   AuthenticatedWorkRoute: typeof AuthenticatedWorkRoute
   AuthenticatedAdminAccountsRoute: typeof AuthenticatedAdminAccountsRouteWithChildren
   AuthenticatedAdminApprovalsRoute: typeof AuthenticatedAdminApprovalsRoute
   AuthenticatedAdminChatBansRoute: typeof AuthenticatedAdminChatBansRoute
+  AuthenticatedAdminCoinSettingsRoute: typeof AuthenticatedAdminCoinSettingsRoute
   AuthenticatedAdminImportsRoute: typeof AuthenticatedAdminImportsRoute
   AuthenticatedAdminLogsRoute: typeof AuthenticatedAdminLogsRoute
   AuthenticatedAdminManageRoute: typeof AuthenticatedAdminManageRoute
+  AuthenticatedAdminRewardsRoute: typeof AuthenticatedAdminRewardsRoute
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
   AuthenticatedAdminWorkProgressRoute: typeof AuthenticatedAdminWorkProgressRoute
 }
@@ -1191,6 +1314,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAttendanceRoute: AuthenticatedAttendanceRoute,
   AuthenticatedChatRoute: AuthenticatedChatRoute,
   AuthenticatedCheckAttendanceRoute: AuthenticatedCheckAttendanceRoute,
+  AuthenticatedCoinsRoute: AuthenticatedCoinsRoute,
   AuthenticatedComplaintsRoute: AuthenticatedComplaintsRoute,
   AuthenticatedCounterRoute: AuthenticatedCounterRoute,
   AuthenticatedExchangeRoute: AuthenticatedExchangeRoute,
@@ -1202,14 +1326,19 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedMinesweeperRoute: AuthenticatedMinesweeperRoute,
   AuthenticatedNewsRoute: AuthenticatedNewsRoute,
   AuthenticatedNotebookRoute: AuthenticatedNotebookRoute,
+  AuthenticatedReferralRoute: AuthenticatedReferralRoute,
+  AuthenticatedRewardsRoute: AuthenticatedRewardsRoute,
   AuthenticatedTransportRoute: AuthenticatedTransportRoute,
+  AuthenticatedWeeklyCheckinRoute: AuthenticatedWeeklyCheckinRoute,
   AuthenticatedWorkRoute: AuthenticatedWorkRoute,
   AuthenticatedAdminAccountsRoute: AuthenticatedAdminAccountsRouteWithChildren,
   AuthenticatedAdminApprovalsRoute: AuthenticatedAdminApprovalsRoute,
   AuthenticatedAdminChatBansRoute: AuthenticatedAdminChatBansRoute,
+  AuthenticatedAdminCoinSettingsRoute: AuthenticatedAdminCoinSettingsRoute,
   AuthenticatedAdminImportsRoute: AuthenticatedAdminImportsRoute,
   AuthenticatedAdminLogsRoute: AuthenticatedAdminLogsRoute,
   AuthenticatedAdminManageRoute: AuthenticatedAdminManageRoute,
+  AuthenticatedAdminRewardsRoute: AuthenticatedAdminRewardsRoute,
   AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
   AuthenticatedAdminWorkProgressRoute: AuthenticatedAdminWorkProgressRoute,
 }

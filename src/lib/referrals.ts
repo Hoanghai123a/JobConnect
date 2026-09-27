@@ -110,6 +110,14 @@ export async function applyReferralCode(
   return true;
 }
 
+export async function recordReferral(
+  code: string,
+  refereeId: string
+): Promise<void> {
+  const { processReferralSignup } = await import("./referral-coins");
+  await processReferralSignup(refereeId, code);
+}
+
 export async function getReferralStats(userId: string) {
   const referralCode = await getOrCreateReferralCode(userId);
 

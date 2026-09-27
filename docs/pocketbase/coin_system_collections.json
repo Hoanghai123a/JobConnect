@@ -1,0 +1,135 @@
+[
+  {
+    "name": "coin_settings",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "setting_key",
+        "type": "text",
+        "required": true,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "coin_amount",
+        "type": "number",
+        "required": true,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": false
+        }
+      },
+      {
+        "name": "description",
+        "type": "text",
+        "required": true,
+        "options": {
+          "min": null,
+          "max": null,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "category",
+        "type": "select",
+        "required": true,
+        "options": {
+          "maxSelect": 1,
+          "values": ["referral", "checkin", "milestone", "other"]
+        }
+      },
+      {
+        "name": "active",
+        "type": "bool",
+        "required": false,
+        "options": {}
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_coin_settings_key ON coin_settings (setting_key)"
+    ],
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "@request.auth.role = 'admin'",
+    "updateRule": "@request.auth.role = 'admin'",
+    "deleteRule": "@request.auth.role = 'admin'"
+  },
+  {
+    "name": "weekly_checkins",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "user",
+        "type": "relation",
+        "required": true,
+        "options": {
+          "collectionId": "_pb_users_auth_",
+          "cascadeDelete": true,
+          "minSelect": null,
+          "maxSelect": 1,
+          "displayFields": ["full_name", "username"]
+        }
+      },
+      {
+        "name": "week_start",
+        "type": "date",
+        "required": true,
+        "options": {}
+      },
+      {
+        "name": "week_end",
+        "type": "date",
+        "required": true,
+        "options": {}
+      },
+      {
+        "name": "checkin_days",
+        "type": "json",
+        "required": false,
+        "options": {
+          "maxSize": 2000000
+        }
+      },
+      {
+        "name": "total_days",
+        "type": "number",
+        "required": true,
+        "options": {
+          "min": 0,
+          "max": 7,
+          "noDecimal": false
+        }
+      },
+      {
+        "name": "coins_earned",
+        "type": "number",
+        "required": true,
+        "options": {
+          "min": 0,
+          "max": null,
+          "noDecimal": false
+        }
+      },
+      {
+        "name": "bonus_claimed",
+        "type": "bool",
+        "required": false,
+        "options": {}
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_weekly_checkins_user_week ON weekly_checkins (user, week_start)"
+    ],
+    "listRule": "@request.auth.id != '' && (user = @request.auth.id || @request.auth.role = 'admin')",
+    "viewRule": "@request.auth.id != '' && (user = @request.auth.id || @request.auth.role = 'admin')",
+    "createRule": "@request.auth.id != '' && user = @request.auth.id",
+    "updateRule": "@request.auth.id != '' && user = @request.auth.id",
+    "deleteRule": "@request.auth.role = 'admin'"
+  }
+]

@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { Database, FileInput, Factory, Settings, ShieldCheck, Upload, Users } from "lucide-react";
+import { Database, FileInput, Factory, Settings, ShieldCheck, Upload, Users, Gift } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { MobileSection } from "@/components/layout/MobileSection";
 import { FeatureTile } from "@/components/dashboard/FeatureTile";
@@ -55,6 +55,13 @@ function AdminManagePage() {
             label="Nhà máy"
             description="Quản lý nhà máy"
             icon={Factory}
+          />
+          <FeatureTile
+            to="/admin/rewards"
+            label="Quản lý phần thưởng"
+            description="Danh sách quà và đơn đổi"
+            icon={Gift}
+            variant="accent"
           />
           <FeatureTile
             to="/admin/settings"
