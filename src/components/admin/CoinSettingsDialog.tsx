@@ -160,6 +160,7 @@ export function CoinSettingsDialog({ open, onOpenChange }: CoinSettingsDialogPro
             await pb.collection("coin_settings").update(existing.id, {
               coin_amount: value,
               description: setting.description,
+              active: true,
             });
           } else {
             await pb.collection("coin_settings").create({

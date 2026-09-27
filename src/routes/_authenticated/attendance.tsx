@@ -95,7 +95,7 @@ function todayStr() {
 }
 
 function getAttendanceTypeLabel(type?: AttendanceType) {
-  if (type === "off") return "Nghỉ KL";
+  if (type === "off") return "Nghỉ";
   if (type === "paid_leave") return "Nghỉ phép";
   return "Làm việc";
 }
@@ -818,7 +818,7 @@ function AuthenticatedUserAttendance() {
                 {(
                   [
                     ["work", "Làm việc"],
-                    ["off", "Nghỉ"],
+                    ["off", "Nghỉ KL"],
                     ["paid_leave", "Nghỉ phép"],
                   ] as const
                 ).map(([value, label]) => (
@@ -1207,7 +1207,7 @@ function LocalAttendance() {
               {(
                 [
                   ["work", "Làm việc"],
-                  ["off", "Nghỉ"],
+                  ["off", "Nghỉ KL"],
                   ["paid_leave", "Nghỉ phép"],
                 ] as const
               ).map(([value, label]) => (

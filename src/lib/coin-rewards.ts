@@ -183,12 +183,12 @@ export async function checkInDaily(
 
   if (checkinMode === 1) {
     // Random mode: lấy số xu ngẫu nhiên trong khoảng min-max
-    const minCoins = (await getCoinAmount("daily_checkin_min")) || 3;
-    const maxCoins = (await getCoinAmount("daily_checkin_max")) || 10;
+    const minCoins = await getCoinAmount("daily_checkin_min");
+    const maxCoins = await getCoinAmount("daily_checkin_max");
     dailyCoins = Math.floor(Math.random() * (maxCoins - minCoins + 1)) + minCoins;
   } else {
     // Fixed mode: lấy số xu cố định
-    dailyCoins = (await getCoinAmount("daily_checkin_base")) || 5;
+    dailyCoins = await getCoinAmount("daily_checkin_base");
   }
 
   if (status.currentWeek) {
