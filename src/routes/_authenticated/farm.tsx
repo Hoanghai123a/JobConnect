@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PhaserGame } from "@/game/PhaserGame";
 import { FarmLoader } from "@/game/components/FarmLoader";
+import { GameStatusGuard } from "@/components/game/GameStatusGuard";
 import { useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -16,7 +17,7 @@ function FarmGamePage() {
   const isAuthenticated = pb.authStore.isValid;
 
   return (
-    <>
+    <GameStatusGuard>
       {!isAuthenticated && (
         <Alert variant="default" className="m-4 border-yellow-500 bg-yellow-50">
           <Info className="h-4 w-4 text-yellow-600" />
@@ -32,6 +33,6 @@ function FarmGamePage() {
       )}
 
       <FarmLoader onLoaded={() => setLoaded(true)}>{loaded && <PhaserGame />}</FarmLoader>
-    </>
+    </GameStatusGuard>
   );
 }

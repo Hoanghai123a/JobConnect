@@ -3,7 +3,7 @@
 ## Current Phase
 
 ✅ **10 - Offline Mode** — COMPLETED
-📝 **Next: Milestone 11 - Production Assets** — PLANNED
+🚧 **11 - Production Assets** — IN PROGRESS (Infrastructure Complete)
 
 ## Milestone Overview
 
@@ -17,6 +17,7 @@
 - [x] **08 - Polish** ✓
 - [x] **09 - Backend** ✓ (MVP - PocketBase integrated)
 - [x] **10 - Offline Mode** ✓ (LocalStorage + PocketBase dual storage)
+- [ ] **11 - Production Assets** 🚧 (Infrastructure ready, assets pending generation)
 
 ## Completed Features
 
@@ -99,7 +100,21 @@ Auto-tracking hoạt động cho:
 
 ## Current Work
 
-Đã hoàn thành Milestone 10 - Offline Mode.
+**Milestone 11 - Production Assets** — IN PROGRESS
+
+### Completed (Infrastructure Phase)
+- ✅ Asset directory structure (`public/game-assets/` với 8 thư mục con)
+- ✅ Complete asset manifest (30 crop sprites defined in `assets.ts`)
+- ✅ Placeholder system (`placeholder.png` fallback)
+- ✅ Asset specification document (`docs/ASSET_SPECIFICATION.md`)
+- ✅ PocketBase import instructions (`docs/pocketbase/IMPORT_INSTRUCTIONS.md`)
+- ✅ AI generation prompts for 30 crop sprites (`docs/AI_IMAGE_GENERATION_PROMPTS.md`)
+
+### Pending (Asset Creation Phase)
+- [ ] Generate 30 crop sprites (10 crops × 3 states) via AI tools
+- [ ] Import PocketBase schema into server instance (manual step)
+- [ ] Test authenticated mode with real PocketBase data
+- [ ] Verify asset integration in-game
 
 **Milestone 10 - Offline Mode features:**
 - ✅ StorageAdapter interface cho dual persistence

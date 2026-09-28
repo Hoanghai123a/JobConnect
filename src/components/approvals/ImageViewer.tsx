@@ -133,6 +133,8 @@ export function ImageViewer({
               src={activeImage.url}
               alt={`Ảnh ${viewIdx! + 1}`}
               className="max-h-[88dvh] max-w-[96vw] rounded-lg object-contain shadow-2xl"
+              width="1200"
+              height="900"
               draggable={false}
               onClick={(event) => event.stopPropagation()}
             />

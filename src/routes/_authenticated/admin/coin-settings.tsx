@@ -28,6 +28,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { CoinQueryMonitor } from "@/components/admin/CoinQueryMonitor";
+import { CoinErrorMonitor } from "@/components/admin/CoinErrorMonitor";
 import { CoinBalance } from "@/components/coins/CoinBalance";
 import { toast } from "@/lib/toast";
 import {
@@ -48,11 +50,23 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
-  Filter
+  Filter,
+  Share2,
+  History,
+  Copy,
+  Activity,
+  AlertCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createStaffActionLog } from "@/lib/audit-staff";
 import { useAuth } from "@/lib/auth";
+import { getOrCreateReferralCode, getReferralStats } from "@/lib/referrals";
+import { ShareDialog } from "@/components/referral/ShareDialog";
+import { UserCoinSearch } from "@/components/admin/coin-management/UserCoinSearch";
+import { CoinBalanceCard } from "@/components/admin/coin-management/CoinBalanceCard";
+import { EditCoinDialog } from "@/components/admin/coin-management/EditCoinDialog";
+import { CoinTransactionHistory } from "@/components/admin/coin-management/CoinTransactionHistory";
+import { getUserCoinBalance } from "@/lib/coin-management";
 
 export const Route = createFileRoute("/_authenticated/admin/coin-settings")({
   component: CoinSettingsPage,
@@ -141,6 +155,14 @@ const DEFAULT_SETTINGS = [
     icon: Calendar,
     category: "checkin",
   },
+  {
+    key: "game_enabled",
+    description: "Bật/tắt trò chơi nông trại",
+    defaultValue: 1, // 1 = bật, 0 = tắt
+    icon: Activity,
+    category: "game",
+    isToggle: true,
+  },
 ];
 
 function CoinSettingsPage() {
@@ -184,6 +206,19 @@ function CoinSettingsPage() {
   const [dateTo, setDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
+  // Tab Giới thiệu states
+  const [referralCode, setReferralCode] = useState("");
+  const [referralStats, setReferralStats] = useState<any>(null);
+  const [referralList, setReferralList] = useState<any[]>([]);
+  const [loadingReferral, setLoadingReferral] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+
+  // Tab Quản lý states
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [userBalance, setUserBalance] = useState<any>(null);
+  const [showEditCoinDialog, setShowEditCoinDialog] = useState(false);
+  const [refreshBalanceTrigger, setRefreshBalanceTrigger] = useState(0);
+
   // Setup realtime updates
   useRewardsRealtime({
     viewer: user,
@@ -199,7 +234,10 @@ function CoinSettingsPage() {
   useEffect(() => {
     loadSettings();
     loadRewards();
-  }, []);
+    if (user?.id) {
+      loadReferralData();
+    }
+  }, [user?.id]);
 
   const loadSettings = async () => {
     setLoading(true);
@@ -245,6 +283,44 @@ function CoinSettingsPage() {
     } finally {
       setLoadingRewards(false);
     }
+  };
+
+  const loadReferralData = async () => {
+    if (!user?.id) return;
+
+    setLoadingReferral(true);
+    try {
+      const code = await getOrCreateReferralCode(user.id);
+      setReferralCode(code.code);
+
+      const stats = await getReferralStats(user.id);
+      setReferralStats(stats.stats);
+      setReferralList(stats.referrals);
+    } catch (error) {
+      console.error("Error loading referral data:", error);
+      toast.error("Không thể tải dữ liệu giới thiệu");
+    } finally {
+      setLoadingReferral(false);
+    }
+  };
+
+  const copyReferralCode = () => {
+    navigator.clipboard.writeText(referralCode);
+    toast.success("Đã copy mã giới thiệu");
+  };
+
+  const handleUserSelected = async (userId: string) => {
+    setSelectedUserId(userId);
+    try {
+      const balance = await getUserCoinBalance(userId);
+      setUserBalance(balance);
+    } catch (error) {
+      console.error("Error loading user balance:", error);
+    }
+  };
+
+  const handleEditCoinSuccess = () => {
+    setRefreshBalanceTrigger((prev) => prev + 1);
   };
 
   const handleSave = async () => {
@@ -542,14 +618,30 @@ function CoinSettingsPage() {
       <div className="flex-1 flex flex-col min-h-0 bg-background">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
           <div className="px-4 pt-4 border-b">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3 md:grid-cols-6">
               <TabsTrigger value="rewards" className="gap-2">
                 <Gift className="h-4 w-4" />
-                Quản lý quà tặng
+                <span className="hidden md:inline">Quà tặng</span>
               </TabsTrigger>
               <TabsTrigger value="coins" className="gap-2">
                 <Coins className="h-4 w-4" />
-                Cài đặt xu
+                <span className="hidden md:inline">Cài đặt xu</span>
+              </TabsTrigger>
+              <TabsTrigger value="referral" className="gap-2">
+                <Share2 className="h-4 w-4" />
+                <span className="hidden md:inline">Giới thiệu</span>
+              </TabsTrigger>
+              <TabsTrigger value="management" className="gap-2">
+                <History className="h-4 w-4" />
+                <span className="hidden md:inline">Quản lý</span>
+              </TabsTrigger>
+              <TabsTrigger value="query-monitor" className="gap-2">
+                <Activity className="h-4 w-4" />
+                <span className="hidden md:inline">Query</span>
+              </TabsTrigger>
+              <TabsTrigger value="error-monitor" className="gap-2">
+                <AlertCircle className="h-4 w-4" />
+                <span className="hidden md:inline">Errors</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -1020,8 +1112,209 @@ function CoinSettingsPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Trò chơi */}
+                <div className="space-y-4">
+                  <h3 className="flex items-center gap-2 font-semibold text-sm">
+                    <Activity className="h-4 w-4 text-purple-600" />
+                    Quản lý trò chơi
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between rounded-xl border p-4">
+                      <div className="space-y-1">
+                        <Label className="text-sm font-medium">Trò chơi nông trại</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Bật/tắt chức năng trò chơi nông trại cho người dùng
+                        </p>
+                      </div>
+                      <Switch
+                        checked={(settings["game_enabled"] ?? 1) === 1}
+                        onCheckedChange={(checked) =>
+                          handleValueChange("game_enabled", checked ? "1" : "0")
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
+          </TabsContent>
+
+          {/* Tab Giới thiệu */}
+          <TabsContent value="referral" className="flex-1 overflow-y-auto px-4 mt-0 min-h-0">
+            {loadingReferral ? (
+              <div className="py-4">
+                <DataLoadingState message="Đang tải dữ liệu giới thiệu..." />
+              </div>
+            ) : (
+              <div className="space-y-6 py-4">
+                {/* Mã giới thiệu */}
+                <Card className="p-6">
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-lg flex items-center gap-2">
+                      <Share2 className="h-5 w-5 text-blue-600" />
+                      Mã giới thiệu của bạn
+                    </h3>
+
+                    <div className="flex items-center justify-center py-6">
+                      <div className="text-center space-y-4">
+                        <div className="text-4xl font-bold text-primary tracking-widest bg-accent px-8 py-4 rounded-lg">
+                          {referralCode}
+                        </div>
+                        <div className="flex items-center justify-center gap-2">
+                          <Button onClick={copyReferralCode} variant="outline" size="sm">
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy mã
+                          </Button>
+                          <Button onClick={() => setShowShareDialog(true)} variant="outline" size="sm">
+                            <Share2 className="h-4 w-4 mr-2" />
+                            Chia sẻ
+                          </Button>
+                        </div>
+
+                        <ShareDialog
+                          referralCode={referralCode}
+                          userName={user?.full_name}
+                          open={showShareDialog}
+                          onOpenChange={setShowShareDialog}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Thống kê */}
+                {referralStats && (
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                      <Users className="h-5 w-5 text-green-600" />
+                      Thống kê giới thiệu
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">Tổng giới thiệu</div>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {referralStats.totalReferrals}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">Đang chờ</div>
+                        <div className="text-2xl font-bold text-yellow-600">
+                          {referralStats.pendingReferrals}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">Đang hoạt động</div>
+                        <div className="text-2xl font-bold text-green-600">
+                          {referralStats.activeReferrals}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">Hoàn thành</div>
+                        <div className="text-2xl font-bold text-purple-600">
+                          {referralStats.completedReferrals}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Danh sách người giới thiệu */}
+                {referralList.length > 0 && (
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg mb-4">Danh sách người giới thiệu</h3>
+                    <div className="space-y-2">
+                      {referralList.slice(0, 10).map((referral) => (
+                        <div
+                          key={referral.id}
+                          className="flex items-center justify-between py-2 border-b last:border-0"
+                        >
+                          <div className="flex-1">
+                            <div className="font-medium">Referee ID: {referral.referee}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {new Date(referral.created).toLocaleDateString("vi-VN")}
+                            </div>
+                          </div>
+                          <div>
+                            {referral.status === "completed" && (
+                              <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">
+                                Hoàn thành
+                              </span>
+                            )}
+                            {referral.status === "active" && (
+                              <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                                Hoạt động
+                              </span>
+                            )}
+                            {referral.status === "pending" && (
+                              <span className="text-xs px-2 py-1 rounded-full bg-yellow-100 text-yellow-700">
+                                Chờ xử lý
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Tab Quản lý */}
+          <TabsContent value="management" className="flex-1 overflow-y-auto px-4 mt-0 min-h-0">
+            <div className="space-y-6 py-4">
+              <UserCoinSearch
+                onSelect={handleUserSelected}
+                selectedUserId={selectedUserId}
+              />
+
+              {selectedUserId && userBalance && (
+                <>
+                  <CoinBalanceCard
+                    userId={selectedUserId}
+                    onEdit={() => setShowEditCoinDialog(true)}
+                    refreshTrigger={refreshBalanceTrigger}
+                  />
+
+                  <CoinTransactionHistory
+                    userId={selectedUserId}
+                    days={7}
+                    refreshTrigger={refreshBalanceTrigger}
+                  />
+                </>
+              )}
+
+              {selectedUserId && !userBalance && (
+                <Card className="p-8">
+                  <div className="text-center text-muted-foreground">
+                    User chưa có thông tin xu
+                  </div>
+                </Card>
+              )}
+
+              {!selectedUserId && (
+                <Card className="p-8">
+                  <div className="text-center text-muted-foreground">
+                    Tìm kiếm và chọn user để quản lý xu
+                  </div>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* Tab Query Monitor */}
+          <TabsContent value="query-monitor" className="flex-1 overflow-y-auto px-4 mt-0 min-h-0">
+            <div className="py-4">
+              <CoinQueryMonitor />
+            </div>
+          </TabsContent>
+
+          {/* Tab Error Monitor */}
+          <TabsContent value="error-monitor" className="flex-1 overflow-y-auto px-4 mt-0 min-h-0">
+            <div className="py-4">
+              <CoinErrorMonitor />
+            </div>
           </TabsContent>
         </Tabs>
 

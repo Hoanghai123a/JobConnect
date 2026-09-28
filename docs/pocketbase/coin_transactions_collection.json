@@ -1,0 +1,125 @@
+{
+  "name": "coin_transactions",
+  "type": "base",
+  "system": false,
+  "schema": [
+    {
+      "system": false,
+      "id": "user_field",
+      "name": "user",
+      "type": "relation",
+      "required": true,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "collectionId": "_pb_users_auth_",
+        "cascadeDelete": false,
+        "minSelect": null,
+        "maxSelect": 1,
+        "displayFields": ["full_name", "username"]
+      }
+    },
+    {
+      "system": false,
+      "id": "amount_field",
+      "name": "amount",
+      "type": "number",
+      "required": true,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "min": null,
+        "max": null,
+        "noDecimal": true
+      }
+    },
+    {
+      "system": false,
+      "id": "balance_after_field",
+      "name": "balance_after",
+      "type": "number",
+      "required": true,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "min": 0,
+        "max": null,
+        "noDecimal": true
+      }
+    },
+    {
+      "system": false,
+      "id": "transaction_type_field",
+      "name": "transaction_type",
+      "type": "select",
+      "required": true,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "maxSelect": 1,
+        "values": [
+          "admin_add",
+          "admin_subtract",
+          "referral",
+          "checkin",
+          "reward",
+          "exchange",
+          "game"
+        ]
+      }
+    },
+    {
+      "system": false,
+      "id": "reason_field",
+      "name": "reason",
+      "type": "text",
+      "required": false,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "min": null,
+        "max": 500,
+        "pattern": ""
+      }
+    },
+    {
+      "system": false,
+      "id": "admin_id_field",
+      "name": "admin_id",
+      "type": "relation",
+      "required": false,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "collectionId": "_pb_users_auth_",
+        "cascadeDelete": false,
+        "minSelect": null,
+        "maxSelect": 1,
+        "displayFields": ["full_name", "username"]
+      }
+    },
+    {
+      "system": false,
+      "id": "metadata_field",
+      "name": "metadata",
+      "type": "json",
+      "required": false,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "maxSize": 2000000
+      }
+    }
+  ],
+  "indexes": [
+    "CREATE INDEX idx_user ON coin_transactions (user)",
+    "CREATE INDEX idx_created ON coin_transactions (created)",
+    "CREATE INDEX idx_user_created ON coin_transactions (user, created)"
+  ],
+  "listRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || user = @request.auth.id)",
+  "viewRule": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || user = @request.auth.id)",
+  "createRule": "@request.auth.role = \"admin\"",
+  "updateRule": null,
+  "deleteRule": null,
+  "options": {}
+}

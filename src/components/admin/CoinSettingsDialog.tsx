@@ -48,6 +48,15 @@ import {
 import { cn } from "@/lib/utils";
 import { createStaffActionLog } from "@/lib/audit-staff";
 import { useAuth } from "@/lib/auth";
+import { getOrCreateReferralCode, getReferralStats } from "@/lib/referrals";
+import { getReferralCoinsEarned } from "@/lib/referral-coins";
+import { ShareDialog } from "@/components/referral/ShareDialog";
+import { UserCoinSearch } from "@/components/admin/coin-management/UserCoinSearch";
+import { CoinBalanceCard } from "@/components/admin/coin-management/CoinBalanceCard";
+import { EditCoinDialog } from "@/components/admin/coin-management/EditCoinDialog";
+import { CoinTransactionHistory } from "@/components/admin/coin-management/CoinTransactionHistory";
+import { getUserCoinBalance } from "@/lib/coin-management";
+import { Copy, Share2, History } from "lucide-react";
 
 type CoinSetting = {
   id: string;
@@ -140,7 +149,9 @@ type CoinSettingsDialogProps = {
 };
 
 export function CoinSettingsDialog({ open, onOpenChange }: CoinSettingsDialogProps) {
+  console.log('[CoinSettingsDialog] Component rendered - open:', open);
   const { user } = useAuth();
+  console.log('[CoinSettingsDialog] User:', user?.id, user?.full_name);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -153,6 +164,19 @@ export function CoinSettingsDialog({ open, onOpenChange }: CoinSettingsDialogPro
   const [redemptions, setRedemptions] = useState<RewardRedemption[]>([]);
   const [loadingRewards, setLoadingRewards] = useState(false);
   const [rewardsTabView, setRewardsTabView] = useState<"rewards" | "redemptions">("rewards");
+
+  // Tab Giới thiệu states
+  const [referralCode, setReferralCode] = useState("");
+  const [referralStats, setReferralStats] = useState<any>(null);
+  const [referralList, setReferralList] = useState<any[]>([]);
+  const [loadingReferral, setLoadingReferral] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+
+  // Tab Quản lý states
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [userBalance, setUserBalance] = useState<any>(null);
+  const [showEditCoinDialog, setShowEditCoinDialog] = useState(false);
+  const [refreshBalanceTrigger, setRefreshBalanceTrigger] = useState(0);
 
   // Reward form states
   const [editingReward, setEditingReward] = useState<Reward | null>(null);
@@ -195,10 +219,15 @@ export function CoinSettingsDialog({ open, onOpenChange }: CoinSettingsDialogPro
 
   useEffect(() => {
     if (open) {
+      console.log('[CoinSettingsDialog] Dialog opened, loading data...');
       loadSettings();
       loadRewards();
+      if (user?.id) {
+        console.log('[CoinSettingsDialog] Loading referral data for user:', user.id);
+        loadReferralData();
+      }
     }
-  }, [open]);
+  }, [open, user?.id]);
 
   const loadSettings = async () => {
     setLoading(true);
@@ -244,6 +273,55 @@ export function CoinSettingsDialog({ open, onOpenChange }: CoinSettingsDialogPro
     } finally {
       setLoadingRewards(false);
     }
+  };
+
+  const loadReferralData = async () => {
+    console.log('[loadReferralData] START - user?.id:', user?.id);
+    if (!user?.id) {
+      console.log('[loadReferralData] ABORT - No user ID');
+      return;
+    }
+
+    setLoadingReferral(true);
+    console.log('[loadReferralData] Loading referral code...');
+    try {
+      const code = await getOrCreateReferralCode(user.id);
+      console.log('[loadReferralData] Referral code loaded:', code.code);
+      setReferralCode(code.code);
+
+      console.log('[loadReferralData] Loading referral stats...');
+      const stats = await getReferralStats(user.id);
+      console.log('[loadReferralData] Stats loaded:', stats);
+      setReferralStats(stats.stats);
+      setReferralList(stats.referrals);
+
+      console.log('[loadReferralData] SUCCESS - Code:', code.code, 'Stats:', stats.stats);
+    } catch (error) {
+      console.error("[loadReferralData] ERROR:", error);
+      toast.error("Không thể tải dữ liệu giới thiệu");
+    } finally {
+      setLoadingReferral(false);
+      console.log('[loadReferralData] DONE');
+    }
+  };
+
+  const copyReferralCode = () => {
+    navigator.clipboard.writeText(referralCode);
+    toast.success("Đã copy mã giới thiệu");
+  };
+
+  const handleUserSelected = async (userId: string) => {
+    setSelectedUserId(userId);
+    try {
+      const balance = await getUserCoinBalance(userId);
+      setUserBalance(balance);
+    } catch (error) {
+      console.error("Error loading user balance:", error);
+    }
+  };
+
+  const handleEditCoinSuccess = () => {
+    setRefreshBalanceTrigger((prev) => prev + 1);
   };
 
   const handleSave = async () => {
@@ -501,14 +579,22 @@ export function CoinSettingsDialog({ open, onOpenChange }: CoinSettingsDialogPro
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
           <div className="px-6 border-b">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="coins" className="gap-2">
                 <Coins className="h-4 w-4" />
                 Cài đặt xu
               </TabsTrigger>
+              <TabsTrigger value="referral" className="gap-2">
+                <Share2 className="h-4 w-4" />
+                Giới thiệu
+              </TabsTrigger>
+              <TabsTrigger value="management" className="gap-2">
+                <History className="h-4 w-4" />
+                Quản lý
+              </TabsTrigger>
               <TabsTrigger value="rewards" className="gap-2">
                 <Gift className="h-4 w-4" />
-                Quản lý quà tặng
+                Quà tặng
               </TabsTrigger>
             </TabsList>
           </div>
@@ -660,6 +746,174 @@ export function CoinSettingsDialog({ open, onOpenChange }: CoinSettingsDialogPro
                 </div>
               </div>
             )}
+          </TabsContent>
+
+          {/* Tab Giới thiệu */}
+          <TabsContent value="referral" className="flex-1 overflow-y-auto px-6 mt-0 min-h-0">
+            {loadingReferral ? (
+              <div className="py-4">
+                <DataLoadingState message="Đang tải dữ liệu giới thiệu..." />
+              </div>
+            ) : (
+              <div className="space-y-6 py-4">
+                {/* Mã giới thiệu */}
+                <Card className="p-6">
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-lg flex items-center gap-2">
+                      <Share2 className="h-5 w-5 text-blue-600" />
+                      Mã giới thiệu của bạn
+                    </h3>
+
+                    <div className="flex items-center justify-center py-6">
+                      <div className="text-center space-y-4">
+                        <div className="text-4xl font-bold text-primary tracking-widest bg-accent px-8 py-4 rounded-lg">
+                          {referralCode}
+                        </div>
+                        <div className="flex items-center justify-center gap-2">
+                          <Button onClick={copyReferralCode} variant="outline" size="sm">
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy mã
+                          </Button>
+                          <Button
+                            onClick={() => setShowShareDialog(true)}
+                            variant="outline"
+                            size="sm"
+                          >
+                            <Share2 className="h-4 w-4 mr-2" />
+                            Chia sẻ
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Share Dialog */}
+                <ShareDialog
+                  referralCode={referralCode}
+                  userName={user?.full_name}
+                  open={showShareDialog}
+                  onOpenChange={setShowShareDialog}
+                />
+
+                {/* Thống kê */}
+                {referralStats && (
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                      <Users className="h-5 w-5 text-green-600" />
+                      Thống kê giới thiệu
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">Tổng giới thiệu</div>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {referralStats.totalReferrals}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">Đang chờ</div>
+                        <div className="text-2xl font-bold text-yellow-600">
+                          {referralStats.pendingReferrals}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">Đang hoạt động</div>
+                        <div className="text-2xl font-bold text-green-600">
+                          {referralStats.activeReferrals}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">Hoàn thành</div>
+                        <div className="text-2xl font-bold text-purple-600">
+                          {referralStats.completedReferrals}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Danh sách người giới thiệu */}
+                {referralList.length > 0 && (
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg mb-4">Danh sách người giới thiệu</h3>
+                    <div className="space-y-2">
+                      {referralList.slice(0, 10).map((referral) => (
+                        <div
+                          key={referral.id}
+                          className="flex items-center justify-between py-2 border-b last:border-0"
+                        >
+                          <div className="flex-1">
+                            <div className="font-medium">Referee ID: {referral.referee}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {new Date(referral.created).toLocaleDateString("vi-VN")}
+                            </div>
+                          </div>
+                          <div>
+                            {referral.status === "completed" && (
+                              <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">
+                                Hoàn thành
+                              </span>
+                            )}
+                            {referral.status === "active" && (
+                              <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                                Hoạt động
+                              </span>
+                            )}
+                            {referral.status === "pending" && (
+                              <span className="text-xs px-2 py-1 rounded-full bg-yellow-100 text-yellow-700">
+                                Chờ xử lý
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Tab Quản lý */}
+          <TabsContent value="management" className="flex-1 overflow-y-auto px-6 mt-0 min-h-0">
+            <div className="space-y-6 py-4">
+              <UserCoinSearch
+                onSelect={handleUserSelected}
+                selectedUserId={selectedUserId}
+              />
+
+              {selectedUserId && userBalance && (
+                <>
+                  <CoinBalanceCard
+                    userId={selectedUserId}
+                    onEdit={() => setShowEditCoinDialog(true)}
+                    refreshTrigger={refreshBalanceTrigger}
+                  />
+
+                  <CoinTransactionHistory
+                    userId={selectedUserId}
+                    days={7}
+                    refreshTrigger={refreshBalanceTrigger}
+                  />
+                </>
+              )}
+
+              {selectedUserId && !userBalance && (
+                <Card className="p-8">
+                  <div className="text-center text-muted-foreground">
+                    User chưa có thông tin xu
+                  </div>
+                </Card>
+              )}
+
+              {!selectedUserId && (
+                <Card className="p-8">
+                  <div className="text-center text-muted-foreground">
+                    Tìm kiếm và chọn user để quản lý xu
+                  </div>
+                </Card>
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent value="rewards" className="flex-1 overflow-y-auto px-6 mt-0 min-h-0">
@@ -1099,6 +1353,18 @@ export function CoinSettingsDialog({ open, onOpenChange }: CoinSettingsDialogPro
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Coin Dialog */}
+      {selectedUserId && userBalance && (
+        <EditCoinDialog
+          open={showEditCoinDialog}
+          onOpenChange={setShowEditCoinDialog}
+          userId={selectedUserId}
+          currentBalance={userBalance.coins}
+          adminId={user!.id}
+          onSuccess={handleEditCoinSuccess}
+        />
+      )}
     </Dialog>
   );
 }

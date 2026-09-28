@@ -32,7 +32,6 @@ const GUEST_ACCESS_PATHS = new Set([
   "/counter",
   "/exchange",
   "/garden",
-  "/gems",
   "/minesweeper",
   "/farm",
 ]);
@@ -91,7 +90,7 @@ function AuthLayout() {
   }
 
   // Focus mode routes không cần padding cho bottom nav
-  const focusMode = pathname === "/gems" || pathname === "/minesweeper" || pathname === "/chat";
+  const focusMode = pathname === "/minesweeper" || pathname === "/chat";
 
   if (!user && isGuest) {
     return (

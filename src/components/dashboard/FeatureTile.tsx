@@ -75,6 +75,7 @@ export function FeatureTile({
             "absolute inline-flex items-center justify-center rounded-full bg-muted p-1.5 text-muted-foreground",
             isCompact ? "right-2 top-2" : "right-3 top-3",
           )}
+          aria-hidden="true"
         >
           <Lock className="h-3 w-3" />
         </span>

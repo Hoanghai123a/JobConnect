@@ -26,7 +26,6 @@ import { Route as AuthenticatedNotebookRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedNewsRouteImport } from './routes/_authenticated/news'
 import { Route as AuthenticatedMinesweeperRouteImport } from './routes/_authenticated/minesweeper'
 import { Route as AuthenticatedGuidesRouteImport } from './routes/_authenticated/guides'
-import { Route as AuthenticatedGemsRouteImport } from './routes/_authenticated/gems'
 import { Route as AuthenticatedGardenRouteImport } from './routes/_authenticated/garden'
 import { Route as AuthenticatedForceChangePasswordRouteImport } from './routes/_authenticated/force-change-password'
 import { Route as AuthenticatedFarmRouteImport } from './routes/_authenticated/farm'
@@ -156,11 +155,6 @@ const AuthenticatedMinesweeperRoute =
 const AuthenticatedGuidesRoute = AuthenticatedGuidesRouteImport.update({
   id: '/guides',
   path: '/guides',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedGemsRoute = AuthenticatedGemsRouteImport.update({
-  id: '/gems',
-  path: '/gems',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedGardenRoute = AuthenticatedGardenRouteImport.update({
@@ -421,7 +415,6 @@ export interface FileRoutesByFullPath {
   '/farm': typeof AuthenticatedFarmRoute
   '/force-change-password': typeof AuthenticatedForceChangePasswordRoute
   '/garden': typeof AuthenticatedGardenRoute
-  '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
   '/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/news': typeof AuthenticatedNewsRoute
@@ -484,7 +477,6 @@ export interface FileRoutesByTo {
   '/farm': typeof AuthenticatedFarmRoute
   '/force-change-password': typeof AuthenticatedForceChangePasswordRoute
   '/garden': typeof AuthenticatedGardenRoute
-  '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
   '/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/news': typeof AuthenticatedNewsRoute
@@ -548,7 +540,6 @@ export interface FileRoutesById {
   '/_authenticated/farm': typeof AuthenticatedFarmRoute
   '/_authenticated/force-change-password': typeof AuthenticatedForceChangePasswordRoute
   '/_authenticated/garden': typeof AuthenticatedGardenRoute
-  '/_authenticated/gems': typeof AuthenticatedGemsRoute
   '/_authenticated/guides': typeof AuthenticatedGuidesRoute
   '/_authenticated/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/_authenticated/news': typeof AuthenticatedNewsRoute
@@ -613,7 +604,6 @@ export interface FileRouteTypes {
     | '/farm'
     | '/force-change-password'
     | '/garden'
-    | '/gems'
     | '/guides'
     | '/minesweeper'
     | '/news'
@@ -676,7 +666,6 @@ export interface FileRouteTypes {
     | '/farm'
     | '/force-change-password'
     | '/garden'
-    | '/gems'
     | '/guides'
     | '/minesweeper'
     | '/news'
@@ -739,7 +728,6 @@ export interface FileRouteTypes {
     | '/_authenticated/farm'
     | '/_authenticated/force-change-password'
     | '/_authenticated/garden'
-    | '/_authenticated/gems'
     | '/_authenticated/guides'
     | '/_authenticated/minesweeper'
     | '/_authenticated/news'
@@ -932,13 +920,6 @@ declare module '@tanstack/react-router' {
       path: '/guides'
       fullPath: '/guides'
       preLoaderRoute: typeof AuthenticatedGuidesRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/gems': {
-      id: '/_authenticated/gems'
-      path: '/gems'
-      fullPath: '/gems'
-      preLoaderRoute: typeof AuthenticatedGemsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/garden': {
@@ -1286,7 +1267,6 @@ interface AuthenticatedRouteChildren {
   AuthenticatedFarmRoute: typeof AuthenticatedFarmRoute
   AuthenticatedForceChangePasswordRoute: typeof AuthenticatedForceChangePasswordRoute
   AuthenticatedGardenRoute: typeof AuthenticatedGardenRoute
-  AuthenticatedGemsRoute: typeof AuthenticatedGemsRoute
   AuthenticatedGuidesRoute: typeof AuthenticatedGuidesRoute
   AuthenticatedMinesweeperRoute: typeof AuthenticatedMinesweeperRoute
   AuthenticatedNewsRoute: typeof AuthenticatedNewsRoute
@@ -1321,7 +1301,6 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedFarmRoute: AuthenticatedFarmRoute,
   AuthenticatedForceChangePasswordRoute: AuthenticatedForceChangePasswordRoute,
   AuthenticatedGardenRoute: AuthenticatedGardenRoute,
-  AuthenticatedGemsRoute: AuthenticatedGemsRoute,
   AuthenticatedGuidesRoute: AuthenticatedGuidesRoute,
   AuthenticatedMinesweeperRoute: AuthenticatedMinesweeperRoute,
   AuthenticatedNewsRoute: AuthenticatedNewsRoute,
