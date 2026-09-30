@@ -9,7 +9,7 @@ migrate((db) => {
     setting_key: "game_enabled",
     coin_amount: 1, // 1 = bật, 0 = tắt
     description: "Bật/tắt trò chơi nông trại",
-    category: "other",
+    category: "game",
     active: true,
   });
 

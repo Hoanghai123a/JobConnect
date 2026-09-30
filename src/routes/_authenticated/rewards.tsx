@@ -148,9 +148,21 @@ function RewardsPage() {
       return;
     }
 
-    if (reward.available_quantity <= 0 && reward.stock_quantity !== -1) {
+    if (reward.stock_quantity !== -1 && reward.stock_quantity <= 0) {
       toast.error("Phần thưởng đã hết");
       return;
+    }
+
+    // Kiểm tra số lần user đã đổi phần thưởng này
+    if (reward.available_quantity !== -1) {
+      const userRedemptionCount = redemptions.filter(
+        (r) => r.reward === reward.id && r.status !== "cancelled"
+      ).length;
+
+      if (userRedemptionCount >= reward.available_quantity) {
+        toast.error(`Bạn chỉ có thể đổi phần thưởng này tối đa ${reward.available_quantity} lần`);
+        return;
+      }
     }
 
     setSelectedReward(reward);
@@ -287,7 +299,7 @@ function RewardsPage() {
                     <CoinBalance coins={reward.point_cost} size="sm" />
                     {reward.stock_quantity !== -1 && (
                       <span className="text-xs text-muted-foreground">
-                        Còn {reward.available_quantity}
+                        Còn {reward.stock_quantity} suất
                       </span>
                     )}
                   </div>
@@ -296,7 +308,7 @@ function RewardsPage() {
                     onClick={() => handleRedeemClick(reward)}
                     disabled={
                       coins < reward.point_cost ||
-                      (reward.available_quantity <= 0 && reward.stock_quantity !== -1)
+                      (reward.stock_quantity !== -1 && reward.stock_quantity <= 0)
                     }
                     className="w-full rounded-xl"
                     size="sm"

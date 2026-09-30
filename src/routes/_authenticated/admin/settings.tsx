@@ -56,6 +56,8 @@ import {
   Gift,
   Users2,
   Trophy,
+  Activity,
+  Gamepad2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({
@@ -80,8 +82,8 @@ function AdminSettingsPage() {
             <TabsTrigger value="factories" className="rounded-xl text-xs">
               <Factory className="mr-1 h-4 w-4" /> Nhà máy
             </TabsTrigger>
-            <TabsTrigger value="coins" className="rounded-xl text-xs">
-              <Coins className="mr-1 h-4 w-4" /> Xu thưởng
+            <TabsTrigger value="games" className="rounded-xl text-xs">
+              <Gamepad2 className="mr-1 h-4 w-4" /> Trò chơi
             </TabsTrigger>
             <TabsTrigger value="app" className="rounded-xl text-xs">
               <Smartphone className="mr-1 h-4 w-4" /> Cài App
@@ -93,8 +95,8 @@ function AdminSettingsPage() {
           <TabsContent value="factories" className="mt-4">
             <FactoriesTab />
           </TabsContent>
-          <TabsContent value="coins" className="mt-4">
-            <CoinsTab />
+          <TabsContent value="games" className="mt-4">
+            <GamesTab />
           </TabsContent>
           <TabsContent value="app" className="mt-4">
             <InstallAppGuideSection />
@@ -1085,221 +1087,149 @@ function FactoriesTab() {
   );
 }
 
-/* ───────── COINS ───────── */
+/* ───────── GAMES ───────── */
 
-function CoinsTab() {
+function GamesTab() {
+  const currentUser = pb.authStore.record as UserRecord | null;
   const [settings, setSettings] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    loadCoinSettings();
+    loadGameSettings();
   }, []);
 
-  const loadCoinSettings = async () => {
+  const loadGameSettings = async () => {
     setLoading(true);
     try {
       const records = await pb.collection("coin_settings").getFullList({
-        sort: "category,setting_key",
+        filter: 'category = "game"',
+        sort: "setting_key",
       });
 
       const map: Record<string, number> = {};
       records.forEach((r: any) => {
-        map[r.setting_key] = r.coin_amount;
+        // Đọc field active thay vì coin_amount
+        map[r.setting_key] = r.active ? 1 : 0;
       });
+
+      // Set defaults nếu chưa có
+      if (map.game_enabled === undefined) map.game_enabled = 1;
+      if (map.gems_game_enabled === undefined) map.gems_game_enabled = 1;
+      if (map.minesweeper_game_enabled === undefined) map.minesweeper_game_enabled = 1;
 
       setSettings(map);
     } catch (error) {
-      console.error("Error loading coin settings:", error);
-      toast.error("Không thể tải cài đặt xu");
+      console.error("Error loading game settings:", error);
+      toast.error("Không thể tải cài đặt trò chơi");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChange = (key: string, value: string) => {
-    const numValue = parseInt(value) || 0;
-    setSettings((prev) => ({ ...prev, [key]: numValue }));
-  };
+  const handleGameToggle = async (gameKey: string, gameName: string, checked: boolean) => {
+    // Cập nhật state local ngay lập tức
+    setSettings((prev) => ({ ...prev, [gameKey]: checked ? 1 : 0 }));
 
-  const save = async () => {
-    setSaving(true);
     try {
-      const promises = Object.entries(settings).map(async ([key, value]) => {
-        const existing = await pb
-          .collection("coin_settings")
-          .getFirstListItem(`setting_key = "${key}"`)
-          .catch(() => null);
+      // Lưu lên PocketBase ngay lập tức
+      const existing = await pb
+        .collection("coin_settings")
+        .getFirstListItem(`setting_key = "${gameKey}"`)
+        .catch(() => null);
 
-        if (existing) {
-          await pb.collection("coin_settings").update(existing.id, {
-            coin_amount: value,
-          });
-        }
-      });
+      if (existing) {
+        // Cập nhật: Dùng field active thay vì coin_amount = 0
+        await pb.collection("coin_settings").update(existing.id, {
+          active: checked,
+        });
+      } else {
+        await pb.collection("coin_settings").create({
+          setting_key: gameKey,
+          coin_amount: 1, // Giá trị mặc định khi tạo mới
+          description: `Bật/tắt trò chơi ${gameName}`,
+          category: "game",
+          active: checked,
+        });
+      }
 
-      await Promise.all(promises);
-      toast.success("Đã lưu cài đặt xu thưởng");
+      // Ghi log thay đổi
+      if (currentUser?.id) {
+        await createStaffActionLog({
+          staff_id: currentUser.id,
+          action_type: "setting_update",
+          description: `${checked ? "Bật" : "Tắt"} trò chơi ${gameName}`,
+          metadata: { setting_key: gameKey, active: checked },
+        });
+      }
 
-      await createStaffActionLog({
-        action: "update_coin_settings",
-        target_type: "coin_settings",
-        target_id: "all",
-        details: "Cập nhật cấu hình xu thưởng",
-        changes: { settings },
-      });
-    } catch (error) {
-      console.error("Error saving coin settings:", error);
-      toast.error("Lỗi khi lưu cài đặt");
-    } finally {
-      setSaving(false);
+      toast.success(checked ? `Đã bật trò chơi ${gameName}` : `Đã tắt trò chơi ${gameName}`);
+    } catch (error: any) {
+      console.error(`Error toggling ${gameKey}:`, error);
+      console.error('Error details:', error.response?.data);
+      toast.error(error.response?.data?.message || "Không thể thay đổi trạng thái trò chơi");
+      // Rollback state nếu lỗi
+      setSettings((prev) => ({ ...prev, [gameKey]: checked ? 0 : 1 }));
     }
   };
 
   if (loading) {
-    return <DataLoadingState message="Đang tải cài đặt..." />;
+    return <DataLoadingState message="Đang tải cài đặt trò chơi..." />;
   }
 
   return (
-    <div className="space-y-4">
-      {/* Card: Giới thiệu */}
-      <Card className="rounded-2xl p-4">
-        <div className="mb-4 flex items-center gap-2">
-          <Users2 className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold">Cài đặt giới thiệu</h3>
+    <Card className="space-y-4 rounded-2xl border-border/60 p-4 shadow-soft">
+      <div className="flex items-center gap-2 pb-2 border-b">
+        <Activity className="h-5 w-5 text-purple-600" />
+        <h3 className="font-semibold text-sm">Quản lý trò chơi</h3>
+      </div>
+
+      <div className="space-y-3">
+        {/* Trò chơi nông trại */}
+        <div className="flex items-center justify-between rounded-xl border p-4">
+          <div className="space-y-1">
+            <Label className="text-sm font-medium">Trò chơi nông trại</Label>
+            <p className="text-xs text-muted-foreground">
+              Bật/tắt chức năng trò chơi nông trại cho người dùng
+            </p>
+          </div>
+          <Switch
+            checked={(settings["game_enabled"] ?? 1) === 1}
+            onCheckedChange={(checked) => handleGameToggle("game_enabled", "nông trại", checked)}
+          />
         </div>
 
-        <div className="space-y-3">
-          <div>
-            <Label className="text-xs">Người giới thiệu nhận (xu)</Label>
-            <Input
-              type="number"
-              min="0"
-              className="mt-1 rounded-xl"
-              value={settings.referral_signup || 0}
-              onChange={(e) => handleChange("referral_signup", e.target.value)}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Xu cho người giới thiệu khi bạn bè đăng ký thành công
+        {/* Trò chơi kim cương */}
+        <div className="flex items-center justify-between rounded-xl border p-4">
+          <div className="space-y-1">
+            <Label className="text-sm font-medium">Trò chơi kim cương</Label>
+            <p className="text-xs text-muted-foreground">
+              Bật/tắt chức năng trò chơi thu thập kim cương
             </p>
           </div>
-
-          <div>
-            <Label className="text-xs">Người nhập mã nhận (xu)</Label>
-            <Input
-              type="number"
-              min="0"
-              className="mt-1 rounded-xl"
-              value={settings.referral_referee_bonus || 0}
-              onChange={(e) => handleChange("referral_referee_bonus", e.target.value)}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Xu thưởng cho người nhập mã giới thiệu
-            </p>
-          </div>
-
-          <div>
-            <Label className="text-xs">Hoàn thành ứng lương đầu tiên (xu)</Label>
-            <Input
-              type="number"
-              min="0"
-              className="mt-1 rounded-xl"
-              value={settings.referral_first_advance || 0}
-              onChange={(e) => handleChange("referral_first_advance", e.target.value)}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Xu cho người giới thiệu khi bạn bè hoàn thành lần ứng lương đầu
-            </p>
-          </div>
-        </div>
-      </Card>
-
-      {/* Card: Milestones */}
-      <Card className="rounded-2xl p-4">
-        <div className="mb-4 flex items-center gap-2">
-          <Trophy className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold">Mốc giới thiệu</h3>
+          <Switch
+            checked={(settings["gems_game_enabled"] ?? 1) === 1}
+            onCheckedChange={(checked) =>
+              handleGameToggle("gems_game_enabled", "kim cương", checked)
+            }
+          />
         </div>
 
-        <div className="space-y-3">
-          <div>
-            <Label className="text-xs">Mốc 5 người (xu)</Label>
-            <Input
-              type="number"
-              min="0"
-              className="mt-1 rounded-xl"
-              value={settings.referral_milestone_5 || 0}
-              onChange={(e) => handleChange("referral_milestone_5", e.target.value)}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Thưởng khi giới thiệu thành công 5 người
+        {/* Trò chơi dò mìn */}
+        <div className="flex items-center justify-between rounded-xl border p-4">
+          <div className="space-y-1">
+            <Label className="text-sm font-medium">Trò chơi dò mìn</Label>
+            <p className="text-xs text-muted-foreground">
+              Bật/tắt chức năng trò chơi dò mìn
             </p>
           </div>
-
-          <div>
-            <Label className="text-xs">Mốc 10 người (xu)</Label>
-            <Input
-              type="number"
-              min="0"
-              className="mt-1 rounded-xl"
-              value={settings.referral_milestone_10 || 0}
-              onChange={(e) => handleChange("referral_milestone_10", e.target.value)}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Thưởng khi giới thiệu thành công 10 người
-            </p>
-          </div>
+          <Switch
+            checked={(settings["minesweeper_game_enabled"] ?? 1) === 1}
+            onCheckedChange={(checked) =>
+              handleGameToggle("minesweeper_game_enabled", "dò mìn", checked)
+            }
+          />
         </div>
-      </Card>
-
-      {/* Card: Điểm danh */}
-      <Card className="rounded-2xl p-4">
-        <div className="mb-4 flex items-center gap-2">
-          <CalendarDays className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold">Cài đặt điểm danh</h3>
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <Label className="text-xs">Điểm danh mỗi ngày (xu)</Label>
-            <Input
-              type="number"
-              min="0"
-              className="mt-1 rounded-xl"
-              value={settings.daily_checkin_base || 0}
-              onChange={(e) => handleChange("daily_checkin_base", e.target.value)}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Xu nhận được mỗi lần điểm danh trong tuần
-            </p>
-          </div>
-
-          <div>
-            <Label className="text-xs">Thưởng hoàn thành tuần (xu)</Label>
-            <Input
-              type="number"
-              min="0"
-              className="mt-1 rounded-xl"
-              value={settings.weekly_checkin_perfect || 0}
-              onChange={(e) => handleChange("weekly_checkin_perfect", e.target.value)}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Thưởng khi điểm danh đủ 7 ngày trong tuần
-            </p>
-          </div>
-        </div>
-      </Card>
-
-      {/* Save Button */}
-      <Button
-        onClick={save}
-        disabled={saving}
-        className="w-full rounded-xl"
-        size="lg"
-      >
-        <Save className="mr-2 h-4 w-4" />
-        {saving ? "Đang lưu..." : "Lưu cài đặt"}
-      </Button>
-    </div>
+      </div>
+    </Card>
   );
 }

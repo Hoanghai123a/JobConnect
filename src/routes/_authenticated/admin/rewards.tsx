@@ -400,10 +400,17 @@ function AdminRewardsPage() {
                       <CoinBalance coins={reward.point_cost} size="sm" />
                       <div className="flex items-center gap-2 text-xs">
                         {reward.stock_quantity === -1 ? (
-                          <span className="text-muted-foreground">Không giới hạn</span>
+                          <span className="text-muted-foreground">Không giới hạn tổng</span>
                         ) : (
                           <span className="text-muted-foreground">
-                            Còn {reward.available_quantity}/{reward.stock_quantity}
+                            Tổng: {reward.stock_quantity}
+                          </span>
+                        )}
+                        {reward.available_quantity === -1 ? (
+                          <span className="text-muted-foreground">• Vô hạn/user</span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            • Tối đa {reward.available_quantity} lần/user
                           </span>
                         )}
                         <span
@@ -595,10 +602,13 @@ function AdminRewardsPage() {
                     setRewardForm({ ...rewardForm, stock_quantity: parseInt(e.target.value) || 0 })
                   }
                 />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Tổng số cho tất cả user
+                </p>
               </div>
 
               <div>
-                <Label className="text-xs">Số lượng còn lại</Label>
+                <Label className="text-xs">Giới hạn/user (-1 = vô hạn)</Label>
                 <Input
                   type="number"
                   className="mt-1 rounded-xl"
@@ -610,6 +620,9 @@ function AdminRewardsPage() {
                     })
                   }
                 />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Số lần mỗi user được đổi
+                </p>
               </div>
             </div>
 

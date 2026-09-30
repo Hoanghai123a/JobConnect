@@ -17,6 +17,7 @@ import {
   fetchAllBalances,
   type GardenBalance,
 } from "@/lib/garden-server";
+import { GameStatusGuard } from "@/components/game/GameStatusGuard";
 
 export const Route = createFileRoute("/_authenticated/minesweeper")({
   component: MinesweeperPage,
@@ -606,7 +607,8 @@ function MinesweeperPage() {
   }
 
   return (
-    <PageContainer
+    <GameStatusGuard settingKey="minesweeper_game_enabled" gameName="dò mìn">
+      <PageContainer
       title="Dò mìn"
       subtitle="Tìm và đánh dấu tất cả bom"
       right={
@@ -852,5 +854,6 @@ function MinesweeperPage() {
         </TabsContent>
       </Tabs>
     </PageContainer>
+    </GameStatusGuard>
   );
 }

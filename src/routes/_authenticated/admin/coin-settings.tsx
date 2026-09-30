@@ -163,6 +163,22 @@ const DEFAULT_SETTINGS = [
     category: "game",
     isToggle: true,
   },
+  {
+    key: "gems_game_enabled",
+    description: "Bật/tắt trò chơi kim cương",
+    defaultValue: 1, // 1 = bật, 0 = tắt
+    icon: Activity,
+    category: "game",
+    isToggle: true,
+  },
+  {
+    key: "minesweeper_game_enabled",
+    description: "Bật/tắt trò chơi dò mìn",
+    defaultValue: 1, // 1 = bật, 0 = tắt
+    icon: Activity,
+    category: "game",
+    isToggle: true,
+  },
 ];
 
 function CoinSettingsPage() {
@@ -373,6 +389,52 @@ function CoinSettingsPage() {
   const handleValueChange = (key: string, value: string) => {
     const numValue = parseInt(value) || 0;
     setSettings((prev) => ({ ...prev, [key]: numValue }));
+  };
+
+  const handleGameEnabledToggle = async (checked: boolean) => {
+    const newValue = checked ? 1 : 0;
+
+    // Cập nhật state local ngay lập tức
+    setSettings((prev) => ({ ...prev, game_enabled: newValue }));
+
+    try {
+      // Lưu lên PocketBase ngay lập tức
+      const existing = await pb
+        .collection("coin_settings")
+        .getFirstListItem(`setting_key = "game_enabled"`)
+        .catch(() => null);
+
+      if (existing) {
+        await pb.collection("coin_settings").update(existing.id, {
+          coin_amount: newValue,
+        });
+      } else {
+        await pb.collection("coin_settings").create({
+          setting_key: "game_enabled",
+          coin_amount: newValue,
+          description: "Bật/tắt trò chơi nông trại",
+          category: "other",
+          active: true,
+        });
+      }
+
+      // Ghi log thay đổi
+      if (user?.id) {
+        await createStaffActionLog({
+          staff_id: user.id,
+          action_type: "setting_update",
+          description: `${checked ? "Bật" : "Tắt"} trò chơi nông trại`,
+          metadata: { setting_key: "game_enabled", new_value: newValue },
+        });
+      }
+
+      toast.success(checked ? "Đã bật trò chơi nông trại" : "Đã tắt trò chơi nông trại");
+    } catch (error) {
+      console.error("Error toggling game_enabled:", error);
+      toast.error("Không thể thay đổi trạng thái trò chơi");
+      // Rollback state nếu lỗi
+      setSettings((prev) => ({ ...prev, game_enabled: checked ? 0 : 1 }));
+    }
   };
 
   // Reward CRUD handlers
@@ -973,7 +1035,7 @@ function CoinSettingsPage() {
                 <DataLoadingState message="Đang tải cài đặt..." />
               </div>
             ) : (
-              <div className="space-y-6 py-4 pb-32">
+              <div className="space-y-6 py-4">
                 {/* Giới thiệu */}
                 <div className="space-y-4">
                   <h3 className="flex items-center gap-2 font-semibold text-sm">
@@ -1112,30 +1174,20 @@ function CoinSettingsPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
 
-                {/* Trò chơi */}
-                <div className="space-y-4">
-                  <h3 className="flex items-center gap-2 font-semibold text-sm">
-                    <Activity className="h-4 w-4 text-purple-600" />
-                    Quản lý trò chơi
-                  </h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between rounded-xl border p-4">
-                      <div className="space-y-1">
-                        <Label className="text-sm font-medium">Trò chơi nông trại</Label>
-                        <p className="text-xs text-muted-foreground">
-                          Bật/tắt chức năng trò chơi nông trại cho người dùng
-                        </p>
-                      </div>
-                      <Switch
-                        checked={(settings["game_enabled"] ?? 1) === 1}
-                        onCheckedChange={(checked) =>
-                          handleValueChange("game_enabled", checked ? "1" : "0")
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
+            {/* Save button inside TabsContent */}
+            {!loading && (
+              <div className="sticky bottom-0 left-0 right-0 flex gap-3 px-4 py-3 mt-4 border-t bg-background">
+                <Button
+                  onClick={handleSave}
+                  disabled={saving || loading}
+                  className="flex-1"
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  {saving ? "Đang lưu..." : "Lưu cài đặt"}
+                </Button>
               </div>
             )}
           </TabsContent>
@@ -1317,20 +1369,6 @@ function CoinSettingsPage() {
             </div>
           </TabsContent>
         </Tabs>
-
-        {/* Save button - fixed at bottom when on coins tab */}
-        {activeTab === "coins" && (
-          <div className="fixed bottom-0 left-0 right-0 flex gap-3 px-4 py-4 border-t bg-background z-10">
-            <Button
-              onClick={handleSave}
-              disabled={saving || loading}
-              className="flex-1"
-            >
-              <Save className="mr-2 h-4 w-4" />
-              {saving ? "Đang lưu..." : "Lưu cài đặt"}
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* Reward Form Dialog */}

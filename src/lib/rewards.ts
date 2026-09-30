@@ -51,8 +51,18 @@ export async function redeemReward(params: {
     throw new Error("Phần thưởng không còn khả dụng");
   }
 
-  if (reward.available_quantity <= 0 && reward.stock_quantity !== -1) {
+  // Kiểm tra tổng số lượng còn lại cho tất cả user
+  if (reward.stock_quantity !== -1 && reward.stock_quantity <= 0) {
     throw new Error("Phần thưởng đã hết");
+  }
+
+  // Kiểm tra số lần user này đã đổi phần thưởng
+  const userRedemptionCount = await pb.collection("reward_redemptions").getList(1, 1, {
+    filter: `user = "${escapePb(params.userId)}" && reward = "${escapePb(params.rewardId)}" && status != "cancelled"`,
+  });
+
+  if (reward.available_quantity !== -1 && userRedemptionCount.totalItems >= reward.available_quantity) {
+    throw new Error(`Bạn chỉ có thể đổi phần thưởng này tối đa ${reward.available_quantity} lần`);
   }
 
   // Lấy balance hiện tại và kiểm tra số xu
@@ -61,14 +71,14 @@ export async function redeemReward(params: {
     throw new Error("Bạn không đủ xu để đổi quà này");
   }
 
-  // Cập nhật số lượng reward trước để đảm bảo không bị race condition
+  // Trừ tổng số lượng (stock_quantity)
   if (reward.stock_quantity !== -1) {
     try {
       await pb.collection("rewards").update(params.rewardId, {
-        available_quantity: reward.available_quantity - 1,
+        stock_quantity: reward.stock_quantity - 1,
       });
     } catch (error) {
-      console.error("Error updating reward quantity:", error);
+      console.error("Error updating reward stock quantity:", error);
       throw new Error("Không thể cập nhật số lượng phần thưởng");
     }
   }
@@ -90,14 +100,14 @@ export async function redeemReward(params: {
 
     return redemption;
   } catch (error) {
-    // Rollback: Hoàn lại số lượng reward nếu trừ xu hoặc tạo redemption thất bại
+    // Rollback: Hoàn lại tổng số lượng nếu trừ xu hoặc tạo redemption thất bại
     if (reward.stock_quantity !== -1) {
       try {
         await pb.collection("rewards").update(params.rewardId, {
-          available_quantity: reward.available_quantity,
+          stock_quantity: reward.stock_quantity,
         });
       } catch (rollbackError) {
-        console.error("Error rolling back reward quantity:", rollbackError);
+        console.error("Error rolling back reward stock quantity:", rollbackError);
       }
     }
     throw error;
@@ -139,10 +149,10 @@ export async function cancelRedemption(params: {
   const balance = await fetchBalance(redemption.user);
   await addCoins(balance.id, balance.coins, redemption.points_spent);
 
-  // Hoàn lại số lượng reward nếu có giới hạn
+  // Hoàn lại tổng số lượng (stock_quantity) nếu có giới hạn
   if (reward.stock_quantity !== -1) {
     await pb.collection("rewards").update(reward.id, {
-      available_quantity: reward.available_quantity + 1,
+      stock_quantity: reward.stock_quantity + 1,
     });
   }
 
