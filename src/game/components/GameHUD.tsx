@@ -4,12 +4,13 @@ import { AudioService } from "../services/audioService";
 import { useState } from "react";
 import { pb } from "@/lib/pocketbase";
 import { Badge } from "@/components/ui/badge";
+import { FORCE_OFFLINE_MODE } from "../services/storageFactory";
 
 export const GameHUD = () => {
   const { player } = useGameStore();
   const expPercentage = (player.exp / player.expToNextLevel) * 100;
   const [soundEnabled, setSoundEnabled] = useState(AudioService.isEnabled());
-  const isAuthenticated = pb.authStore.isValid;
+  const isAuthenticated = pb.authStore.isValid && !FORCE_OFFLINE_MODE;
 
   const toggleSound = () => {
     const newState = AudioService.toggle();

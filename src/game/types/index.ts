@@ -18,12 +18,26 @@ export interface CropConfig {
   unlockedAtLevel: number;
 }
 
+// Plot state types (5 states as per requirement)
+export type PlotState =
+  | "EMPTY"        // 1. Đất trống - bare tilled soil
+  | "GROWING"      // 2. Đang phát triển - seedling → mature plant
+  | "NEEDS_CARE"   // 3. Cần chăm sóc - pests, weeds, dry soil
+  | "READY"        // 4. Chín / Thu hoạch - ripe with sparkle effect
+  | "LOCKED";      // 5. Đất khóa - fenced, requires unlock
+
 export interface Plot {
   id: number;
   x: number;
   y: number;
   crop: PlantedCrop | null;
+  state: PlotState; // Current visual state
+  needsCare?: CareType; // What care is needed (if state is NEEDS_CARE)
+  isWatered?: boolean; // For soil moisture visual effect
 }
+
+// Care event types for NEEDS_CARE state
+export type CareType = "WATER" | "PESTS" | "WEEDS";
 
 export interface PlantedCrop {
   cropId: string;
@@ -31,9 +45,10 @@ export interface PlantedCrop {
   plantedAt: number; // timestamp
   harvestAt: number; // timestamp
   state: CropState;
+  growthStage?: number; // 0-2 for seedling/mid/mature sprites
 }
 
-export type CropState = "EMPTY" | "GROWING" | "READY";
+export type CropState = "GROWING" | "READY";
 
 export interface GameState {
   player: Player;

@@ -10,6 +10,7 @@ import { InventoryModal } from "./components/InventoryModal";
 import { QuestsModal } from "./components/QuestsModal";
 import { CollectionModal } from "./components/CollectionModal";
 import { PlantModal } from "./components/PlantModal";
+import { LandscapeMode } from "./components/LandscapeMode";
 
 export const PhaserGame = () => {
   const gameRef = useRef<Phaser.Game | null>(null);

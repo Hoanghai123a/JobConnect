@@ -2,10 +2,20 @@ import Phaser from "phaser";
 import { useGameStore } from "../stores/gameStore";
 import { GAME_CONFIG } from "../config/game";
 import { ParticleService } from "../services/particleService";
+import { CROPS } from "../config/crops";
+import { ASSETS } from "../config/assets";
+import { gridToIsometric, getIsometricOrigin } from "../utils/isometricHelper";
 
 export class FarmScene extends Phaser.Scene {
   private plotGraphics: Map<number, Phaser.GameObjects.Container> = new Map();
   private selectedPlotId: number | null = null;
+
+  // Swipe detection
+  private swipeStartPos: { x: number; y: number } | null = null;
+  private swipeStartTime: number = 0;
+  private swipePlotId: number | null = null;
+  private readonly SWIPE_MIN_DISTANCE = 30; // pixels
+  private readonly SWIPE_MAX_TIME = 300; // milliseconds
 
   constructor() {
     super({ key: "FarmScene" });
@@ -14,6 +24,22 @@ export class FarmScene extends Phaser.Scene {
   preload() {
     // Initialize particle textures
     ParticleService.initParticles(this);
+
+    // Load all crop sprites (15 crops × 2 states = 30 sprites)
+    Object.keys(CROPS).forEach((cropId) => {
+      const seedKey = `${cropId}_seed`;
+      const readyKey = `${cropId}_ready`;
+
+      // Load seed sprite
+      if (ASSETS.crops[seedKey]) {
+        this.load.image(seedKey, ASSETS.crops[seedKey]);
+      }
+
+      // Load ready sprite
+      if (ASSETS.crops[readyKey]) {
+        this.load.image(readyKey, ASSETS.crops[readyKey]);
+      }
+    });
   }
 
   create() {
@@ -39,20 +65,29 @@ export class FarmScene extends Phaser.Scene {
 
   private createFarmLayout() {
     const store = useGameStore.getState();
-    const { plotSize, plotSpacing } = GAME_CONFIG.farm;
-    const startX = 250;
-    const startY = 180;
+    const { isometric } = GAME_CONFIG.farm;
+    const origin = getIsometricOrigin();
 
     store.plots.forEach((plot) => {
-      const x = startX + plot.x * (plotSize + plotSpacing);
-      const y = startY + plot.y * (plotSize + plotSpacing);
+      // Convert grid coordinates to isometric screen position
+      const isoPos = gridToIsometric(plot.x, plot.y);
+      const screenX = origin.x + isoPos.x;
+      const screenY = origin.y + isoPos.y;
 
-      const container = this.createPlotVisual(plot.id, x, y);
+      const container = this.createPlotVisual(plot.id, screenX, screenY);
       this.plotGraphics.set(plot.id, container);
 
-      // Make interactive
-      container.setSize(plotSize, plotSize);
-      container.setInteractive();
+      // Make interactive with diamond hitbox
+      const hitArea = new Phaser.Geom.Polygon([
+        0, -isometric.tileHeight / 2,          // Top
+        isometric.tileWidth / 2, 0,            // Right
+        0, isometric.tileHeight / 2,           // Bottom
+        -isometric.tileWidth / 2, 0,           // Left
+      ]);
+      container.setInteractive(hitArea, Phaser.Geom.Polygon.Contains);
+
+      // Setup swipe detection for harvest/care actions
+      this.setupSwipeDetection(container, plot.id);
 
       container.on("pointerover", () => {
         this.highlightPlot(plot.id, true);
@@ -86,15 +121,53 @@ export class FarmScene extends Phaser.Scene {
 
   private createPlotVisual(plotId: number, x: number, y: number): Phaser.GameObjects.Container {
     const container = this.add.container(x, y);
-    const { plotSize } = GAME_CONFIG.farm;
+    const { isometric, effects } = GAME_CONFIG.farm;
     const store = useGameStore.getState();
     const isUnlocked = store.isPlotUnlocked(plotId);
 
-    // Plot base (soil) - darker if locked
-    const soilColor = isUnlocked ? 0x8b4513 : 0x4a4a4a;
-    const soil = this.add.rectangle(0, 0, plotSize, plotSize, soilColor);
-    soil.setStrokeStyle(2, 0x654321);
+    // Shadow layer (drawn first, behind everything)
+    const shadow = this.add.graphics();
+    shadow.fillStyle(0x000000, 0.25);
+    shadow.fillEllipse(0, isometric.tileHeight / 2 + 4, isometric.tileWidth * 0.85, isometric.tileHeight * 0.45);
+    shadow.setName("shadow");
+
+    // Diamond-shaped plot base with gradient (isometric tile)
+    const soil = this.add.graphics();
+    const baseColor = isUnlocked ? effects.soilDryColor : 0x4a4a4a;
+
+    // Calculate gradient colors (lighter top, darker bottom for 3D effect)
+    const topColor = Phaser.Display.Color.IntegerToColor(baseColor);
+    const bottomColor = topColor.clone().darken(20);
+
+    // Draw diamond shape with gradient
+    soil.fillGradientStyle(
+      topColor.color,      // Top-left
+      topColor.color,      // Top-right
+      bottomColor.color,   // Bottom-right
+      bottomColor.color,   // Bottom-left
+      1
+    );
+
+    // Subtle border
+    soil.lineStyle(2, 0x654321, 0.8);
+    soil.beginPath();
+    soil.moveTo(0, -isometric.tileHeight / 2);              // Top
+    soil.lineTo(isometric.tileWidth / 2, 0);                // Right
+    soil.lineTo(0, isometric.tileHeight / 2);               // Bottom
+    soil.lineTo(-isometric.tileWidth / 2, 0);               // Left
+    soil.closePath();
+    soil.fillPath();
+    soil.strokePath();
     soil.setName("soil");
+
+    // Add top highlight for extra depth
+    const highlight3D = this.add.graphics();
+    highlight3D.lineStyle(1.5, 0xffffff, 0.2);
+    highlight3D.beginPath();
+    highlight3D.moveTo(-2, -isometric.tileHeight / 2 + 1);
+    highlight3D.lineTo(isometric.tileWidth / 2 - 2, -1);
+    highlight3D.strokePath();
+    highlight3D.setName("highlight3D");
 
     // Lock icon for locked plots
     const lockIcon = this.add.text(0, 0, "🔒", {
@@ -104,18 +177,66 @@ export class FarmScene extends Phaser.Scene {
     lockIcon.setName("lockIcon");
     lockIcon.setVisible(!isUnlocked);
 
-    // Highlight rectangle (hidden by default)
-    const highlight = this.add.rectangle(0, 0, plotSize + 4, plotSize + 4, 0xffff00, 0);
-    highlight.setStrokeStyle(3, 0xffff00);
+    // Highlight diamond (hidden by default)
+    const highlight = this.add.graphics();
+    highlight.lineStyle(3, 0xffff00, 0);
+    highlight.beginPath();
+    highlight.moveTo(0, -isometric.tileHeight / 2 - 2);
+    highlight.lineTo(isometric.tileWidth / 2 + 2, 0);
+    highlight.lineTo(0, isometric.tileHeight / 2 + 2);
+    highlight.lineTo(-isometric.tileWidth / 2 - 2, 0);
+    highlight.closePath();
+    highlight.strokePath();
     highlight.setName("highlight");
 
-    // Crop visual placeholder (initially hidden)
-    const cropVisual = this.add.graphics();
-    cropVisual.setName("cropVisual");
-    cropVisual.setVisible(false);
+    // Empty state: Plus icon (hidden by default)
+    const plusIcon = this.add.text(0, 0, "+", {
+      fontSize: "32px",
+      color: "#ffffff",
+      alpha: 0.3,
+    });
+    plusIcon.setOrigin(0.5);
+    plusIcon.setName("plusIcon");
+    plusIcon.setVisible(false);
+
+    // Crop sprite placeholder (initially hidden)
+    const cropSprite = this.add.sprite(0, -isometric.tileHeight / 4, "");
+    cropSprite.setName("cropSprite");
+    cropSprite.setVisible(false);
+    cropSprite.setDisplaySize(isometric.tileWidth * 0.6, isometric.tileWidth * 0.6);
+
+    // Progress bar for growing crops
+    const progressBarBg = this.add.graphics();
+    progressBarBg.setName("progressBarBg");
+    progressBarBg.setVisible(false);
+
+    const progressBarFill = this.add.graphics();
+    progressBarFill.setName("progressBarFill");
+    progressBarFill.setVisible(false);
+
+    // Floating bubble for care events (water, pests, weeds)
+    const careBubble = this.add.container(0, -isometric.tileHeight);
+    const bubbleCircle = this.add.circle(0, 0, 16, 0xffffff, 0.95);
+    bubbleCircle.setStrokeStyle(2, 0x333333);
+    const bubbleIcon = this.add.text(0, 0, "", { fontSize: "20px" });
+    bubbleIcon.setOrigin(0.5);
+    careBubble.add([bubbleCircle, bubbleIcon]);
+    careBubble.setName("careBubble");
+    careBubble.setVisible(false);
+
+    // Sparkle effect for ready crops
+    const sparkles = this.add.particles(0, -isometric.tileHeight / 2, "particle-yellow", {
+      speed: { min: 10, max: 30 },
+      scale: { start: 0.3, end: 0 },
+      lifespan: 600,
+      frequency: 300,
+      quantity: 2,
+    });
+    sparkles.setName("sparkles");
+    sparkles.stop();
 
     // State text (growth timer)
-    const stateText = this.add.text(0, plotSize / 2 - 8, "", {
+    const stateText = this.add.text(0, isometric.tileHeight / 2 + 8, "", {
       fontSize: "11px",
       color: "#ffffff",
       backgroundColor: "#00000080",
@@ -124,7 +245,20 @@ export class FarmScene extends Phaser.Scene {
     stateText.setOrigin(0.5);
     stateText.setName("stateText");
 
-    container.add([highlight, soil, lockIcon, cropVisual, stateText]);
+    container.add([
+      shadow,
+      soil,
+      highlight3D,
+      highlight,
+      lockIcon,
+      plusIcon,
+      progressBarBg,
+      progressBarFill,
+      cropSprite,
+      careBubble,
+      sparkles,
+      stateText,
+    ]);
     container.setData("x", x);
     container.setData("y", y);
     return container;
@@ -134,9 +268,21 @@ export class FarmScene extends Phaser.Scene {
     const container = this.plotGraphics.get(plotId);
     if (!container) return;
 
-    const highlight = container.getByName("highlight") as Phaser.GameObjects.Rectangle;
+    const highlight = container.getByName("highlight") as Phaser.GameObjects.Graphics;
     if (highlight) {
-      highlight.setAlpha(show ? 1 : 0);
+      // Update stroke alpha for graphics object
+      highlight.lineStyle(3, 0xffff00, show ? 1 : 0);
+      highlight.clear();
+      if (show) {
+        const { isometric } = GAME_CONFIG.farm;
+        highlight.beginPath();
+        highlight.moveTo(0, -isometric.tileHeight / 2 - 2);
+        highlight.lineTo(isometric.tileWidth / 2 + 2, 0);
+        highlight.lineTo(0, isometric.tileHeight / 2 + 2);
+        highlight.lineTo(-isometric.tileWidth / 2 - 2, 0);
+        highlight.closePath();
+        highlight.strokePath();
+      }
     }
   }
 
@@ -168,114 +314,200 @@ export class FarmScene extends Phaser.Scene {
       if (!container) return;
 
       const isUnlocked = store.isPlotUnlocked(plot.id);
-      const soil = container.getByName("soil") as Phaser.GameObjects.Rectangle;
+      const soil = container.getByName("soil") as Phaser.GameObjects.Graphics;
       const lockIcon = container.getByName("lockIcon") as Phaser.GameObjects.Text;
-      const cropVisual = container.getByName("cropVisual") as Phaser.GameObjects.Graphics;
+      const plusIcon = container.getByName("plusIcon") as Phaser.GameObjects.Text;
+      const cropSprite = container.getByName("cropSprite") as Phaser.GameObjects.Sprite;
+      const progressBarBg = container.getByName("progressBarBg") as Phaser.GameObjects.Graphics;
+      const progressBarFill = container.getByName("progressBarFill") as Phaser.GameObjects.Graphics;
+      const careBubble = container.getByName("careBubble") as Phaser.GameObjects.Container;
+      const sparkles = container.getByName("sparkles") as Phaser.GameObjects.ParticleEmitter;
       const stateText = container.getByName("stateText") as Phaser.GameObjects.Text;
 
-      // Update lock state
+      // Update soil color based on watered state
       if (soil) {
-        soil.setFillStyle(isUnlocked ? 0x8b4513 : 0x4a4a4a);
+        const { isometric, effects } = GAME_CONFIG.farm;
+        let soilColor = effects.soilDryColor;
+
+        if (!isUnlocked) {
+          soilColor = 0x4a4a4a; // Gray for locked
+        } else if (plot.isWatered) {
+          soilColor = effects.soilWetColor; // Dark brown when watered
+        }
+
+        soil.clear();
+        soil.fillStyle(soilColor, 1);
+        soil.lineStyle(2, 0x654321, 1);
+        soil.beginPath();
+        soil.moveTo(0, -isometric.tileHeight / 2);
+        soil.lineTo(isometric.tileWidth / 2, 0);
+        soil.lineTo(0, isometric.tileHeight / 2);
+        soil.lineTo(-isometric.tileWidth / 2, 0);
+        soil.closePath();
+        soil.fillPath();
+        soil.strokePath();
       }
-      if (lockIcon) {
-        lockIcon.setVisible(!isUnlocked);
-      }
 
-      if (!cropVisual || !stateText) return;
+      // Hide all elements by default
+      lockIcon?.setVisible(false);
+      plusIcon?.setVisible(false);
+      cropSprite?.setVisible(false);
+      progressBarBg?.setVisible(false);
+      progressBarFill?.setVisible(false);
+      careBubble?.setVisible(false);
+      sparkles?.stop();
+      stateText?.setVisible(false);
 
-      cropVisual.clear();
+      // Render based on plot state
+      if (plot.state === "LOCKED") {
+        // State 5: LOCKED - Show lock icon
+        lockIcon?.setVisible(true);
 
-      if (plot.crop) {
-        const cropState = plot.crop.state;
-        const previousState = cropVisual.getData("lastState");
-        cropVisual.setVisible(true);
+      } else if (plot.state === "EMPTY") {
+        // State 1: EMPTY - Show plus icon hint
+        if (isUnlocked) {
+          plusIcon?.setVisible(true);
+        }
 
-        if (cropState === "GROWING") {
-          // Draw growing crop (small green sprout)
-          this.drawGrowingCrop(cropVisual);
+      } else if (plot.state === "GROWING" && plot.crop) {
+        // State 2: GROWING - Show crop sprite + progress bar
+        const cropConfig = CROPS[plot.crop.cropId];
+        if (!cropConfig) return;
 
-          // Animate growth if state just changed
-          if (previousState !== "GROWING") {
-            cropVisual.setAlpha(0);
-            cropVisual.setScale(0.5);
-            this.tweens.add({
-              targets: cropVisual,
-              alpha: 1,
-              scale: 1,
-              duration: 400,
-              ease: "Back.easeOut",
-            });
+        // Show crop sprite
+        const spriteKey = `${plot.crop.cropId}_seed`;
+        if (cropSprite && this.textures.exists(spriteKey)) {
+          cropSprite.setTexture(spriteKey);
+          cropSprite.setVisible(true);
+        }
+
+        // Draw progress bar
+        const { isometric, ui } = GAME_CONFIG.farm;
+        const barY = -isometric.tileHeight / 2 - 12;
+
+        progressBarBg?.clear();
+        progressBarBg?.fillStyle(0x333333, 0.8);
+        progressBarBg?.fillRect(-ui.timerBarWidth / 2, barY, ui.timerBarWidth, ui.timerBarHeight);
+        progressBarBg?.setVisible(true);
+
+        // Calculate progress
+        const now = Date.now();
+        const totalTime = plot.crop.harvestAt - plot.crop.plantedAt;
+        const elapsed = now - plot.crop.plantedAt;
+        const progress = Math.min(1, elapsed / totalTime);
+
+        progressBarFill?.clear();
+        progressBarFill?.fillStyle(0x4caf50, 1);
+        progressBarFill?.fillRect(-ui.timerBarWidth / 2, barY, ui.timerBarWidth * progress, ui.timerBarHeight);
+        progressBarFill?.setVisible(true);
+
+        // Show timer text
+        const timeLeft = Math.max(0, plot.crop.harvestAt - now);
+        const secondsLeft = Math.ceil(timeLeft / 1000);
+        stateText?.setText(`${secondsLeft}s`);
+        stateText?.setVisible(true);
+
+      } else if (plot.state === "NEEDS_CARE" && plot.needsCare) {
+        // State 3: NEEDS_CARE - Show crop + floating bubble
+        if (plot.crop) {
+          const spriteKey = `${plot.crop.cropId}_seed`;
+          if (cropSprite && this.textures.exists(spriteKey)) {
+            cropSprite.setTexture(spriteKey);
+            cropSprite.setVisible(true);
           }
+        }
 
-          const timeLeft = Math.max(0, plot.crop.harvestAt - Date.now());
-          const seconds = Math.ceil(timeLeft / 1000);
-          stateText.setText(`${seconds}s`);
-          stateText.setVisible(true);
-        } else if (cropState === "READY") {
-          // Draw mature crop (larger with glow)
-          this.drawReadyCrop(cropVisual);
+        // Show care bubble with icon
+        if (careBubble) {
+          const bubbleIcon = careBubble.getAt(1) as Phaser.GameObjects.Text;
+          if (bubbleIcon) {
+            // Set icon based on care type
+            if (plot.needsCare === "WATER") {
+              bubbleIcon.setText("💧");
+            } else if (plot.needsCare === "PESTS") {
+              bubbleIcon.setText("🐛");
+            } else if (plot.needsCare === "WEEDS") {
+              bubbleIcon.setText("🌿");
+            }
+          }
+          careBubble.setVisible(true);
 
-          // Animate ready state transition
-          if (previousState === "GROWING") {
-            // Growth complete animation
+          // Animate bubble float (if not already animated)
+          if (!careBubble.getData("floating")) {
+            careBubble.setData("floating", true);
             this.tweens.add({
-              targets: cropVisual,
-              scale: 1.3,
-              duration: 200,
+              targets: careBubble,
+              y: careBubble.y - 5,
+              duration: 1000,
               yoyo: true,
+              repeat: -1,
               ease: "Sine.easeInOut",
             });
+          }
+        }
 
-            // Pulsing glow animation
+      } else if (plot.state === "READY" && plot.crop) {
+        // State 4: READY - Show mature crop + sparkles + bounce + glow
+        const cropConfig = CROPS[plot.crop.cropId];
+        if (!cropConfig) return;
+
+        const spriteKey = `${plot.crop.cropId}_ready`;
+        if (cropSprite && this.textures.exists(spriteKey)) {
+          cropSprite.setTexture(spriteKey);
+          cropSprite.setVisible(true);
+
+          // Bounce animation (if not already bouncing)
+          if (!cropSprite.getData("bouncing")) {
+            cropSprite.setData("bouncing", true);
             this.tweens.add({
-              targets: cropVisual,
-              alpha: { from: 1, to: 0.7 },
+              targets: cropSprite,
+              y: cropSprite.y - 8,
+              duration: 600,
+              yoyo: true,
+              repeat: -1,
+              ease: "Sine.easeInOut",
+            });
+          }
+        }
+
+        // Add pulsing glow effect around the plot
+        const { isometric } = GAME_CONFIG.farm;
+        if (soil) {
+          // Add golden glow outline
+          soil.clear();
+          soil.fillStyle(effects.soilWetColor, 1);
+          soil.lineStyle(3, 0xffd700, 0.8); // Golden outline
+          soil.beginPath();
+          soil.moveTo(0, -isometric.tileHeight / 2);
+          soil.lineTo(isometric.tileWidth / 2, 0);
+          soil.lineTo(0, isometric.tileHeight / 2);
+          soil.lineTo(-isometric.tileWidth / 2, 0);
+          soil.closePath();
+          soil.fillPath();
+          soil.strokePath();
+
+          // Pulse animation for glow (if not already pulsing)
+          if (!soil.getData("glowing")) {
+            soil.setData("glowing", true);
+            this.tweens.add({
+              targets: soil,
+              alpha: 0.7,
               duration: 800,
               yoyo: true,
               repeat: -1,
               ease: "Sine.easeInOut",
             });
           }
-
-          stateText.setText("Sẵn sàng");
-          stateText.setVisible(true);
         }
 
-        cropVisual.setData("lastState", cropState);
-      } else {
-        cropVisual.setVisible(false);
-        stateText.setText("");
-        stateText.setVisible(false);
-        cropVisual.setData("lastState", null);
+        // Start sparkle particles
+        sparkles?.start();
+
+        // Show ready text
+        stateText?.setText("✓ Sẵn sàng");
+        stateText?.setVisible(true);
       }
     });
-  }
-
-  private drawGrowingCrop(graphics: Phaser.GameObjects.Graphics) {
-    // Simple sprout shape
-    graphics.fillStyle(0x4caf50, 1); // Green
-    graphics.fillCircle(0, 0, 8); // Center bulb
-    graphics.fillStyle(0x81c784, 1); // Light green
-    graphics.fillCircle(-4, -6, 5); // Left leaf
-    graphics.fillCircle(4, -6, 5); // Right leaf
-  }
-
-  private drawReadyCrop(graphics: Phaser.GameObjects.Graphics) {
-    // Mature crop with glow effect
-    graphics.fillStyle(0xffeb3b, 0.3); // Yellow glow
-    graphics.fillCircle(0, 0, 20);
-
-    graphics.fillStyle(0x4caf50, 1); // Green
-    graphics.fillCircle(0, 0, 12); // Larger center
-
-    graphics.fillStyle(0x81c784, 1); // Light green
-    graphics.fillCircle(-8, -8, 7); // Left leaf
-    graphics.fillCircle(8, -8, 7); // Right leaf
-    graphics.fillCircle(-6, 6, 6); // Bottom left
-    graphics.fillCircle(6, 6, 6); // Bottom right
-
-    graphics.fillStyle(0xfdd835, 1); // Yellow center (harvest ready indicator)
-    graphics.fillCircle(0, 0, 6);
   }
 
   private setupUpdateLoop() {
@@ -357,5 +589,117 @@ export class FarmScene extends Phaser.Scene {
       y: centerY,
       scene: this,
     });
+  }
+
+  /**
+   * Create floating text effect (for XP, coins, etc.)
+   */
+  private createFloatingText(x: number, y: number, text: string, color: string = "#ffffff") {
+    const floatingText = this.add.text(x, y, text, {
+      fontSize: "20px",
+      fontStyle: "bold",
+      color: color,
+      stroke: "#000000",
+      strokeThickness: 3,
+    });
+    floatingText.setOrigin(0.5);
+    floatingText.setDepth(1000);
+
+    // Animate floating up and fade out
+    this.tweens.add({
+      targets: floatingText,
+      y: y - 80,
+      alpha: 0,
+      scale: 1.2,
+      duration: 1200,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        floatingText.destroy();
+      },
+    });
+  }
+
+  /**
+   * Setup swipe detection on a plot container
+   */
+  private setupSwipeDetection(container: Phaser.GameObjects.Container, plotId: number) {
+    container.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      this.swipeStartPos = { x: pointer.x, y: pointer.y };
+      this.swipeStartTime = Date.now();
+      this.swipePlotId = plotId;
+    });
+
+    container.on("pointerup", (pointer: Phaser.Input.Pointer) => {
+      if (!this.swipeStartPos || this.swipePlotId !== plotId) return;
+
+      const deltaX = pointer.x - this.swipeStartPos.x;
+      const deltaY = pointer.y - this.swipeStartPos.y;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const duration = Date.now() - this.swipeStartTime;
+
+      // Check if it's a valid swipe
+      if (distance >= this.SWIPE_MIN_DISTANCE && duration <= this.SWIPE_MAX_TIME) {
+        this.handleSwipe(plotId, deltaX, deltaY);
+      }
+
+      // Reset swipe tracking
+      this.swipeStartPos = null;
+      this.swipePlotId = null;
+    });
+  }
+
+  /**
+   * Handle swipe gesture on a plot
+   */
+  private handleSwipe(plotId: number, deltaX: number, deltaY: number) {
+    const store = useGameStore.getState();
+    const plot = store.plots.find((p) => p.id === plotId);
+    if (!plot) return;
+
+    const container = this.plotGraphics.get(plotId);
+    if (!container) return;
+
+    const x = container.getData("x") || container.x;
+    const y = container.getData("y") || container.y;
+
+    // Determine swipe direction
+    const angle = Math.atan2(deltaY, deltaX);
+    const isUpSwipe = angle < -Math.PI / 4 && angle > (-3 * Math.PI) / 4;
+
+    // Handle based on plot state
+    if (plot.state === "READY" && plot.crop) {
+      // Swipe up to harvest
+      if (isUpSwipe) {
+        const cropConfig = CROPS[plot.crop.cropId];
+        if (cropConfig) {
+          store.harvestCrop(plotId);
+
+          // Show floating rewards
+          this.createFloatingText(x, y - 20, `+${cropConfig.expReward} XP`, "#4caf50");
+          this.createFloatingText(x + 30, y - 10, `+${cropConfig.sellPrice} 💰`, "#ffd700");
+
+          // Trigger harvest particles
+          ParticleService.createHarvestEffect({ x, y, scene: this });
+        }
+      }
+    } else if (plot.state === "NEEDS_CARE" && plot.needsCare) {
+      // Swipe to provide care
+      if (plot.needsCare === "WATER" && isUpSwipe) {
+        store.waterPlot(plotId);
+        this.createFloatingText(x, y - 20, "💧 Đã tưới", "#2196f3");
+        // Simple particle effect for watering
+        ParticleService.createPlantEffect({ x, y, scene: this });
+      } else if (plot.needsCare === "PESTS") {
+        store.removePests(plotId);
+        this.createFloatingText(x, y - 20, "🐛 Diệt sâu", "#ff9800");
+        // Use harvest effect for pest removal
+        ParticleService.createHarvestEffect({ x, y, scene: this });
+      } else if (plot.needsCare === "WEEDS") {
+        store.removeWeeds(plotId);
+        this.createFloatingText(x, y - 20, "🌿 Nhổ cỏ", "#8bc34a");
+        // Use plant effect for weed removal
+        ParticleService.createPlantEffect({ x, y, scene: this });
+      }
+    }
   }
 }

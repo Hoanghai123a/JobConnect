@@ -1,0 +1,62 @@
+{
+  "id": "farm_transactions_id",
+  "name": "farm_transactions",
+  "type": "base",
+  "system": false,
+  "schema": [
+    {
+      "id": "player_field",
+      "name": "player",
+      "type": "relation",
+      "required": true,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "collectionId": "farm_players_id",
+        "cascadeDelete": true,
+        "minSelect": null,
+        "maxSelect": 1,
+        "displayFields": ["user"]
+      }
+    },
+    {
+      "id": "transaction_type_field",
+      "name": "transaction_type",
+      "type": "select",
+      "required": true,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "maxSelect": 1,
+        "values": [
+          "BUY_SEED",
+          "PLANT_CROP",
+          "HARVEST_CROP",
+          "SELL_CROP"
+        ]
+      }
+    },
+    {
+      "id": "transaction_data_field",
+      "name": "transaction_data",
+      "type": "json",
+      "required": true,
+      "presentable": false,
+      "unique": false,
+      "options": {
+        "maxSize": 2000000
+      }
+    }
+  ],
+  "indexes": [
+    "CREATE INDEX idx_farm_transactions_player ON farm_transactions (player)",
+    "CREATE INDEX idx_farm_transactions_type ON farm_transactions (transaction_type)",
+    "CREATE INDEX idx_farm_transactions_created ON farm_transactions (created)"
+  ],
+  "listRule": "player.user = @request.auth.id",
+  "viewRule": "player.user = @request.auth.id",
+  "createRule": null,
+  "updateRule": null,
+  "deleteRule": null,
+  "options": {}
+}

@@ -3,6 +3,7 @@ import type { CropConfig } from "../types";
 export * from "./progression";
 
 export const CROPS: Record<string, CropConfig> = {
+  // Level 1-3: Cây dễ trồng
   carrot: {
     id: "carrot",
     name: "Cà rốt",
@@ -21,6 +22,17 @@ export const CROPS: Record<string, CropConfig> = {
     expReward: 5,
     unlockedAtLevel: 1,
   },
+  lettuce: {
+    id: "lettuce",
+    name: "Rau xà lách",
+    seedCost: 25,
+    sellPrice: 45,
+    growTime: 45,
+    expReward: 4,
+    unlockedAtLevel: 2,
+  },
+
+  // Level 4-6: Cây trung bình
   corn: {
     id: "corn",
     name: "Ngô",
@@ -28,7 +40,7 @@ export const CROPS: Record<string, CropConfig> = {
     sellPrice: 90,
     growTime: 120,
     expReward: 8,
-    unlockedAtLevel: 2,
+    unlockedAtLevel: 3,
   },
   potato: {
     id: "potato",
@@ -37,7 +49,7 @@ export const CROPS: Record<string, CropConfig> = {
     sellPrice: 140,
     growTime: 180,
     expReward: 12,
-    unlockedAtLevel: 3,
+    unlockedAtLevel: 4,
   },
   tomato: {
     id: "tomato",
@@ -46,8 +58,10 @@ export const CROPS: Record<string, CropConfig> = {
     sellPrice: 210,
     growTime: 300,
     expReward: 18,
-    unlockedAtLevel: 4,
+    unlockedAtLevel: 5,
   },
+
+  // Level 7-9: Cây khá khó
   strawberry: {
     id: "strawberry",
     name: "Dâu tây",
@@ -55,8 +69,28 @@ export const CROPS: Record<string, CropConfig> = {
     sellPrice: 360,
     growTime: 600,
     expReward: 30,
-    unlockedAtLevel: 5,
+    unlockedAtLevel: 6,
   },
+  pumpkin: {
+    id: "pumpkin",
+    name: "Bí ngô",
+    seedCost: 250,
+    sellPrice: 480,
+    growTime: 720,
+    expReward: 38,
+    unlockedAtLevel: 7,
+  },
+  chili: {
+    id: "chili",
+    name: "Ớt",
+    seedCost: 280,
+    sellPrice: 530,
+    growTime: 780,
+    expReward: 42,
+    unlockedAtLevel: 8,
+  },
+
+  // Level 10-12: Cây khó
   watermelon: {
     id: "watermelon",
     name: "Dưa hấu",
@@ -64,17 +98,28 @@ export const CROPS: Record<string, CropConfig> = {
     sellPrice: 650,
     growTime: 900,
     expReward: 45,
-    unlockedAtLevel: 6,
+    unlockedAtLevel: 9,
   },
-  pumpkin: {
-    id: "pumpkin",
-    name: "Bí ngô",
-    seedCost: 500,
-    sellPrice: 950,
+  grape: {
+    id: "grape",
+    name: "Nho",
+    seedCost: 420,
+    sellPrice: 790,
+    growTime: 1080,
+    expReward: 55,
+    unlockedAtLevel: 10,
+  },
+  eggplant: {
+    id: "eggplant",
+    name: "Cà tím",
+    seedCost: 480,
+    sellPrice: 920,
     growTime: 1200,
-    expReward: 65,
-    unlockedAtLevel: 7,
+    expReward: 62,
+    unlockedAtLevel: 11,
   },
+
+  // Level 13-15: Cây rất khó (Quý hiếm)
   sunflower: {
     id: "sunflower",
     name: "Hướng dương",
@@ -82,7 +127,7 @@ export const CROPS: Record<string, CropConfig> = {
     sellPrice: 1400,
     growTime: 1800,
     expReward: 90,
-    unlockedAtLevel: 8,
+    unlockedAtLevel: 12,
   },
   dragon_fruit: {
     id: "dragon_fruit",
@@ -91,7 +136,16 @@ export const CROPS: Record<string, CropConfig> = {
     sellPrice: 2300,
     growTime: 3600,
     expReward: 140,
-    unlockedAtLevel: 9,
+    unlockedAtLevel: 13,
+  },
+  golden_ginger: {
+    id: "golden_ginger",
+    name: "Gừng vàng",
+    seedCost: 1500,
+    sellPrice: 2900,
+    growTime: 4200,
+    expReward: 180,
+    unlockedAtLevel: 14,
   },
 };
 

@@ -97,10 +97,10 @@ export const PlantModal = ({ open, onClose, plotId }: PlantModalProps) => {
                 <p className="text-sm text-gray-600">
                   Trạng thái:{" "}
                   <span className="font-semibold">
-                    {plot.crop.state === "GROWING" ? "Đang lớn" : "Sẵn sàng thu hoạch"}
+                    {plot.crop.state === "EMPTY" ? "Đang lớn" : "Sẵn sàng thu hoạch"}
                   </span>
                 </p>
-                {plot.crop.state === "GROWING" && (
+                {plot.crop.state === "EMPTY" && (
                   <p className="text-xs text-gray-500 mt-1">
                     Thời gian còn lại: {Math.ceil((plot.crop.harvestAt - Date.now()) / 1000)}s
                   </p>

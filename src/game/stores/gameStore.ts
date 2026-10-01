@@ -190,7 +190,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               plotId,
               plantedAt: now,
               harvestAt: now + growTime * 1000,
-              state: "GROWING" as const,
+              state: "EMPTY" as const, // Crop starts as EMPTY (seed sprite)
             },
           };
         }
@@ -225,7 +225,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set((state) => {
       const now = Date.now();
       const plots = state.plots.map((plot) => {
-        if (plot.crop && plot.crop.state === "GROWING") {
+        if (plot.crop && plot.crop.state === "EMPTY") {
           if (now >= plot.crop.harvestAt) {
             return {
               ...plot,
