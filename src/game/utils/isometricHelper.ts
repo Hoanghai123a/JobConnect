@@ -1,70 +1,42 @@
 /**
- * Isometric grid utilities
- * Converts 2D grid coordinates to isometric (diamond) screen coordinates
+ * Isometric Helper - Phase 1
+ * Chuyển đổi tọa độ grid 2D sang tọa độ isometric (kim cương)
  */
 
 import { GAME_CONFIG } from "../config/game";
 
 /**
- * Convert 2D grid position (x, y) to isometric screen position
- * @param gridX - Column in grid (0-indexed)
- * @param gridY - Row in grid (0-indexed)
- * @returns Screen coordinates {x, y}
+ * Chuyển đổi tọa độ grid (x, y) sang tọa độ màn hình isometric
+ * @param gridX - Cột trong grid (0-indexed)
+ * @param gridY - Hàng trong grid (0-indexed)
+ * @returns Tọa độ màn hình {x, y}
  */
 export function gridToIsometric(gridX: number, gridY: number): { x: number; y: number } {
-  const { tileWidth, tileHeight, spacing } = GAME_CONFIG.farm.isometric;
+  const { tileWidth, tileHeight } = GAME_CONFIG.grid;
 
-  // Isometric projection formula with spacing
-  const effectiveTileWidth = tileWidth + spacing;
-  const effectiveTileHeight = tileHeight + spacing;
-
-  const screenX = (gridX - gridY) * (effectiveTileWidth / 2);
-  const screenY = (gridX + gridY) * (effectiveTileHeight / 2);
+  // Công thức isometric projection
+  const screenX = (gridX - gridY) * (tileWidth / 2);
+  const screenY = (gridX + gridY) * (tileHeight / 2);
 
   return { x: screenX, y: screenY };
 }
 
 /**
- * Convert screen position to grid coordinates (for click detection)
- * @param screenX - Screen X coordinate
- * @param screenY - Screen Y coordinate
- * @returns Grid coordinates {x, y}
- */
-export function isometricToGrid(screenX: number, screenY: number): { x: number; y: number } {
-  const { tileWidth, tileHeight } = GAME_CONFIG.farm.isometric;
-
-  // Inverse isometric projection
-  const gridX = (screenX / (tileWidth / 2) + screenY / (tileHeight / 2)) / 2;
-  const gridY = (screenY / (tileHeight / 2) - screenX / (tileWidth / 2)) / 2;
-
-  return { x: Math.floor(gridX), y: Math.floor(gridY) };
-}
-
-/**
- * Get centered origin for isometric grid
- * Centers the grid on the screen accounting for isometric projection
+ * Lấy origin point để center grid trên canvas
  */
 export function getIsometricOrigin(): { x: number; y: number } {
-  const { plotsX, plotsY, isometric } = GAME_CONFIG.farm;
-  const { tileWidth, tileHeight, spacing } = isometric;
+  const { cols, rows, tileWidth, tileHeight } = GAME_CONFIG.grid;
 
-  const effectiveTileWidth = tileWidth + spacing;
-  const effectiveTileHeight = tileHeight + spacing;
+  // Tính tổng kích thước grid
+  const totalGridWidth = (cols + rows - 1) * (tileWidth / 2);
+  const totalGridHeight = (cols + rows - 1) * (tileHeight / 2);
 
-  // For a 4×3 grid in isometric:
-  // Total width spans from leftmost to rightmost point
-  // Total height spans from top to bottom
-  const totalGridWidth = (plotsX + plotsY - 1) * (effectiveTileWidth / 2);
-  const totalGridHeight = (plotsX + plotsY - 1) * (effectiveTileHeight / 2);
-
-  // Center the grid on screen
+  // Center trên canvas
   const centerX = GAME_CONFIG.width / 2;
   const centerY = GAME_CONFIG.height / 2;
 
-  // Origin is the center of the grid
-  // Offset by half the grid dimensions to center it
   return {
     x: centerX,
-    y: centerY - totalGridHeight / 2 + 40, // +40 to account for HUD at top
+    y: centerY - totalGridHeight / 3, // Offset để grid hiển thị centered
   };
 }

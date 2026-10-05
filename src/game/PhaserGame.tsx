@@ -1,34 +1,18 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+/**
+ * PhaserGame Component - Phase 2
+ * React wrapper cho Phaser game canvas + UIOverlay
+ */
+
+import { useEffect, useRef } from "react";
 import Phaser from "phaser";
 import { FarmScene } from "./scenes/FarmScene";
+import { UIOverlay } from "./scenes/UIOverlay";
+import { BottomBar } from "./scenes/BottomBar";
 import { GAME_CONFIG } from "./config/game";
-import { GameHUD } from "./components/GameHUD";
-import { GameBottomNav } from "./components/GameBottomNav";
-import { ShopModal } from "./components/ShopModal";
-import { SellModal } from "./components/SellModal";
-import { InventoryModal } from "./components/InventoryModal";
-import { QuestsModal } from "./components/QuestsModal";
-import { CollectionModal } from "./components/CollectionModal";
-import { PlantModal } from "./components/PlantModal";
-import { LandscapeMode } from "./components/LandscapeMode";
 
 export const PhaserGame = () => {
   const gameRef = useRef<Phaser.Game | null>(null);
-  const sceneRef = useRef<FarmScene | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  const [shopOpen, setShopOpen] = useState(false);
-  const [sellOpen, setSellOpen] = useState(false);
-  const [inventoryOpen, setInventoryOpen] = useState(false);
-  const [questsOpen, setQuestsOpen] = useState(false);
-  const [collectionOpen, setCollectionOpen] = useState(false);
-  const [plantModalOpen, setPlantModalOpen] = useState(false);
-  const [selectedPlotId, setSelectedPlotId] = useState<number | null>(null);
-
-  const handlePlotSelected = useCallback((plotId: number) => {
-    setSelectedPlotId(plotId);
-    setPlantModalOpen(true);
-  }, []);
 
   useEffect(() => {
     if (!containerRef.current || gameRef.current) return;
@@ -39,7 +23,16 @@ export const PhaserGame = () => {
       height: GAME_CONFIG.height,
       backgroundColor: GAME_CONFIG.backgroundColor,
       parent: containerRef.current,
-      scene: [FarmScene],
+      scene: [FarmScene, UIOverlay, BottomBar], // Thêm BottomBar scene
+      scale: {
+        mode: Phaser.Scale.NONE, // Không scale, để canvas exact size match container
+        autoCenter: Phaser.Scale.NO_CENTER,
+      },
+      input: {
+        // Fix pointer coordinates khi canvas được scale
+        activePointers: 3,
+        smoothFactor: 0,
+      },
       physics: {
         default: "arcade",
         arcade: {
@@ -51,62 +44,34 @@ export const PhaserGame = () => {
 
     gameRef.current = new Phaser.Game(config);
 
-    // Get scene reference
-    gameRef.current.events.once("ready", () => {
-      sceneRef.current = gameRef.current?.scene.getScene("FarmScene") as FarmScene;
+    // Expose game object for debugging
+    (window as any).game = gameRef.current;
 
-      // Listen to plot selection events
-      sceneRef.current?.events.on("plot-selected", handlePlotSelected);
-    });
-
+    // Cleanup
     return () => {
-      if (sceneRef.current) {
-        sceneRef.current.events.off("plot-selected", handlePlotSelected);
-      }
       if (gameRef.current) {
         gameRef.current.destroy(true);
         gameRef.current = null;
-        sceneRef.current = null;
       }
     };
-  }, [handlePlotSelected]);
+  }, []);
 
   return (
     <div className="relative flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-sky-400 to-green-400">
-      {/* HUD */}
-      <GameHUD />
-
       {/* Phaser Game Canvas */}
-      <div className="flex-1 flex items-center justify-center w-full">
+      <div className="flex-1 flex items-center justify-center w-full px-1 py-1">
         <div
           ref={containerRef}
-          className="rounded-lg shadow-2xl overflow-hidden border-4 border-white"
+          className="rounded-lg shadow-2xl overflow-hidden border-2 border-white max-w-full max-h-full"
+          style={{
+            width: '900px',
+            height: '550px',
+            aspectRatio: '900 / 550',
+            maxWidth: 'calc(100vw - 8px)',
+            maxHeight: 'calc(100vh - 140px)',
+          }}
         />
       </div>
-
-      {/* Bottom Navigation */}
-      <GameBottomNav
-        onShopClick={() => setShopOpen(true)}
-        onSellClick={() => setSellOpen(true)}
-        onInventoryClick={() => setInventoryOpen(true)}
-        onQuestsClick={() => setQuestsOpen(true)}
-        onCollectionClick={() => setCollectionOpen(true)}
-      />
-
-      {/* Modals */}
-      <ShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
-      <SellModal open={sellOpen} onClose={() => setSellOpen(false)} />
-      <InventoryModal open={inventoryOpen} onClose={() => setInventoryOpen(false)} />
-      <QuestsModal open={questsOpen} onClose={() => setQuestsOpen(false)} />
-      <CollectionModal open={collectionOpen} onClose={() => setCollectionOpen(false)} />
-      <PlantModal
-        open={plantModalOpen}
-        onClose={() => {
-          setPlantModalOpen(false);
-          setSelectedPlotId(null);
-        }}
-        plotId={selectedPlotId}
-      />
     </div>
   );
 };

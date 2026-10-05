@@ -1,43 +1,113 @@
+/**
+ * Game Configuration - Phase 1
+ * Canvas 900x550, Isometric Grid 4x3
+ */
+
 export const GAME_CONFIG = {
-  width: Math.max(window.innerWidth, window.innerHeight), // Chiều ngang lớn hơn
-  height: Math.min(window.innerWidth, window.innerHeight) - 140, // Chiều cao nhỏ hơn, trừ HUD+nav
-  backgroundColor: "#87CEEB",
+  // Canvas size - fixed landscape
+  width: 900,
+  height: 550,
+  backgroundColor: "#87CEEB", // Sky blue
 
-  farm: {
-    plotsX: 4,
-    plotsY: 3,
-    plotSize: 64,
-    plotSpacing: 8,
+  // Isometric grid
+  grid: {
+    cols: 4, // 4 columns
+    rows: 3, // 3 rows
+    tileWidth: 100,  // Isometric tile width
+    tileHeight: 50,  // Isometric tile height
+  },
 
-    // Isometric layout config
-    isometric: {
-      enabled: true,
-      tileWidth: 80, // Thu gọn về 80 để vừa màn hình
-      tileHeight: 40, // Thu gọn về 40 để cân đối
-      spacing: 8, // Giảm spacing để compact hơn
-      angle: 30, // Isometric angle (degrees)
+  // Colors for placeholder graphics
+  colors: {
+    soil: 0xa67c52,      // Brown soil
+    soilDark: 0x8b6f47,  // Darker brown
+    soilPlanted: 0x6b5438, // Darker brown khi đã gieo hạt
+    grass: 0x7cb342,     // Green grass border
+    highlight: 0xffffff, // White highlight
+    sprout: 0x4caf50,    // Green sprout (mầm cây)
+    sproutDark: 0x2e7d32, // Dark green
+  },
+
+  // UI Top Bar
+  ui: {
+    topBarHeight: 80,
+    topBarColor: 0x1a237e,     // Dark blue
+    topBarAlpha: 0.9,
+    textColor: "#ffffff",
+    goldColor: "#ffd700",
+    expBarColor: 0x4caf50,     // Green
+    expBarBg: 0x263238,        // Dark gray
+  },
+
+  // Game balance
+  balance: {
+    initialCoins: 100,
+    initialLevel: 1,
+    expPerLevel: 100,
+    coinsPerHarvest: 10,
+    expPerHarvest: 15,
+  },
+
+  // Crop configurations
+  crops: {
+    carrot: {
+      type: "carrot" as const,
+      name: "Cà rốt",
+      stages: ["SEED", "STAGE1", "STAGE2", "STAGE3", "HARVEST"] as const,
+      stageTime: 5, // 5 seconds per stage for testing
+      harvestCoins: 15,
+      harvestExp: 10,
+      seedCost: 5,
     },
-
-    // Visual effects
-    effects: {
-      soilDryColor: 0xa67c52, // Light brown when dry
-      soilWetColor: 0x8b6f47, // Dark brown when watered
-      sparkleColor: 0xffeb3b, // Yellow sparkle for ready crops
-      glowIntensity: 0.3,
+    wheat: {
+      type: "wheat" as const,
+      name: "Lúa mì",
+      stages: ["SEED", "STAGE1", "STAGE2", "STAGE3", "HARVEST"] as const,
+      stageTime: 4,
+      harvestCoins: 12,
+      harvestExp: 8,
+      seedCost: 3,
     },
-
-    // UI elements
-    ui: {
-      bubbleFloatSpeed: 1.5, // Pixels per second
-      bubbleFloatDistance: 10, // Pixels
-      timerBarHeight: 4,
-      timerBarWidth: 50,
+    tomato: {
+      type: "tomato" as const,
+      name: "Cà chua",
+      stages: ["SEED", "STAGE1", "STAGE2", "STAGE3", "HARVEST"] as const,
+      stageTime: 6,
+      harvestCoins: 20,
+      harvestExp: 15,
+      seedCost: 8,
     },
   },
 
-  player: {
-    initialCoins: 1000,
-    initialLevel: 1,
-    initialExp: 0,
+  // Asset paths
+  assets: {
+    crops: {
+      carrot: {
+        seed: "/game-assets/crops/carrot/seed.png",
+        stage1: "/game-assets/crops/carrot/stage1.png",
+        stage2: "/game-assets/crops/carrot/stage2.png",
+        stage3: "/game-assets/crops/carrot/stage3.png",
+        harvest: "/game-assets/crops/carrot/harvest.png",
+      },
+      wheat: {
+        seed: "/game-assets/crops/wheat/seed.png",
+        stage1: "/game-assets/crops/wheat/stage1.png",
+        stage2: "/game-assets/crops/wheat/stage2.png",
+        stage3: "/game-assets/crops/wheat/stage3.png",
+        harvest: "/game-assets/crops/wheat/harvest.png",
+      },
+      tomato: {
+        seed: "/game-assets/crops/tomato/seed.png",
+        stage1: "/game-assets/crops/tomato/stage1.png",
+        stage2: "/game-assets/crops/tomato/stage2.png",
+        stage3: "/game-assets/crops/tomato/stage3.png",
+        harvest: "/game-assets/crops/tomato/harvest.png",
+      },
+    },
+    ui: {
+      coin: "/game-assets/ui/coin.png",
+      star: "/game-assets/ui/star.png",
+      exp: "/game-assets/ui/exp.png",
+    },
   },
 };
