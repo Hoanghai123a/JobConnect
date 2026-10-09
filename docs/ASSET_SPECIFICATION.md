@@ -1,305 +1,301 @@
-# Nông Trại Game - Asset Specification
+# Asset Specification - Farm Game
 
-## Art Direction
+## 📁 Cấu trúc thư mục
 
-### Visual Style
-- **Style**: 2D casual farming game
-- **Tone**: Cute, colorful, clean, welcoming
-- **Perspective**: Top-down with slight isometric tilt (optional)
-- **Quality**: Mobile-game quality, optimized for performance
-- **Target audience**: Casual players, all ages
-
-### Design Principles
-- **Readability**: Clear silhouettes, easily distinguishable at small sizes
-- **Consistency**: Unified lighting, scale, and camera angle across all assets
-- **Simplicity**: Not overly detailed - clear, clean shapes
-- **Color**: Vibrant but harmonious palette
-- **Background**: Transparent PNG for all sprites
-
-### Technical Constraints
-- **Format**: PNG with transparency
-- **Resolution**: 64x64px base size (can scale up for high-DPI)
-- **Color depth**: 24-bit RGB + 8-bit alpha
-- **File size**: Target <50KB per sprite (optimized)
-- **Naming**: lowercase_underscore format (e.g., `carrot_ready.png`)
-
----
-
-## Asset Categories
-
-### 1. Crops (Priority: CRITICAL)
-**Quantity**: 30 sprites (10 crops × 3 states)
-
-#### States
-1. **Seed** - Small sprouting stage, visible in ground
-2. **Growing** - Mid-growth, recognizable but not mature
-3. **Ready** - Fully grown, vibrant, harvestable
-
-#### Crop List
-1. **Cà rốt (Carrot)** - Orange root vegetable with green tops
-   - Seed: Small orange nub with tiny leaves
-   - Growing: Partial carrot visible, green leaves growing
-   - Ready: Full bright orange carrot with lush green foliage
-
-2. **Lúa (Rice)** - Golden grain stalks
-   - Seed: Small green shoots
-   - Growing: Green rice stalks, medium height
-   - Ready: Golden yellow mature rice plants
-
-3. **Ngô (Corn)** - Yellow corn cobs
-   - Seed: Small corn sprout
-   - Growing: Green stalk with partial cob
-   - Ready: Tall stalk with golden corn cobs
-
-4. **Khoai tây (Potato)** - Brown tubers
-   - Seed: Small plant sprout
-   - Growing: Green leaves, hints of potato underground
-   - Ready: Mature plant with visible brown potatoes
-
-5. **Cà chua (Tomato)** - Red tomatoes on vine
-   - Seed: Tiny tomato seedling
-   - Growing: Green plant with small green tomatoes
-   - Ready: Red ripe tomatoes on green vine
-
-6. **Dâu tây (Strawberry)** - Red berries
-   - Seed: Strawberry seedling
-   - Growing: Plant with white flowers
-   - Ready: Bright red strawberries with seeds visible
-
-7. **Dưa hấu (Watermelon)** - Large striped melons
-   - Seed: Watermelon sprout
-   - Growing: Vine with small green melon
-   - Ready: Large striped watermelon on vine
-
-8. **Bí ngô (Pumpkin)** - Orange pumpkin
-   - Seed: Pumpkin sprout
-   - Growing: Green vine with small orange pumpkin
-   - Ready: Large orange pumpkin with green stem
-
-9. **Hướng dương (Sunflower)** - Yellow flower
-   - Seed: Small green shoot
-   - Growing: Tall stalk with budding flower
-   - Ready: Large bright yellow sunflower bloom
-
-10. **Thanh long (Dragon Fruit)** - Pink/white exotic fruit
-    - Seed: Cactus-like sprout
-    - Growing: Cactus with small pink fruit forming
-    - Ready: Vibrant pink dragon fruit on cactus plant
-
-#### Design Requirements
-- Each crop must be visually distinct at 64x64px
-- Growth progression should be clear
-- Ready state should be most vibrant/appealing
-- Maintain consistent lighting direction across all crops
-- Keep shadows soft and simple
-
----
-
-### 2. Tiles (Priority: HIGH)
-**Quantity**: 3 base tiles
-
-1. **grass.png** - Background grass tile
-   - Light green, slightly textured
-   - Tileable seamlessly
-   - Subtle variation to avoid repetition
-
-2. **dirt.png** - Farm plot dirt
-   - Brown soil texture
-   - Slightly darker than grass
-   - Tileable
-
-3. **plot_empty.png** - Empty farm plot
-   - Defined rectangular plot
-   - Tilled soil appearance
-   - Border visible but subtle
-   - 128x128px (larger to accommodate plot size)
-
----
-
-### 3. UI Elements (Priority: MEDIUM)
-**Quantity**: 2 base elements
-
-1. **button_primary.png** - Main action button
-   - Rounded rectangle
-   - Warm, inviting color (orange/yellow)
-   - Slight gradient or shine
-   - 9-slice compatible (design for stretching)
-
-2. **panel.png** - Modal background panel
-   - Subtle wood or paper texture
-   - Rounded corners
-   - Semi-transparent or solid
-   - 9-slice compatible
-
----
-
-### 4. Items (Priority: MEDIUM)
-**Quantity**: 2 items
-
-1. **coin.png** - Currency icon
-   - Golden circular coin
-   - Shine/glint effect
-   - 32x32px (smaller item icon)
-
-2. **seed_bag.png** - Seed inventory icon
-   - Brown burlap sack
-   - Tied at top
-   - Generic, not crop-specific
-   - 32x32px
-
----
-
-### 5. Effects (Priority: LOW)
-**Quantity**: 2 particle sprites
-
-1. **sparkle.png** - Generic sparkle effect
-   - Star or plus shape
-   - Bright yellow/white
-   - Semi-transparent
-   - 32x32px
-   - Used for level-up, quest complete
-
-2. **harvest.png** - Harvest particle
-   - Leaf or petal shapes
-   - Green with slight transparency
-   - 32x32px
-   - Spawned when harvesting crops
-
----
-
-### 6. Buildings (Priority: LOW - Post-MVP)
-**Quantity**: 2 buildings (deferred)
-
-1. **barn.png** - Storage building
-   - Red barn with white trim
-   - Simple geometric shape
-   - Positioned in corner of farm
-
-2. **shop.png** - Seed shop building
-   - Wooden shop front
-   - Sign indicating shop
-   - Positioned in corner of farm
-
----
-
-### 7. Characters (Priority: LOW - Post-MVP)
-**Quantity**: 1 character (deferred)
-
-1. **farmer.png** - Player character
-   - Cute, simple character design
-   - Friendly appearance
-   - Neutral gender presentation
-   - Optional: Multiple frames for idle animation
-
----
-
-## Asset Pipeline
-
-### Creation Process
-1. **Concept** - Rough sketch or reference gathering
-2. **Production** - Create asset in design tool or AI generation
-3. **Review** - Check against specification
-4. **Optimization** - Compress PNG, ensure transparency
-5. **Integration** - Add to manifest in `src/game/config/assets.ts`
-6. **Testing** - Verify in-game appearance
-
-### Naming Convention
-```
-{category}/{item}_{state}.png
-```
-
-Examples:
-- `crops/carrot_seed.png`
-- `crops/carrot_growing.png`
-- `crops/carrot_ready.png`
-- `tiles/grass.png`
-- `items/coin.png`
-
-### File Organization
 ```
 public/game-assets/
-├── characters/
-├── crops/          ← PRIORITY
-├── tiles/          ← PRIORITY
-├── buildings/
-├── items/
-├── effects/
-├── ui/
-├── sounds/
-└── placeholder.png ← Fallback for missing assets
+├── crops/           # Sprite cây trồng (5 stages mỗi loại)
+├── tiles/           # Texture ô đất, viền cỏ, đường
+├── decorations/     # Hàng rào, cây, đá
+├── ui/              # Icon coins, star, exp, buttons
+└── effects/         # Particles, sparkles
 ```
 
 ---
 
-## Quality Checklist
+## 🌾 Crops - Bộ sprite cây trồng
 
-Before an asset is considered complete:
+**3 loại cây cần đầy đủ:**
+- Carrot (Cà rốt) - màu cam
+- Wheat (Lúa mì) - màu vàng  
+- Tomato (Cà chua) - màu đỏ
 
-- [ ] Correct dimensions (64x64px base, or specified size)
-- [ ] PNG format with transparency
-- [ ] Matches art direction (style, lighting, perspective)
-- [ ] Visually distinct from similar assets
-- [ ] Readable at target size
-- [ ] Optimized file size (<50KB)
-- [ ] Correct filename (lowercase_underscore)
-- [ ] Added to asset manifest
-- [ ] Tested in game scene
-- [ ] No copyright/licensing issues
+### Quy cách file
 
----
+**Mỗi loại cây cần 5 file PNG trong suốt:**
 
-## Implementation Priority
+```
+{crop}_seed.png     # Stage SEED - Hạt vừa gieo, nhỏ
+{crop}_stage1.png   # Stage 1 - Mầm non, 30% chiều cao
+{crop}_stage2.png   # Stage 2 - Cây nhỡ, 60% chiều cao
+{crop}_stage3.png   # Stage 3 - Cây trưởng thành, 90% chiều cao
+{crop}_harvest.png  # Stage HARVEST - Quả chín rực rỡ, 100% + bounce
+```
 
-### Phase 1: MVP Critical (Current Milestone)
-1. ✅ Placeholder system (`placeholder.png`)
-2. 🔲 Crop sprites (30 total) - **BLOCKING GAMEPLAY**
-3. 🔲 Plot tile (`plot_empty.png`) - **BLOCKING VISUAL**
+**Ví dụ carrot:**
+```
+carrot_seed.png
+carrot_stage1.png
+carrot_stage2.png
+carrot_stage3.png
+carrot_harvest.png
+```
 
-### Phase 2: Core Experience
-4. 🔲 Grass and dirt tiles
-5. 🔲 UI elements (button, panel)
-6. 🔲 Coin icon
+### Kích thước khuyến nghị
 
-### Phase 3: Polish
-7. 🔲 Effects (sparkle, harvest particles)
-8. 🔲 Seed bag icon
+- **Canvas:** 128×128 px (power of 2, dễ scale)
+- **Sprite thực tế:** 
+  - SEED: ~20×20 px (nhỏ, sát đất)
+  - STAGE1: ~40×50 px (mầm non)
+  - STAGE2: ~60×80 px (cây nhỡ)
+  - STAGE3: ~80×100 px (cây trưởng thành)
+  - HARVEST: ~100×120 px (quả to, rực rỡ)
 
-### Phase 4: Future Enhancement
-9. 🔲 Buildings (barn, shop)
-10. 🔲 Character sprite
+- **Anchor point:** Bottom-center (chân cây sát đất)
+- **Transparent background:** Bắt buộc (PNG alpha channel)
 
----
+### Style visual
 
-## Asset Generation Options
-
-### Option 1: AI Image Generation (Recommended for MVP)
-- Use Claude's image generation for concept and production assets
-- Prompt template for crops:
-  ```
-  Create a 64x64px game sprite of a [crop name] in [state] stage.
-  Style: cute 2D farming game, top-down view, vibrant colors, 
-  transparent background, clean silhouette, mobile game quality.
-  [Specific details about the crop appearance]
-  ```
-
-### Option 2: Manual Design
-- Design tools: Aseprite, Photoshop, Procreate
-- Faster for simple geometric shapes
-- Better control over pixel-perfect details
-
-### Option 3: Asset Pack Purchase
-- Consider high-quality farming asset packs
-- Ensure licensing allows commercial use
-- Must match established art direction
+- **Phong cách:** Cartoon casual, friendly, không quá realistic
+- **Màu sắc:** Vibrant, saturated (màu rực rỡ để nổi bật trên nền đất nâu)
+- **Outline:** Có viền đen mỏng (~2px) để tách biệt với background
+- **Shadow:** Có bóng nhẹ ở chân cây (tùy chọn, có thể code vẽ)
 
 ---
 
-## Current Status
+## 🟫 Tiles - Texture ô đất
 
-- [x] Asset specification document created
-- [x] Directory structure established
-- [x] Placeholder system in place
-- [x] Asset manifest updated with all 30 crop sprites
-- [ ] Production assets created (0/30 crops completed)
+### Soil tile (Ô đất)
 
-**Next Action**: Begin creating crop sprites, starting with Level 1 crops (carrot, rice) as proof of concept.
+**File:** `soil_tile.png`
+- **Kích thước:** 128×64 px (isometric diamond)
+- **Hình dạng:** Diamond isometric (kim cương xiên 45°)
+- **Texture:** Đất nâu, có sần nhám, chấm đá nhỏ
+- **Màu:** #a67c52 (nền), #8b6f47 (shadow), #b89968 (highlight)
+
+### Soil planted (Đất đã gieo)
+
+**File:** `soil_planted.png`
+- **Kích thước:** 128×64 px
+- **Texture:** Đất tối hơn, ẩm ướt
+- **Màu:** #6b5438 (tối hơn soil bình thường)
+
+### Grass border (Viền cỏ)
+
+**File:** `grass_border.png`
+- **Kích thước:** 128×64 px
+- **Style:** Viền cỏ xanh 4-6px bao quanh ô đất
+- **Màu:** #7cb342 (xanh lá tươi)
+- **Texture:** Có sợi cỏ nhỏ nhấp nhô
+
+---
+
+## 🪵 Decorations - Đồ trang trí
+
+### Wooden fence (Hàng rào gỗ)
+
+**Files:**
+```
+fence_horizontal.png  # Hàng rào ngang (128×32 px)
+fence_vertical.png    # Hàng rào dọc (32×64 px)
+fence_corner.png      # Góc hàng rào (64×64 px)
+```
+
+- **Style:** Gỗ nâu, có vân, phong cách rustic
+- **Màu:** #8b6f47 (nâu gỗ), viền tối #5d4e37
+
+### Trees & Rocks (Cây & đá)
+
+**Files:**
+```
+tree_small.png   # Cây nhỏ (64×80 px)
+tree_large.png   # Cây to (128×160 px)
+rock_1.png       # Đá nhỏ (32×32 px)
+rock_2.png       # Đá vừa (48×48 px)
+```
+
+---
+
+## 💎 UI Icons - Biểu tượng giao diện
+
+### Top Bar icons
+
+```
+coin.png         # Xu vàng (32×32 px)
+star.png         # Sao level (32×32 px)
+exp_bar_bg.png   # Background EXP bar (300×20 px)
+exp_bar_fill.png # Fill EXP bar (298×18 px)
+```
+
+### Bottom Bar icons
+
+```
+quest_icon.png      # Icon nhiệm vụ (24×24 px)
+shop_icon.png       # Icon cửa hàng (40×40 px)
+storage_icon.png    # Icon kho (40×40 px)
+settings_icon.png   # Icon cài đặt (40×40 px)
+```
+
+### Seed selector icons
+
+```
+seed_bg.png          # Background nút seed (60×60 px)
+seed_bg_active.png   # Background active (viền xanh)
+seed_bg_hover.png    # Background hover (sáng hơn)
+```
+
+---
+
+## ✨ Effects - Hiệu ứng
+
+### Particles
+
+```
+sparkle.png      # Tia sáng nhỏ (16×16 px)
+coin_particle.png # Xu bay lên (24×24 px)
+star_particle.png # Sao bay lên (24×24 px)
+```
+
+### Glow effects
+
+```
+glow_harvest.png  # Hào quang cây chín (128×128 px)
+glow_complete.png # Hào quang hoàn thành quest (200×200 px)
+```
+
+---
+
+## 📐 Quy tắc tích hợp
+
+### Phaser 3 sprite loading
+
+```typescript
+// preload()
+this.load.image('carrot_seed', '/game-assets/crops/carrot_seed.png');
+this.load.image('carrot_stage1', '/game-assets/crops/carrot_stage1.png');
+// ... tương tự cho stage2, stage3, harvest
+
+// create()
+const sprite = this.add.sprite(x, y, 'carrot_seed');
+sprite.setOrigin(0.5, 1);  // Bottom-center anchor
+sprite.setScale(0.8);       // Scale xuống 80%
+```
+
+### Fallback system
+
+```typescript
+// Kiểm tra sprite tồn tại
+if (this.textures.exists(spriteKey)) {
+  // Load sprite thật
+  const sprite = this.add.sprite(x, y, spriteKey);
+} else {
+  // Fallback về Graphics
+  const graphic = FallbackGraphics.drawCropStage(this, cropType, stage);
+}
+```
+
+### Depth (Z-index) layers
+
+```
+0-99:    Shadows
+100-199: Soil tiles
+200-299: Grass borders
+300-399: Decorations (fences, rocks)
+400-499: Crops (sprites)
+500-599: UI growth bars
+1000+:   Overlay UI (Top Bar, Bottom Bar)
+```
+
+---
+
+## 🎨 Palette chính
+
+```css
+/* Soil */
+--soil-light: #a67c52;
+--soil-dark: #6b5438;
+
+/* Grass */
+--grass-border: #7cb342;
+--grass-dark: #558b2f;
+
+/* UI */
+--ui-blue: #1a237e;
+--ui-gold: #ffd700;
+--ui-green: #4caf50;
+--ui-orange: #ff9800;
+
+/* Crops */
+--carrot-orange: #ff6b35;
+--wheat-gold: #ffd700;
+--tomato-red: #ff4444;
+```
+
+---
+
+## ✅ Checklist triển khai
+
+### Phase 8.1: Core crops (Ưu tiên cao)
+
+- [ ] `carrot_seed.png` - `carrot_harvest.png` (5 files)
+- [ ] `wheat_seed.png` - `wheat_harvest.png` (5 files)
+- [ ] `tomato_seed.png` - `tomato_harvest.png` (5 files)
+
+### Phase 8.2: Tiles & borders
+
+- [ ] `soil_tile.png`
+- [ ] `soil_planted.png`
+- [ ] `grass_border.png`
+
+### Phase 8.3: UI icons
+
+- [ ] `coin.png`, `star.png`
+- [ ] `quest_icon.png`
+- [ ] `shop_icon.png`, `storage_icon.png`, `settings_icon.png`
+
+### Phase 8.4: Decorations (Tùy chọn)
+
+- [ ] `fence_horizontal.png`, `fence_vertical.png`
+- [ ] `tree_small.png`, `tree_large.png`
+- [ ] `rock_1.png`, `rock_2.png`
+
+### Phase 8.5: Effects (Tùy chọn)
+
+- [ ] `sparkle.png`
+- [ ] `glow_harvest.png`
+
+---
+
+## 🔧 Tool hỗ trợ tạo asset
+
+### AI Image Generation
+
+**Prompt mẫu cho Midjourney/DALL-E:**
+
+```
+A cute cartoon [crop name] plant at [stage], 
+isometric view, game asset, transparent background, 
+vibrant colors, black outline, 128x128 canvas, 
+centered, farming game style, casual mobile game
+```
+
+**Ví dụ:**
+```
+A cute cartoon carrot plant seedling, 
+isometric view, game asset, transparent background, 
+vibrant orange, black outline, 128x128 canvas, 
+centered, farming game style
+```
+
+### Manual creation tools
+
+- **Aseprite** - Pixel art animation
+- **Figma** - Vector design, export PNG
+- **Photoshop** - Painting, effects
+- **GIMP** - Free alternative to Photoshop
+
+---
+
+**Version:** 1.0  
+**Updated:** 2026-10-07  
+**Status:** Specification draft - Ready for asset creation

@@ -5,28 +5,31 @@
 
 import Phaser from "phaser";
 import { GAME_CONFIG } from "../config/game";
-import type { CropType } from "../types";
+import type { CropType, QuestProgress } from "../types";
+import { blockInputBelow } from "../utils/blockInputBelow";
+import { getQuestConfig } from "../utils/questManager";
 
 export class BottomBar extends Phaser.Scene {
   private selectedSeed: CropType = "carrot"; // Default seed
   private seedButtons: Map<CropType, Phaser.GameObjects.Container> = new Map();
+  private seedBadges: Map<CropType, Phaser.GameObjects.Text> = new Map(); // Phase 9: Seed quantity badges
   private missionText!: Phaser.GameObjects.Text;
+  private progressBar!: Phaser.GameObjects.Graphics;
+  private progressText!: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: "BottomBar" });
   }
 
   create() {
-    console.log("🎮 BottomBar scene created!");
-
-    // Enable input for this scene
-    this.input.topOnly = false;
-
     const { width, height } = GAME_CONFIG;
 
     // Bottom Bar Background
     const barHeight = 100;
     const barY = height - barHeight;
+
+    // Chạm vào thanh (kể cả khoảng trống) không lọt xuống ô đất phía dưới
+    blockInputBelow(this, 0, barY, width, barHeight);
 
     const bg = this.add.graphics();
     bg.fillStyle(0x1a237e, 1); // Navy blue
@@ -46,11 +49,20 @@ export class BottomBar extends Phaser.Scene {
     // === MISSION HUD (Bottom Left) ===
     this.createMissionHUD(barY);
 
+    // Listen to quest updates
+    this.game.events.on("questUpdate", this.updateMissionHUD, this);
+
+    // Phase 9: Listen to gameState updates để cập nhật seed badges
+    this.game.events.on("gameStateUpdate", this.updateSeedBadges, this);
+
     // === ACTION BUTTONS (Bottom Right) ===
     this.createActionButtons(barY);
 
-    // Listen to game events
-    this.game.events.on("seed-selected", this.onSeedSelected, this);
+    // Cleanup listeners on shutdown
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.game.events.off("questUpdate", this.updateMissionHUD, this);
+      this.game.events.off("gameStateUpdate", this.updateSeedBadges, this);
+    });
   }
 
   /**
@@ -106,14 +118,27 @@ export class BottomBar extends Phaser.Scene {
       });
       costText.setOrigin(0.5, 0.5);
 
-      container.add([btnBg, border, seedIcon, nameText, costText]);
+      // Phase 9: Seed quantity badge (góc trên phải)
+      const badgeBg = this.add.graphics();
+      badgeBg.fillStyle(0xff9800, 1);
+      badgeBg.fillCircle(20, -20, 12);
+
+      const badgeText = this.add.text(20, -20, "0", {
+        fontSize: "11px",
+        color: "#ffffff",
+        fontFamily: "Arial, sans-serif",
+        fontStyle: "bold",
+      });
+      badgeText.setOrigin(0.5, 0.5);
+      this.seedBadges.set(crop, badgeText);
+
+      container.add([btnBg, border, seedIcon, nameText, costText, badgeBg, badgeText]);
       container.setSize(60, 60);
       container.setInteractive();
       container.setDepth(1001); // Depth cao hơn background
 
       // Click handler
       container.on("pointerdown", () => {
-        console.log(`🌱 Seed button clicked: ${crop}`);
         this.selectSeed(crop);
       });
 
@@ -139,29 +164,99 @@ export class BottomBar extends Phaser.Scene {
    */
   private createMissionHUD(barY: number) {
     const padding = 20;
+    const width = 250;
+    const height = 50;
 
     // Mission container
     const missionBg = this.add.graphics();
-    missionBg.fillStyle(0x263238, 0.9);
-    missionBg.fillRoundedRect(padding, barY + 10, 200, 35, 6);
+    missionBg.fillStyle(0x263238, 0.95);
+    missionBg.fillRoundedRect(padding, barY + 10, width, height, 8);
     missionBg.setDepth(1001);
 
     // Mission icon (placeholder)
     const icon = this.add.graphics();
     icon.fillStyle(0xffc107, 1);
-    icon.fillCircle(padding + 15, barY + 27, 8);
+    icon.fillCircle(padding + 15, barY + 25, 8);
     icon.lineStyle(2, 0xffeb3b, 1);
-    icon.strokeCircle(padding + 15, barY + 27, 10);
+    icon.strokeCircle(padding + 15, barY + 25, 10);
     icon.setDepth(1002);
 
     // Mission text
-    this.missionText = this.add.text(padding + 35, barY + 27, "Nhiệm vụ: Thu hoạch 10 Cà rốt", {
+    this.missionText = this.add.text(padding + 35, barY + 20, "Nhiệm vụ: Đang tải...", {
       fontSize: "11px",
       color: "#ffffff",
       fontFamily: "Arial, sans-serif",
+      fontStyle: "bold",
     });
-    this.missionText.setOrigin(0, 0.5);
+    this.missionText.setOrigin(0, 0);
     this.missionText.setDepth(1002);
+
+    // Progress text (current/target)
+    this.progressText = this.add.text(padding + 35, barY + 35, "0 / 0", {
+      fontSize: "10px",
+      color: "#aaaaaa",
+      fontFamily: "Arial, sans-serif",
+    });
+    this.progressText.setOrigin(0, 0);
+    this.progressText.setDepth(1002);
+
+    // Progress bar
+    this.progressBar = this.add.graphics();
+    this.progressBar.setDepth(1002);
+  }
+
+  /**
+   * Update Mission HUD khi có thay đổi quest
+   */
+  private updateMissionHUD(questProgress?: QuestProgress) {
+    if (!questProgress) {
+      this.missionText.setText("Nhiệm vụ: Không có");
+      this.progressText.setText("");
+      this.progressBar.clear();
+      return;
+    }
+
+    const config = getQuestConfig(questProgress.questId);
+    if (!config) return;
+
+    // Update text
+    this.missionText.setText(`${config.name}`);
+    this.progressText.setText(`${questProgress.current} / ${config.target}`);
+
+    // Update progress bar
+    const barWidth = 180;
+    const barHeight = 6;
+    const barX = 35;
+    const barY = GAME_CONFIG.height - 100 + 45;
+
+    this.progressBar.clear();
+
+    // Background
+    this.progressBar.fillStyle(0x37474f, 1);
+    this.progressBar.fillRoundedRect(barX, barY, barWidth, barHeight, 3);
+
+    // Progress fill
+    const progress = Math.min(1, questProgress.current / config.target);
+    const fillColor = questProgress.completed ? 0x4caf50 : 0xffc107;
+    this.progressBar.fillStyle(fillColor, 1);
+    this.progressBar.fillRoundedRect(
+      barX + 1,
+      barY + 1,
+      (barWidth - 2) * progress,
+      barHeight - 2,
+      2,
+    );
+
+    // Glow effect khi hoàn thành
+    if (questProgress.completed && !questProgress.claimed) {
+      this.tweens.add({
+        targets: this.progressBar,
+        alpha: { from: 1, to: 0.6 },
+        duration: 500,
+        yoyo: true,
+        repeat: -1,
+      });
+    }
   }
 
   /**
@@ -174,6 +269,7 @@ export class BottomBar extends Phaser.Scene {
     const btnSpacing = 10;
 
     const buttons = [
+      { icon: "📜", color: 0xff9800, label: "Quest" }, // Phase 12: Quest button
       { icon: "💼", color: 0x2196f3, label: "Shop" },
       { icon: "📦", color: 0x9c27b0, label: "Storage" },
       { icon: "⚙️", color: 0x607d8b, label: "Settings" },
@@ -220,6 +316,14 @@ export class BottomBar extends Phaser.Scene {
 
       container.on("pointerdown", () => {
         console.log(`🔘 ${btn.label} button clicked`);
+        // Phase 9 & 12: Open modal scenes
+        if (btn.label === "Quest") {
+          this.scene.launch("QuestModal");
+        } else if (btn.label === "Shop") {
+          this.scene.launch("ShopModal");
+        } else if (btn.label === "Storage") {
+          this.scene.launch("StorageModal");
+        }
       });
     });
   }
@@ -245,23 +349,6 @@ export class BottomBar extends Phaser.Scene {
   }
 
   /**
-   * Event handler khi seed được chọn từ FarmScene
-   */
-  private onSeedSelected(crop: CropType) {
-    // Chỉ sync UI, không emit event lại (tránh infinite loop)
-    this.selectedSeed = crop;
-
-    // Update border của tất cả buttons
-    this.seedButtons.forEach((container, cropType) => {
-      const border = container.getAt(1) as Phaser.GameObjects.Graphics;
-      border.clear();
-      const isActive = cropType === crop;
-      border.lineStyle(3, isActive ? 0x4caf50 : 0x455a64, 1);
-      border.strokeRoundedRect(-30, -30, 60, 60, 8);
-    });
-  }
-
-  /**
    * Lấy màu đặc trưng của từng loại cây
    */
   private getCropColor(cropType: CropType): number {
@@ -275,6 +362,39 @@ export class BottomBar extends Phaser.Scene {
       default:
         return 0x4caf50; // Green
     }
+  }
+
+  /**
+   * Phase 9: Update seed badges khi gameState thay đổi
+   */
+  private updateSeedBadges(gameState: any) {
+    if (!gameState || !gameState.seeds) return;
+
+    const crops: CropType[] = ["carrot", "wheat", "tomato"];
+
+    crops.forEach((crop) => {
+      const quantity = gameState.seeds[crop] || 0;
+      const badgeText = this.seedBadges.get(crop);
+      const container = this.seedButtons.get(crop);
+
+      if (badgeText) {
+        badgeText.setText(quantity.toString());
+      }
+
+      // Làm mờ icon nếu hết hạt
+      if (container) {
+        const alpha = quantity > 0 ? 1 : 0.5;
+        container.setAlpha(alpha);
+
+        // Đổi màu badge sang xám nếu hết hạt
+        const badgeBg = container.getAt(5) as Phaser.GameObjects.Graphics;
+        if (badgeBg) {
+          badgeBg.clear();
+          badgeBg.fillStyle(quantity > 0 ? 0xff9800 : 0x757575, 1);
+          badgeBg.fillCircle(20, -20, 12);
+        }
+      }
+    });
   }
 
   /**

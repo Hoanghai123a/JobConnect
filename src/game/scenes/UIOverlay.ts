@@ -6,6 +6,7 @@
 import Phaser from "phaser";
 import { GAME_CONFIG } from "../config/game";
 import type { GameState } from "../types";
+import { blockInputBelow } from "../utils/blockInputBelow";
 
 export class UIOverlay extends Phaser.Scene {
   private coinText!: Phaser.GameObjects.Text;
@@ -26,11 +27,22 @@ export class UIOverlay extends Phaser.Scene {
 
     // Listen for game state updates
     this.game.events.on("gameStateUpdate", this.updateUI, this);
+
+    // Phaser.Scene không có destroy() để override → gỡ listener qua scene events.
+    // game.events sống lâu hơn scene nên không gỡ sẽ rò rỉ và gọi vào object đã hủy.
+    const cleanup = () => this.game.events.off("gameStateUpdate", this.updateUI, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanup);
+    this.events.once(Phaser.Scenes.Events.DESTROY, cleanup);
+
+    // Hỏi state hiện tại (scene này khởi động sau emit đầu tiên của FarmScene)
+    this.game.events.emit("gameStateRequest");
   }
 
   private createTopBar() {
     const { width } = GAME_CONFIG;
     const { topBarHeight, topBarColor, topBarAlpha } = GAME_CONFIG.ui;
+
+    blockInputBelow(this, 0, 0, width, topBarHeight);
 
     // Top bar background
     const topBar = this.add.graphics();
@@ -66,16 +78,12 @@ export class UIOverlay extends Phaser.Scene {
 
     // Level icon (placeholder - vẽ ngôi sao)
     const star = this.add.graphics();
-    star.fillStyle(0xff9800, 1); // Orange
-    const starX = width - 120;
-    const starY = 25;
-
-    // Vẽ ngôi sao 5 cánh
+    star.fillStyle(0xffd700, 1); // Gold star
     star.beginPath();
     for (let i = 0; i < 5; i++) {
       const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
-      const x = starX + Math.cos(angle) * 12;
-      const y = starY + Math.sin(angle) * 12;
+      const x = width - 260 + Math.cos(angle) * 12;
+      const y = 25 + Math.sin(angle) * 12;
       if (i === 0) star.moveTo(x, y);
       else star.lineTo(x, y);
     }
@@ -84,7 +92,7 @@ export class UIOverlay extends Phaser.Scene {
     star.setDepth(1001);
 
     // Level text
-    this.levelText = this.add.text(width - 95, 15, "Lv.1", {
+    this.levelText = this.add.text(width - 230, 15, "Lv.1", {
       fontSize: "24px",
       fontFamily: "Arial, sans-serif",
       color: textColor,
@@ -95,64 +103,53 @@ export class UIOverlay extends Phaser.Scene {
 
   private createExpBar() {
     const { width } = GAME_CONFIG;
-    const { expBarBg, expBarColor, textColor } = GAME_CONFIG.ui;
+    const { expBarColor, expBarBg } = GAME_CONFIG.ui;
 
-    const barWidth = 300;
-    const barHeight = 20;
-    const barX = (width - barWidth) / 2;
-    const barY = 50;
+    const barWidth = 180;
+    const barHeight = 12;
+    const barX = width - 180;
+    const barY = 45;
 
     // EXP bar background
     this.expBarBg = this.add.graphics();
-    this.expBarBg.fillStyle(expBarBg, 0.8);
-    this.expBarBg.fillRoundedRect(barX, barY, barWidth, barHeight, 10);
+    this.expBarBg.fillStyle(expBarBg, 1);
+    this.expBarBg.fillRoundedRect(barX, barY, barWidth, barHeight, 6);
     this.expBarBg.setDepth(1001);
 
-    // EXP bar fill
+    // EXP bar progress
     this.expBar = this.add.graphics();
     this.expBar.setDepth(1002);
 
-    // EXP text
-    this.expText = this.add.text(barX + barWidth / 2, barY + 2, "0 / 100", {
+    // EXP text (0/100)
+    this.expText = this.add.text(barX + barWidth / 2, barY + barHeight / 2, "0/100", {
       fontSize: "14px",
       fontFamily: "Arial, sans-serif",
-      color: textColor,
+      color: "#ffffff",
       fontStyle: "bold",
     });
-    this.expText.setOrigin(0.5, 0);
+    this.expText.setOrigin(0.5, 0.5);
     this.expText.setDepth(1003);
   }
 
-  private updateUI(gameState: GameState) {
-    // Update coins
-    this.coinText.setText(gameState.coins.toString());
+  private updateUI(state: GameState) {
+    // Update coin text
+    this.coinText.setText(`${state.coins}`);
 
-    // Update level
-    this.levelText.setText(`Lv.${gameState.level}`);
+    // Update level text
+    this.levelText.setText(`Lv.${state.level}`);
 
     // Update EXP bar
-    const progress = gameState.exp / gameState.expToNextLevel;
-    const barWidth = 300;
-    const barHeight = 20;
-    const barX = (GAME_CONFIG.width - barWidth) / 2;
-    const barY = 50;
+    const barWidth = 180;
+    const barHeight = 12;
+    const barX = this.cameras.main.width - 180;
+    const barY = 45;
+    const progress = Math.min(state.exp / state.expToNextLevel, 1); // 0-1
 
     this.expBar.clear();
     this.expBar.fillStyle(GAME_CONFIG.ui.expBarColor, 1);
-    this.expBar.fillRoundedRect(
-      barX + 2,
-      barY + 2,
-      (barWidth - 4) * progress,
-      barHeight - 4,
-      8
-    );
+    this.expBar.fillRoundedRect(barX, barY, barWidth * progress, barHeight, 6);
 
     // Update EXP text
-    this.expText.setText(`${gameState.exp} / ${gameState.expToNextLevel}`);
-  }
-
-  destroy() {
-    this.game.events.off("gameStateUpdate", this.updateUI, this);
-    super.destroy();
+    this.expText.setText(`${state.exp}/${state.expToNextLevel}`);
   }
 }

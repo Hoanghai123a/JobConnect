@@ -14,7 +14,7 @@ export class FallbackGraphics {
   static drawCropStage(
     scene: Phaser.Scene,
     cropType: CropType,
-    stage: GrowthStage
+    stage: GrowthStage,
   ): Phaser.GameObjects.Graphics {
     const graphic = scene.add.graphics();
     const { sprout, sproutDark } = GAME_CONFIG.colors;
@@ -54,7 +54,7 @@ export class FallbackGraphics {
         graphic.fillEllipse(8, -18, 10, 7);
         break;
 
-      case "STAGE3":
+      case "STAGE3": {
         // Gần chín - cây lớn + hoa/quả nhỏ
         graphic.lineStyle(4, sproutDark, 1);
         graphic.beginPath();
@@ -73,8 +73,9 @@ export class FallbackGraphics {
         graphic.fillStyle(fruitColor, 1);
         graphic.fillCircle(0, -35, 5);
         break;
+      }
 
-      case "HARVEST":
+      case "HARVEST": {
         // Chín thu hoạch - cây lớn + quả rõ
         graphic.lineStyle(4, sproutDark, 1);
         graphic.beginPath();
@@ -100,6 +101,7 @@ export class FallbackGraphics {
         graphic.strokeCircle(-8, -38, 10);
         graphic.strokeCircle(8, -38, 10);
         break;
+      }
     }
 
     return graphic;
@@ -126,7 +128,7 @@ export class FallbackGraphics {
    */
   static drawProgressBar(
     scene: Phaser.Scene,
-    progress: number // 0-1
+    progress: number, // 0-1
   ): Phaser.GameObjects.Graphics {
     const graphic = scene.add.graphics();
     const barWidth = 40;
@@ -169,7 +171,7 @@ export class FallbackGraphics {
     x: number,
     y: number,
     text: string,
-    color: string = "#ffd700"
+    color: string = "#ffd700",
   ): void {
     const floatingText = scene.add.text(x, y, text, {
       fontSize: "20px",
