@@ -82,6 +82,10 @@ export interface GameState {
   storage: CropInventory; // Nông sản thu hoạch
   seeds: SeedInventory; // Hạt giống sở hữu
   storageCapacity: number; // Sức chứa kho tối đa
+  // Phase 16: Daily Login Reward System
+  lastLoginDate?: string; // YYYY-MM-DD format
+  loginStreak?: number; // 1-7 (7 ngày liên tiếp, sau đó reset về 1)
+  dailyClaimedToday?: boolean; // Đã nhận thưởng hôm nay chưa
 }
 
 export interface CropConfig {
@@ -92,4 +96,13 @@ export interface CropConfig {
   harvestCoins: number;
   harvestExp: number;
   seedCost: number;
+}
+
+// === Daily Login Reward System (Phase 16) ===
+
+export interface DailyReward {
+  day: number; // 1-7
+  coins?: number;
+  seeds?: Partial<SeedInventory>; // { carrot: 5, wheat: 10 }
+  description: string;
 }

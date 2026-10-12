@@ -14,6 +14,8 @@ import {
   updateQuestProgress,
   getQuestConfig,
 } from "../utils/questManager";
+import { checkDailyLogin } from "../utils/dailyLoginManager";
+import { audioManager } from "../utils/audioManager";
 import type { Plot, GameState, CropType, QuestProgress } from "../types";
 
 /** Sprite (asset thật) hoặc Graphics (fallback) - cả hai đều có x/y/scale/alpha */
@@ -62,6 +64,9 @@ export class FarmScene extends Phaser.Scene {
       this.initGameState();
     }
 
+    // Phase 16: Check Daily Login (must be after gameState init)
+    this.checkDailyLoginReward();
+
     // Lấy origin point để center grid
     const origin = getIsometricOrigin();
 
@@ -91,6 +96,7 @@ export class FarmScene extends Phaser.Scene {
       document.removeEventListener("visibilitychange", saveOnVisibility);
       this.game.events.off("gameStateRequest", this.emitGameState, this);
       this.game.events.off("seed-selected", this.onSeedSelected, this);
+      this.game.events.off("dailyRewardClaimed", this.onDailyRewardClaimed, this);
     };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanup);
     this.events.once(Phaser.Scenes.Events.DESTROY, cleanup);
@@ -117,6 +123,69 @@ export class FarmScene extends Phaser.Scene {
 
     // Emit initial state to UI
     this.emitGameState();
+
+    // Phase 16: Expose debug utilities to window (DEV only)
+    if (import.meta.env.DEV) {
+      this.exposeDebugUtils();
+    }
+  }
+
+  /**
+   * Phase 16: Expose debug utilities cho console testing
+   */
+  private exposeDebugUtils() {
+    const win = window as unknown as {
+      game?: Phaser.Game;
+      debugDailyLogin?: {
+        advanceDay: () => void;
+        resetStreak: () => void;
+        setDay: (day: number) => void;
+        showModal: () => void;
+        getState: () => void;
+      };
+    };
+
+    win.debugDailyLogin = {
+      advanceDay: () => {
+        const { debugAdvanceDay } = require("../utils/dailyLoginManager");
+        debugAdvanceDay(this.gameState);
+        this.persist();
+        console.log("✅ Day advanced! Reload game or call checkDailyLogin() to trigger modal.");
+        console.log("💡 Or call debugDailyLogin.showModal() to open modal immediately.");
+      },
+      resetStreak: () => {
+        const { debugResetStreak } = require("../utils/dailyLoginManager");
+        debugResetStreak(this.gameState);
+        this.persist();
+        console.log("✅ Streak reset to Day 1!");
+      },
+      setDay: (day: number) => {
+        const { debugSetDay } = require("../utils/dailyLoginManager");
+        debugSetDay(this.gameState, day);
+        this.persist();
+        this.emitGameState();
+        console.log(`✅ Set to Day ${day}/7! Call debugDailyLogin.showModal() to test.`);
+      },
+      showModal: () => {
+        this.scene.launch("DailyRewardModal", { gameState: this.gameState });
+        console.log("🎁 Daily Reward Modal opened!");
+      },
+      getState: () => {
+        console.log("Current Daily Login State:");
+        console.log(`  - Last Login: ${this.gameState.lastLoginDate || "Never"}`);
+        console.log(`  - Streak: Day ${this.gameState.loginStreak || 1}/7`);
+        console.log(`  - Claimed Today: ${this.gameState.dailyClaimedToday ? "Yes ✅" : "No ❌"}`);
+      },
+    };
+
+    console.log(
+      "🎁 Daily Login Debug Utils:\n" +
+        "  debugDailyLogin.advanceDay()  - Go to next day\n" +
+        "  debugDailyLogin.resetStreak() - Reset to Day 1\n" +
+        "  debugDailyLogin.setDay(N)     - Jump to Day N (1-7)\n" +
+        "  debugDailyLogin.showModal()   - Open modal now\n" +
+        "  debugDailyLogin.getState()    - Show current state",
+    );
   }
 
   /**
@@ -315,98 +384,18 @@ export class FarmScene extends Phaser.Scene {
 
     if (shouldUpdate && config.type !== "coins") {
       const justCompleted = updateQuestProgress(this.gameState.currentQuest, config, 1);
-      if (justCompleted) {
-        this.onQuestCompleted();
-      }
+      // Phase 12: onQuestCompleted() removed (replaced by updateQuestProgress())
     } else if (shouldUpdate && config.type === "coins") {
       if (
         this.gameState.currentQuest.current >= config.target &&
         !this.gameState.currentQuest.completed
       ) {
         this.gameState.currentQuest.completed = true;
-        this.onQuestCompleted();
+        // Phase 12: onQuestCompleted() removed (replaced by updateQuestProgress())
       }
     }
 
     this.emitQuestUpdate();
-  }
-
-  /**
-   * Xử lý khi nhiệm vụ hoàn thành
-   */
-  private onQuestCompleted() {
-    if (!this.gameState.currentQuest) return;
-
-    const config = getQuestConfig(this.gameState.currentQuest.questId);
-    if (!config) return;
-
-    console.log(`🎉 Quest completed: ${config.name}`);
-
-    // Floating text chúc mừng
-    const origin = getIsometricOrigin();
-    FallbackGraphics.createFloatingText(
-      this,
-      origin.x,
-      origin.y - 100,
-      `🎉 ${config.name} hoàn thành!`,
-      "#ff9800",
-    );
-
-    // Tự động nhận thưởng và chuyển nhiệm vụ mới sau 1.5s
-    this.time.delayedCall(1500, () => {
-      this.claimQuestReward();
-    });
-  }
-
-  /**
-   * Nhận thưởng nhiệm vụ và chuyển nhiệm vụ mới
-   */
-  private claimQuestReward() {
-    if (!this.gameState.currentQuest) return;
-
-    const config = getQuestConfig(this.gameState.currentQuest.questId);
-    if (!config || !this.gameState.currentQuest.completed) return;
-
-    // Thưởng coins + exp
-    this.gameState.coins += config.rewardCoins;
-    this.gameState.exp += config.rewardExp;
-
-    // Check level up
-    if (this.gameState.exp >= this.gameState.expToNextLevel) {
-      this.gameState.level++;
-      this.gameState.exp = 0;
-      this.gameState.expToNextLevel = GAME_CONFIG.balance.getExpForLevel(this.gameState.level);
-    }
-
-    // Floating text thưởng
-    const origin = getIsometricOrigin();
-    FallbackGraphics.createFloatingText(
-      this,
-      origin.x - 30,
-      origin.y - 80,
-      `+${config.rewardCoins}💰`,
-      "#ffd700",
-    );
-    FallbackGraphics.createFloatingText(
-      this,
-      origin.x + 30,
-      origin.y - 80,
-      `+${config.rewardExp}⭐`,
-      "#4caf50",
-    );
-
-    // Lưu vào lịch sử
-    this.gameState.questHistory.push(this.gameState.currentQuest.questId);
-
-    // Chuyển nhiệm vụ mới
-    const nextQuest = getNextQuest(this.gameState.questHistory);
-    this.gameState.currentQuest = initQuestProgress(nextQuest);
-
-    console.log(`✨ New quest: ${nextQuest.name}`);
-
-    this.emitGameState();
-    this.emitQuestUpdate();
-    this.persist();
   }
 
   private getPlot(gridX: number, gridY: number): Plot | undefined {
@@ -561,14 +550,24 @@ export class FarmScene extends Phaser.Scene {
 
     tile.add(cropVisual);
 
-    // Animation pop in với scale động theo stage
+    // Phase 13: Squash & Stretch animation - Dẹt xuống rồi nảy tưng lên
     const targetScale = this.getStageScale(plot.growthStage);
+    cropVisual.setScale(targetScale, 0); // Start: dẹt hoàn toàn (scaleY = 0)
+
     this.tweens.add({
       targets: cropVisual,
-      scaleX: { from: 0, to: targetScale },
-      scaleY: { from: 0, to: targetScale },
-      duration: 300,
-      ease: "Back.easeOut",
+      scaleY: targetScale * 1.3, // Nảy hơi cao (130%)
+      duration: 150,
+      ease: "Quad.easeOut",
+      onComplete: () => {
+        // Rồi chùng xuống về scale chuẩn
+        this.tweens.add({
+          targets: cropVisual,
+          scaleY: targetScale,
+          duration: 150,
+          ease: "Bounce.easeOut",
+        });
+      },
     });
 
     // HARVEST stage: Thêm bounce animation liên tục quanh vị trí gốc
@@ -601,6 +600,9 @@ export class FarmScene extends Phaser.Scene {
       // TODO: Show notification toast
       return;
     }
+
+    // Phase 14: Play plant sound
+    audioManager.play("plant");
 
     // Deduct 1 seed from inventory
     this.gameState.seeds[cropType] -= 1;
@@ -651,9 +653,15 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
+    // Phase 14: Play harvest sound
+    audioManager.play("harvest");
+
     // Get screen position for floating text
     const screenPos = gridToIsometric(gridX, gridY);
     const origin = getIsometricOrigin();
+
+    // Phase 13: Harvest VFX - Particle burst (chùm hạt bụi)
+    this.createHarvestParticles(origin.x + screenPos.x, origin.y + screenPos.y - 20);
 
     // Phase 9: Thêm vào storage thay vì +coins trực tiếp
     this.gameState.storage[plot.cropType] += 1;
@@ -1003,6 +1011,96 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
+  // ===== Phase 13: Game Juice & VFX =====
+
+  /**
+   * Create harvest particle burst (chùm hạt bụi khi thu hoạch)
+   */
+  private createHarvestParticles(x: number, y: number) {
+    // Tạo graphics làm particle (hình tròn nhỏ)
+    const particleGraphics = this.add.graphics();
+    particleGraphics.fillStyle(0xffd700, 1); // Gold
+    particleGraphics.fillCircle(3, 3, 3);
+    particleGraphics.generateTexture("harvest_particle", 6, 6);
+    particleGraphics.destroy();
+
+    // Particle emitter
+    const emitter = this.add.particles(x, y, "harvest_particle", {
+      speed: { min: 50, max: 150 },
+      angle: { min: 0, max: 360 },
+      scale: { start: 1, end: 0 },
+      alpha: { start: 1, end: 0 },
+      lifespan: 600,
+      quantity: 15,
+      gravityY: 200,
+      blendMode: "ADD",
+    });
+
+    // Destroy emitter sau khi hết
+    this.time.delayedCall(700, () => {
+      emitter.destroy();
+    });
+  }
+
+  /**
+   * Create coin fly animation (coin bay từ modal về TopBar)
+   */
+  private createCoinFlyAnimation(startX: number, startY: number, amount: number) {
+    // Tạo coin icon graphics
+    const coin = this.add.graphics();
+    coin.fillStyle(0xffd700, 1);
+    coin.fillCircle(0, 0, 12);
+    coin.lineStyle(2, 0xffed4e, 1);
+    coin.strokeCircle(0, 0, 12);
+    coin.setPosition(startX, startY);
+    coin.setDepth(3000); // On top of everything
+
+    // Text số coin
+    const coinText = this.add.text(startX, startY, `+${amount}`, {
+      fontSize: "18px",
+      fontFamily: "Arial, sans-serif",
+      color: "#ffd700",
+      fontStyle: "bold",
+      stroke: "#000000",
+      strokeThickness: 3,
+    });
+    coinText.setOrigin(0.5, 0.5);
+    coinText.setDepth(3001);
+
+    // Target: TopBar coin icon (approx 40, 25)
+    const targetX = 40;
+    const targetY = 25;
+
+    // Animation: Bay cong lên cao rồi xuống TopBar
+    this.tweens.add({
+      targets: [coin, coinText],
+      x: targetX,
+      y: targetY,
+      duration: 800,
+      ease: "Quad.easeInOut",
+      onUpdate: (tween) => {
+        // Thêm hiệu ứng cong (parabola)
+        const progress = tween.progress;
+        const arc = Math.sin(progress * Math.PI) * 50; // Cong lên 50px
+        coin.y = startY + (targetY - startY) * progress - arc;
+        coinText.y = coin.y;
+      },
+      onComplete: () => {
+        // Scale to 0 và destroy
+        this.tweens.add({
+          targets: [coin, coinText],
+          scale: 0,
+          duration: 150,
+          ease: "Back.easeIn",
+          onComplete: () => {
+            coin.destroy();
+            coinText.destroy();
+          },
+        });
+      },
+    });
+  }
+
   // ===== PUBLIC API for Quest System (Phase 12) =====
 
   /**
@@ -1094,6 +1192,9 @@ export class FarmScene extends Phaser.Scene {
       // Thưởng coin khi lên cấp
       const bonus = GAME_CONFIG.balance.levelUpCoinBonus(this.gameState.level);
       this.gameState.coins += bonus;
+
+      // Phase 14: Play level up sound
+      audioManager.play("levelup");
 
       leveledUp = true;
       console.log(
@@ -1247,6 +1348,14 @@ export class FarmScene extends Phaser.Scene {
     }
 
     const cost = GAME_CONFIG.unlockCosts[index];
+    const requiredLevel = GAME_CONFIG.unlockLevels[index];
+
+    // Phase 15: Check level requirement
+    if (this.gameState.level < requiredLevel) {
+      console.log(`❌ Không đủ Level! Cần Level ${requiredLevel}, hiện tại Level ${this.gameState.level}`);
+      return false;
+    }
+
     if (this.gameState.coins < cost) {
       console.log(`❌ Không đủ xu! Cần ${cost}💰, còn ${this.gameState.coins}💰`);
       return false;
@@ -1324,16 +1433,24 @@ export class FarmScene extends Phaser.Scene {
   private showUnlockDialog(gridX: number, gridY: number) {
     const index = gridY * GAME_CONFIG.grid.cols + gridX;
     const cost = GAME_CONFIG.unlockCosts[index];
+    const requiredLevel = GAME_CONFIG.unlockLevels[index];
 
-    console.log(`🔓 Showing unlock dialog for plot ${index} (cost: ${cost}💰)`);
+    console.log(
+      `🔓 Showing unlock dialog for plot ${index} (cost: ${cost}💰, level: ${requiredLevel})`,
+    );
+
+    // Check requirements
+    const hasEnoughCoins = this.gameState.coins >= cost;
+    const hasEnoughLevel = this.gameState.level >= requiredLevel;
 
     // Overlay mờ
     const overlay = this.add.rectangle(450, 275, 900, 550, 0x000000, 0.7);
     overlay.setDepth(100);
+    overlay.setInteractive();
 
     // Dialog container
     const dialogW = 400;
-    const dialogH = 200;
+    const dialogH = 280;
     const dialogX = 450;
     const dialogY = 275;
 
@@ -1344,7 +1461,7 @@ export class FarmScene extends Phaser.Scene {
 
     // Title
     const title = this.add
-      .text(dialogX, dialogY - 60, "🔓 Mở khóa ô đất", {
+      .text(dialogX, dialogY - 90, "🔓 Mở khóa ô đất", {
         fontSize: "24px",
         fontFamily: "Arial, sans-serif",
         color: "#ffffff",
@@ -1353,66 +1470,103 @@ export class FarmScene extends Phaser.Scene {
       .setOrigin(0.5, 0.5)
       .setDepth(102);
 
-    // Message
-    const message = this.add
-      .text(dialogX, dialogY - 10, `Bạn có muốn mở khóa ô đất này?\nGiá: ${cost}💰`, {
-        fontSize: "18px",
+    // Requirements text
+    const reqText = this.add
+      .text(
+        dialogX,
+        dialogY - 30,
+        `Yêu cầu:\n• Level: ${requiredLevel} ${hasEnoughLevel ? "✅" : "❌"}\n• Xu: ${cost}💰 ${hasEnoughCoins ? "✅" : "❌"}`,
+        {
+          fontSize: "18px",
+          fontFamily: "Arial, sans-serif",
+          color: "#ecf0f1",
+          align: "center",
+        },
+      )
+      .setOrigin(0.5, 0.5)
+      .setDepth(102);
+
+    // Status message
+    let statusMsg = "";
+    let statusColor = "#ffffff";
+    if (!hasEnoughLevel) {
+      statusMsg = `⚠️ Cần đạt Level ${requiredLevel}!`;
+      statusColor = "#e74c3c";
+    } else if (!hasEnoughCoins) {
+      statusMsg = `⚠️ Không đủ xu! (Còn thiếu ${cost - this.gameState.coins}💰)`;
+      statusColor = "#e74c3c";
+    } else {
+      statusMsg = "✅ Đủ điều kiện mở khóa!";
+      statusColor = "#2ecc71";
+    }
+
+    const statusText = this.add
+      .text(dialogX, dialogY + 30, statusMsg, {
+        fontSize: "16px",
         fontFamily: "Arial, sans-serif",
-        color: "#ecf0f1",
+        color: statusColor,
+        fontStyle: "bold",
         align: "center",
       })
       .setOrigin(0.5, 0.5)
       .setDepth(102);
 
-    // Button: Mở Khóa (Rectangle + setInteractive trực tiếp)
+    // Button: Mở Khóa (disabled if not enough)
     const unlockBtnW = 140;
     const unlockBtnH = 50;
     const unlockBtnX = dialogX - 80;
-    const unlockBtnY = dialogY + 60;
+    const unlockBtnY = dialogY + 90;
+
+    const canUnlock = hasEnoughCoins && hasEnoughLevel;
 
     const unlockBtn = this.add
-      .rectangle(unlockBtnX, unlockBtnY, unlockBtnW, unlockBtnH, 0x27ae60)
-      .setStrokeStyle(2, 0x1e8449)
-      .setInteractive({ useHandCursor: true })
+      .rectangle(unlockBtnX, unlockBtnY, unlockBtnW, unlockBtnH, canUnlock ? 0x27ae60 : 0x7f8c8d)
+      .setStrokeStyle(2, canUnlock ? 0x1e8449 : 0x5d6d7e)
+      .setInteractive({ useHandCursor: canUnlock })
       .setDepth(102);
 
     const unlockText = this.add
       .text(unlockBtnX, unlockBtnY, "Mở Khóa", {
         fontSize: "18px",
         fontFamily: "Arial, sans-serif",
-        color: "#ffffff",
+        color: canUnlock ? "#ffffff" : "#95a5a6",
         fontStyle: "bold",
       })
       .setOrigin(0.5, 0.5)
       .setDepth(103);
 
-    unlockBtn.on("pointerdown", () => {
-      console.log(`👉 ĐÃ CLICK MỞ KHÓA: plot ${index}`);
-      const success = this.unlockPlot(index);
-      if (success) {
-        // Đóng dialog
-        overlay.destroy();
-        dialogBg.destroy();
-        title.destroy();
-        message.destroy();
-        unlockBtn.destroy();
-        unlockText.destroy();
-        cancelBtn.destroy();
-        cancelText.destroy();
+    if (canUnlock) {
+      unlockBtn.on("pointerdown", () => {
+        console.log(`👉 ĐÃ CLICK MỞ KHÓA: plot ${index}`);
+        audioManager.play("coin");
 
-        // Redraw tile as EMPTY
-        this.updateLockedPlotVisual(gridX, gridY);
-      }
-    });
+        const success = this.unlockPlot(index);
+        if (success) {
+          // Đóng dialog
+          overlay.destroy();
+          dialogBg.destroy();
+          title.destroy();
+          reqText.destroy();
+          statusText.destroy();
+          unlockBtn.destroy();
+          unlockText.destroy();
+          cancelBtn.destroy();
+          cancelText.destroy();
 
-    unlockBtn.on("pointerover", () => unlockBtn.setFillStyle(0x2ecc71));
-    unlockBtn.on("pointerout", () => unlockBtn.setFillStyle(0x27ae60));
+          // Redraw tile as EMPTY
+          this.updateLockedPlotVisual(gridX, gridY);
+        }
+      });
+
+      unlockBtn.on("pointerover", () => unlockBtn.setFillStyle(0x2ecc71));
+      unlockBtn.on("pointerout", () => unlockBtn.setFillStyle(0x27ae60));
+    }
 
     // Button: Hủy
     const cancelBtnW = 140;
     const cancelBtnH = 50;
     const cancelBtnX = dialogX + 80;
-    const cancelBtnY = dialogY + 60;
+    const cancelBtnY = dialogY + 90;
 
     const cancelBtn = this.add
       .rectangle(cancelBtnX, cancelBtnY, cancelBtnW, cancelBtnH, 0x95a5a6)
@@ -1432,10 +1586,13 @@ export class FarmScene extends Phaser.Scene {
 
     cancelBtn.on("pointerdown", () => {
       console.log(`👉 ĐÃ CLICK HỦY`);
+      audioManager.play("click");
+
       overlay.destroy();
       dialogBg.destroy();
       title.destroy();
-      message.destroy();
+      reqText.destroy();
+      statusText.destroy();
       unlockBtn.destroy();
       unlockText.destroy();
       cancelBtn.destroy();
@@ -1444,6 +1601,21 @@ export class FarmScene extends Phaser.Scene {
 
     cancelBtn.on("pointerover", () => cancelBtn.setFillStyle(0xbdc3c7));
     cancelBtn.on("pointerout", () => cancelBtn.setFillStyle(0x95a5a6));
+
+    // Click overlay to close
+    overlay.on("pointerdown", () => {
+      audioManager.play("click");
+
+      overlay.destroy();
+      dialogBg.destroy();
+      title.destroy();
+      reqText.destroy();
+      statusText.destroy();
+      unlockBtn.destroy();
+      unlockText.destroy();
+      cancelBtn.destroy();
+      cancelText.destroy();
+    });
   }
 
   /**
@@ -1485,13 +1657,16 @@ export class FarmScene extends Phaser.Scene {
    */
   private renderLockedPlot(tileContainer: Phaser.GameObjects.Container, index: number) {
     const cost = GAME_CONFIG.unlockCosts[index];
+    const requiredLevel = GAME_CONFIG.unlockLevels[index];
     const { tileWidth, tileHeight } = GAME_CONFIG.grid;
 
     // Xác định ô tiếp theo được mở
     const nextLockedIndex = this.gameState.plots.findIndex((p) => p.state === "LOCKED");
     const isNextUnlock = index === nextLockedIndex;
 
-    console.log(`🔒 Rendering LOCKED plot ${index}, cost: ${cost}💰, isNext: ${isNextUnlock}`);
+    console.log(
+      `🔒 Rendering LOCKED plot ${index}, cost: ${cost}💰, level: ${requiredLevel}, isNext: ${isNextUnlock}`,
+    );
 
     // 1. Nền tối cho mọi ô LOCKED
     const darkOverlay = this.add.graphics();
@@ -1511,30 +1686,44 @@ export class FarmScene extends Phaser.Scene {
     tileContainer.add(darkOverlay);
 
     if (isNextUnlock) {
-      // === Ô TIẾP THEO ĐƯỢC MỞ: Icon vàng + giá tiền + hover + click ===
+      // === Ô TIẾP THEO ĐƯỢC MỞ: Icon vàng + giá tiền + level + hover + click ===
 
       // 2. Vẽ icon ổ khóa bằng Graphics (màu vàng nổi bật)
       const lockGraphics = this.add.graphics();
 
       // Thân khóa (hình chữ nhật màu vàng)
       lockGraphics.fillStyle(0xffd700, 1); // Vàng
-      lockGraphics.fillRect(-8, -5, 16, 12); // Thân khóa 16x12px
+      lockGraphics.fillRect(-8, -8, 16, 12); // Thân khóa 16x12px
 
       // Cùm khóa (arc màu vàng)
       lockGraphics.lineStyle(3, 0xffd700, 1);
-      lockGraphics.strokeCircle(0, -8, 6); // Cùm tròn radius 6px
+      lockGraphics.strokeCircle(0, -11, 6); // Cùm tròn radius 6px
 
       // Lỗ khóa (chấm đen nhỏ)
       lockGraphics.fillStyle(0x000000, 1);
-      lockGraphics.fillCircle(0, 0, 2); // Chấm đen 2px
+      lockGraphics.fillCircle(0, -3, 2); // Chấm đen 2px
 
       lockGraphics.setName("lock-icon");
       tileContainer.add(lockGraphics);
 
-      // 3. Text giá tiền (vàng rực với stroke đen dày)
+      // 3. Text level requirement (trên icon khóa)
+      const levelText = this.add
+        .text(0, -25, `Lv.${requiredLevel}`, {
+          fontSize: "14px",
+          fontFamily: "Arial, sans-serif",
+          color: "#4caf50",
+          fontStyle: "bold",
+          stroke: "#000000",
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5, 0.5)
+        .setName("lock-level");
+      tileContainer.add(levelText);
+
+      // 4. Text giá tiền (dưới icon khóa)
       const costText = this.add
-        .text(0, 20, `${cost}💰`, {
-          fontSize: "18px",
+        .text(0, 15, `${cost}💰`, {
+          fontSize: "16px",
           fontFamily: "Arial, sans-serif",
           color: "#ffd700",
           fontStyle: "bold",
@@ -1545,7 +1734,7 @@ export class FarmScene extends Phaser.Scene {
         .setName("lock-cost");
       tileContainer.add(costText);
 
-      // 4. Hover effect - Làm sáng khi hover
+      // 5. Hover effect - Làm sáng khi hover
       tileContainer.on("pointerover", () => {
         darkOverlay.clear();
         darkOverlay.fillStyle(0x34495e, 0.65); // Sáng hơn khi hover
@@ -1559,6 +1748,7 @@ export class FarmScene extends Phaser.Scene {
           true,
         );
         lockGraphics.setScale(1.15); // Icon phóng to
+        levelText.setScale(1.1);
         costText.setScale(1.1);
       });
 
@@ -1575,6 +1765,7 @@ export class FarmScene extends Phaser.Scene {
           true,
         );
         lockGraphics.setScale(1.0);
+        levelText.setScale(1.0);
         costText.setScale(1.0);
       });
 
@@ -1602,5 +1793,34 @@ export class FarmScene extends Phaser.Scene {
     }
 
     console.log(`✅ LOCKED plot ${index} rendered (isNext: ${isNextUnlock})`);
+  }
+
+  /**
+   * Phase 16: Daily Login Reward System
+   * Kiểm tra điểm danh hàng ngày và hiển thị modal nếu cần
+   */
+  private checkDailyLoginReward() {
+    const shouldShow = checkDailyLogin(this.gameState);
+
+    if (shouldShow) {
+      console.log("🎁 Showing Daily Reward Modal...");
+      // Delay 500ms để cho UI load xong
+      this.time.delayedCall(500, () => {
+        this.scene.launch("DailyRewardModal", { gameState: this.gameState });
+      });
+    }
+
+    // Listen to Daily Reward claimed event
+    this.game.events.on("dailyRewardClaimed", this.onDailyRewardClaimed, this);
+  }
+
+  /**
+   * Handler khi nhận thưởng điểm danh
+   */
+  private onDailyRewardClaimed(updatedState: GameState) {
+    this.gameState = updatedState;
+    this.persist();
+    this.emitGameState();
+    console.log("✅ Daily reward claimed and saved!");
   }
 }

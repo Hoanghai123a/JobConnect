@@ -8,6 +8,7 @@ import { GAME_CONFIG } from "../config/game";
 import type { CropType, QuestProgress } from "../types";
 import { blockInputBelow } from "../utils/blockInputBelow";
 import { getQuestConfig } from "../utils/questManager";
+import { audioManager } from "../utils/audioManager";
 
 export class BottomBar extends Phaser.Scene {
   private selectedSeed: CropType = "carrot"; // Default seed
@@ -139,6 +140,9 @@ export class BottomBar extends Phaser.Scene {
 
       // Click handler
       container.on("pointerdown", () => {
+        // Phase 14: Play click sound
+        audioManager.play("click");
+
         this.selectSeed(crop);
       });
 
@@ -316,13 +320,19 @@ export class BottomBar extends Phaser.Scene {
 
       container.on("pointerdown", () => {
         console.log(`🔘 ${btn.label} button clicked`);
-        // Phase 9 & 12: Open modal scenes
+
+        // Phase 14: Play click sound
+        audioManager.play("click");
+
+        // Phase 9 & 12 & 14: Open modal scenes
         if (btn.label === "Quest") {
           this.scene.launch("QuestModal");
         } else if (btn.label === "Shop") {
           this.scene.launch("ShopModal");
         } else if (btn.label === "Storage") {
           this.scene.launch("StorageModal");
+        } else if (btn.label === "Settings") {
+          this.scene.launch("SettingsModal");
         }
       });
     });

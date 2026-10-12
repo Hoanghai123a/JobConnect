@@ -8,6 +8,7 @@ import { GAME_CONFIG } from "../config/game";
 import type { CropType } from "../types";
 import { blockInputBelow } from "../utils/blockInputBelow";
 import type { FarmScene } from "./FarmScene";
+import { audioManager } from "../utils/audioManager";
 
 export class StorageModal extends Phaser.Scene {
   private overlay!: Phaser.GameObjects.Graphics;
@@ -231,7 +232,13 @@ export class StorageModal extends Phaser.Scene {
     // Event handlers trực tiếp trên btnBg
     btnBg.on("pointerdown", () => {
       console.log(`👉 ĐÃ CLICK NÚT BÁN: ${cropType} x${Math.min(quantity, available)}`);
-      this.sellCrop(cropType, Math.min(quantity, available));
+
+      // Phase 13: Get button world position for coin fly animation
+      const worldPos = btnBg.getWorldTransformMatrix();
+      const btnScreenX = worldPos.tx;
+      const btnScreenY = worldPos.ty;
+
+      this.sellCrop(cropType, Math.min(quantity, available), btnScreenX, btnScreenY);
     });
 
     btnBg.on("pointerover", () => {
@@ -245,7 +252,7 @@ export class StorageModal extends Phaser.Scene {
     return this.add.container(0, 0, [btnBg, btnText]);
   }
 
-  private sellCrop(cropType: CropType, quantity: number) {
+  private sellCrop(cropType: CropType, quantity: number, btnX?: number, btnY?: number) {
     const farmScene = this.scene.get("FarmScene") as FarmScene;
     if (!farmScene || !farmScene.gameState) {
       console.error("❌ FarmScene not found or gameState missing!");
@@ -265,6 +272,14 @@ export class StorageModal extends Phaser.Scene {
     console.log(
       `💰 Bán ${actualQty} ${cropType}: Storage ${available} → ${available - actualQty}, Coins ${farmScene.gameState.coins} → ${farmScene.gameState.coins + totalCoins}`,
     );
+
+    // Phase 14: Play coin sound
+    audioManager.play("coin");
+
+    // Phase 13: Coin fly animation BEFORE selling
+    if (btnX !== undefined && btnY !== undefined) {
+      (farmScene as any).createCoinFlyAnimation(btnX, btnY, totalCoins);
+    }
 
     // Gọi public API sellCrop()
     const success = farmScene.sellCrop(cropType, actualQty);

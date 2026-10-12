@@ -8,6 +8,7 @@ import { GAME_CONFIG } from "../config/game";
 import type { Quest } from "../types";
 import type { FarmScene } from "./FarmScene";
 import { blockInputBelow } from "../utils/blockInputBelow";
+import { audioManager } from "../utils/audioManager";
 
 export class QuestModal extends Phaser.Scene {
   private overlay!: Phaser.GameObjects.Rectangle;
@@ -183,11 +184,25 @@ export class QuestModal extends Phaser.Scene {
 
       btnBg.on("pointerdown", () => {
         const farmScene = this.scene.get("FarmScene") as FarmScene;
+
+        // Phase 14: Play coin sound
+        audioManager.play("coin");
+
+        // Phase 13: Trigger coin fly animation BEFORE claiming
+        const btnWorldPos = this.modalContainer.getWorldTransformMatrix();
+        const btnScreenX = btnWorldPos.tx + btnX;
+        const btnScreenY = btnWorldPos.ty + btnY;
+
+        // Coin fly animation
+        (farmScene as any).createCoinFlyAnimation(btnScreenX, btnScreenY, quest.rewardCoins);
+
         const success = farmScene.claimQuestReward(quest.id);
         if (success) {
-          // Rebuild modal to show updated state
-          this.modalContainer.removeAll(true);
-          this.create();
+          // Rebuild modal to show updated state after delay
+          this.time.delayedCall(400, () => {
+            this.modalContainer.removeAll(true);
+            this.create();
+          });
         }
       });
 

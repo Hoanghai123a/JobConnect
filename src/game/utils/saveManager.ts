@@ -83,6 +83,10 @@ function sanitizeState(raw: GameState): GameState | null {
     storage: raw.storage || { carrot: 0, wheat: 0, tomato: 0 },
     seeds: raw.seeds || { carrot: 5, wheat: 5, tomato: 5 },
     storageCapacity: isFiniteNumber(raw.storageCapacity) ? raw.storageCapacity : 50,
+    // Phase 16: Daily Login Reward System - Migrate old saves
+    lastLoginDate: raw.lastLoginDate || undefined,
+    loginStreak: isFiniteNumber(raw.loginStreak) ? Math.max(1, Math.min(7, raw.loginStreak)) : 1,
+    dailyClaimedToday: raw.dailyClaimedToday || false,
   };
 }
 

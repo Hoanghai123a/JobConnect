@@ -11,6 +11,8 @@ import { BottomBar } from "./scenes/BottomBar";
 import { ShopModal } from "./scenes/ShopModal";
 import { StorageModal } from "./scenes/StorageModal";
 import { QuestModal } from "./scenes/QuestModal";
+import { SettingsModal } from "./scenes/SettingsModal";
+import { DailyRewardModal } from "./scenes/DailyRewardModal";
 import { GAME_CONFIG } from "./config/game";
 
 export const PhaserGame = () => {
@@ -33,7 +35,7 @@ export const PhaserGame = () => {
       type: Phaser.AUTO,
       backgroundColor: GAME_CONFIG.backgroundColor,
       parent: mount,
-      scene: [FarmScene, UIOverlay, BottomBar, ShopModal, StorageModal, QuestModal],
+      scene: [FarmScene, UIOverlay, BottomBar, ShopModal, StorageModal, QuestModal, SettingsModal, DailyRewardModal],
       // FIT: giữ tỷ lệ 900x550, co giãn vừa khít container và tự cập nhật khi resize/xoay máy.
       // Phaser tự quy đổi tọa độ chuột/chạm theo tỷ lệ scale nên hitArea không bị lệch.
       scale: {

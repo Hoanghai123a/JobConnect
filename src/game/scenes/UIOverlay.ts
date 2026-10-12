@@ -24,6 +24,7 @@ export class UIOverlay extends Phaser.Scene {
     this.createCoinDisplay();
     this.createLevelDisplay();
     this.createExpBar();
+    this.createGiftBoxButton(); // Phase 16: Daily Reward
 
     // Listen for game state updates
     this.game.events.on("gameStateUpdate", this.updateUI, this);
@@ -151,5 +152,66 @@ export class UIOverlay extends Phaser.Scene {
 
     // Update EXP text
     this.expText.setText(`${state.exp}/${state.expToNextLevel}`);
+  }
+
+  /**
+   * Phase 16: Gift Box Button - Mở Daily Reward Modal
+   */
+  private createGiftBoxButton() {
+    const btnSize = 50;
+    const btnX = GAME_CONFIG.width / 2;
+    const btnY = 25;
+
+    // Button background (gift box style)
+    const btn = this.add.graphics();
+    btn.fillStyle(0xff5722, 1); // Orange
+    btn.fillRoundedRect(btnX - btnSize / 2, btnY - btnSize / 2, btnSize, btnSize, 8);
+    btn.lineStyle(3, 0xff9800, 1); // Light orange border
+    btn.strokeRoundedRect(btnX - btnSize / 2, btnY - btnSize / 2, btnSize, btnSize, 8);
+    btn.setDepth(1001);
+    btn.setInteractive(
+      new Phaser.Geom.Rectangle(btnX - btnSize / 2, btnY - btnSize / 2, btnSize, btnSize),
+      Phaser.Geom.Rectangle.Contains,
+    );
+
+    // Gift icon emoji
+    const icon = this.add
+      .text(btnX, btnY, "🎁", {
+        fontSize: "32px",
+      })
+      .setOrigin(0.5, 0.5)
+      .setDepth(1002);
+
+    // Hover effect
+    btn.on("pointerover", () => {
+      btn.clear();
+      btn.fillStyle(0xff6f42, 1); // Lighter orange
+      btn.fillRoundedRect(btnX - btnSize / 2, btnY - btnSize / 2, btnSize, btnSize, 8);
+      btn.lineStyle(3, 0xff9800, 1);
+      btn.strokeRoundedRect(btnX - btnSize / 2, btnY - btnSize / 2, btnSize, btnSize, 8);
+      icon.setScale(1.1);
+    });
+
+    btn.on("pointerout", () => {
+      btn.clear();
+      btn.fillStyle(0xff5722, 1); // Back to normal
+      btn.fillRoundedRect(btnX - btnSize / 2, btnY - btnSize / 2, btnSize, btnSize, 8);
+      btn.lineStyle(3, 0xff9800, 1);
+      btn.strokeRoundedRect(btnX - btnSize / 2, btnY - btnSize / 2, btnSize, btnSize, 8);
+      icon.setScale(1.0);
+    });
+
+    // Click handler
+    btn.on("pointerdown", () => {
+      this.openDailyRewardModal();
+    });
+  }
+
+  private openDailyRewardModal() {
+    // Request gameState from FarmScene
+    this.game.events.once("gameStateResponse", (gameState: GameState) => {
+      this.scene.launch("DailyRewardModal", { gameState });
+    });
+    this.game.events.emit("gameStateRequest");
   }
 }

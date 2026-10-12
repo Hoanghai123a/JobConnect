@@ -75,6 +75,26 @@ export const GAME_CONFIG = {
     2000, // Plot 15
   ],
 
+  // Phase 15: Level requirements cho từng plot
+  unlockLevels: [
+    1, // Plot 0 (free, Lv1)
+    1, // Plot 1 (free, Lv1)
+    1, // Plot 2 (free, Lv1)
+    1, // Plot 3 (free, Lv1)
+    1, // Plot 4 (Lv1)
+    2, // Plot 5 (Lv2)
+    2, // Plot 6 (Lv2)
+    2, // Plot 7 (Lv2)
+    3, // Plot 8 (Lv3)
+    3, // Plot 9 (Lv3)
+    4, // Plot 10 (Lv4)
+    4, // Plot 11 (Lv4)
+    5, // Plot 12 (Lv5)
+    5, // Plot 13 (Lv5)
+    6, // Plot 14 (Lv6)
+    7, // Plot 15 (Lv7)
+  ],
+
   // Crop configurations - Phase 11: Level requirements
   crops: {
     carrot: {
@@ -193,4 +213,44 @@ export const GAME_CONFIG = {
       exp: "/game-assets/ui/exp.png",
     },
   },
+
+  // Phase 16: Daily Login Reward System
+  dailyRewards: [
+    {
+      day: 1,
+      coins: 50,
+      description: "50💰",
+    },
+    {
+      day: 2,
+      seeds: { carrot: 5 },
+      description: "5 Hạt Cà Rốt",
+    },
+    {
+      day: 3,
+      coins: 100,
+      description: "100💰",
+    },
+    {
+      day: 4,
+      seeds: { tomato: 5 },
+      description: "5 Hạt Cà Chua",
+    },
+    {
+      day: 5,
+      coins: 200,
+      description: "200💰",
+    },
+    {
+      day: 6,
+      seeds: { wheat: 5 },
+      description: "5 Hạt Lúa Mì",
+    },
+    {
+      day: 7,
+      coins: 500,
+      seeds: { carrot: 10, wheat: 10, tomato: 10 },
+      description: "500💰 + 10 Hạt Giống Mỗi Loại",
+    },
+  ],
 };
