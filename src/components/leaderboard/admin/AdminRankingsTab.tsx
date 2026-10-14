@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Download, RefreshCw } from "lucide-react";
+import { ChevronDown, Download, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -26,6 +26,7 @@ export function AdminRankingsTab() {
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [factoryFilter, setFactoryFilter] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const loadLeaderboard = useCallback(async () => {
     setLoading(true);
@@ -102,55 +103,100 @@ export function AdminRankingsTab() {
         .map((entry, index) => ({ ...entry, rank: index + 1 }))
     : entries;
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Controls */}
       <Card className="p-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Label>Tháng:</Label>
-            <MonthSelector value={month} onChange={setMonth} />
+        <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <Label htmlFor="admin-leaderboard-month" className="shrink-0">
+              Tháng
+            </Label>
+            <MonthSelector
+              id="admin-leaderboard-month"
+              value={month}
+              onChange={setMonth}
+              className="min-w-0 flex-1"
+              inputClassName="w-0 min-w-0 flex-1"
+            />
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-11 w-11 shrink-0"
+            aria-label={filtersOpen ? "Thu gọn bộ lọc và thao tác" : "Mở bộ lọc và thao tác"}
+            aria-expanded={filtersOpen}
+            aria-controls="admin-leaderboard-filter-options"
+            title={filtersOpen ? "Thu gọn bộ lọc và thao tác" : "Mở bộ lọc và thao tác"}
+            onClick={() => setFiltersOpen((open) => !open)}
+          >
+            <ChevronDown
+              aria-hidden="true"
+              className={`h-4 w-4 transition-transform motion-reduce:transition-none ${filtersOpen ? "rotate-180" : ""}`}
+            />
+          </Button>
+        </div>
 
-          <div className="flex items-center gap-2">
-            <Label>Nguồn dữ liệu:</Label>
+        <div
+          id="admin-leaderboard-filter-options"
+          hidden={!filtersOpen}
+          className="mt-3 space-y-4 border-t pt-4"
+        >
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Nguồn dữ liệu</legend>
             <RadioGroup
+              name="source"
               value={source}
               onValueChange={(value) => setSource(value as StaffHoursDataSource)}
-              className="flex gap-4"
+              className="flex flex-wrap gap-x-4 gap-y-2"
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="admin_upload" id="admin_upload" />
-                <Label htmlFor="admin_upload" className="font-normal cursor-pointer">
+                <Label htmlFor="admin_upload" className="cursor-pointer font-normal">
                   Admin upload
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="self_checkin" id="self_checkin" />
-                <Label htmlFor="self_checkin" className="font-normal cursor-pointer">
+                <Label htmlFor="self_checkin" className="cursor-pointer font-normal">
                   Tự chấm công
                 </Label>
               </div>
             </RadioGroup>
+          </fieldset>
+
+          <div className="space-y-2">
+            <Label htmlFor="admin-leaderboard-factory">Nhà máy</Label>
+            <select
+              id="admin-leaderboard-factory"
+              name="factory"
+              value={factoryFilter}
+              onChange={(event) => setFactoryFilter(event.target.value)}
+              className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">Tất cả nhà máy</option>
+              {[...new Set(entries.map((entry) => entry.factoryName).filter(Boolean))]
+                .sort((a, b) => a.localeCompare(b, "vi"))
+                .map((factory) => (
+                  <option key={factory} value={factory}>
+                    {factory}
+                  </option>
+                ))}
+            </select>
           </div>
 
-          <select
-            value={factoryFilter}
-            onChange={(event) => setFactoryFilter(event.target.value)}
-            className="rounded-lg border border-input bg-background px-3 py-2 text-sm"
-          >
-            <option value="">Tất cả nhà máy</option>
-            {[...new Set(entries.map((entry) => entry.factoryName).filter(Boolean))]
-              .sort((a, b) => a.localeCompare(b, "vi"))
-              .map((factory) => (
-                <option key={factory} value={factory}>
-                  {factory}
-                </option>
-              ))}
-          </select>
-
-          <div className="ml-auto flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={loading}
+              aria-label="Làm mới bảng xếp hạng"
+            >
+              <RefreshCw
+                aria-hidden="true"
+                className={`h-4 w-4 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`}
+              />
             </Button>
             <Button
               variant="outline"
@@ -158,7 +204,7 @@ export function AdminRankingsTab() {
               onClick={handleExportExcel}
               disabled={filteredEntries.length === 0}
             >
-              <Download className="h-4 w-4 mr-2" />
+              <Download aria-hidden="true" className="mr-2 h-4 w-4" />
               Xuất Excel
             </Button>
           </div>
@@ -166,26 +212,20 @@ export function AdminRankingsTab() {
       </Card>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-4">
-          <div className="text-sm text-muted-foreground">Tổng số người</div>
-          <div className="text-2xl font-bold">{filteredEntries.length}</div>
+      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+        <Card className="flex min-h-20 flex-col justify-center p-3">
+          <div className="text-sm text-muted-foreground">Tổng người</div>
+          <div className="text-2xl font-bold tabular-nums">{filteredEntries.length}</div>
         </Card>
-        <Card className="p-4">
-          <div className="text-sm text-muted-foreground">Giờ trung bình</div>
-          <div className="text-2xl font-bold">
+        <Card className="flex min-h-20 flex-col justify-center p-3">
+          <div className="text-sm text-muted-foreground">Trung bình</div>
+          <div className="text-2xl font-bold tabular-nums">
             {filteredEntries.length > 0
               ? (
                   filteredEntries.reduce((sum, e) => sum + e.totalHours, 0) / filteredEntries.length
                 ).toFixed(1)
               : 0}
             h
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-sm text-muted-foreground">Người dẫn đầu</div>
-          <div className="text-2xl font-bold">
-            {filteredEntries[0] ? `${filteredEntries[0].totalHours.toFixed(1)}h` : "—"}
           </div>
         </Card>
       </div>
