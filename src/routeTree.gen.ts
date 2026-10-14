@@ -17,6 +17,7 @@ import { Route as AboutRouteImport } from './routes/about'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiUidCounterRouteImport } from './routes/api/uid-counter'
+import { Route as ApiLeaderboardRouteImport } from './routes/api/leaderboard'
 import { Route as AuthenticatedWorkRouteImport } from './routes/_authenticated/work'
 import { Route as AuthenticatedWeeklyCheckinRouteImport } from './routes/_authenticated/weekly-checkin'
 import { Route as AuthenticatedTransportRouteImport } from './routes/_authenticated/transport'
@@ -25,6 +26,7 @@ import { Route as AuthenticatedReferralRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedNotebookRouteImport } from './routes/_authenticated/notebook'
 import { Route as AuthenticatedNewsRouteImport } from './routes/_authenticated/news'
 import { Route as AuthenticatedMinesweeperRouteImport } from './routes/_authenticated/minesweeper'
+import { Route as AuthenticatedLeaderboardRouteImport } from './routes/_authenticated/leaderboard'
 import { Route as AuthenticatedGuidesRouteImport } from './routes/_authenticated/guides'
 import { Route as AuthenticatedGemsRouteImport } from './routes/_authenticated/gems'
 import { Route as AuthenticatedGardenRouteImport } from './routes/_authenticated/garden'
@@ -55,10 +57,12 @@ import { Route as ApiPublicAppIcon192RouteImport } from './routes/api/public/app
 import { Route as ApiPublicAppIconRouteImport } from './routes/api/public/app-icon'
 import { Route as ApiPublicAdvanceRequestRouteImport } from './routes/api/public/advance-request'
 import { Route as AuthenticatedAdminWorkProgressRouteImport } from './routes/_authenticated/admin/work-progress'
+import { Route as AuthenticatedAdminStaffRouteImport } from './routes/_authenticated/admin/staff'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminRewardsRouteImport } from './routes/_authenticated/admin/rewards'
 import { Route as AuthenticatedAdminManageRouteImport } from './routes/_authenticated/admin/manage'
 import { Route as AuthenticatedAdminLogsRouteImport } from './routes/_authenticated/admin/logs'
+import { Route as AuthenticatedAdminLeaderboardRouteImport } from './routes/_authenticated/admin/leaderboard'
 import { Route as AuthenticatedAdminImportsRouteImport } from './routes/_authenticated/admin/imports'
 import { Route as AuthenticatedAdminCoinSettingsRouteImport } from './routes/_authenticated/admin/coin-settings'
 import { Route as AuthenticatedAdminChatBansRouteImport } from './routes/_authenticated/admin/chat-bans'
@@ -111,6 +115,11 @@ const ApiUidCounterRoute = ApiUidCounterRouteImport.update({
   path: '/api/uid-counter',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiLeaderboardRoute = ApiLeaderboardRouteImport.update({
+  id: '/api/leaderboard',
+  path: '/api/leaderboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedWorkRoute = AuthenticatedWorkRouteImport.update({
   id: '/work',
   path: '/work',
@@ -151,6 +160,12 @@ const AuthenticatedMinesweeperRoute =
   AuthenticatedMinesweeperRouteImport.update({
     id: '/minesweeper',
     path: '/minesweeper',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedLeaderboardRoute =
+  AuthenticatedLeaderboardRouteImport.update({
+    id: '/leaderboard',
+    path: '/leaderboard',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedGuidesRoute = AuthenticatedGuidesRouteImport.update({
@@ -307,6 +322,11 @@ const AuthenticatedAdminWorkProgressRoute =
     path: '/admin/work-progress',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedAdminStaffRoute = AuthenticatedAdminStaffRouteImport.update({
+  id: '/admin/staff',
+  path: '/admin/staff',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedAdminSettingsRoute =
   AuthenticatedAdminSettingsRouteImport.update({
     id: '/admin/settings',
@@ -330,6 +350,12 @@ const AuthenticatedAdminLogsRoute = AuthenticatedAdminLogsRouteImport.update({
   path: '/admin/logs',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedAdminLeaderboardRoute =
+  AuthenticatedAdminLeaderboardRouteImport.update({
+    id: '/admin/leaderboard',
+    path: '/admin/leaderboard',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedAdminImportsRoute =
   AuthenticatedAdminImportsRouteImport.update({
     id: '/admin/imports',
@@ -423,6 +449,7 @@ export interface FileRoutesByFullPath {
   '/garden': typeof AuthenticatedGardenRoute
   '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
+  '/leaderboard': typeof AuthenticatedLeaderboardRoute
   '/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/news': typeof AuthenticatedNewsRoute
   '/notebook': typeof AuthenticatedNotebookRoute
@@ -431,16 +458,19 @@ export interface FileRoutesByFullPath {
   '/transport': typeof AuthenticatedTransportRoute
   '/weekly-checkin': typeof AuthenticatedWeeklyCheckinRoute
   '/work': typeof AuthenticatedWorkRoute
+  '/api/leaderboard': typeof ApiLeaderboardRoute
   '/api/uid-counter': typeof ApiUidCounterRoute
   '/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/chat-bans': typeof AuthenticatedAdminChatBansRoute
   '/admin/coin-settings': typeof AuthenticatedAdminCoinSettingsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
+  '/admin/leaderboard': typeof AuthenticatedAdminLeaderboardRoute
   '/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/admin/manage': typeof AuthenticatedAdminManageRoute
   '/admin/rewards': typeof AuthenticatedAdminRewardsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/staff': typeof AuthenticatedAdminStaffRoute
   '/admin/work-progress': typeof AuthenticatedAdminWorkProgressRoute
   '/api/public/advance-request': typeof ApiPublicAdvanceRequestRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
@@ -486,6 +516,7 @@ export interface FileRoutesByTo {
   '/garden': typeof AuthenticatedGardenRoute
   '/gems': typeof AuthenticatedGemsRoute
   '/guides': typeof AuthenticatedGuidesRoute
+  '/leaderboard': typeof AuthenticatedLeaderboardRoute
   '/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/news': typeof AuthenticatedNewsRoute
   '/notebook': typeof AuthenticatedNotebookRoute
@@ -494,15 +525,18 @@ export interface FileRoutesByTo {
   '/transport': typeof AuthenticatedTransportRoute
   '/weekly-checkin': typeof AuthenticatedWeeklyCheckinRoute
   '/work': typeof AuthenticatedWorkRoute
+  '/api/leaderboard': typeof ApiLeaderboardRoute
   '/api/uid-counter': typeof ApiUidCounterRoute
   '/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/admin/chat-bans': typeof AuthenticatedAdminChatBansRoute
   '/admin/coin-settings': typeof AuthenticatedAdminCoinSettingsRoute
   '/admin/imports': typeof AuthenticatedAdminImportsRoute
+  '/admin/leaderboard': typeof AuthenticatedAdminLeaderboardRoute
   '/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/admin/manage': typeof AuthenticatedAdminManageRoute
   '/admin/rewards': typeof AuthenticatedAdminRewardsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/staff': typeof AuthenticatedAdminStaffRoute
   '/admin/work-progress': typeof AuthenticatedAdminWorkProgressRoute
   '/api/public/advance-request': typeof ApiPublicAdvanceRequestRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
@@ -550,6 +584,7 @@ export interface FileRoutesById {
   '/_authenticated/garden': typeof AuthenticatedGardenRoute
   '/_authenticated/gems': typeof AuthenticatedGemsRoute
   '/_authenticated/guides': typeof AuthenticatedGuidesRoute
+  '/_authenticated/leaderboard': typeof AuthenticatedLeaderboardRoute
   '/_authenticated/minesweeper': typeof AuthenticatedMinesweeperRoute
   '/_authenticated/news': typeof AuthenticatedNewsRoute
   '/_authenticated/notebook': typeof AuthenticatedNotebookRoute
@@ -558,16 +593,19 @@ export interface FileRoutesById {
   '/_authenticated/transport': typeof AuthenticatedTransportRoute
   '/_authenticated/weekly-checkin': typeof AuthenticatedWeeklyCheckinRoute
   '/_authenticated/work': typeof AuthenticatedWorkRoute
+  '/api/leaderboard': typeof ApiLeaderboardRoute
   '/api/uid-counter': typeof ApiUidCounterRoute
   '/_authenticated/admin/accounts': typeof AuthenticatedAdminAccountsRouteWithChildren
   '/_authenticated/admin/approvals': typeof AuthenticatedAdminApprovalsRoute
   '/_authenticated/admin/chat-bans': typeof AuthenticatedAdminChatBansRoute
   '/_authenticated/admin/coin-settings': typeof AuthenticatedAdminCoinSettingsRoute
   '/_authenticated/admin/imports': typeof AuthenticatedAdminImportsRoute
+  '/_authenticated/admin/leaderboard': typeof AuthenticatedAdminLeaderboardRoute
   '/_authenticated/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/_authenticated/admin/manage': typeof AuthenticatedAdminManageRoute
   '/_authenticated/admin/rewards': typeof AuthenticatedAdminRewardsRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/_authenticated/admin/staff': typeof AuthenticatedAdminStaffRoute
   '/_authenticated/admin/work-progress': typeof AuthenticatedAdminWorkProgressRoute
   '/api/public/advance-request': typeof ApiPublicAdvanceRequestRoute
   '/api/public/app-icon': typeof ApiPublicAppIconRoute
@@ -615,6 +653,7 @@ export interface FileRouteTypes {
     | '/garden'
     | '/gems'
     | '/guides'
+    | '/leaderboard'
     | '/minesweeper'
     | '/news'
     | '/notebook'
@@ -623,16 +662,19 @@ export interface FileRouteTypes {
     | '/transport'
     | '/weekly-checkin'
     | '/work'
+    | '/api/leaderboard'
     | '/api/uid-counter'
     | '/admin/accounts'
     | '/admin/approvals'
     | '/admin/chat-bans'
     | '/admin/coin-settings'
     | '/admin/imports'
+    | '/admin/leaderboard'
     | '/admin/logs'
     | '/admin/manage'
     | '/admin/rewards'
     | '/admin/settings'
+    | '/admin/staff'
     | '/admin/work-progress'
     | '/api/public/advance-request'
     | '/api/public/app-icon'
@@ -678,6 +720,7 @@ export interface FileRouteTypes {
     | '/garden'
     | '/gems'
     | '/guides'
+    | '/leaderboard'
     | '/minesweeper'
     | '/news'
     | '/notebook'
@@ -686,15 +729,18 @@ export interface FileRouteTypes {
     | '/transport'
     | '/weekly-checkin'
     | '/work'
+    | '/api/leaderboard'
     | '/api/uid-counter'
     | '/admin/approvals'
     | '/admin/chat-bans'
     | '/admin/coin-settings'
     | '/admin/imports'
+    | '/admin/leaderboard'
     | '/admin/logs'
     | '/admin/manage'
     | '/admin/rewards'
     | '/admin/settings'
+    | '/admin/staff'
     | '/admin/work-progress'
     | '/api/public/advance-request'
     | '/api/public/app-icon'
@@ -741,6 +787,7 @@ export interface FileRouteTypes {
     | '/_authenticated/garden'
     | '/_authenticated/gems'
     | '/_authenticated/guides'
+    | '/_authenticated/leaderboard'
     | '/_authenticated/minesweeper'
     | '/_authenticated/news'
     | '/_authenticated/notebook'
@@ -749,16 +796,19 @@ export interface FileRouteTypes {
     | '/_authenticated/transport'
     | '/_authenticated/weekly-checkin'
     | '/_authenticated/work'
+    | '/api/leaderboard'
     | '/api/uid-counter'
     | '/_authenticated/admin/accounts'
     | '/_authenticated/admin/approvals'
     | '/_authenticated/admin/chat-bans'
     | '/_authenticated/admin/coin-settings'
     | '/_authenticated/admin/imports'
+    | '/_authenticated/admin/leaderboard'
     | '/_authenticated/admin/logs'
     | '/_authenticated/admin/manage'
     | '/_authenticated/admin/rewards'
     | '/_authenticated/admin/settings'
+    | '/_authenticated/admin/staff'
     | '/_authenticated/admin/work-progress'
     | '/api/public/advance-request'
     | '/api/public/app-icon'
@@ -792,6 +842,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PendingRoute: typeof PendingRoute
   RegisterRoute: typeof RegisterRoute
+  ApiLeaderboardRoute: typeof ApiLeaderboardRoute
   ApiUidCounterRoute: typeof ApiUidCounterRoute
   ApiPublicAdvanceRequestRoute: typeof ApiPublicAdvanceRequestRoute
   ApiPublicAppIconRoute: typeof ApiPublicAppIconRoute
@@ -871,6 +922,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiUidCounterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/leaderboard': {
+      id: '/api/leaderboard'
+      path: '/api/leaderboard'
+      fullPath: '/api/leaderboard'
+      preLoaderRoute: typeof ApiLeaderboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/work': {
       id: '/_authenticated/work'
       path: '/work'
@@ -925,6 +983,13 @@ declare module '@tanstack/react-router' {
       path: '/minesweeper'
       fullPath: '/minesweeper'
       preLoaderRoute: typeof AuthenticatedMinesweeperRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/leaderboard': {
+      id: '/_authenticated/leaderboard'
+      path: '/leaderboard'
+      fullPath: '/leaderboard'
+      preLoaderRoute: typeof AuthenticatedLeaderboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/guides': {
@@ -1137,6 +1202,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminWorkProgressRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/admin/staff': {
+      id: '/_authenticated/admin/staff'
+      path: '/admin/staff'
+      fullPath: '/admin/staff'
+      preLoaderRoute: typeof AuthenticatedAdminStaffRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/admin/settings': {
       id: '/_authenticated/admin/settings'
       path: '/admin/settings'
@@ -1163,6 +1235,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/logs'
       fullPath: '/admin/logs'
       preLoaderRoute: typeof AuthenticatedAdminLogsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/admin/leaderboard': {
+      id: '/_authenticated/admin/leaderboard'
+      path: '/admin/leaderboard'
+      fullPath: '/admin/leaderboard'
+      preLoaderRoute: typeof AuthenticatedAdminLeaderboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/admin/imports': {
@@ -1288,6 +1367,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedGardenRoute: typeof AuthenticatedGardenRoute
   AuthenticatedGemsRoute: typeof AuthenticatedGemsRoute
   AuthenticatedGuidesRoute: typeof AuthenticatedGuidesRoute
+  AuthenticatedLeaderboardRoute: typeof AuthenticatedLeaderboardRoute
   AuthenticatedMinesweeperRoute: typeof AuthenticatedMinesweeperRoute
   AuthenticatedNewsRoute: typeof AuthenticatedNewsRoute
   AuthenticatedNotebookRoute: typeof AuthenticatedNotebookRoute
@@ -1301,10 +1381,12 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAdminChatBansRoute: typeof AuthenticatedAdminChatBansRoute
   AuthenticatedAdminCoinSettingsRoute: typeof AuthenticatedAdminCoinSettingsRoute
   AuthenticatedAdminImportsRoute: typeof AuthenticatedAdminImportsRoute
+  AuthenticatedAdminLeaderboardRoute: typeof AuthenticatedAdminLeaderboardRoute
   AuthenticatedAdminLogsRoute: typeof AuthenticatedAdminLogsRoute
   AuthenticatedAdminManageRoute: typeof AuthenticatedAdminManageRoute
   AuthenticatedAdminRewardsRoute: typeof AuthenticatedAdminRewardsRoute
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
+  AuthenticatedAdminStaffRoute: typeof AuthenticatedAdminStaffRoute
   AuthenticatedAdminWorkProgressRoute: typeof AuthenticatedAdminWorkProgressRoute
 }
 
@@ -1323,6 +1405,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedGardenRoute: AuthenticatedGardenRoute,
   AuthenticatedGemsRoute: AuthenticatedGemsRoute,
   AuthenticatedGuidesRoute: AuthenticatedGuidesRoute,
+  AuthenticatedLeaderboardRoute: AuthenticatedLeaderboardRoute,
   AuthenticatedMinesweeperRoute: AuthenticatedMinesweeperRoute,
   AuthenticatedNewsRoute: AuthenticatedNewsRoute,
   AuthenticatedNotebookRoute: AuthenticatedNotebookRoute,
@@ -1336,10 +1419,12 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminChatBansRoute: AuthenticatedAdminChatBansRoute,
   AuthenticatedAdminCoinSettingsRoute: AuthenticatedAdminCoinSettingsRoute,
   AuthenticatedAdminImportsRoute: AuthenticatedAdminImportsRoute,
+  AuthenticatedAdminLeaderboardRoute: AuthenticatedAdminLeaderboardRoute,
   AuthenticatedAdminLogsRoute: AuthenticatedAdminLogsRoute,
   AuthenticatedAdminManageRoute: AuthenticatedAdminManageRoute,
   AuthenticatedAdminRewardsRoute: AuthenticatedAdminRewardsRoute,
   AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
+  AuthenticatedAdminStaffRoute: AuthenticatedAdminStaffRoute,
   AuthenticatedAdminWorkProgressRoute: AuthenticatedAdminWorkProgressRoute,
 }
 
@@ -1355,6 +1440,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PendingRoute: PendingRoute,
   RegisterRoute: RegisterRoute,
+  ApiLeaderboardRoute: ApiLeaderboardRoute,
   ApiUidCounterRoute: ApiUidCounterRoute,
   ApiPublicAdvanceRequestRoute: ApiPublicAdvanceRequestRoute,
   ApiPublicAppIconRoute: ApiPublicAppIconRoute,

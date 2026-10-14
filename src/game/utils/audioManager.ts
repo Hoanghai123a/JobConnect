@@ -36,6 +36,7 @@ class AudioManager {
    * Load mute state from localStorage
    */
   private loadMuteState() {
+    if (typeof window === "undefined") return;
     const saved = localStorage.getItem("farm-game-mute");
     this.isMuted = saved === "true";
   }
@@ -44,6 +45,7 @@ class AudioManager {
    * Save mute state to localStorage
    */
   private saveMuteState() {
+    if (typeof window === "undefined") return;
     localStorage.setItem("farm-game-mute", String(this.isMuted));
   }
 

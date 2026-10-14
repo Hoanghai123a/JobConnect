@@ -43,6 +43,7 @@ import {
   ListOrdered,
   Gem,
   Bomb,
+  Trophy,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -285,14 +286,7 @@ export function DashboardPage() {
         console.log("[DailyIncentive] Profile:", profileData);
         console.log("[DailyIncentive] Hours:", { hcHours, otHours, shift });
 
-        const estimate = estimateDailySalary(
-          todayStr,
-          profileData,
-          shift,
-          false,
-          hcHours,
-          otHours,
-        );
+        const estimate = estimateDailySalary(todayStr, profileData, shift, false, hcHours, otHours);
 
         console.log("[DailyIncentive] Calculated:", estimate.work, "đ");
 
@@ -381,7 +375,9 @@ export function DashboardPage() {
     return () => {
       alive = false;
       if (user) {
-        pb.collection("attendance").unsubscribe("*").catch(() => {});
+        pb.collection("attendance")
+          .unsubscribe("*")
+          .catch(() => {});
       }
     };
   }, [user, isAdmin]);
@@ -497,12 +493,17 @@ export function DashboardPage() {
                   <span className="min-w-0 flex-1">
                     Hôm nay bạn chưa chấm công.{" "}
                     {dailyIncentive !== null ? (
-                      <>Chấm công nhận <strong>{formatVND(dailyIncentive)}</strong> vào lương</>
+                      <>
+                        Chấm công nhận <strong>{formatVND(dailyIncentive)}</strong> vào lương
+                      </>
                     ) : (
                       <>Chạm để nhập chấm công.</>
                     )}
                   </span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <ChevronRight
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
                 </button>
               )}
             </div>
@@ -523,7 +524,9 @@ export function DashboardPage() {
               <span className="min-w-0 flex-1">
                 Hôm nay bạn chưa chấm công.{" "}
                 {dailyIncentive !== null ? (
-                  <>Chấm công nhận <strong>{formatVND(dailyIncentive)}</strong> vào lương</>
+                  <>
+                    Chấm công nhận <strong>{formatVND(dailyIncentive)}</strong> vào lương
+                  </>
                 ) : (
                   <>Chạm để nhập chấm công.</>
                 )}
@@ -681,6 +684,12 @@ export function DashboardPage() {
                 to="/admin/accounts/stats"
                 label="Thống kê"
                 icon={Users}
+                size="compact"
+              />
+              <FeatureTile
+                to="/admin/leaderboard"
+                label="Xếp hạng giờ làm"
+                icon={Trophy}
                 size="compact"
               />
             </>

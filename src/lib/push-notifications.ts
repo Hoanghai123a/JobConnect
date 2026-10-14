@@ -24,6 +24,7 @@ function authHeaders(): Record<string, string> {
 }
 
 function urlBase64ToUint8Array(value: string) {
+  if (typeof window === "undefined") return new Uint8Array(0);
   const padding = "=".repeat((4 - (value.length % 4)) % 4);
   const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
   const raw = window.atob(base64);

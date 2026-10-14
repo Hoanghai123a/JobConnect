@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useState, type ComponentType, type ReactNode } from "react";
-import { ChevronLeft, Home, Info, LogIn, LogOut, Settings, Upload, User, Coins } from "lucide-react";
+import { ChevronLeft, Home, Info, LogIn, LogOut, Settings, Upload, User, Coins, Trophy } from "lucide-react";
 import { LoginRequiredDialog } from "@/components/auth/LoginRequiredDialog";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -40,12 +40,19 @@ export function BottomNav() {
           { to: "/account", label: "Tài khoản", icon: User },
         ]
       : user
-        ? [
-            { to: "/home", label: "Trang chủ", icon: Home, exact: true },
-            { to: "/coins", label: "Xu", icon: Coins },
-            { to: "/about", label: "Về chúng tôi", icon: Info },
-            { to: "/account", label: "Tài khoản", icon: User },
-          ]
+        ? user.is_internal
+          ? [
+              { to: "/home", label: "Trang chủ", icon: Home, exact: true },
+              { to: "/leaderboard", label: "Xếp hạng", icon: Trophy },
+              { to: "/coins", label: "Xu", icon: Coins },
+              { to: "/account", label: "Tài khoản", icon: User },
+            ]
+          : [
+              { to: "/home", label: "Trang chủ", icon: Home, exact: true },
+              { to: "/coins", label: "Xu", icon: Coins },
+              { to: "/about", label: "Về chúng tôi", icon: Info },
+              { to: "/account", label: "Tài khoản", icon: User },
+            ]
         : [
             { to: "/home", label: "Trang chủ", icon: Home, exact: true },
             { to: "/login", label: "Đăng nhập", icon: LogIn, requiresLogin: true },

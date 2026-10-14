@@ -14,6 +14,7 @@ const VISIT_COUNT_KEY = "jobconnect.installBanner.visitCount";
 const SESSION_MARKER_KEY = "jobconnect.installBanner.session";
 
 function isTemporarilyHidden(now: number) {
+  if (typeof window === "undefined") return false;
   const until = Number(window.localStorage.getItem(HIDE_UNTIL_KEY) || 0);
   return Number.isFinite(until) && until > now;
 }

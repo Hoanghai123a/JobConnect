@@ -8,6 +8,8 @@ function versionParam(version?: string) {
 }
 
 function upsertHeadLink(rel: string, href: string) {
+  if (typeof window === "undefined") return;
+
   const selector = rel === "icon" ? 'link[rel="icon"]' : `link[rel="${rel}"]`;
   let link = document.head.querySelector<HTMLLinkElement>(selector);
 
