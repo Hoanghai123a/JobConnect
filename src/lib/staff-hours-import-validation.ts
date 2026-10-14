@@ -17,29 +17,19 @@ function normalizeFactoryName(value: string): string {
     .replace(/\s+/g, " ");
 }
 
+function getImportRowKey(row: Pick<ImportValidationRow, "employeeCode" | "factoryName" | "month">): string {
+  return JSON.stringify([row.month, row.employeeCode, normalizeFactoryName(row.factoryName)]);
+}
+
+/** Dòng sau cùng trong file được xem là giá trị cập nhật cho cùng một khóa. */
+export function deduplicateImportRows<T extends ImportValidationRow>(rows: T[]): T[] {
+  const rowsByKey = new Map<string, T>();
+  for (const row of rows) rowsByKey.set(getImportRowKey(row), row);
+  return [...rowsByKey.values()];
+}
+
 export function validateImportData(rows: ImportValidationRow[]): string[] {
   const errors: string[] = [];
-  const rowsByEmployeeMonthFactory = new Map<string, number[]>();
-
-  for (const row of rows) {
-    const key = JSON.stringify([
-      row.month,
-      row.employeeCode,
-      normalizeFactoryName(row.factoryName),
-    ]);
-    const rowNumbers = rowsByEmployeeMonthFactory.get(key) || [];
-    rowNumbers.push(row.rowNumber);
-    rowsByEmployeeMonthFactory.set(key, rowNumbers);
-  }
-
-  for (const [key, rowNumbers] of rowsByEmployeeMonthFactory) {
-    if (rowNumbers.length > 1) {
-      const [month, code, factory] = JSON.parse(key) as [string, string, string];
-      errors.push(
-        `Mã NV "${code}" trùng lặp trong tháng ${month}${factory ? ` tại nhà máy ${factory}` : ""} ở dòng ${rowNumbers.join(", ")}`,
-      );
-    }
-  }
 
   for (const row of rows) {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(row.month)) {

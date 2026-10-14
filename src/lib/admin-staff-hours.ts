@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { readStaffHoursExcel, type StaffHoursExcelRow } from "./staff-hours-import";
-import { validateImportData } from "./staff-hours-import-validation";
+import { deduplicateImportRows, validateImportData } from "./staff-hours-import-validation";
 import { pb, type StaffHoursDataSource } from "./pocketbase";
 
 export interface AdminStaffHoursRecord {
@@ -170,13 +170,15 @@ export async function previewAdminStaffHours(
   fallbackMonth: string,
   source: StaffHoursDataSource,
 ): Promise<AdminStaffHoursPreview> {
-  const rows = await readStaffHoursExcel(file, fallbackMonth);
-  if (rows.length === 0) throw new Error("File Excel không có dữ liệu hợp lệ");
+  const parsedRows = await readStaffHoursExcel(file, fallbackMonth);
+  if (parsedRows.length === 0) throw new Error("File Excel không có dữ liệu hợp lệ");
 
-  const validationErrors = validateImportData(rows);
+  const validationErrors = validateImportData(parsedRows);
   if (validationErrors.length > 0) {
     throw new Error(`Lỗi validation:\n${validationErrors.join("\n")}`);
   }
+
+  const rows = deduplicateImportRows(parsedRows);
 
   return {
     batchId: uuidv4(),
@@ -227,17 +229,18 @@ export async function executeAdminStaffHours(
   preview: AdminStaffHoursPreview,
   adminUserId: string,
 ): Promise<{ batchId: string; successCount: number; errorCount: number; errors: string[] }> {
+  const rows = deduplicateImportRows(preview.rows);
   const existing = await pb.collection(RECORDS_COLLECTION).getFullList<AdminStaffHoursRecord>({
     filter: buildFilter(adminUserId),
   });
-  const incomingKeys = new Set(preview.rows.map((row) => rowKey(row, preview.source)));
+  const incomingKeys = new Set(rows.map((row) => rowKey(row, preview.source)));
   const previousByKey = new Map(
     existing
       .filter((record) => incomingKeys.has(rowKey(recordToRow(record), record.source)))
       .map((record) => [rowKey(recordToRow(record), record.source), record]),
   );
 
-  for (const row of preview.rows) {
+  for (const row of rows) {
     const previous = previousByKey.get(rowKey(row, preview.source));
     const payload = {
       admin_id: adminUserId,
@@ -269,14 +272,14 @@ export async function executeAdminStaffHours(
     batch_id: preview.batchId,
     months: JSON.stringify(preview.months),
     source: preview.source,
-    success_count: preview.rows.length,
+    success_count: rows.length,
     error_count: 0,
     status: "completed",
   });
 
   await syncAdminStaffHours(adminUserId);
   await getAdminStaffHoursBatches(adminUserId);
-  return { batchId: preview.batchId, successCount: preview.rows.length, errorCount: 0, errors: [] };
+  return { batchId: preview.batchId, successCount: rows.length, errorCount: 0, errors: [] };
 }
 
 export async function getAdminStaffHours(
